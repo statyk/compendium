@@ -17,9 +17,7 @@ class SqlLoanRepository:
 
     def get_active_for_item(self, item_id: int) -> Loan | None:
         return (
-            self._s.query(Loan)
-            .filter(Loan.item_id == item_id, Loan.returned_at.is_(None))
-            .first()
+            self._s.query(Loan).filter(Loan.item_id == item_id, Loan.returned_at.is_(None)).first()
         )
 
     def get_active_for_patron(self, patron_id: int) -> list[Loan]:

@@ -1,4 +1,5 @@
 """Patron self-service endpoints — identity comes from the JWT, no card number needed."""
+
 from fastapi import APIRouter, Depends, HTTPException, Path
 from sqlalchemy.orm import Session
 

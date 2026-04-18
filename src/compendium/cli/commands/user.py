@@ -32,3 +32,22 @@ def add_user(
     except DomainError as exc:
         typer.echo(f"Error: {exc}", err=True)
         raise typer.Exit(1) from exc
+
+
+@app.command("deactivate")
+def deactivate_user(
+    username: str = typer.Option(..., "--username", help="Username to deactivate"),
+) -> None:
+    """Deactivate a user account (prevents login; does not delete)."""
+    try:
+        with session_scope() as session:
+            svc = AuthService(
+                user_repo=SqlUserRepository(session),
+                role_repo=SqlRoleRepository(session),
+                settings=get_settings(),
+            )
+            user = svc.deactivate_user(username)
+            typer.echo(f"\nDeactivated user '{user.username}'.")
+    except DomainError as exc:
+        typer.echo(f"Error: {exc}", err=True)
+        raise typer.Exit(1) from exc

@@ -1,4 +1,5 @@
-from compendium.domain.errors import ExternalLookupError, NotFoundError
+from compendium.domain.enums import ItemStatus
+from compendium.domain.errors import BusinessRuleError, ExternalLookupError, NotFoundError
 from compendium.domain.models import Creator, Item, Work, WorkCreator
 from compendium.repositories.base import (
     BranchRepository,
@@ -52,6 +53,16 @@ class CatalogService:
         item = self._create_item(work, location=location)
         return work, item
 
+    def withdraw_item(self, barcode: str) -> Item:
+        item = self._items.get_by_barcode(barcode)
+        if item is None:
+            raise NotFoundError(f"No item with barcode '{barcode}'")
+        blocked = {ItemStatus.CHECKED_OUT.value, ItemStatus.ON_HOLD.value}
+        if item.status in blocked:
+            raise BusinessRuleError(f"Item '{barcode}' cannot be withdrawn while {item.status}")
+        item.status = ItemStatus.WITHDRAWN.value
+        return self._items.update(item)
+
     def add_item_to_work(self, work_id: int, location: str | None = None) -> Item:
         """Add another physical copy of an existing Work."""
         work = self._works.get(work_id)
@@ -95,9 +106,7 @@ class CatalogService:
             creator = self._get_or_create_creator(name)
             # Append to collection — back_populates sets wc.work automatically.
             # Do NOT also pass work= to the constructor; that would add it twice.
-            work.creators.append(
-                WorkCreator(creator=creator, role="author", display_order=order)
-            )
+            work.creators.append(WorkCreator(creator=creator, role="author", display_order=order))
 
         return work
 

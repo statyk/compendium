@@ -7,7 +7,7 @@ import bcrypt
 import jwt
 
 from compendium.config.settings import Settings
-from compendium.domain.errors import AuthError, ConflictError, NotFoundError
+from compendium.domain.errors import AuthError, BusinessRuleError, ConflictError, NotFoundError
 from compendium.domain.models import AppUser
 from compendium.repositories.base import RoleRepository, UserRepository
 
@@ -77,6 +77,15 @@ class AuthService:
             self._settings.jwt_secret_key,
             algorithm=self._settings.jwt_algorithm,
         )
+
+    def deactivate_user(self, username: str) -> AppUser:
+        user = self._users.get_by_username(username)
+        if user is None:
+            raise NotFoundError(f"No user with username '{username}'")
+        if not user.is_active:
+            raise BusinessRuleError(f"User '{username}' is already inactive")
+        user.is_active = False
+        return self._users.update(user)
 
     def verify_token(self, token: str) -> dict[str, Any]:
         try:

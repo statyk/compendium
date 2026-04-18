@@ -30,9 +30,7 @@ class Branch(Base):
     name: Mapped[str] = mapped_column(String(128))
     address: Mapped[dict[str, Any] | None] = mapped_column(JSON)
     is_default: Mapped[bool] = mapped_column(Boolean, default=False, server_default="0")
-    created_at: Mapped[datetime] = mapped_column(
-        DateTime(timezone=True), server_default=func.now()
-    )
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
 
 
 class Creator(Base):
@@ -42,9 +40,7 @@ class Creator(Base):
     display_name: Mapped[str] = mapped_column(String(256))
     sort_name: Mapped[str] = mapped_column(String(256), index=True)
     external_ids: Mapped[dict[str, Any]] = mapped_column(JSON, default=dict)
-    created_at: Mapped[datetime] = mapped_column(
-        DateTime(timezone=True), server_default=func.now()
-    )
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
 
 
 class WorkCreator(Base):
@@ -80,9 +76,7 @@ class Work(Base):
     cover_image_url: Mapped[str | None] = mapped_column(String(512))
     extra_metadata: Mapped[dict[str, Any]] = mapped_column(JSON, default=dict)
     external_ids: Mapped[dict[str, Any]] = mapped_column(JSON, default=dict)
-    created_at: Mapped[datetime] = mapped_column(
-        DateTime(timezone=True), server_default=func.now()
-    )
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
     updated_at: Mapped[datetime | None] = mapped_column(
         DateTime(timezone=True), onupdate=func.now()
     )
@@ -105,14 +99,10 @@ class Item(Base):
     call_number: Mapped[str | None] = mapped_column(String(64))
     location: Mapped[str | None] = mapped_column(String(256))
     condition: Mapped[str | None] = mapped_column(String(16))
-    status: Mapped[str] = mapped_column(
-        String(16), default=ItemStatus.AVAILABLE.value, index=True
-    )
+    status: Mapped[str] = mapped_column(String(16), default=ItemStatus.AVAILABLE.value, index=True)
     acquired_at: Mapped[date | None] = mapped_column(Date)
     notes: Mapped[str | None] = mapped_column(Text)
-    created_at: Mapped[datetime] = mapped_column(
-        DateTime(timezone=True), server_default=func.now()
-    )
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
     updated_at: Mapped[datetime | None] = mapped_column(
         DateTime(timezone=True), onupdate=func.now()
     )
@@ -128,9 +118,7 @@ class Role(Base):
     name: Mapped[str] = mapped_column(String(64), unique=True)
     permissions: Mapped[list[str]] = mapped_column(JSON, default=list)
     is_system: Mapped[bool] = mapped_column(Boolean, default=False, server_default="0")
-    created_at: Mapped[datetime] = mapped_column(
-        DateTime(timezone=True), server_default=func.now()
-    )
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
 
     users: Mapped[list[AppUser]] = relationship(back_populates="role")
 
@@ -144,9 +132,7 @@ class AppUser(Base):
     password_hash: Mapped[str] = mapped_column(String(256))
     role_id: Mapped[int] = mapped_column(ForeignKey("role.id"))
     is_active: Mapped[bool] = mapped_column(Boolean, default=True, server_default="1")
-    created_at: Mapped[datetime] = mapped_column(
-        DateTime(timezone=True), server_default=func.now()
-    )
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
     updated_at: Mapped[datetime | None] = mapped_column(
         DateTime(timezone=True), onupdate=func.now()
     )
@@ -166,9 +152,7 @@ class Patron(Base):
     address: Mapped[dict[str, Any] | None] = mapped_column(JSON)
     notes: Mapped[str | None] = mapped_column(Text)
     is_active: Mapped[bool] = mapped_column(Boolean, default=True, server_default="1")
-    created_at: Mapped[datetime] = mapped_column(
-        DateTime(timezone=True), server_default=func.now()
-    )
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
     updated_at: Mapped[datetime | None] = mapped_column(
         DateTime(timezone=True), onupdate=func.now()
     )
@@ -214,12 +198,8 @@ class Hold(Base):
     work_id: Mapped[int] = mapped_column(ForeignKey("work.id"), index=True)
     patron_id: Mapped[int] = mapped_column(ForeignKey("patron.id"), index=True)
     branch_id: Mapped[int] = mapped_column(ForeignKey("branch.id"))
-    status: Mapped[str] = mapped_column(
-        String(16), default=HoldStatus.WAITING.value, index=True
-    )
-    placed_at: Mapped[datetime] = mapped_column(
-        DateTime(timezone=True), server_default=func.now()
-    )
+    status: Mapped[str] = mapped_column(String(16), default=HoldStatus.WAITING.value, index=True)
+    placed_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
     expires_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
     notified_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
 

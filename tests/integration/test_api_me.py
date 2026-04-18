@@ -1,4 +1,5 @@
 """Integration tests for /me patron self-service endpoints."""
+
 from unittest.mock import patch
 
 import pytest

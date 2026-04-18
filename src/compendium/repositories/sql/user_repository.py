@@ -17,3 +17,7 @@ class SqlUserRepository:
 
     def get_by_username(self, username: str) -> AppUser | None:
         return self._s.query(AppUser).filter_by(username=username).first()
+
+    def update(self, user: AppUser) -> AppUser:
+        self._s.flush()
+        return user

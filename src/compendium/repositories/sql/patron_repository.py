@@ -21,5 +21,9 @@ class SqlPatronRepository:
     def get_by_user_id(self, user_id: int) -> Patron | None:
         return self._s.query(Patron).filter_by(user_id=user_id).first()
 
+    def update(self, patron: Patron) -> Patron:
+        self._s.flush()
+        return patron
+
     def list(self, limit: int = 50, offset: int = 0) -> list[Patron]:
         return self._s.query(Patron).order_by(Patron.full_name).offset(offset).limit(limit).all()

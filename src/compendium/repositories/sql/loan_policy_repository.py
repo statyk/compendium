@@ -18,18 +18,10 @@ class SqlLoanPolicyRepository:
         return self._s.get(LoanPolicy, policy_id)
 
     def get_for_media_type(self, media_type_id: int) -> LoanPolicy | None:
-        return (
-            self._s.query(LoanPolicy)
-            .filter(LoanPolicy.media_type_id == media_type_id)
-            .first()
-        )
+        return self._s.query(LoanPolicy).filter(LoanPolicy.media_type_id == media_type_id).first()
 
     def get_default(self) -> LoanPolicy | None:
-        return (
-            self._s.query(LoanPolicy)
-            .filter(LoanPolicy.is_default.is_(True))
-            .first()
-        )
+        return self._s.query(LoanPolicy).filter(LoanPolicy.is_default.is_(True)).first()
 
     def list(self) -> list[LoanPolicy]:
         return self._s.query(LoanPolicy).order_by(LoanPolicy.id).all()

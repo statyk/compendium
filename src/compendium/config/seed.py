@@ -18,9 +18,12 @@ _PRESET_ROLES = [
     (
         "Patron",
         [
-            "item.view", "work.view",
-            "loan.view.self", "loan.renew.self",
-            "hold.place.self", "hold.view.self",
+            "item.view",
+            "work.view",
+            "loan.view.self",
+            "loan.renew.self",
+            "hold.place.self",
+            "hold.view.self",
         ],
         True,
     ),
@@ -48,12 +51,14 @@ def seed_defaults(session: Session) -> None:
             session.add(Role(name=name, permissions=permissions, is_system=is_system))
 
     if not session.query(LoanPolicy).filter_by(is_default=True).first():
-        session.add(LoanPolicy(
-            name="Default",
-            media_type_id=None,
-            loan_period_days=14,
-            max_renewals=2,
-            is_default=True,
-        ))
+        session.add(
+            LoanPolicy(
+                name="Default",
+                media_type_id=None,
+                loan_period_days=14,
+                max_renewals=2,
+                is_default=True,
+            )
+        )
 
     session.flush()

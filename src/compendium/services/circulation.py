@@ -74,9 +74,7 @@ class CirculationService:
         if item.status == ItemStatus.ON_HOLD:
             hold = self._holds.get_available_for_patron_work(patron.id, item.work_id)
             if hold is None:
-                raise BusinessRuleError(
-                    f"Item '{barcode}' is reserved for another patron"
-                )
+                raise BusinessRuleError(f"Item '{barcode}' is reserved for another patron")
             fulfilled_hold = hold
         elif item.status != ItemStatus.AVAILABLE:
             raise BusinessRuleError(
@@ -148,9 +146,7 @@ class CirculationService:
 
         patron = self._patrons.get_by_card_number(card_number)
         if patron is None or loan.patron_id != patron.id:
-            raise BusinessRuleError(
-                f"Loan does not belong to patron with card '{card_number}'"
-            )
+            raise BusinessRuleError(f"Loan does not belong to patron with card '{card_number}'")
 
         loan_period_days, max_renewals = self._get_policy(item)
         if loan.renewal_count >= max_renewals:

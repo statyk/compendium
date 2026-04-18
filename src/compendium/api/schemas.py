@@ -99,6 +99,15 @@ class CreatePolicyRequest(BaseModel):
     is_default: bool = False
 
 
+class UserResponse(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    id: int
+    username: str
+    email: str | None
+    is_active: bool
+
+
 class LoanPolicyResponse(BaseModel):
     model_config = ConfigDict(from_attributes=True)
 

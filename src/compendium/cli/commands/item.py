@@ -1,4 +1,3 @@
-
 import typer
 
 from compendium.db.session import session_scope
@@ -79,6 +78,22 @@ def show_item(
             typer.echo(f"  Condition : {item.condition or 'not set'}")
             if item.location:
                 typer.echo(f"  Location  : {item.location}")
+    except DomainError as exc:
+        typer.echo(f"Error: {exc}", err=True)
+        raise typer.Exit(1) from exc
+
+
+@app.command("withdraw")
+def withdraw_item(
+    barcode: str = typer.Option(..., "--barcode", help="Item barcode"),
+) -> None:
+    """Withdraw an item from the collection (marks it as withdrawn, not deleted)."""
+    try:
+        with session_scope() as session:
+            item = _catalog(session).withdraw_item(barcode)
+            typer.echo(f"\nWithdrawn: {item.work.title}")
+            typer.echo(f"  Barcode : {item.barcode}")
+            typer.echo(f"  Status  : {item.status}")
     except DomainError as exc:
         typer.echo(f"Error: {exc}", err=True)
         raise typer.Exit(1) from exc

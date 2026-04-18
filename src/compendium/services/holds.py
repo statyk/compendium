@@ -43,9 +43,7 @@ class HoldService:
 
         existing = self._holds.get_active_for_patron_work(patron.id, work_id)
         if existing is not None:
-            raise BusinessRuleError(
-                f"Patron already has an active hold on work {work_id}"
-            )
+            raise BusinessRuleError(f"Patron already has an active hold on work {work_id}")
 
         branch = self._branches.get_default()
         now = datetime.utcnow()

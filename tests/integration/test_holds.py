@@ -1,4 +1,5 @@
 """Integration tests for holds and loan policies (full lifecycle)."""
+
 from datetime import datetime, timedelta
 from unittest.mock import patch
 
@@ -95,6 +96,7 @@ def default_policy(session):
 
 # ── Hold placement ────────────────────────────────────────────────────────────
 
+
 def test_place_hold_creates_waiting(session, work_and_item, patron):
     work, _ = work_and_item
     hold = _holds(session).place(work.id, patron.library_card_number)
@@ -119,6 +121,7 @@ def test_cancel_hold(session, work_and_item, patron):
 
 
 # ── Checkin promotes hold ─────────────────────────────────────────────────────
+
 
 def test_checkin_promotes_oldest_waiting_hold(
     session, work_and_item, patron, patron2, default_policy
@@ -147,6 +150,7 @@ def test_checkin_no_hold_frees_item(session, work_and_item, patron, default_poli
 
 
 # ── Checkout ON_HOLD item ─────────────────────────────────────────────────────
+
 
 def test_checkout_on_hold_item_for_hold_patron(
     session, work_and_item, patron, patron2, default_policy
@@ -183,6 +187,7 @@ def test_checkout_on_hold_item_wrong_patron_raises(
 
 # ── Loan renewal ──────────────────────────────────────────────────────────────
 
+
 def test_renew_extends_due_date(session, work_and_item, patron, default_policy):
     _, item = work_and_item
     loan = _circulation(session).checkout(item.barcode, patron.library_card_number)
@@ -212,6 +217,7 @@ def test_renew_wrong_patron_raises(session, work_and_item, patron, patron2, defa
 
 # ── Expire holds ──────────────────────────────────────────────────────────────
 
+
 def test_expire_holds_marks_expired(session, work_and_item, patron):
     work, _ = work_and_item
     hold = _holds(session).place(work.id, patron.library_card_number)
@@ -226,6 +232,7 @@ def test_expire_holds_marks_expired(session, work_and_item, patron):
 
 
 # ── Loan policy ───────────────────────────────────────────────────────────────
+
 
 def test_checkout_uses_policy_loan_period(session, work_and_item, patron):
     work, item = work_and_item

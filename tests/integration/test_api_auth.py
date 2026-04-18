@@ -1,4 +1,5 @@
 """Integration tests for auth endpoints and permission enforcement."""
+
 from unittest.mock import patch
 
 import pytest
