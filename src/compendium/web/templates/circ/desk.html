@@ -1,0 +1,39 @@
+{% extends "base.html" %}
+{% block title %}Circulation Desk — Compendium{% endblock %}
+{% block content %}
+<h2>Circulation Desk</h2>
+<div class="grid">
+
+  <article>
+    <header><strong>Check Out</strong></header>
+    <form hx-post="/ui/circ/checkout" hx-target="#circ-result" hx-swap="innerHTML" hx-include="[name='csrf_token']">
+      <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+      <label>Item barcode <input type="text" name="barcode" placeholder="Scan or type barcode" autofocus></label>
+      <label>Patron card # <input type="text" name="card_number" placeholder="Card number"></label>
+      <button type="submit">Check Out</button>
+    </form>
+  </article>
+
+  <article>
+    <header><strong>Check In</strong></header>
+    <form hx-post="/ui/circ/checkin" hx-target="#circ-result" hx-swap="innerHTML" hx-include="[name='csrf_token']">
+      <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+      <label>Item barcode <input type="text" name="barcode" placeholder="Scan or type barcode"></label>
+      <button type="submit">Check In</button>
+    </form>
+  </article>
+
+  <article>
+    <header><strong>Renew</strong></header>
+    <form hx-post="/ui/circ/renew" hx-target="#circ-result" hx-swap="innerHTML" hx-include="[name='csrf_token']">
+      <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+      <label>Item barcode <input type="text" name="barcode" placeholder="Scan or type barcode"></label>
+      <label>Patron card # <input type="text" name="card_number" placeholder="Card number"></label>
+      <button type="submit">Renew</button>
+    </form>
+  </article>
+
+</div>
+
+<div id="circ-result"></div>
+{% endblock %}

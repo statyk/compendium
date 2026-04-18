@@ -1,0 +1,19 @@
+{% extends "base.html" %}
+{% block title %}Catalog — Compendium{% endblock %}
+{% block content %}
+<h2>Catalog Search</h2>
+<input
+  type="search"
+  name="q"
+  placeholder="Search by title…"
+  autofocus
+  hx-get="/ui/catalog/search-results"
+  hx-trigger="input changed delay:300ms, search"
+  hx-target="#results"
+  hx-include="[name='q']"
+  value="{{ q }}"
+>
+<div id="results">
+  {% include "_partials/work_list.html" %}
+</div>
+{% endblock %}

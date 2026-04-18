@@ -1,0 +1,17 @@
+{% if not works %}
+  <p><em>{% if q %}No results for "{{ q }}".{% else %}Enter a title to search.{% endif %}</em></p>
+{% else %}
+<ul>
+  {% for work in works %}
+  <li>
+    <a href="/ui/catalog/{{ work.id }}">{{ work.title }}</a>
+    {% if work.creators %}
+      &mdash;
+      {% for wc in work.creators %}{{ wc.creator.display_name }}{% if not loop.last %}, {% endif %}{% endfor %}
+    {% endif %}
+    {% if work.publication_year %}({{ work.publication_year }}){% endif %}
+    <small>{{ work.media_type.display_name }}</small>
+  </li>
+  {% endfor %}
+</ul>
+{% endif %}

@@ -1,0 +1,34 @@
+{% extends "base.html" %}
+{% block title %}My Holds — Compendium{% endblock %}
+{% block content %}
+<h2>My Holds</h2>
+{% if not holds %}
+  <p><em>You have no active holds.</em></p>
+{% else %}
+<table>
+  <thead>
+    <tr><th>Title</th><th>Status</th><th>Expires</th><th>Action</th></tr>
+  </thead>
+  <tbody>
+    {% for hold in holds %}
+    <tr id="hold-{{ hold.id }}">
+      <td><a href="/ui/catalog/{{ hold.work_id }}">{{ hold.work.title }}</a></td>
+      <td>{{ hold.status }}</td>
+      <td>{{ hold.expires_at.strftime("%Y-%m-%d") if hold.expires_at else "—" }}</td>
+      <td>
+        <form
+          hx-post="/ui/me/holds/{{ hold.id }}/cancel"
+          hx-target="#hold-{{ hold.id }}"
+          hx-swap="outerHTML"
+          hx-include="[name='csrf_token']"
+        >
+          <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+          <button type="submit" class="outline contrast">Cancel</button>
+        </form>
+      </td>
+    </tr>
+    {% endfor %}
+  </tbody>
+</table>
+{% endif %}
+{% endblock %}

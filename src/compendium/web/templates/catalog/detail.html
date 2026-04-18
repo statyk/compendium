@@ -1,0 +1,65 @@
+{% extends "base.html" %}
+{% block title %}{{ work.title }} — Compendium{% endblock %}
+{% block content %}
+<nav aria-label="breadcrumb">
+  <ul>
+    <li><a href="/ui/catalog">Catalog</a></li>
+    <li>{{ work.title }}</li>
+  </ul>
+</nav>
+
+<hgroup>
+  <h2>{{ work.title }}</h2>
+  {% if work.subtitle %}<p>{{ work.subtitle }}</p>{% endif %}
+</hgroup>
+
+<dl>
+  {% if work.creators %}
+  <dt>Creator(s)</dt>
+  <dd>{% for wc in work.creators %}{{ wc.creator.display_name }} ({{ wc.role }}){% if not loop.last %}, {% endif %}{% endfor %}</dd>
+  {% endif %}
+  <dt>Type</dt><dd>{{ work.media_type.display_name }}</dd>
+  {% if work.publisher %}<dt>Publisher</dt><dd>{{ work.publisher }}</dd>{% endif %}
+  {% if work.publication_year %}<dt>Year</dt><dd>{{ work.publication_year }}</dd>{% endif %}
+  {% if work.isbn %}<dt>ISBN</dt><dd>{{ work.isbn }}</dd>{% endif %}
+  {% if work.description %}<dt>Description</dt><dd>{{ work.description }}</dd>{% endif %}
+</dl>
+
+<h3>Copies</h3>
+{% if work.items %}
+<table>
+  <thead><tr><th>Barcode</th><th>Branch</th><th>Status</th><th>Call #</th></tr></thead>
+  <tbody>
+    {% for item in work.items %}
+    <tr>
+      <td><code>{{ item.barcode }}</code></td>
+      <td>{{ item.branch.name }}</td>
+      <td>{{ item.status }}</td>
+      <td>{{ item.call_number or "—" }}</td>
+    </tr>
+    {% endfor %}
+  </tbody>
+</table>
+{% else %}
+  <p><em>No copies on record.</em></p>
+{% endif %}
+
+{% if patron %}
+<hr>
+<div id="hold-action">
+  <form
+    hx-post="/ui/catalog/{{ work.id }}/hold"
+    hx-target="#hold-action"
+    hx-swap="innerHTML"
+    hx-include="[name='csrf_token']"
+  >
+    <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+    <button type="submit">Place Hold</button>
+  </form>
+</div>
+{% elif user %}
+  <p><em>Your account has no patron record — contact a librarian to place holds.</em></p>
+{% else %}
+  <p><a href="/ui/login?next=/ui/catalog/{{ work.id }}">Log in</a> to place a hold.</p>
+{% endif %}
+{% endblock %}

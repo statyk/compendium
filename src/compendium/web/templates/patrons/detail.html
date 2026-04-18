@@ -1,0 +1,75 @@
+{% extends "base.html" %}
+{% block title %}{{ patron.full_name }} — Compendium{% endblock %}
+{% block content %}
+<nav aria-label="breadcrumb">
+  <ul>
+    <li><a href="/ui/patrons">Patrons</a></li>
+    <li>{{ patron.full_name }}</li>
+  </ul>
+</nav>
+
+<hgroup>
+  <h2>{{ patron.full_name }}</h2>
+  <p><code>{{ patron.library_card_number }}</code></p>
+</hgroup>
+
+<dl>
+  <dt>Status</dt>
+  <dd id="patron-status">
+    {% if patron.is_active %}
+      Active
+      <form
+        style="display:inline"
+        hx-post="/ui/patrons/{{ patron.library_card_number }}/deactivate"
+        hx-target="#patron-status"
+        hx-swap="innerHTML"
+        hx-include="[name='csrf_token']"
+        hx-confirm="Deactivate this patron? This will cancel their active holds."
+      >
+        <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+        <button type="submit" class="outline contrast" style="padding:0.2rem 0.6rem; margin-left:1rem">Deactivate</button>
+      </form>
+    {% else %}
+      <em>Inactive</em>
+    {% endif %}
+  </dd>
+  {% if patron.contact_email %}<dt>Email</dt><dd>{{ patron.contact_email }}</dd>{% endif %}
+  {% if patron.contact_phone %}<dt>Phone</dt><dd>{{ patron.contact_phone }}</dd>{% endif %}
+</dl>
+
+<h3>Active Loans</h3>
+{% if loans %}
+<table>
+  <thead><tr><th>Barcode</th><th>Title</th><th>Due</th></tr></thead>
+  <tbody>
+    {% for loan in loans %}
+    <tr>
+      <td><code>{{ loan.item.barcode }}</code></td>
+      <td><a href="/ui/catalog/{{ loan.item.work_id }}">{{ loan.item.work.title }}</a></td>
+      <td>{{ loan.due_at.strftime("%Y-%m-%d") if loan.due_at else "—" }}</td>
+    </tr>
+    {% endfor %}
+  </tbody>
+</table>
+{% else %}
+  <p><em>No active loans.</em></p>
+{% endif %}
+
+<h3>Active Holds</h3>
+{% if holds %}
+<table>
+  <thead><tr><th>Title</th><th>Status</th><th>Expires</th></tr></thead>
+  <tbody>
+    {% for hold in holds %}
+    <tr>
+      <td><a href="/ui/catalog/{{ hold.work_id }}">{{ hold.work.title }}</a></td>
+      <td>{{ hold.status }}</td>
+      <td>{{ hold.expires_at.strftime("%Y-%m-%d") if hold.expires_at else "—" }}</td>
+    </tr>
+    {% endfor %}
+  </tbody>
+</table>
+{% else %}
+  <p><em>No active holds.</em></p>
+{% endif %}
+{% endblock %}

@@ -18,6 +18,8 @@ dependencies = [
     "uvicorn[standard]>=0.29",
     "bcrypt>=4.0",
     "PyJWT>=2.8",
+    "jinja2>=3.1",
+    "python-multipart>=0.0.9",
 ]
 
 [project.optional-dependencies]
@@ -52,7 +54,9 @@ select = [
 [tool.ruff.lint.per-file-ignores]
 # FastAPI uses Depends() in function defaults by design — B008 is a false positive.
 "src/compendium/api/**" = ["B008"]
+"src/compendium/web/**" = ["B008"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
 pythonpath = ["src"]
+

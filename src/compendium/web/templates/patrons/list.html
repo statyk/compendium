@@ -1,0 +1,23 @@
+{% extends "base.html" %}
+{% block title %}Patrons — Compendium{% endblock %}
+{% block content %}
+<h2>Patrons</h2>
+{% if not patrons %}
+  <p><em>No patrons on record.</em></p>
+{% else %}
+<table>
+  <thead>
+    <tr><th>Name</th><th>Card #</th><th>Status</th></tr>
+  </thead>
+  <tbody>
+    {% for patron in patrons %}
+    <tr>
+      <td><a href="/ui/patrons/{{ patron.library_card_number }}">{{ patron.full_name }}</a></td>
+      <td><code>{{ patron.library_card_number }}</code></td>
+      <td>{% if patron.is_active %}Active{% else %}<em>Inactive</em>{% endif %}</td>
+    </tr>
+    {% endfor %}
+  </tbody>
+</table>
+{% endif %}
+{% endblock %}

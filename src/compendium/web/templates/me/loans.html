@@ -1,0 +1,34 @@
+{% extends "base.html" %}
+{% block title %}My Loans — Compendium{% endblock %}
+{% block content %}
+<h2>My Loans</h2>
+{% if not loans %}
+  <p><em>You have no active loans.</em></p>
+{% else %}
+<table>
+  <thead>
+    <tr><th>Barcode</th><th>Title</th><th>Due</th><th>Action</th></tr>
+  </thead>
+  <tbody>
+    {% for loan in loans %}
+    <tr id="loan-{{ loan.id }}">
+      <td><code>{{ loan.item.barcode }}</code></td>
+      <td><a href="/ui/catalog/{{ loan.item.work_id }}">{{ loan.item.work.title }}</a></td>
+      <td>{{ loan.due_at.strftime("%Y-%m-%d") if loan.due_at else "—" }}</td>
+      <td>
+        <form
+          hx-post="/ui/me/loans/{{ loan.id }}/renew"
+          hx-target="#loan-{{ loan.id }}"
+          hx-swap="innerHTML"
+          hx-include="[name='csrf_token']"
+        >
+          <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+          <button type="submit" class="outline">Renew</button>
+        </form>
+      </td>
+    </tr>
+    {% endfor %}
+  </tbody>
+</table>
+{% endif %}
+{% endblock %}
