@@ -1,5 +1,5 @@
+from collections.abc import Generator
 from contextlib import contextmanager
-from typing import Generator
 
 from sqlalchemy.orm import Session, sessionmaker
 
@@ -13,6 +13,20 @@ def _make_factory() -> sessionmaker[Session]:
 @contextmanager
 def session_scope() -> Generator[Session, None, None]:
     """Yield a SQLAlchemy session; commit on success, roll back on error."""
+    factory = _make_factory()
+    session: Session = factory()
+    try:
+        yield session
+        session.commit()
+    except Exception:
+        session.rollback()
+        raise
+    finally:
+        session.close()
+
+
+def get_session() -> Generator[Session, None, None]:
+    """FastAPI dependency that yields a committed-or-rolled-back session."""
     factory = _make_factory()
     session: Session = factory()
     try:

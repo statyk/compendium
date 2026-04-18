@@ -63,7 +63,11 @@ def parse_open_library(data: dict, isbn: str) -> dict:
         "authors": authors,
         "publisher": publishers[0] if publishers else None,
         "publication_year": year,
-        "description": (data.get("notes") or {}).get("value") if isinstance(data.get("notes"), dict) else data.get("notes"),
+        "description": (
+            (data.get("notes") or {}).get("value")
+            if isinstance(data.get("notes"), dict)
+            else data.get("notes")
+        ),
         "cover_image_url": cover_url,
         "external_ids": {"openlibrary": ol_id} if ol_id else {},
         "isbn": isbn,

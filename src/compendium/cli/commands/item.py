@@ -1,9 +1,8 @@
-from typing import Optional
 
 import typer
 
 from compendium.db.session import session_scope
-from compendium.domain.errors import BusinessRuleError, DomainError, ExternalLookupError
+from compendium.domain.errors import DomainError, ExternalLookupError
 from compendium.repositories.sql.branch_repository import SqlBranchRepository
 from compendium.repositories.sql.creator_repository import SqlCreatorRepository
 from compendium.repositories.sql.item_repository import SqlItemRepository
@@ -24,8 +23,8 @@ def _catalog(session):
 
 @app.command("add")
 def add_item(
-    isbn: Optional[str] = typer.Option(None, "--isbn", help="ISBN-10 or ISBN-13"),
-    location: Optional[str] = typer.Option(None, "--location", help="Shelf location note"),
+    isbn: str | None = typer.Option(None, "--isbn", help="ISBN-10 or ISBN-13"),
+    location: str | None = typer.Option(None, "--location", help="Shelf location note"),
 ) -> None:
     """Add a new item to the catalog.
 
@@ -41,10 +40,10 @@ def add_item(
             work, item = _catalog(session).add_from_isbn(isbn, location=location)
     except ExternalLookupError as exc:
         typer.echo(f"Lookup failed: {exc}", err=True)
-        raise typer.Exit(1)
+        raise typer.Exit(1) from exc
     except DomainError as exc:
         typer.echo(f"Error: {exc}", err=True)
-        raise typer.Exit(1)
+        raise typer.Exit(1) from exc
 
     authors = ", ".join(wc.creator.display_name for wc in work.creators)
     typer.echo(f"\nAdded: {work.title}" + (f" — {authors}" if authors else ""))
@@ -82,7 +81,7 @@ def show_item(
                 typer.echo(f"  Location  : {item.location}")
     except DomainError as exc:
         typer.echo(f"Error: {exc}", err=True)
-        raise typer.Exit(1)
+        raise typer.Exit(1) from exc
 
 
 @app.command("list")
@@ -98,4 +97,5 @@ def list_items(
         for work in works:
             authors = ", ".join(wc.creator.display_name for wc in work.creators)
             copies = len(work.items)
-            typer.echo(f"  {work.title}" + (f" — {authors}" if authors else "") + f" [{copies} cop{'y' if copies == 1 else 'ies'}]")
+            suffix = f" [{copies} cop{'y' if copies == 1 else 'ies'}]"
+            typer.echo(f"  {work.title}" + (f" — {authors}" if authors else "") + suffix)

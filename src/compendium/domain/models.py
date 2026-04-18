@@ -7,7 +7,7 @@ from sqlalchemy import Boolean, Date, DateTime, ForeignKey, Integer, String, Tex
 from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column, relationship
 from sqlalchemy.types import JSON
 
-from compendium.domain.enums import ItemStatus
+from compendium.domain.enums import HoldStatus, ItemStatus
 
 
 class Base(DeclarativeBase):
@@ -121,11 +121,44 @@ class Item(Base):
     branch: Mapped[Branch] = relationship()
 
 
+class Role(Base):
+    __tablename__ = "role"
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    name: Mapped[str] = mapped_column(String(64), unique=True)
+    permissions: Mapped[list[str]] = mapped_column(JSON, default=list)
+    is_system: Mapped[bool] = mapped_column(Boolean, default=False, server_default="0")
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now()
+    )
+
+    users: Mapped[list[AppUser]] = relationship(back_populates="role")
+
+
+class AppUser(Base):
+    __tablename__ = "app_user"
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    username: Mapped[str] = mapped_column(String(64), unique=True)
+    email: Mapped[str | None] = mapped_column(String(256))
+    password_hash: Mapped[str] = mapped_column(String(256))
+    role_id: Mapped[int] = mapped_column(ForeignKey("role.id"))
+    is_active: Mapped[bool] = mapped_column(Boolean, default=True, server_default="1")
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now()
+    )
+    updated_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), onupdate=func.now()
+    )
+
+    role: Mapped[Role] = relationship(back_populates="users")
+
+
 class Patron(Base):
     __tablename__ = "patron"
 
     id: Mapped[int] = mapped_column(primary_key=True)
-    # user_id FK is added in a later migration when app_user is introduced.
+    user_id: Mapped[int | None] = mapped_column(ForeignKey("app_user.id"), nullable=True)
     library_card_number: Mapped[str] = mapped_column(String(64), unique=True)
     full_name: Mapped[str] = mapped_column(String(256))
     contact_email: Mapped[str | None] = mapped_column(String(256))
@@ -157,5 +190,39 @@ class Loan(Base):
     notes: Mapped[str | None] = mapped_column(Text)
 
     item: Mapped[Item] = relationship()
+    patron: Mapped[Patron] = relationship()
+    branch: Mapped[Branch] = relationship()
+
+
+class LoanPolicy(Base):
+    __tablename__ = "loan_policy"
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    name: Mapped[str] = mapped_column(String(128))
+    media_type_id: Mapped[int | None] = mapped_column(ForeignKey("media_type.id"), nullable=True)
+    loan_period_days: Mapped[int] = mapped_column(Integer)
+    max_renewals: Mapped[int] = mapped_column(Integer, default=2, server_default="2")
+    is_default: Mapped[bool] = mapped_column(Boolean, default=False, server_default="0")
+
+    media_type: Mapped[MediaType | None] = relationship()
+
+
+class Hold(Base):
+    __tablename__ = "hold"
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    work_id: Mapped[int] = mapped_column(ForeignKey("work.id"), index=True)
+    patron_id: Mapped[int] = mapped_column(ForeignKey("patron.id"), index=True)
+    branch_id: Mapped[int] = mapped_column(ForeignKey("branch.id"))
+    status: Mapped[str] = mapped_column(
+        String(16), default=HoldStatus.WAITING.value, index=True
+    )
+    placed_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now()
+    )
+    expires_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    notified_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+
+    work: Mapped[Work] = relationship()
     patron: Mapped[Patron] = relationship()
     branch: Mapped[Branch] = relationship()

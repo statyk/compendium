@@ -1,6 +1,5 @@
 import random
 import string
-from typing import Optional
 
 import typer
 
@@ -20,8 +19,8 @@ def _generate_card_number() -> str:
 @app.command("add")
 def add_patron(
     name: str = typer.Option(..., "--name", help="Patron's full name"),
-    email: Optional[str] = typer.Option(None, "--email"),
-    phone: Optional[str] = typer.Option(None, "--phone"),
+    email: str | None = typer.Option(None, "--email"),
+    phone: str | None = typer.Option(None, "--phone"),
 ) -> None:
     """Register a new patron."""
     try:
@@ -40,7 +39,7 @@ def add_patron(
             repo.add(patron)
     except DomainError as exc:
         typer.echo(f"Error: {exc}", err=True)
-        raise typer.Exit(1)
+        raise typer.Exit(1) from exc
 
     typer.echo(f"\nPatron registered: {name}")
     typer.echo(f"  Card number : {card}")

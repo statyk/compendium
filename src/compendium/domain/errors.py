@@ -20,3 +20,7 @@ class BusinessRuleError(DomainError):
 
 class ExternalLookupError(DomainError):
     """An external metadata source failed or returned nothing usable."""
+
+
+class AuthError(DomainError):
+    """Authentication failed (bad credentials, expired token, etc.)."""

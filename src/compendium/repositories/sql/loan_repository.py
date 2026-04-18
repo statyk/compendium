@@ -12,6 +12,9 @@ class SqlLoanRepository:
         self._s.flush()
         return loan
 
+    def get(self, loan_id: int) -> Loan | None:
+        return self._s.get(Loan, loan_id)
+
     def get_active_for_item(self, item_id: int) -> Loan | None:
         return (
             self._s.query(Loan)

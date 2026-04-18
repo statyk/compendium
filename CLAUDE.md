@@ -269,12 +269,20 @@ compendium/
 
 ## Open decisions / later
 
-- Package manager: leaning `uv`, open to `poetry`.
-- Auth implementation: `fastapi-users` vs hand-rolled.
+- Package manager: `uv` (decided — in use).
+- Auth implementation: hand-rolled (decided in slice 2: PyJWT + bcrypt; `fastapi-users` would fight our custom permission model).
 - Whether to split domain models out of SQLAlchemy later.
 - Default loan-history retention policy (opt-in via config setting; the maintenance prune command honors it).
 - Whether to add `import-linter` for dependency-rule enforcement.
 - Whether to add entry-point-based plugin discovery for backends (deferred until someone asks for it).
+
+### Known technical debt (slices 1–2)
+
+- `services/catalog.py` `_create_work()` reaches into `item_repo._s` to query `MediaType` directly — a pragmatic shortcut. Clean fix: add a `MediaTypeRepository` and inject it into `CatalogService`.
+- Datetimes stored as naive UTC (SQLite limitation). When Postgres support is added, revisit with timezone-aware storage and a consistent conversion layer.
+- Card-number generation (random 8-digit) is duplicated between `cli/commands/patron.py` and `api/routes/patrons.py`. Clean fix: extract to a `PatronService`.
+- `jwt_secret_key` defaults to an insecure value. Production deployments must set `COMPENDIUM_JWT_SECRET_KEY`. A startup warning would help.
+- The API test fixtures use a module-scoped `StaticPool` engine (separate from the integration test engine) to avoid SQLite in-memory thread-isolation issues with FastAPI's thread pool. This is correct but means API tests accumulate committed data within the module; tests are written to be independent despite this.
 
 ---
 
@@ -283,7 +291,8 @@ compendium/
 If you're a future Claude session joining this project:
 
 1. Read this file first.
-2. Check `git log` (once the repo is initialized) for recent progress.
-3. Check `docs/schema.md` for schema details once written.
-4. **Current status (last updated 2026-04-17):** design phase, no code yet. Next step is a vertical slice — "catalog a book and check it out" — driven end-to-end through every layer.
-5. Design decisions on this page are settled unless the user opens them again. When a prior decision seems wrong, raise it for discussion rather than quietly overriding it.
+2. Run `git log --oneline` to see recent progress.
+3. Run `uv run pytest` — all tests should pass before making changes.
+4. **Current status (last updated 2026-04-18):** vertical slice 3 complete (holds + loan policies). CLI covers: `db init`, `item add --isbn`, `item show/list`, `patron add/list`, `loan checkout/checkin/renew/active`, `hold place/cancel/list`, `policy list/set`, `maintenance expire-holds`, `user add`, `serve`. FastAPI routes: `POST /auth/login`, `GET /works/search`, `GET /items/{barcode}`, `POST /patrons`, `POST /loans/checkout`, `POST /loans/{id}/checkin`, `POST /loans/{id}/renew`, `POST /holds`, `GET /holds`, `DELETE /holds/{id}`, `GET /policies`, `POST /policies`. Default LoanPolicy seeded (14 days, 2 renewals). Hold lifecycle: WAITING → AVAILABLE (on checkin) → FULFILLED (on checkout). ON_HOLD items can only be checked out by the patron holding the AVAILABLE hold. SQLite backend only.
+5. Logical next steps (discuss with user before starting): web UI (HTMX + Jinja templates), patron self-service API (renew own loans, view own holds without knowing card number), AuditLog, additional media types, MARC/CSV import.
+6. Design decisions on this page are settled unless the user opens them again. When a prior decision seems wrong, raise it for discussion rather than quietly overriding it.

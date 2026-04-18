@@ -1,3 +1,5 @@
+from __future__ import annotations
+
 from sqlalchemy.orm import Session
 
 from compendium.domain.models import Work
@@ -20,3 +22,13 @@ class SqlWorkRepository:
 
     def list(self, limit: int = 50, offset: int = 0) -> list[Work]:
         return self._s.query(Work).order_by(Work.title).offset(offset).limit(limit).all()
+
+    def search(self, q: str, limit: int = 20) -> list[Work]:
+        pattern = f"%{q}%"
+        return (
+            self._s.query(Work)
+            .filter(Work.title.ilike(pattern))
+            .order_by(Work.title)
+            .limit(limit)
+            .all()
+        )

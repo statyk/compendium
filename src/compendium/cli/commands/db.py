@@ -5,7 +5,7 @@ from alembic import command as alembic_command
 from alembic.config import Config as AlembicConfig
 
 from compendium.config.seed import seed_defaults
-from compendium.db.engine import get_engine, get_settings
+from compendium.db.engine import get_settings
 from compendium.db.session import session_scope
 
 app = typer.Typer(help="Database management commands.")

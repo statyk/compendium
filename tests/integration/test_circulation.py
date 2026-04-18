@@ -6,7 +6,9 @@ from compendium.domain.errors import BusinessRuleError, NotFoundError
 from compendium.domain.models import Patron
 from compendium.repositories.sql.branch_repository import SqlBranchRepository
 from compendium.repositories.sql.creator_repository import SqlCreatorRepository
+from compendium.repositories.sql.hold_repository import SqlHoldRepository
 from compendium.repositories.sql.item_repository import SqlItemRepository
+from compendium.repositories.sql.loan_policy_repository import SqlLoanPolicyRepository
 from compendium.repositories.sql.loan_repository import SqlLoanRepository
 from compendium.repositories.sql.patron_repository import SqlPatronRepository
 from compendium.repositories.sql.work_repository import SqlWorkRepository
@@ -39,7 +41,8 @@ def _circulation(session) -> CirculationService:
         loan_repo=SqlLoanRepository(session),
         patron_repo=SqlPatronRepository(session),
         branch_repo=SqlBranchRepository(session),
-        loan_period_days=14,
+        hold_repo=SqlHoldRepository(session),
+        policy_repo=SqlLoanPolicyRepository(session),
     )
 
 

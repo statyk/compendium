@@ -17,6 +17,14 @@ class ItemCondition(StrEnum):
     POOR = "poor"
 
 
+class HoldStatus(StrEnum):
+    WAITING = "waiting"
+    AVAILABLE = "available"
+    FULFILLED = "fulfilled"
+    CANCELLED = "cancelled"
+    EXPIRED = "expired"
+
+
 class CreatorRole(StrEnum):
     AUTHOR = "author"
     EDITOR = "editor"
