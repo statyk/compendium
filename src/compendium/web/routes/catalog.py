@@ -43,10 +43,14 @@ def _render(name: str, request: Request, ctx: dict, status_code: int = 200):
 @router.get("/catalog")
 def catalog_search(
     request: Request,
+    q: str = "",
+    field: str = "all",
     user=Depends(get_web_user),
 ):
     return _render(
-        "catalog/search.html", request, {"request": request, "user": user, "works": [], "q": ""}
+        "catalog/search.html",
+        request,
+        {"request": request, "user": user, "works": [], "q": q, "field": field},
     )
 
 
@@ -54,13 +58,14 @@ def catalog_search(
 def catalog_search_results(
     request: Request,
     q: str = "",
+    field: str = "all",
     user=Depends(get_web_user),
     session: Session = Depends(get_session),
 ):
     settings = get_settings()
     works = []
     if q and (settings.guest_search_enabled or user is not None):
-        works = SqlWorkRepository(session).search(q)
+        works = SqlWorkRepository(session).search(q, field=field)
     return templates.TemplateResponse(
         request,
         "_partials/work_list.html",

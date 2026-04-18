@@ -2,17 +2,34 @@
 {% block title %}Catalog — Compendium{% endblock %}
 {% block content %}
 <h2>Catalog Search</h2>
-<input
-  type="search"
-  name="q"
-  placeholder="Search by title…"
-  autofocus
-  hx-get="/ui/catalog/search-results"
-  hx-trigger="input changed delay:300ms, search"
-  hx-target="#results"
-  hx-include="[name='q']"
-  value="{{ q }}"
->
+<div role="group">
+  <select
+    name="field"
+    id="search-field"
+    hx-get="/ui/catalog/search-results"
+    hx-trigger="change"
+    hx-target="#results"
+    hx-include="[name='q'], [name='field']"
+    style="max-width: 10rem; flex-shrink: 0"
+  >
+    <option value="all" {% if field == "all" %}selected{% endif %}>All fields</option>
+    <option value="title" {% if field == "title" %}selected{% endif %}>Title</option>
+    <option value="author" {% if field == "author" %}selected{% endif %}>Author</option>
+    <option value="publisher" {% if field == "publisher" %}selected{% endif %}>Publisher</option>
+    <option value="isbn" {% if field == "isbn" %}selected{% endif %}>ISBN</option>
+  </select>
+  <input
+    type="search"
+    name="q"
+    placeholder="Search…"
+    autofocus
+    hx-get="/ui/catalog/search-results"
+    hx-trigger="input changed delay:300ms, search"
+    hx-target="#results"
+    hx-include="[name='q'], [name='field']"
+    value="{{ q }}"
+  >
+</div>
 <div id="results">
   {% include "_partials/work_list.html" %}
 </div>

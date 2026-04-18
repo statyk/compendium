@@ -24,11 +24,32 @@ class SqlWorkRepository:
     def list(self, limit: int = 50, offset: int = 0) -> list[Work]:
         return self._s.query(Work).order_by(Work.title).offset(offset).limit(limit).all()
 
-    def search(self, q: str, limit: int = 20) -> list[Work]:
+    def search(self, q: str, field: str = "all", limit: int = 20) -> list[Work]:
         pattern = f"%{q}%"
+        base = self._s.query(Work)
+
+        if field == "title":
+            return base.filter(Work.title.ilike(pattern)).order_by(Work.title).limit(limit).all()
+        if field == "author":
+            return (
+                base.join(Work.creators)
+                .join(WorkCreator.creator)
+                .filter(Creator.display_name.ilike(pattern))
+                .order_by(Work.title)
+                .distinct()
+                .limit(limit)
+                .all()
+            )
+        if field == "publisher":
+            return (
+                base.filter(Work.publisher.ilike(pattern)).order_by(Work.title).limit(limit).all()
+            )
+        if field == "isbn":
+            return base.filter(Work.isbn.ilike(pattern)).order_by(Work.title).limit(limit).all()
+
+        # default: all fields
         return (
-            self._s.query(Work)
-            .outerjoin(Work.creators)
+            base.outerjoin(Work.creators)
             .outerjoin(WorkCreator.creator)
             .filter(
                 or_(
