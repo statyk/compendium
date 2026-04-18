@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from fastapi import APIRouter, Depends, Form, Request
-from fastapi.responses import HTMLResponse
+from fastapi.responses import HTMLResponse, RedirectResponse
 from sqlalchemy.orm import Session
 
 from compendium.db.engine import get_settings
@@ -56,6 +56,40 @@ def patron_list(
         request,
         {"request": request, "user": user, "patrons": patrons},
     )
+
+
+@router.get("/patrons/new")
+def patron_new_form(
+    request: Request,
+    user: AppUser = Depends(require_web_permission(_PERM)),
+):
+    return _render("patrons/new.html", request, {"request": request, "user": user, "error": None})
+
+
+@router.post("/patrons/new")
+def patron_create(
+    request: Request,
+    full_name: str = Form(),
+    contact_email: str = Form(default=""),
+    contact_phone: str = Form(default=""),
+    csrf_token: str = Form(default=""),
+    user: AppUser = Depends(require_web_permission(_PERM)),
+    session: Session = Depends(get_session),
+):
+    check_csrf_form(request, csrf_token)
+    try:
+        patron = _patron_svc(session, user).create(
+            full_name=full_name.strip(),
+            contact_email=contact_email.strip() or None,
+            contact_phone=contact_phone.strip() or None,
+        )
+    except BusinessRuleError as exc:
+        return _render(
+            "patrons/new.html",
+            request,
+            {"request": request, "user": user, "error": str(exc)},
+        )
+    return RedirectResponse(f"/ui/patrons/{patron.library_card_number}", status_code=303)
 
 
 @router.get("/patrons/{card_number}")

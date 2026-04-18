@@ -268,3 +268,136 @@ def test_csrf_mismatch_rejected(web_client, librarian):
         cookies={**auth_cookies, CSRF_COOKIE: signed},
     )
     assert resp.status_code == 403
+
+
+# ── Audit log ─────────────────────────────────────────────────────────────────
+
+
+def test_audit_log_requires_auth(web_client):
+    resp = web_client.get("/ui/audit")
+    assert resp.status_code == 303
+    assert "/ui/login" in resp.headers["location"]
+
+
+def test_audit_log_renders_for_librarian(web_client, librarian, work):
+    cookies = _login(web_client, "lib01")
+    resp = web_client.get("/ui/audit", cookies=cookies)
+    assert resp.status_code == 200
+    assert b"Audit Log" in resp.content
+
+
+def test_audit_log_filter_by_entity_type(web_client, librarian, work):
+    cookies = _login(web_client, "lib01")
+    resp = web_client.get("/ui/audit?entity_type=item", cookies=cookies)
+    assert resp.status_code == 200
+    assert b"item" in resp.content
+
+
+# ── Patron create ─────────────────────────────────────────────────────────────
+
+
+def test_patron_new_form_renders(web_client, librarian):
+    cookies = _login(web_client, "lib01")
+    resp = web_client.get("/ui/patrons/new", cookies=cookies)
+    assert resp.status_code == 200
+    assert b"Add Patron" in resp.content
+
+
+def test_patron_create_redirects_to_detail(web_client, librarian):
+    auth_cookies = _login(web_client, "lib01")
+    raw, signed = _make_csrf_pair()
+    resp = web_client.post(
+        "/ui/patrons/new",
+        data={"full_name": "Jane Test", "csrf_token": raw},
+        cookies={**auth_cookies, CSRF_COOKIE: signed},
+    )
+    assert resp.status_code == 303
+    assert "/ui/patrons/" in resp.headers["location"]
+
+
+def test_patron_new_requires_auth(web_client):
+    resp = web_client.get("/ui/patrons/new")
+    assert resp.status_code == 303
+
+
+# ── Item detail ───────────────────────────────────────────────────────────────
+
+
+def test_item_detail_renders(web_client, librarian, work):
+    _, item = work
+    cookies = _login(web_client, "lib01")
+    resp = web_client.get(f"/ui/items/{item.barcode}", cookies=cookies)
+    assert resp.status_code == 200
+    assert item.barcode.encode() in resp.content
+
+
+def test_item_detail_404(web_client, librarian):
+    cookies = _login(web_client, "lib01")
+    resp = web_client.get("/ui/items/NOSUCHBARCODE", cookies=cookies)
+    assert resp.status_code == 404
+
+
+def test_item_withdraw_via_web(web_client, librarian, work):
+    _, item = work
+    auth_cookies = _login(web_client, "lib01")
+    raw, signed = _make_csrf_pair()
+    resp = web_client.post(
+        f"/ui/items/{item.barcode}/withdraw",
+        data={"csrf_token": raw},
+        cookies={**auth_cookies, CSRF_COOKIE: signed},
+    )
+    assert resp.status_code == 200
+    assert b"withdrawn" in resp.content.lower()
+
+
+# ── Item add (new) ────────────────────────────────────────────────────────────
+
+
+def test_item_new_form_renders(web_client, librarian):
+    cookies = _login(web_client, "lib01")
+    resp = web_client.get("/ui/items/new", cookies=cookies)
+    assert resp.status_code == 200
+    assert b"Add Item" in resp.content
+
+
+def test_item_new_requires_auth(web_client):
+    resp = web_client.get("/ui/items/new")
+    assert resp.status_code == 303
+
+
+def test_item_lookup_returns_preview(web_client, librarian):
+    auth_cookies = _login(web_client, "lib01")
+    raw, signed = _make_csrf_pair()
+    with patch("compendium.web.routes.items.lookup_isbn", return_value=_OPEN_LIB_DUNE):
+        resp = web_client.post(
+            "/ui/items/lookup",
+            data={"isbn": _ISBN, "csrf_token": raw},
+            cookies={**auth_cookies, CSRF_COOKIE: signed},
+        )
+    assert resp.status_code == 200
+    assert b"Dune" in resp.content
+
+
+def test_item_lookup_existing_work(web_client, librarian, work):
+    auth_cookies = _login(web_client, "lib01")
+    raw, signed = _make_csrf_pair()
+    resp = web_client.post(
+        "/ui/items/lookup",
+        data={"isbn": _ISBN, "csrf_token": raw},
+        cookies={**auth_cookies, CSRF_COOKIE: signed},
+    )
+    assert resp.status_code == 200
+    assert b"Already in catalog" in resp.content
+
+
+def test_item_create_via_web(web_client, librarian):
+    auth_cookies = _login(web_client, "lib01")
+    raw, signed = _make_csrf_pair()
+    with patch("compendium.services.catalog.lookup_isbn", return_value=_OPEN_LIB_DUNE):
+        resp = web_client.post(
+            "/ui/items/new",
+            data={"isbn": "9780441013594", "csrf_token": raw, "location": "Shelf B"},
+            cookies={**auth_cookies, CSRF_COOKIE: signed},
+        )
+    assert resp.status_code == 303
+    assert "/ui/items/" in resp.headers["location"]

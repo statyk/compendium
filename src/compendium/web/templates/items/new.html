@@ -1,0 +1,53 @@
+{% extends "base.html" %}
+{% block title %}Add Item — Compendium{% endblock %}
+{% block content %}
+<h2>Add Item</h2>
+
+{% if error %}<p class="error-banner">{{ error }}</p>{% endif %}
+
+<article>
+  <header><strong>Look up by ISBN</strong></header>
+  <form
+    hx-post="/ui/items/lookup"
+    hx-target="#item-preview"
+    hx-swap="innerHTML"
+    hx-include="[name='csrf_token']"
+  >
+    <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+    <label for="isbn">ISBN</label>
+    <fieldset role="group">
+      <input type="text" id="isbn" name="isbn" placeholder="Scan or type ISBN" autocomplete="off" autofocus>
+      <button type="button" class="outline secondary" data-scan-target="isbn">Scan</button>
+    </fieldset>
+    <button type="submit">Look Up</button>
+  </form>
+</article>
+
+<div id="item-preview"></div>
+
+<dialog id="scanner-dialog">
+  <article>
+    <header>
+      <button id="scanner-close" type="button" aria-label="Close" class="outline secondary" style="float:right;padding:0.2rem 0.6rem;margin:0">&#x2715;</button>
+      <strong>Scan barcode</strong>
+    </header>
+    <video id="scanner-video" autoplay playsinline muted style="width:100%;border-radius:var(--pico-border-radius)"></video>
+    <p id="scanner-error" hidden class="error-banner">
+      Camera access is unavailable or was denied. You can still type or paste the
+      barcode directly. If you have a USB scanner, plug it in and scan &mdash; it
+      enters the barcode automatically without camera access.
+    </p>
+    <footer>
+      <label>
+        <input type="checkbox" id="scanner-beep-toggle" role="switch">
+        Beep on scan
+      </label>
+    </footer>
+  </article>
+</dialog>
+{% endblock %}
+
+{% block scripts %}
+<script src="/ui/static/zxing/zxing-browser.min.js"></script>
+<script src="/ui/static/scanner.js"></script>
+{% endblock %}

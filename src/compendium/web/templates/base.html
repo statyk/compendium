@@ -24,6 +24,8 @@
           {% if user.role.name in ("Librarian",) or "*" in user.role.permissions %}
             <li><a href="/ui/circ">Circ Desk</a></li>
             <li><a href="/ui/patrons">Patrons</a></li>
+            <li><a href="/ui/items/new">Add Item</a></li>
+            <li><a href="/ui/audit">Audit Log</a></li>
           {% endif %}
           <li><a href="/ui/me/loans">My Loans</a></li>
           <li><a href="/ui/me/holds">My Holds</a></li>

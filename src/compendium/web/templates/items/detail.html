@@ -1,0 +1,48 @@
+{% extends "base.html" %}
+{% block title %}Item {{ item.barcode }} — Compendium{% endblock %}
+{% block content %}
+<nav aria-label="breadcrumb">
+  <ul>
+    <li><a href="/ui/catalog/{{ item.work_id }}">{{ item.work.title }}</a></li>
+    <li>{{ item.barcode }}</li>
+  </ul>
+</nav>
+
+<hgroup>
+  <h2>{{ item.work.title }}</h2>
+  <p>Item <code>{{ item.barcode }}</code></p>
+</hgroup>
+
+<dl>
+  <dt>Status</dt>
+  <dd id="item-status">
+    {{ item.status }}
+    {% if user and ("*" in user.role.permissions or "item.delete" in user.role.permissions) %}
+      {% if item.status != "withdrawn" %}
+      <form
+        style="display:inline"
+        hx-post="/ui/items/{{ item.barcode }}/withdraw"
+        hx-target="#item-status"
+        hx-swap="innerHTML"
+        hx-include="[name='csrf_token']"
+        hx-confirm="Withdraw this item? This cannot be undone."
+      >
+        <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+        <button type="submit" class="outline contrast" style="padding:0.2rem 0.6rem; margin-left:1rem">Withdraw</button>
+      </form>
+      {% endif %}
+    {% endif %}
+  </dd>
+  <dt>Barcode</dt><dd><code>{{ item.barcode }}</code></dd>
+  <dt>Accession #</dt><dd>{{ item.accession_number }}</dd>
+  {% if item.call_number %}<dt>Call #</dt><dd>{{ item.call_number }}</dd>{% endif %}
+  {% if item.location %}<dt>Location</dt><dd>{{ item.location }}</dd>{% endif %}
+  {% if item.condition %}<dt>Condition</dt><dd>{{ item.condition }}</dd>{% endif %}
+  <dt>Branch</dt><dd>{{ item.branch.name }}</dd>
+  <dt>Added</dt><dd>{{ item.created_at.strftime("%Y-%m-%d") }}</dd>
+</dl>
+
+<a href="/ui/catalog/{{ item.work_id }}" role="button" class="outline secondary">
+  &larr; Back to work
+</a>
+{% endblock %}

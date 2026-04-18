@@ -78,8 +78,12 @@ Start the server with `compendium serve` and open your browser to `http://localh
 | `/ui/me/loans` | Patron | Active loans with inline renew |
 | `/ui/me/holds` | Patron | Active holds with inline cancel |
 | `/ui/circ` | Librarian | Circulation desk — checkout / checkin / renew |
+| `/ui/items/new` | Librarian | Add item by ISBN (with barcode scanner) |
+| `/ui/items/{barcode}` | Librarian | Item detail and withdraw |
 | `/ui/patrons` | Librarian | Patron list |
+| `/ui/patrons/new` | Librarian | Create patron |
 | `/ui/patrons/{card}` | Librarian | Patron detail with active loans, holds, deactivate |
+| `/ui/audit` | Librarian | Audit log viewer |
 
 Guest catalog search is enabled by default (`COMPENDIUM_GUEST_SEARCH_ENABLED=true`).
 

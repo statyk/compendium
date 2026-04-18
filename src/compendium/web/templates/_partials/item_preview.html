@@ -1,0 +1,39 @@
+{% if existing %}
+<div class="success-banner" style="margin-bottom:1rem">
+  <strong>Already in catalog:</strong> {{ work.title }}
+  {% if work.creators %} &mdash; {% for wc in work.creators %}{{ wc.creator.display_name }}{% if not loop.last %}, {% endif %}{% endfor %}{% endif %}
+  <br><small>Adding another copy to this work.</small>
+</div>
+{% else %}
+<div style="display:flex; gap:1rem; margin-bottom:1rem; align-items:flex-start">
+  {% if meta.cover_image_url %}
+  <img src="{{ meta.cover_image_url }}" alt="Cover" style="width:80px; flex-shrink:0; border-radius:4px">
+  {% endif %}
+  <div>
+    <strong>{{ meta.title }}</strong>
+    {% if meta.subtitle %}<br><em>{{ meta.subtitle }}</em>{% endif %}
+    {% if meta.authors %}<br>{{ meta.authors | join(", ") }}{% endif %}
+    {% if meta.publisher %}<br><small>{{ meta.publisher }}{% if meta.publication_year %}, {{ meta.publication_year }}{% endif %}</small>{% endif %}
+  </div>
+</div>
+{% endif %}
+
+<form method="post" action="/ui/items/new">
+  <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+  <input type="hidden" name="isbn" value="{{ isbn }}">
+  <label for="ip-location">Location <small>(optional)</small></label>
+  <input type="text" id="ip-location" name="location" placeholder="e.g. Shelf A3" autocomplete="off">
+  <label for="ip-call-number">Call number <small>(optional)</small></label>
+  <input type="text" id="ip-call-number" name="call_number" autocomplete="off">
+  <label for="ip-condition">Condition <small>(optional)</small></label>
+  <select id="ip-condition" name="condition">
+    <option value="">—</option>
+    <option>New</option>
+    <option>Good</option>
+    <option>Fair</option>
+    <option>Poor</option>
+  </select>
+  <div style="margin-top:1rem">
+    <button type="submit">Add Item</button>
+  </div>
+</form>

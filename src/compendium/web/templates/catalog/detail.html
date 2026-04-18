@@ -32,7 +32,7 @@
   <tbody>
     {% for item in work.items %}
     <tr>
-      <td><code>{{ item.barcode }}</code></td>
+      <td><a href="/ui/items/{{ item.barcode }}"><code>{{ item.barcode }}</code></a></td>
       <td>{{ item.branch.name }}</td>
       <td>{{ item.status }}</td>
       <td>{{ item.call_number or "—" }}</td>
@@ -42,6 +42,10 @@
 </table>
 {% else %}
   <p><em>No copies on record.</em></p>
+{% endif %}
+
+{% if user and ("*" in user.role.permissions or "item.delete" in user.role.permissions) %}
+<p><a href="/ui/items/new" role="button" class="outline secondary">+ Add another copy</a></p>
 {% endif %}
 
 {% if patron %}

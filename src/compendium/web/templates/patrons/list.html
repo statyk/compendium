@@ -1,7 +1,10 @@
 {% extends "base.html" %}
 {% block title %}Patrons — Compendium{% endblock %}
 {% block content %}
-<h2>Patrons</h2>
+<div style="display:flex; align-items:baseline; gap:1rem; margin-bottom:1rem">
+  <h2 style="margin:0">Patrons</h2>
+  <a href="/ui/patrons/new" role="button" class="outline" style="padding:0.25rem 0.75rem">+ New Patron</a>
+</div>
 {% if not patrons %}
   <p><em>No patrons on record.</em></p>
 {% else %}

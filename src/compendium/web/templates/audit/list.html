@@ -1,0 +1,56 @@
+{% extends "base.html" %}
+{% block title %}Audit Log — Compendium{% endblock %}
+{% block content %}
+<h2>Audit Log</h2>
+
+<form method="get" action="/ui/audit" style="display:flex; gap:1rem; flex-wrap:wrap; align-items:flex-end; margin-bottom:1.5rem">
+  <label style="flex:1; min-width:150px">
+    Entity type
+    <select name="entity_type">
+      {% for value, label in entity_choices %}
+      <option value="{{ value }}"{% if selected_type == value %} selected{% endif %}>{{ label }}</option>
+      {% endfor %}
+    </select>
+  </label>
+  <label style="flex:1; min-width:120px">
+    Entity ID
+    <input type="text" name="entity_id" value="{{ selected_id }}" placeholder="(any)">
+  </label>
+  <label style="flex:0 0 auto">
+    Limit
+    <input type="number" name="limit" value="{{ limit }}" min="10" max="200" style="width:5rem">
+  </label>
+  <button type="submit" style="margin-bottom:0">Filter</button>
+</form>
+
+{% if entries %}
+<figure>
+  <table>
+    <thead>
+      <tr>
+        <th>Time (UTC)</th>
+        <th>Actor</th>
+        <th>Type</th>
+        <th>ID</th>
+        <th>Action</th>
+        <th>Details</th>
+      </tr>
+    </thead>
+    <tbody>
+      {% for e in entries %}
+      <tr>
+        <td style="white-space:nowrap"><code>{{ e.occurred_at.strftime("%Y-%m-%d %H:%M") }}</code></td>
+        <td>{{ e.actor_label or "—" }}</td>
+        <td>{{ e.entity_type }}</td>
+        <td>{{ e.entity_id if e.entity_id is not none else "—" }}</td>
+        <td>{{ e.action }}</td>
+        <td><small><code>{% if e.details %}{{ e.details | tojson }}{% else %}—{% endif %}</code></small></td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+</figure>
+{% else %}
+  <p><em>No audit entries match the current filter.</em></p>
+{% endif %}
+{% endblock %}
