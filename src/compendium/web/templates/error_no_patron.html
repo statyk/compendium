@@ -1,0 +1,20 @@
+{% extends "base.html" %}
+{% block title %}No Patron Account — Compendium{% endblock %}
+{% block content %}
+<article style="max-width: 520px; margin: 4rem auto; text-align: center">
+  <h2>No patron account linked</h2>
+  {% if username %}
+  <p>
+    Your login (<strong>{{ username }}</strong>) is not linked to a patron record.
+    This feature is only available to patrons.
+  </p>
+  {% else %}
+  <p>This feature requires a patron account.</p>
+  {% endif %}
+  <p>
+    Ask a librarian to link your login to a patron card, or to create a patron
+    record for you.
+  </p>
+  <a href="/ui/catalog" role="button" class="outline">Back to catalog</a>
+</article>
+{% endblock %}

@@ -1,11 +1,12 @@
 from pathlib import Path
 
 from fastapi import FastAPI, Request
-from fastapi.responses import RedirectResponse
+from fastapi.responses import HTMLResponse, RedirectResponse
 from fastapi.staticfiles import StaticFiles
 
 from compendium.api.routes import auth, holds, items, loans, me, patrons, policies, users, works
-from compendium.web.app import RequiresLoginException, create_web_router
+from compendium.web.app import NoPatronAccountException, RequiresLoginException, create_web_router
+from compendium.web.jinja import templates
 
 _WEB_STATIC = Path(__file__).parent.parent / "web" / "static"
 
@@ -34,5 +35,22 @@ def create_app() -> FastAPI:
         if exc.next_url:
             url = f"/ui/login?next={exc.next_url}"
         return RedirectResponse(url=url, status_code=303)
+
+    @app.exception_handler(NoPatronAccountException)
+    async def _no_patron(request: Request, exc: NoPatronAccountException) -> HTMLResponse:
+        from compendium.web.deps import AUTH_COOKIE, _decode_token
+
+        username = None
+        token = request.cookies.get(AUTH_COOKIE)
+        if token:
+            payload = _decode_token(token)
+            if payload:
+                username = payload.get("username")
+        return templates.TemplateResponse(
+            request,
+            "error_no_patron.html",
+            {"user": None, "csrf_token": "", "username": username},
+            status_code=403,
+        )
 
     return app

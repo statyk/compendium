@@ -21,6 +21,10 @@ class RequiresLoginException(Exception):
         self.next_url = next_url
 
 
+class NoPatronAccountException(Exception):
+    pass
+
+
 def _decode_token(token: str) -> dict | None:
     settings = get_settings()
     try:
@@ -83,9 +87,7 @@ def get_web_patron(
     session: Session = Depends(get_session),
     user: AppUser = Depends(require_web_user),
 ) -> Patron:
-    from fastapi import HTTPException
-
     patron = SqlPatronRepository(session).get_by_user_id(user.id)
     if patron is None:
-        raise HTTPException(status_code=403, detail="No patron account linked to your user.")
+        raise NoPatronAccountException()
     return patron

@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from fastapi import APIRouter
 
-from compendium.web.deps import RequiresLoginException
+from compendium.web.deps import NoPatronAccountException, RequiresLoginException
 from compendium.web.routes import auth, catalog, circ, me, patrons
 
 
@@ -18,4 +18,4 @@ def create_web_router() -> APIRouter:
     return router
 
 
-__all__ = ["create_web_router", "RequiresLoginException"]
+__all__ = ["create_web_router", "NoPatronAccountException", "RequiresLoginException"]

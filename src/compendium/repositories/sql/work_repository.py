@@ -1,8 +1,9 @@
 from __future__ import annotations
 
+from sqlalchemy import or_
 from sqlalchemy.orm import Session
 
-from compendium.domain.models import Work
+from compendium.domain.models import Creator, Work, WorkCreator
 
 
 class SqlWorkRepository:
@@ -27,8 +28,18 @@ class SqlWorkRepository:
         pattern = f"%{q}%"
         return (
             self._s.query(Work)
-            .filter(Work.title.ilike(pattern))
+            .outerjoin(Work.creators)
+            .outerjoin(WorkCreator.creator)
+            .filter(
+                or_(
+                    Work.title.ilike(pattern),
+                    Work.publisher.ilike(pattern),
+                    Work.isbn.ilike(pattern),
+                    Creator.display_name.ilike(pattern),
+                )
+            )
             .order_by(Work.title)
+            .distinct()
             .limit(limit)
             .all()
         )
