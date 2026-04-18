@@ -8,8 +8,16 @@
     <header><strong>Check Out</strong></header>
     <form hx-post="/ui/circ/checkout" hx-target="#circ-result" hx-swap="innerHTML" hx-include="[name='csrf_token']">
       <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
-      <label>Item barcode <input type="text" name="barcode" placeholder="Scan or type barcode" autofocus></label>
-      <label>Patron card # <input type="text" name="card_number" placeholder="Card number"></label>
+      <label for="co-barcode">Item barcode</label>
+      <fieldset role="group">
+        <input type="text" id="co-barcode" name="barcode" placeholder="Scan or type" autocomplete="off" autofocus>
+        <button type="button" class="outline secondary" data-scan-target="co-barcode">Scan</button>
+      </fieldset>
+      <label for="co-card">Patron card #</label>
+      <fieldset role="group">
+        <input type="text" id="co-card" name="card_number" placeholder="Library card #" autocomplete="off">
+        <button type="button" class="outline secondary" data-scan-target="co-card">Scan</button>
+      </fieldset>
       <button type="submit">Check Out</button>
     </form>
   </article>
@@ -18,7 +26,11 @@
     <header><strong>Check In</strong></header>
     <form hx-post="/ui/circ/checkin" hx-target="#circ-result" hx-swap="innerHTML" hx-include="[name='csrf_token']">
       <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
-      <label>Item barcode <input type="text" name="barcode" placeholder="Scan or type barcode"></label>
+      <label for="ci-barcode">Item barcode</label>
+      <fieldset role="group">
+        <input type="text" id="ci-barcode" name="barcode" placeholder="Scan or type" autocomplete="off">
+        <button type="button" class="outline secondary" data-scan-target="ci-barcode">Scan</button>
+      </fieldset>
       <button type="submit">Check In</button>
     </form>
   </article>
@@ -27,8 +39,16 @@
     <header><strong>Renew</strong></header>
     <form hx-post="/ui/circ/renew" hx-target="#circ-result" hx-swap="innerHTML" hx-include="[name='csrf_token']">
       <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
-      <label>Item barcode <input type="text" name="barcode" placeholder="Scan or type barcode"></label>
-      <label>Patron card # <input type="text" name="card_number" placeholder="Card number"></label>
+      <label for="rn-barcode">Item barcode</label>
+      <fieldset role="group">
+        <input type="text" id="rn-barcode" name="barcode" placeholder="Scan or type" autocomplete="off">
+        <button type="button" class="outline secondary" data-scan-target="rn-barcode">Scan</button>
+      </fieldset>
+      <label for="rn-card">Patron card #</label>
+      <fieldset role="group">
+        <input type="text" id="rn-card" name="card_number" placeholder="Library card #" autocomplete="off">
+        <button type="button" class="outline secondary" data-scan-target="rn-card">Scan</button>
+      </fieldset>
       <button type="submit">Renew</button>
     </form>
   </article>
@@ -36,4 +56,30 @@
 </div>
 
 <div id="circ-result"></div>
+
+<dialog id="scanner-dialog">
+  <article>
+    <header>
+      <button id="scanner-close" type="button" aria-label="Close" class="outline secondary" style="float:right;padding:0.2rem 0.6rem;margin:0">&#x2715;</button>
+      <strong>Scan barcode</strong>
+    </header>
+    <video id="scanner-video" autoplay playsinline muted style="width:100%;border-radius:var(--pico-border-radius)"></video>
+    <p id="scanner-error" hidden class="error-banner">
+      Camera access is unavailable or was denied. You can still type or paste the
+      barcode directly. If you have a USB scanner, plug it in and scan &mdash; it
+      enters the barcode automatically without camera access.
+    </p>
+    <footer>
+      <label>
+        <input type="checkbox" id="scanner-beep-toggle" role="switch">
+        Beep on scan
+      </label>
+    </footer>
+  </article>
+</dialog>
+{% endblock %}
+
+{% block scripts %}
+<script src="/ui/static/zxing/zxing-browser.min.js"></script>
+<script src="/ui/static/scanner.js"></script>
 {% endblock %}

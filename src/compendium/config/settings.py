@@ -17,3 +17,5 @@ class Settings(BaseSettings):
     jwt_expire_minutes: int = 60 * 8
     hold_expiry_days: int = 30
     hold_pickup_days: int = 3
+    ssl_certfile: str | None = None
+    ssl_keyfile: str | None = None

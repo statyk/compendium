@@ -92,9 +92,43 @@ See [`crontab.sample`](crontab.sample) for a ready-made cron entry and [`compend
 
 ---
 
-## Reverse proxy (recommended for production)
+## HTTPS / TLS
 
-Serve behind nginx or Caddy to get TLS, compression, and static-file efficiency. Minimal nginx config:
+Camera-based barcode scanning requires HTTPS (browsers block camera access on plain HTTP, except on `localhost`). Three options:
+
+### Option A — Native TLS (manual cert)
+
+Pass certificate and key directly to the server. No proxy required.
+
+```bash
+compendium serve --ssl-certfile /path/to/cert.pem --ssl-keyfile /path/to/key.pem
+```
+
+Or set via environment / `.env`:
+
+```dotenv
+COMPENDIUM_SSL_CERTFILE=/path/to/cert.pem
+COMPENDIUM_SSL_KEYFILE=/path/to/key.pem
+```
+
+For LAN-only deployments, generate a self-signed cert with `mkcert` and trust it on each device. For public deployments, obtain a cert from Let's Encrypt with certbot and renew it via cron.
+
+### Option B — Caddy (automatic Let's Encrypt)
+
+Caddy handles ACME negotiation, certificate renewal, and OCSP stapling automatically.
+
+```
+# Caddyfile
+library.example.com {
+    reverse_proxy 127.0.0.1:8000
+}
+```
+
+```bash
+caddy run --config /etc/caddy/Caddyfile
+```
+
+### Option C — nginx reverse proxy
 
 ```nginx
 server {
@@ -111,8 +145,6 @@ server {
     }
 }
 ```
-
-TLS is required if you want to use camera-based barcode scanning in the web UI (browsers restrict camera access to secure contexts).
 
 ---
 

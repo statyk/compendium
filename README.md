@@ -11,7 +11,7 @@ A library card catalog system for physical items — books, vinyl records, DVDs,
 - **Holds** — patron reservation queue; automatic promotion on checkin; expiry via maintenance command
 - **Auth** — role/permission model (ReadOnly, Patron, Librarian); JWT for API, cookie-based for web UI
 - **Audit log** — synchronous trail of Librarian mutations (items, works, patrons, users, policies); queryable via CLI
-- **Web UI** — HTMX + Jinja2 browser interface: catalog search, circulation desk, patron self-service
+- **Web UI** — HTMX + Jinja2 browser interface: catalog search, circulation desk (with camera-based barcode scanning), patron self-service
 - **REST API** — FastAPI; consumed by the web UI and available for integrations
 - **CLI** — full librarian workflow without running a server
 

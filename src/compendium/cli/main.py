@@ -1,3 +1,5 @@
+from typing import Optional
+
 import typer
 
 from compendium.cli.commands import audit, db, hold, item, loan, maintenance, patron, policy, user
@@ -23,10 +25,20 @@ app.add_typer(user.app, name="user")
 def serve(
     host: str = typer.Option("127.0.0.1", "--host", help="Bind host"),
     port: int = typer.Option(8000, "--port", help="Bind port"),
+    ssl_certfile: Optional[str] = typer.Option(None, "--ssl-certfile", help="Path to TLS certificate file (PEM)"),
+    ssl_keyfile: Optional[str] = typer.Option(None, "--ssl-keyfile", help="Path to TLS private key file (PEM)"),
 ) -> None:
     """Start the HTTP API server."""
     import uvicorn
 
     from compendium.api.app import create_app
+    from compendium.db.engine import get_settings
 
-    uvicorn.run(create_app(), host=host, port=port)
+    s = get_settings()
+    uvicorn.run(
+        create_app(),
+        host=host,
+        port=port,
+        ssl_certfile=ssl_certfile or s.ssl_certfile or None,
+        ssl_keyfile=ssl_keyfile or s.ssl_keyfile or None,
+    )
