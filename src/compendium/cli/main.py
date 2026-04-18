@@ -1,6 +1,6 @@
 import typer
 
-from compendium.cli.commands import db, hold, item, loan, maintenance, patron, policy, user
+from compendium.cli.commands import audit, db, hold, item, loan, maintenance, patron, policy, user
 
 app = typer.Typer(
     name="compendium",
@@ -8,6 +8,7 @@ app = typer.Typer(
     no_args_is_help=True,
 )
 
+app.add_typer(audit.app, name="audit")
 app.add_typer(db.app, name="db")
 app.add_typer(item.app, name="item")
 app.add_typer(patron.app, name="patron")

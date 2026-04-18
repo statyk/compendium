@@ -1,22 +1,28 @@
-import random
-import string
+import getpass
 
 import typer
 
 from compendium.db.session import session_scope
 from compendium.domain.errors import DomainError
-from compendium.domain.models import Patron
+from compendium.repositories.sql.audit_log_repository import SqlAuditLogRepository
 from compendium.repositories.sql.hold_repository import SqlHoldRepository
 from compendium.repositories.sql.loan_repository import SqlLoanRepository
 from compendium.repositories.sql.patron_repository import SqlPatronRepository
+from compendium.services.audit import AuditService
 from compendium.services.patrons import PatronService
 
 app = typer.Typer(help="Patron management commands.")
 
 
-def _generate_card_number() -> str:
-    """Generate a random 8-digit library card number."""
-    return "".join(random.choices(string.digits, k=8))
+def _patron_svc(session) -> PatronService:
+    return PatronService(
+        patron_repo=SqlPatronRepository(session),
+        loan_repo=SqlLoanRepository(session),
+        hold_repo=SqlHoldRepository(session),
+        audit_svc=AuditService(SqlAuditLogRepository(session)),
+        actor_label=f"cli:{getpass.getuser()}",
+        source="cli",
+    )
 
 
 @app.command("add")
@@ -28,24 +34,17 @@ def add_patron(
     """Register a new patron."""
     try:
         with session_scope() as session:
-            repo = SqlPatronRepository(session)
-            card = _generate_card_number()
-            while repo.get_by_card_number(card) is not None:
-                card = _generate_card_number()
-
-            patron = Patron(
-                library_card_number=card,
+            patron = _patron_svc(session).create(
                 full_name=name,
                 contact_email=email,
                 contact_phone=phone,
             )
-            repo.add(patron)
     except DomainError as exc:
         typer.echo(f"Error: {exc}", err=True)
         raise typer.Exit(1) from exc
 
-    typer.echo(f"\nPatron registered: {name}")
-    typer.echo(f"  Card number : {card}")
+    typer.echo(f"\nPatron registered: {patron.full_name}")
+    typer.echo(f"  Card number : {patron.library_card_number}")
     if email:
         typer.echo(f"  Email       : {email}")
     if phone:
@@ -59,12 +58,7 @@ def deactivate_patron(
     """Deactivate a patron account (cancels active holds; blocks if active loans exist)."""
     try:
         with session_scope() as session:
-            svc = PatronService(
-                patron_repo=SqlPatronRepository(session),
-                loan_repo=SqlLoanRepository(session),
-                hold_repo=SqlHoldRepository(session),
-            )
-            patron = svc.deactivate(card)
+            patron = _patron_svc(session).deactivate(card)
             typer.echo(f"\nDeactivated: {patron.full_name} ({patron.library_card_number})")
     except DomainError as exc:
         typer.echo(f"Error: {exc}", err=True)

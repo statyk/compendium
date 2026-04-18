@@ -8,9 +8,11 @@ from compendium.db.engine import get_settings
 from compendium.db.session import get_session
 from compendium.domain.errors import BusinessRuleError, NotFoundError
 from compendium.domain.models import AppUser
+from compendium.repositories.sql.audit_log_repository import SqlAuditLogRepository
 from compendium.repositories.sql.hold_repository import SqlHoldRepository
 from compendium.repositories.sql.loan_repository import SqlLoanRepository
 from compendium.repositories.sql.patron_repository import SqlPatronRepository
+from compendium.services.audit import AuditService
 from compendium.services.patrons import PatronService
 from compendium.web.csrf import check_csrf_form, ensure_csrf, set_csrf_cookie
 from compendium.web.deps import require_web_permission
@@ -21,11 +23,14 @@ router = APIRouter()
 _PERM = "patron.manage"
 
 
-def _patron_svc(session: Session) -> PatronService:
+def _patron_svc(session: Session, actor: AppUser) -> PatronService:
     return PatronService(
         patron_repo=SqlPatronRepository(session),
         loan_repo=SqlLoanRepository(session),
         hold_repo=SqlHoldRepository(session),
+        audit_svc=AuditService(SqlAuditLogRepository(session)),
+        actor=actor,
+        source="web",
     )
 
 
@@ -93,7 +98,7 @@ def deactivate_patron(
 ):
     check_csrf_form(request, csrf_token)
     try:
-        _patron_svc(session).deactivate(card_number)
+        _patron_svc(session, user).deactivate(card_number)
         return HTMLResponse("<span class='error-banner'>Patron deactivated.</span>")
     except (BusinessRuleError, NotFoundError) as exc:
         return HTMLResponse(f"<span class='error-banner'>{exc}</span>")

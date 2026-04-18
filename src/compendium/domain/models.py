@@ -3,7 +3,7 @@ from __future__ import annotations
 from datetime import date, datetime
 from typing import Any
 
-from sqlalchemy import Boolean, Date, DateTime, ForeignKey, Integer, String, Text, func
+from sqlalchemy import Boolean, Date, DateTime, ForeignKey, Index, Integer, String, Text, func
 from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column, relationship
 from sqlalchemy.types import JSON
 
@@ -206,3 +206,25 @@ class Hold(Base):
     work: Mapped[Work] = relationship()
     patron: Mapped[Patron] = relationship()
     branch: Mapped[Branch] = relationship()
+
+
+class AuditLog(Base):
+    __tablename__ = "audit_log"
+    __table_args__ = (
+        Index("ix_audit_log_entity", "entity_type", "entity_id", "occurred_at"),
+        Index("ix_audit_log_user_time", "user_id", "occurred_at"),
+    )
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    occurred_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now(), index=True
+    )
+    user_id: Mapped[int | None] = mapped_column(ForeignKey("app_user.id"), nullable=True)
+    actor_label: Mapped[str | None] = mapped_column(String(128))
+    source: Mapped[str] = mapped_column(String(16))
+    entity_type: Mapped[str] = mapped_column(String(32))
+    entity_id: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    action: Mapped[str] = mapped_column(String(32))
+    details: Mapped[dict[str, Any] | None] = mapped_column(JSON)
+
+    actor: Mapped[AppUser | None] = relationship()

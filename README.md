@@ -10,6 +10,7 @@ A library card catalog system for physical items — books, vinyl records, DVDs,
 - **Circulation** — checkout, checkin, loan renewal with configurable per-media-type loan policies
 - **Holds** — patron reservation queue; automatic promotion on checkin; expiry via maintenance command
 - **Auth** — role/permission model (ReadOnly, Patron, Librarian); JWT for API, cookie-based for web UI
+- **Audit log** — synchronous trail of Librarian mutations (items, works, patrons, users, policies); queryable via CLI
 - **Web UI** — HTMX + Jinja2 browser interface: catalog search, circulation desk, patron self-service
 - **REST API** — FastAPI; consumed by the web UI and available for integrations
 - **CLI** — full librarian workflow without running a server
@@ -62,6 +63,7 @@ Log in at `http://localhost:8000/ui/login` with the username and password you se
 | `compendium maintenance expire-holds` | Expire overdue waiting holds (for cron) |
 | `compendium user add --username <u> --role <r>` | Create a user account |
 | `compendium user deactivate --username <u>` | Deactivate a user account |
+| `compendium audit list` | Browse audit log (supports `--entity`, `--id`, `--user-id`, `--limit`) |
 | `compendium serve` | Start the API + web UI server |
 
 ## Web UI
@@ -136,7 +138,7 @@ The `compendium maintenance expire-holds` command should run periodically via cr
 uv run pytest -q
 ```
 
-Tests are split into `tests/unit/` (no DB, mock repos) and `tests/integration/` (SQLite in-memory). 98 tests as of the current build.
+Tests are split into `tests/unit/` (no DB, mock repos) and `tests/integration/` (SQLite in-memory). 111 tests as of the current build.
 
 ## Layout
 
@@ -144,7 +146,7 @@ Tests are split into `tests/unit/` (no DB, mock repos) and `tests/integration/` 
 src/compendium/
 ├── domain/        # models, enums, permissions, errors
 ├── repositories/  # base protocols + SQLAlchemy implementations
-├── services/      # business logic (catalog, circulation, holds, patrons, auth)
+├── services/      # business logic (catalog, circulation, holds, patrons, policies, auth, audit)
 ├── api/           # FastAPI routes + Pydantic schemas + JWT auth
 ├── web/           # HTMX + Jinja2 web UI + CSRF protection
 ├── cli/           # Typer CLI commands

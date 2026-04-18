@@ -1,17 +1,31 @@
+import getpass
+
 import typer
 
 from compendium.db.session import session_scope
-from compendium.domain.errors import DomainError
+from compendium.domain.errors import DomainError, NotFoundError
+from compendium.repositories.sql.audit_log_repository import SqlAuditLogRepository
 from compendium.repositories.sql.loan_policy_repository import SqlLoanPolicyRepository
+from compendium.services.audit import AuditService
+from compendium.services.policies import PolicyService
 
 app = typer.Typer(help="Loan policy commands.")
+
+
+def _policy_svc(session) -> PolicyService:
+    return PolicyService(
+        policy_repo=SqlLoanPolicyRepository(session),
+        audit_svc=AuditService(SqlAuditLogRepository(session)),
+        actor_label=f"cli:{getpass.getuser()}",
+        source="cli",
+    )
 
 
 @app.command("list")
 def list_policies() -> None:
     """List all loan policies."""
     with session_scope() as session:
-        policies = SqlLoanPolicyRepository(session).list()
+        policies = _policy_svc(session).list()
         if not policies:
             typer.echo("No loan policies configured.")
             return
@@ -37,20 +51,13 @@ def set_policy(
         raise typer.Exit(1)
     try:
         with session_scope() as session:
-            repo = SqlLoanPolicyRepository(session)
-            policy = repo.get(policy_id)
-            if policy is None:
-                typer.echo(f"No policy with id={policy_id}.", err=True)
-                raise typer.Exit(1)
-            if loan_days is not None:
-                policy.loan_period_days = loan_days
-            if max_renewals is not None:
-                policy.max_renewals = max_renewals
-            repo.update(policy)
+            policy = _policy_svc(session).update(
+                policy_id, loan_period_days=loan_days, max_renewals=max_renewals
+            )
             typer.echo(
                 f"Policy #{policy.id} '{policy.name}' updated: "
                 f"{policy.loan_period_days}d / {policy.max_renewals} renewals."
             )
-    except DomainError as exc:
+    except (DomainError, NotFoundError) as exc:
         typer.echo(f"Error: {exc}", err=True)
         raise typer.Exit(1) from exc

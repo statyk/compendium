@@ -1,12 +1,13 @@
 from compendium.domain.enums import ItemStatus
 from compendium.domain.errors import BusinessRuleError, ExternalLookupError, NotFoundError
-from compendium.domain.models import Creator, Item, Work, WorkCreator
+from compendium.domain.models import AppUser, Creator, Item, Work, WorkCreator
 from compendium.repositories.base import (
     BranchRepository,
     CreatorRepository,
     ItemRepository,
     WorkRepository,
 )
+from compendium.services.audit import AuditAction, AuditEntityType, AuditService
 from compendium.services.metadata import lookup_isbn, normalize_isbn, parse_open_library
 
 
@@ -17,11 +18,19 @@ class CatalogService:
         item_repo: ItemRepository,
         creator_repo: CreatorRepository,
         branch_repo: BranchRepository,
+        audit_svc: AuditService | None = None,
+        actor: AppUser | None = None,
+        actor_label: str | None = None,
+        source: str = "system",
     ) -> None:
         self._works = work_repo
         self._items = item_repo
         self._creators = creator_repo
         self._branches = branch_repo
+        self._audit = audit_svc
+        self._actor = actor
+        self._actor_label = actor_label
+        self._source = source
 
     # ------------------------------------------------------------------
     # Public API
@@ -40,6 +49,7 @@ class CatalogService:
         isbn = normalize_isbn(raw_isbn)
 
         work = self._works.get_by_isbn(isbn)
+        new_work = work is None
         if work is None:
             data = lookup_isbn(isbn)
             if not data:
@@ -51,6 +61,15 @@ class CatalogService:
             work = self._create_work(meta)
 
         item = self._create_item(work, location=location)
+        if new_work:
+            self._record(
+                AuditEntityType.WORK, work.id, AuditAction.CREATE,
+                {"snapshot": {"title": work.title, "isbn": work.isbn}},
+            )
+        self._record(
+            AuditEntityType.ITEM, item.id, AuditAction.CREATE,
+            {"snapshot": {"barcode": item.barcode, "work_id": work.id}},
+        )
         return work, item
 
     def withdraw_item(self, barcode: str) -> Item:
@@ -61,14 +80,24 @@ class CatalogService:
         if item.status in blocked:
             raise BusinessRuleError(f"Item '{barcode}' cannot be withdrawn while {item.status}")
         item.status = ItemStatus.WITHDRAWN.value
-        return self._items.update(item)
+        result = self._items.update(item)
+        self._record(
+            AuditEntityType.ITEM, item.id, AuditAction.WITHDRAW,
+            {"snapshot": {"barcode": item.barcode, "work_id": item.work_id}},
+        )
+        return result
 
     def add_item_to_work(self, work_id: int, location: str | None = None) -> Item:
         """Add another physical copy of an existing Work."""
         work = self._works.get(work_id)
         if work is None:
             raise NotFoundError(f"No Work with id={work_id}")
-        return self._create_item(work, location=location)
+        item = self._create_item(work, location=location)
+        self._record(
+            AuditEntityType.ITEM, item.id, AuditAction.CREATE,
+            {"snapshot": {"barcode": item.barcode, "work_id": work.id}},
+        )
+        return item
 
     # ------------------------------------------------------------------
     # Internals
@@ -133,6 +162,24 @@ class CatalogService:
     def _next_accession(self) -> str:
         n = self._items.count_all() + 1
         return f"{n:06d}"
+
+    def _record(
+        self,
+        entity_type: str,
+        entity_id: int | None,
+        action: str,
+        details: dict | None = None,
+    ) -> None:
+        if self._audit is not None:
+            self._audit.record(
+                actor=self._actor,
+                actor_label=self._actor_label,
+                source=self._source,
+                entity_type=entity_type,
+                entity_id=entity_id,
+                action=action,
+                details=details,
+            )
 
 
 def _to_sort_name(display_name: str) -> str:

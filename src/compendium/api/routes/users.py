@@ -7,18 +7,23 @@ from compendium.db.engine import get_settings
 from compendium.db.session import get_session
 from compendium.domain.errors import BusinessRuleError, NotFoundError
 from compendium.domain.models import AppUser
+from compendium.repositories.sql.audit_log_repository import SqlAuditLogRepository
 from compendium.repositories.sql.role_repository import SqlRoleRepository
 from compendium.repositories.sql.user_repository import SqlUserRepository
+from compendium.services.audit import AuditService
 from compendium.services.auth import AuthService
 
 router = APIRouter()
 
 
-def _auth(session: Session) -> AuthService:
+def _auth(session: Session, actor: AppUser) -> AuthService:
     return AuthService(
         user_repo=SqlUserRepository(session),
         role_repo=SqlRoleRepository(session),
         settings=get_settings(),
+        audit_svc=AuditService(SqlAuditLogRepository(session)),
+        actor=actor,
+        source="api",
     )
 
 
@@ -26,12 +31,12 @@ def _auth(session: Session) -> AuthService:
 def deactivate_user(
     username: str,
     session: Session = Depends(get_session),
-    _user: AppUser = Depends(require_permission("user.manage")),
+    user: AppUser = Depends(require_permission("user.manage")),
 ) -> UserResponse:
     try:
-        user = _auth(session).deactivate_user(username)
+        result = _auth(session, user).deactivate_user(username)
     except NotFoundError as exc:
         raise HTTPException(status_code=404, detail=str(exc)) from exc
     except BusinessRuleError as exc:
         raise HTTPException(status_code=422, detail=str(exc)) from exc
-    return UserResponse.model_validate(user)
+    return UserResponse.model_validate(result)

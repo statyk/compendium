@@ -10,6 +10,7 @@ from compendium.config.settings import Settings
 from compendium.domain.errors import AuthError, BusinessRuleError, ConflictError, NotFoundError
 from compendium.domain.models import AppUser
 from compendium.repositories.base import RoleRepository, UserRepository
+from compendium.services.audit import AuditAction, AuditEntityType, AuditService
 
 
 def hash_password(password: str) -> str:
@@ -30,10 +31,18 @@ class AuthService:
         user_repo: UserRepository,
         role_repo: RoleRepository,
         settings: Settings,
+        audit_svc: AuditService | None = None,
+        actor: AppUser | None = None,
+        actor_label: str | None = None,
+        source: str = "system",
     ) -> None:
         self._users = user_repo
         self._roles = role_repo
         self._settings = settings
+        self._audit = audit_svc
+        self._actor = actor
+        self._actor_label = actor_label
+        self._source = source
 
     def create_user(
         self,
@@ -53,7 +62,14 @@ class AuthService:
             password_hash=hash_password(password),
             role_id=role.id,
         )
-        return self._users.add(user)
+        result = self._users.add(user)
+        self._record(
+            AuditEntityType.USER,
+            result.id,
+            AuditAction.CREATE,
+            {"snapshot": {"username": result.username, "role": role_name}},
+        )
+        return result
 
     def authenticate(self, username: str, password: str) -> AppUser:
         user = self._users.get_by_username(username)
@@ -85,7 +101,32 @@ class AuthService:
         if not user.is_active:
             raise BusinessRuleError(f"User '{username}' is already inactive")
         user.is_active = False
-        return self._users.update(user)
+        result = self._users.update(user)
+        self._record(
+            AuditEntityType.USER,
+            result.id,
+            AuditAction.DEACTIVATE,
+            {"snapshot": {"username": result.username}},
+        )
+        return result
+
+    def _record(
+        self,
+        entity_type: str,
+        entity_id: int | None,
+        action: str,
+        details: dict | None = None,
+    ) -> None:
+        if self._audit is not None:
+            self._audit.record(
+                actor=self._actor,
+                actor_label=self._actor_label,
+                source=self._source,
+                entity_type=entity_type,
+                entity_id=entity_id,
+                action=action,
+                details=details,
+            )
 
     def verify_token(self, token: str) -> dict[str, Any]:
         try:

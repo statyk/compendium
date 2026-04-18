@@ -1,9 +1,12 @@
 from __future__ import annotations
 
+import random
+
 from compendium.domain.enums import HoldStatus
 from compendium.domain.errors import BusinessRuleError, NotFoundError
-from compendium.domain.models import Patron
+from compendium.domain.models import AppUser, Patron
 from compendium.repositories.base import HoldRepository, LoanRepository, PatronRepository
+from compendium.services.audit import AuditAction, AuditEntityType, AuditService
 
 
 class PatronService:
@@ -12,10 +15,43 @@ class PatronService:
         patron_repo: PatronRepository,
         loan_repo: LoanRepository,
         hold_repo: HoldRepository,
+        audit_svc: AuditService | None = None,
+        actor: AppUser | None = None,
+        actor_label: str | None = None,
+        source: str = "system",
     ) -> None:
         self._patrons = patron_repo
         self._loans = loan_repo
         self._holds = hold_repo
+        self._audit = audit_svc
+        self._actor = actor
+        self._actor_label = actor_label
+        self._source = source
+
+    def create(
+        self,
+        full_name: str,
+        contact_email: str | None = None,
+        contact_phone: str | None = None,
+    ) -> Patron:
+        for _ in range(10):
+            card = f"{random.randint(0, 99_999_999):08d}"
+            if self._patrons.get_by_card_number(card) is None:
+                break
+        patron = Patron(
+            library_card_number=card,
+            full_name=full_name,
+            contact_email=contact_email,
+            contact_phone=contact_phone,
+        )
+        self._patrons.add(patron)
+        self._record(
+            AuditEntityType.PATRON,
+            patron.id,
+            AuditAction.CREATE,
+            {"snapshot": {"name": patron.full_name, "card": patron.library_card_number}},
+        )
+        return patron
 
     def deactivate(self, card_number: str) -> Patron:
         patron = self._patrons.get_by_card_number(card_number)
@@ -35,4 +71,29 @@ class PatronService:
             self._holds.update(hold)
 
         patron.is_active = False
-        return self._patrons.update(patron)
+        result = self._patrons.update(patron)
+        self._record(
+            AuditEntityType.PATRON,
+            patron.id,
+            AuditAction.DEACTIVATE,
+            {"snapshot": {"name": patron.full_name, "card": patron.library_card_number}},
+        )
+        return result
+
+    def _record(
+        self,
+        entity_type: str,
+        entity_id: int | None,
+        action: str,
+        details: dict | None = None,
+    ) -> None:
+        if self._audit is not None:
+            self._audit.record(
+                actor=self._actor,
+                actor_label=self._actor_label,
+                source=self._source,
+                entity_type=entity_type,
+                entity_id=entity_id,
+                action=action,
+                details=details,
+            )

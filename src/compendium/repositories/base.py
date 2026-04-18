@@ -5,6 +5,7 @@ from typing import Protocol, runtime_checkable
 
 from compendium.domain.models import (
     AppUser,
+    AuditLog,
     Branch,
     Creator,
     Hold,
@@ -101,3 +102,15 @@ class LoanPolicyRepository(Protocol):
     def get_default(self) -> LoanPolicy | None: ...
     def list(self) -> list[LoanPolicy]: ...
     def update(self, policy: LoanPolicy) -> LoanPolicy: ...
+
+
+@runtime_checkable
+class AuditLogRepository(Protocol):
+    def add(self, entry: AuditLog) -> None: ...
+    def list(
+        self,
+        entity_type: str | None = None,
+        entity_id: int | None = None,
+        user_id: int | None = None,
+        limit: int = 50,
+    ) -> list[AuditLog]: ...
