@@ -61,7 +61,7 @@ def checkin(
 def renew(
     loan_id: int = Path(),
     session: Session = Depends(get_session),
-    _user: AppUser = Depends(require_permission("loan.renew.self")),
+    _user: AppUser = Depends(require_permission("loan.renew.any")),
 ) -> LoanResponse:
     try:
         loan = _circulation(session).renew_by_id(loan_id)

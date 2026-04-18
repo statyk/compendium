@@ -18,5 +18,8 @@ class SqlPatronRepository:
     def get_by_card_number(self, card_number: str) -> Patron | None:
         return self._s.query(Patron).filter_by(library_card_number=card_number).first()
 
+    def get_by_user_id(self, user_id: int) -> Patron | None:
+        return self._s.query(Patron).filter_by(user_id=user_id).first()
+
     def list(self, limit: int = 50, offset: int = 0) -> list[Patron]:
         return self._s.query(Patron).order_by(Patron.full_name).offset(offset).limit(limit).all()

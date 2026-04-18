@@ -76,6 +76,10 @@ class CreateHoldRequest(BaseModel):
     card_number: str
 
 
+class SelfHoldRequest(BaseModel):
+    work_id: int
+
+
 class HoldResponse(BaseModel):
     model_config = ConfigDict(from_attributes=True)
 

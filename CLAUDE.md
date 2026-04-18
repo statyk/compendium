@@ -183,6 +183,18 @@ All return permissively-licensed data; no usage restrictions relevant to an open
 
 ---
 
+## Classification systems
+
+The `Work` schema is deliberately classification-neutral: `classification_scheme` and `classification_code` are free-form strings. Compendium does not bundle or distribute any classification tables.
+
+- **LCC (Library of Congress Classification)** — the project's recommended default. US federal work, public domain (17 U.S.C. § 105). Free to use, redistribute, and build tools against.
+- **DDC (Dewey Decimal Classification)** — copyrighted and trademarked by OCLC. Individual classification numbers assigned to specific books are bibliographic facts and safe to store; the DDC *tables*, *relative index*, and *branded tooling* are not. Institutional users with an OCLC subscription can enter DDC numbers via the free-form field; Compendium will never ship DDC reference data or a "Dewey picker."
+- **Other schemes** — UDC (licensed), BISAC (licensed), custom/in-house labels all work because the field accepts any string.
+
+Rule of thumb: fetching and storing a classification number for a specific book is fine. Shipping a classification *system* (lookup tables, categorizers, editorial content) is not — unless it's LCC or user-contributed.
+
+---
+
 ## Licensing conventions
 
 - Prefer permissive licenses (MIT, Apache-2.0, BSD) for dependencies.
@@ -293,6 +305,6 @@ If you're a future Claude session joining this project:
 1. Read this file first.
 2. Run `git log --oneline` to see recent progress.
 3. Run `uv run pytest` — all tests should pass before making changes.
-4. **Current status (last updated 2026-04-18):** vertical slice 3 complete (holds + loan policies). CLI covers: `db init`, `item add --isbn`, `item show/list`, `patron add/list`, `loan checkout/checkin/renew/active`, `hold place/cancel/list`, `policy list/set`, `maintenance expire-holds`, `user add`, `serve`. FastAPI routes: `POST /auth/login`, `GET /works/search`, `GET /items/{barcode}`, `POST /patrons`, `POST /loans/checkout`, `POST /loans/{id}/checkin`, `POST /loans/{id}/renew`, `POST /holds`, `GET /holds`, `DELETE /holds/{id}`, `GET /policies`, `POST /policies`. Default LoanPolicy seeded (14 days, 2 renewals). Hold lifecycle: WAITING → AVAILABLE (on checkin) → FULFILLED (on checkout). ON_HOLD items can only be checked out by the patron holding the AVAILABLE hold. SQLite backend only.
-5. Logical next steps (discuss with user before starting): web UI (HTMX + Jinja templates), patron self-service API (renew own loans, view own holds without knowing card number), AuditLog, additional media types, MARC/CSV import.
+4. **Current status (last updated 2026-04-18):** vertical slice 4 complete (patron self-service API). CLI covers: `db init`, `item add --isbn`, `item show/list`, `patron add/list`, `loan checkout/checkin/renew/active`, `hold place/cancel/list`, `policy list/set`, `maintenance expire-holds`, `user add`, `serve`. FastAPI routes: `POST /auth/login`, `GET /works/search`, `GET /items/{barcode}`, `POST /patrons`, `POST /loans/checkout`, `POST /loans/{id}/checkin`, `POST /loans/{id}/renew` (requires `loan.renew.any`), `POST /holds`, `GET /holds`, `DELETE /holds/{id}`, `GET /policies`, `POST /policies`. Self-service routes (identity from JWT): `GET /me/loans`, `GET /me/holds`, `POST /me/holds`, `DELETE /me/holds/{id}`, `POST /me/loans/{id}/renew`. `Patron.user_id` links auth users to patron records; `get_current_patron` dep enforces this. Default LoanPolicy seeded (14 days, 2 renewals). SQLite backend only.
+5. Logical next steps (discuss with user before starting): web UI (HTMX + Jinja templates), AuditLog, additional media types / metadata sources, MARC/CSV bulk import.
 6. Design decisions on this page are settled unless the user opens them again. When a prior decision seems wrong, raise it for discussion rather than quietly overriding it.

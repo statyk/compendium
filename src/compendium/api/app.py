@@ -1,6 +1,6 @@
 from fastapi import FastAPI
 
-from compendium.api.routes import auth, holds, items, loans, patrons, policies, works
+from compendium.api.routes import auth, holds, items, loans, me, patrons, policies, works
 
 
 def create_app() -> FastAPI:
@@ -12,4 +12,5 @@ def create_app() -> FastAPI:
     app.include_router(loans.router, prefix="/loans", tags=["loans"])
     app.include_router(holds.router, prefix="/holds", tags=["holds"])
     app.include_router(policies.router, prefix="/policies", tags=["policies"])
+    app.include_router(me.router, prefix="/me", tags=["me"])
     return app

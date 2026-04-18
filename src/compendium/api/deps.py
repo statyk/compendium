@@ -7,7 +7,8 @@ from sqlalchemy.orm import Session
 
 from compendium.db.engine import get_settings
 from compendium.db.session import get_session
-from compendium.domain.models import AppUser
+from compendium.domain.models import AppUser, Patron
+from compendium.repositories.sql.patron_repository import SqlPatronRepository
 from compendium.repositories.sql.user_repository import SqlUserRepository
 from compendium.services.auth import has_permission
 
@@ -53,6 +54,19 @@ def get_optional_user(
     except jwt.PyJWTError:
         return None
     return SqlUserRepository(session).get(int(payload["sub"]))
+
+
+def get_current_patron(
+    session: Session = Depends(get_session),
+    user: AppUser = Depends(get_current_user),
+) -> Patron:
+    patron = SqlPatronRepository(session).get_by_user_id(user.id)
+    if patron is None:
+        raise HTTPException(
+            status_code=403,
+            detail="No patron account is linked to your user. Contact a librarian.",
+        )
+    return patron
 
 
 def require_permission(permission: str):
