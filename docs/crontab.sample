@@ -1,0 +1,11 @@
+# Compendium — sample crontab entries
+#
+# Install with:  crontab -e
+# Adjust the path to `compendium` to match your installation.
+# If using uv in a project directory, use:
+#   cd /path/to/compendium && uv run compendium <command>
+#
+# Run `crontab -l` to view your current crontab.
+
+# Expire holds whose pickup window has passed — runs nightly at 02:00.
+0 2 * * * cd /path/to/compendium && uv run compendium maintenance expire-holds >> /var/log/compendium-maintenance.log 2>&1

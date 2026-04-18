@@ -1,0 +1,67 @@
+# Compendium — sample systemd unit file for the daemon
+#
+# Copy to /etc/systemd/system/compendium.service and adjust:
+#   - User / Group
+#   - WorkingDirectory (path to the compendium project)
+#   - ExecStart (path to uv or the installed compendium binary)
+#   - EnvironmentFile (optional; path to your .env file)
+#
+# Then:
+#   sudo systemctl daemon-reload
+#   sudo systemctl enable --now compendium
+
+[Unit]
+Description=Compendium library catalog daemon
+After=network.target
+
+[Service]
+Type=simple
+User=compendium
+Group=compendium
+WorkingDirectory=/opt/compendium
+EnvironmentFile=/opt/compendium/.env
+ExecStart=uv run compendium serve
+Restart=on-failure
+RestartSec=5
+
+# Optional: tighten the sandbox
+NoNewPrivileges=yes
+PrivateTmp=yes
+
+[Install]
+WantedBy=multi-user.target
+
+
+# ── Companion timer for maintenance tasks ─────────────────────────────────────
+#
+# To run `expire-holds` nightly via systemd instead of cron, create two
+# additional files:
+#
+# /etc/systemd/system/compendium-maintenance.service
+# ──────────────────────────────────────────────────
+# [Unit]
+# Description=Compendium nightly maintenance
+#
+# [Service]
+# Type=oneshot
+# User=compendium
+# WorkingDirectory=/opt/compendium
+# EnvironmentFile=/opt/compendium/.env
+# ExecStart=uv run compendium maintenance expire-holds
+#
+#
+# /etc/systemd/system/compendium-maintenance.timer
+# ─────────────────────────────────────────────────
+# [Unit]
+# Description=Run Compendium maintenance nightly
+#
+# [Timer]
+# OnCalendar=*-*-* 02:00:00
+# Persistent=true
+#
+# [Install]
+# WantedBy=timers.target
+#
+# Then:
+#   sudo systemctl daemon-reload
+#   sudo systemctl enable --now compendium-maintenance.timer

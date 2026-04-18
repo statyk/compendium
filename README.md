@@ -2,56 +2,41 @@
 
 A library card catalog system for physical items — books, vinyl records, DVDs, CDs.
 
-**Status:** Active development. See [`CLAUDE.md`](CLAUDE.md) for the full design and architecture document.
+**Status:** Active development. Core circulation, holds, patron management, and a full web UI are complete. See [`CLAUDE.md`](CLAUDE.md) for architecture and design decisions.
 
-## Features (current)
+## Features
 
-- **Catalog** — add items by ISBN (Open Library lookup), search, list works and items
-- **Circulation** — checkout, checkin, loan renewal with configurable loan policies
-- **Holds** — patron reservation queue; automatic promotion on checkin
-- **Auth** — JWT-based login, role/permission model (ReadOnly, Patron, Librarian)
-- **Patron self-service API** — patrons renew loans and manage holds via their own token
+- **Catalog** — add items by ISBN (Open Library lookup), search, browse works and copies
+- **Circulation** — checkout, checkin, loan renewal with configurable per-media-type loan policies
+- **Holds** — patron reservation queue; automatic promotion on checkin; expiry via maintenance command
+- **Auth** — role/permission model (ReadOnly, Patron, Librarian); JWT for API, cookie-based for web UI
+- **Web UI** — HTMX + Jinja2 browser interface: catalog search, circulation desk, patron self-service
+- **REST API** — FastAPI; consumed by the web UI and available for integrations
 - **CLI** — full librarian workflow without running a server
-- **REST API** — FastAPI; run with `compendium serve`
 
 ## Quick start
 
 ```bash
-# Install dependencies into a project-local virtualenv
+# Install dependencies
 uv sync --extra dev
 
-# Initialise the database (creates ./compendium.db on SQLite by default)
+# Initialise the database (creates ./compendium.db with SQLite by default)
 uv run compendium db init
 
-# Add a user account
+# Create a Librarian account
 uv run compendium user add --username admin --role Librarian
 
 # Add a book by ISBN (looks up metadata from Open Library)
 uv run compendium item add --isbn 9780441013593
 
 # Add a patron
-uv run compendium patron add --name "A. Patron"
+uv run compendium patron add --name "Alice Example"
 
-# Check it out (use the barcode reported by `item add` and the card number from `patron add`)
-uv run compendium loan checkout --barcode <barcode> --card <card>
-
-# Renew a loan
-uv run compendium loan renew --barcode <barcode> --card <card>
-
-# Check it back in
-uv run compendium loan checkin --barcode <barcode>
-
-# Place and list holds
-uv run compendium hold place --work-id <id> --card <card>
-uv run compendium hold list --card <card>
-
-# View and update loan policies
-uv run compendium policy list
-uv run compendium policy set --id <id> --loan-days 21
-
-# Start the API server
+# Start the server (web UI at http://localhost:8000/ui/catalog)
 uv run compendium serve
 ```
+
+Log in at `http://localhost:8000/ui/login` with the username and password you set above.
 
 ## CLI reference
 
@@ -61,42 +46,69 @@ uv run compendium serve
 | `compendium item add --isbn <isbn>` | Add an item by ISBN |
 | `compendium item show --barcode <barcode>` | Show item detail |
 | `compendium item list` | List all items |
+| `compendium item withdraw --barcode <barcode>` | Withdraw (soft-remove) an item |
 | `compendium patron add --name <name>` | Add a patron |
 | `compendium patron list` | List patrons |
-| `compendium loan checkout` | Check out an item |
-| `compendium loan checkin` | Check in an item |
-| `compendium loan renew` | Renew an active loan |
+| `compendium patron deactivate --card <card>` | Deactivate a patron account |
+| `compendium loan checkout --barcode <b> --card <c>` | Check out an item |
+| `compendium loan checkin --barcode <barcode>` | Check in an item |
+| `compendium loan renew --barcode <b> --card <c>` | Renew an active loan |
 | `compendium loan active --card <card>` | List active loans for a patron |
-| `compendium hold place` | Place a hold |
-| `compendium hold cancel` | Cancel a hold |
-| `compendium hold list` | List active holds for a patron |
+| `compendium hold place --work-id <id> --card <c>` | Place a hold |
+| `compendium hold cancel --id <hold_id> --card <c>` | Cancel a hold |
+| `compendium hold list --card <card>` | List active holds for a patron |
 | `compendium policy list` | List loan policies |
-| `compendium policy set` | Update a loan policy |
+| `compendium policy set --id <id> --loan-days <d>` | Update a loan policy |
 | `compendium maintenance expire-holds` | Expire overdue waiting holds (for cron) |
-| `compendium user add` | Create a user account |
-| `compendium serve` | Start the API server |
+| `compendium user add --username <u> --role <r>` | Create a user account |
+| `compendium user deactivate --username <u>` | Deactivate a user account |
+| `compendium serve` | Start the API + web UI server |
 
-## API endpoints
+## Web UI
+
+Start the server with `compendium serve` and open your browser to `http://localhost:8000/ui/catalog`.
+
+| URL | Audience | Description |
+|---|---|---|
+| `/ui/catalog` | Anyone | Search catalog (live HTMX results) |
+| `/ui/catalog/{work_id}` | Anyone | Work detail, items, place-hold button |
+| `/ui/login` | Anyone | Login form |
+| `/ui/me/loans` | Patron | Active loans with inline renew |
+| `/ui/me/holds` | Patron | Active holds with inline cancel |
+| `/ui/circ` | Librarian | Circulation desk — checkout / checkin / renew |
+| `/ui/patrons` | Librarian | Patron list |
+| `/ui/patrons/{card}` | Librarian | Patron detail with active loans, holds, deactivate |
+
+Guest catalog search is enabled by default (`COMPENDIUM_GUEST_SEARCH_ENABLED=true`).
+
+## REST API endpoints
+
+The API is also available at the root. Use `Authorization: Bearer <token>` from `POST /auth/login`.
 
 | Method | Path | Permission | Description |
 |---|---|---|---|
 | POST | `/auth/login` | — | Obtain JWT |
 | GET | `/works/search?q=` | guest / `item.view` | Search catalog |
 | GET | `/items/{barcode}` | `item.view` | Item detail |
+| POST | `/items/{barcode}/withdraw` | `item.delete` | Withdraw item |
 | POST | `/patrons` | `patron.manage` | Create patron |
+| POST | `/patrons/{card}/deactivate` | `patron.manage` | Deactivate patron |
 | POST | `/loans/checkout` | `loan.checkout` | Check out |
 | POST | `/loans/{id}/checkin` | `loan.checkin` | Check in |
 | POST | `/loans/{id}/renew` | `loan.renew.any` | Renew (librarian) |
-| POST | `/holds` | `hold.place.self` | Place hold (card number required) |
+| POST | `/holds` | `hold.place.self` | Place hold |
 | GET | `/holds?card_number=` | `hold.view.self` | List holds |
 | DELETE | `/holds/{id}` | `hold.place.self` | Cancel hold |
 | GET | `/policies` | `item.view` | List loan policies |
 | POST | `/policies` | `policy.edit` | Create loan policy |
+| POST | `/users/{username}/deactivate` | `user.manage` | Deactivate user |
 | GET | `/me/loans` | `loan.view.self` | Own active loans |
 | GET | `/me/holds` | `hold.view.self` | Own active holds |
 | POST | `/me/holds` | `hold.place.self` | Place own hold |
 | DELETE | `/me/holds/{id}` | `hold.place.self` | Cancel own hold |
 | POST | `/me/loans/{id}/renew` | `loan.renew.self` | Renew own loan |
+
+Interactive API docs are at `http://localhost:8000/docs` when the server is running.
 
 ## Configuration
 
@@ -105,26 +117,41 @@ Settings are read from environment variables (prefix `COMPENDIUM_`) or a `.env` 
 | Variable | Default | Description |
 |---|---|---|
 | `COMPENDIUM_DATABASE_URL` | `sqlite:///compendium.db` | SQLAlchemy database URL |
-| `COMPENDIUM_JWT_SECRET_KEY` | *(insecure default)* | **Change in production** |
-| `COMPENDIUM_JWT_EXPIRE_MINUTES` | `480` | Token lifetime |
-| `COMPENDIUM_GUEST_SEARCH_ENABLED` | `true` | Allow unauthenticated search |
+| `COMPENDIUM_JWT_SECRET_KEY` | *(insecure default)* | **Must be changed in production** |
+| `COMPENDIUM_JWT_EXPIRE_MINUTES` | `480` | Token lifetime (8 hours) |
+| `COMPENDIUM_GUEST_SEARCH_ENABLED` | `true` | Allow unauthenticated catalog search |
 | `COMPENDIUM_DEFAULT_LOAN_PERIOD_DAYS` | `14` | Fallback loan period |
 | `COMPENDIUM_HOLD_EXPIRY_DAYS` | `30` | Days before a waiting hold expires |
 | `COMPENDIUM_HOLD_PICKUP_DAYS` | `3` | Days a patron has to collect an available hold |
 
+See [`docs/deployment.md`](docs/deployment.md) for full deployment guidance.
+
+## Scheduled maintenance
+
+The `compendium maintenance expire-holds` command should run periodically via cron or a systemd timer. See [`docs/crontab.sample`](docs/crontab.sample) and [`docs/compendium.service.sample`](docs/compendium.service.sample).
+
 ## Running tests
 
 ```bash
-uv run pytest tests/ -q
+uv run pytest -q
 ```
+
+Tests are split into `tests/unit/` (no DB, mock repos) and `tests/integration/` (SQLite in-memory). 98 tests as of the current build.
 
 ## Layout
 
-- `src/compendium/` — application code (see `CLAUDE.md` for layer breakdown)
-- `migrations/` — Alembic migrations
-- `tests/unit/` — unit tests (no DB, mock repositories)
-- `tests/integration/` — integration tests (SQLite in-memory)
+```
+src/compendium/
+├── domain/        # models, enums, permissions, errors
+├── repositories/  # base protocols + SQLAlchemy implementations
+├── services/      # business logic (catalog, circulation, holds, patrons, auth)
+├── api/           # FastAPI routes + Pydantic schemas + JWT auth
+├── web/           # HTMX + Jinja2 web UI + CSRF protection
+├── cli/           # Typer CLI commands
+├── config/        # settings, seed data
+└── db/            # engine factory, session lifecycle
+```
 
 ## License
 
-MIT (assumed; finalize before first release).
+MIT (to be finalised before first release).
