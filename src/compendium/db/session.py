@@ -1,0 +1,25 @@
+from contextlib import contextmanager
+from typing import Generator
+
+from sqlalchemy.orm import Session, sessionmaker
+
+from compendium.db.engine import get_engine
+
+
+def _make_factory() -> sessionmaker[Session]:
+    return sessionmaker(bind=get_engine(), autoflush=False, expire_on_commit=False)
+
+
+@contextmanager
+def session_scope() -> Generator[Session, None, None]:
+    """Yield a SQLAlchemy session; commit on success, roll back on error."""
+    factory = _make_factory()
+    session: Session = factory()
+    try:
+        yield session
+        session.commit()
+    except Exception:
+        session.rollback()
+        raise
+    finally:
+        session.close()
