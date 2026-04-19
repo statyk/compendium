@@ -203,6 +203,29 @@ def patron_unlink_user(
         )
 
 
+@router.get("/patrons/{card_number}/loans")
+def patron_loans(
+    card_number: str,
+    request: Request,
+    user: AppUser = Depends(require_web_permission(_PERM)),
+    session: Session = Depends(get_session),
+):
+    patron = SqlPatronRepository(session).get_by_card_number(card_number)
+    if patron is None:
+        return _render(
+            "error.html",
+            request,
+            {"request": request, "user": user, "message": f"Patron '{card_number}' not found"},
+            status_code=404,
+        )
+    loans = SqlLoanRepository(session).get_active_for_patron(patron.id)
+    return _render(
+        "patrons/loans.html",
+        request,
+        {"request": request, "user": user, "patron": patron, "loans": loans},
+    )
+
+
 @router.post("/patrons/{card_number}/holds/{hold_id}/cancel", response_class=HTMLResponse)
 def patron_cancel_hold(
     card_number: str,

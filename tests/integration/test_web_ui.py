@@ -330,6 +330,26 @@ def test_librarian_cancels_patron_hold(web_client, librarian, patron_user, work,
     assert b"cancelled" in resp.content.lower()
 
 
+def test_patron_loans_page_renders_for_librarian(web_client, librarian, patron_user):
+    _, patron = patron_user
+    cookies = _login(web_client, "lib01")
+    resp = web_client.get(f"/ui/patrons/{patron.library_card_number}/loans", cookies=cookies)
+    assert resp.status_code == 200
+    assert b"Active loans" in resp.content
+    assert patron.library_card_number.encode() in resp.content
+
+
+def test_patron_loans_page_requires_patron_manage(web_client, patron_user):
+    _, patron = patron_user
+    cookies = _login(web_client, "patron01")
+    resp = web_client.get(
+        f"/ui/patrons/{patron.library_card_number}/loans",
+        cookies=cookies,
+        follow_redirects=False,
+    )
+    assert resp.status_code == 403
+
+
 def test_patron_cannot_cancel_via_librarian_route(web_client, patron_user, work, web_session):
     from compendium.repositories.sql.hold_repository import SqlHoldRepository
 

@@ -1,0 +1,43 @@
+{% extends "base.html" %}
+{% block title %}Loans — {{ patron.full_name }} — Compendium{% endblock %}
+{% block content %}
+<nav aria-label="breadcrumb">
+  <ul>
+    <li><a href="/ui/patrons">Patrons</a></li>
+    <li><a href="/ui/patrons/{{ patron.library_card_number }}">{{ patron.full_name }}</a></li>
+    <li>Loans</li>
+  </ul>
+</nav>
+
+<hgroup>
+  <h2>Active loans</h2>
+  <p>{{ patron.full_name }} — <code>{{ patron.library_card_number }}</code></p>
+</hgroup>
+
+{% if loans %}
+<table>
+  <thead>
+    <tr>
+      <th>Barcode</th>
+      <th>Title</th>
+      <th>Branch</th>
+      <th>Checked out</th>
+      <th>Due</th>
+    </tr>
+  </thead>
+  <tbody>
+    {% for loan in loans %}
+    <tr>
+      <td><a href="/ui/items/{{ loan.item.barcode }}"><code>{{ loan.item.barcode }}</code></a></td>
+      <td><a href="/ui/catalog/{{ loan.item.work_id }}">{{ loan.item.work.title }}</a></td>
+      <td>{{ loan.item.branch.name if loan.item.branch else "—" }}</td>
+      <td>{{ loan.checked_out_at.strftime("%Y-%m-%d") if loan.checked_out_at else "—" }}</td>
+      <td>{{ loan.due_at.strftime("%Y-%m-%d") if loan.due_at else "—" }}</td>
+    </tr>
+    {% endfor %}
+  </tbody>
+</table>
+{% else %}
+  <p><em>No active loans.</em></p>
+{% endif %}
+{% endblock %}
