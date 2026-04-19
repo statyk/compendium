@@ -85,7 +85,7 @@ def active_loans(
     card: str = typer.Option(..., "--card", help="Patron library card number"),
 ) -> None:
     """List active loans for a patron."""
-    from datetime import datetime
+    from datetime import datetime, timezone
 
     with session_scope() as session:
         patron = SqlPatronRepository(session).get_by_card_number(card)
@@ -98,6 +98,6 @@ def active_loans(
             return
         typer.echo(f"\nActive loans for {patron.full_name}:")
         for loan in loans:
-            overdue = "  *** OVERDUE ***" if loan.due_at < datetime.utcnow() else ""
+            overdue = "  *** OVERDUE ***" if loan.due_at < datetime.now(timezone.utc) else ""
             due = loan.due_at.strftime("%Y-%m-%d")
             typer.echo(f"  {loan.item.work.title}  |  due {due}{overdue}")

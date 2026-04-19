@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 from typing import Any
 
 import bcrypt
@@ -80,7 +80,7 @@ class AuthService:
         return user
 
     def issue_token(self, user: AppUser) -> str:
-        expire = datetime.utcnow() + timedelta(minutes=self._settings.jwt_expire_minutes)
+        expire = datetime.now(timezone.utc) + timedelta(minutes=self._settings.jwt_expire_minutes)
         payload: dict[str, Any] = {
             "sub": str(user.id),
             "username": user.username,

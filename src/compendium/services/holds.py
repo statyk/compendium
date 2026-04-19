@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 
 from compendium.domain.enums import HoldStatus
 from compendium.domain.errors import BusinessRuleError, NotFoundError
@@ -46,7 +46,7 @@ class HoldService:
             raise BusinessRuleError(f"Patron already has an active hold on work {work_id}")
 
         branch = self._branches.get_default()
-        now = datetime.utcnow()
+        now = datetime.now(timezone.utc)
         hold = Hold(
             work_id=work_id,
             patron_id=patron.id,
@@ -69,7 +69,7 @@ class HoldService:
         return self._holds.update(hold)
 
     def expire_holds(self) -> int:
-        holds = self._holds.get_expired_waiting(datetime.utcnow())
+        holds = self._holds.get_expired_waiting(datetime.now(timezone.utc))
         for hold in holds:
             hold.status = HoldStatus.EXPIRED.value
             self._holds.update(hold)

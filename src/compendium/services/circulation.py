@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 
 from compendium.domain.enums import HoldStatus, ItemStatus
 from compendium.domain.errors import BusinessRuleError, NotFoundError
@@ -50,7 +50,7 @@ class CirculationService:
         """After checkin: promote oldest WAITING hold to AVAILABLE, or free the item."""
         hold = self._holds.get_oldest_waiting_for_work(item.work_id)
         if hold is not None:
-            now = datetime.utcnow()
+            now = datetime.now(timezone.utc)
             hold.status = HoldStatus.AVAILABLE.value
             hold.expires_at = now + timedelta(days=self._pickup_days)
             hold.notified_at = now
@@ -83,7 +83,7 @@ class CirculationService:
 
         loan_period_days, _ = self._get_policy(item)
         branch = self._branches.get_default()
-        now = datetime.utcnow()
+        now = datetime.now(timezone.utc)
         loan = Loan(
             item_id=item.id,
             patron_id=patron.id,
@@ -110,7 +110,7 @@ class CirculationService:
         if loan is None:
             raise BusinessRuleError(f"Item '{barcode}' has no active loan to check in")
 
-        loan.returned_at = datetime.utcnow()
+        loan.returned_at = datetime.now(timezone.utc)
         self._loans.update(loan)
 
         self._promote_hold(item)
@@ -128,7 +128,7 @@ class CirculationService:
         if item is None:
             raise NotFoundError(f"No item with id={loan.item_id}")
 
-        loan.returned_at = datetime.utcnow()
+        loan.returned_at = datetime.now(timezone.utc)
         self._loans.update(loan)
 
         self._promote_hold(item)
@@ -154,7 +154,7 @@ class CirculationService:
                 f"Item '{barcode}' has reached the renewal limit ({max_renewals})"
             )
 
-        loan.due_at = datetime.utcnow() + timedelta(days=loan_period_days)
+        loan.due_at = datetime.now(timezone.utc) + timedelta(days=loan_period_days)
         loan.renewal_count += 1
         self._loans.update(loan)
         return loan
@@ -178,7 +178,7 @@ class CirculationService:
                 f"Loan {loan_id} has reached the renewal limit ({max_renewals})"
             )
 
-        loan.due_at = datetime.utcnow() + timedelta(days=loan_period_days)
+        loan.due_at = datetime.now(timezone.utc) + timedelta(days=loan_period_days)
         loan.renewal_count += 1
         self._loans.update(loan)
         return loan

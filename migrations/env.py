@@ -24,13 +24,18 @@ def _db_url() -> str:
     return url
 
 
+def _is_sqlite(url: str) -> bool:
+    return url.startswith("sqlite")
+
+
 def run_migrations_offline() -> None:
+    url = _db_url()
     context.configure(
-        url=_db_url(),
+        url=url,
         target_metadata=target_metadata,
         literal_binds=True,
         dialect_opts={"paramstyle": "named"},
-        render_as_batch=True,  # required for SQLite ALTER TABLE support
+        render_as_batch=_is_sqlite(url),
     )
     with context.begin_transaction():
         context.run_migrations()
@@ -38,7 +43,8 @@ def run_migrations_offline() -> None:
 
 def run_migrations_online() -> None:
     cfg = config.get_section(config.config_ini_section, {})
-    cfg["sqlalchemy.url"] = _db_url()
+    url = _db_url()
+    cfg["sqlalchemy.url"] = url
 
     connectable = engine_from_config(
         cfg,
@@ -50,7 +56,7 @@ def run_migrations_online() -> None:
         context.configure(
             connection=connection,
             target_metadata=target_metadata,
-            render_as_batch=True,  # required for SQLite ALTER TABLE support
+            render_as_batch=_is_sqlite(url),
         )
         with context.begin_transaction():
             context.run_migrations()

@@ -8,8 +8,11 @@ from compendium.config.settings import Settings
 def make_engine(settings: Settings) -> Engine:
     kwargs: dict = {}
     if settings.database_url.startswith("sqlite"):
-        # SQLite needs this for multi-threaded CLI use
         kwargs["connect_args"] = {"check_same_thread": False}
+    elif settings.database_url.startswith("postgresql"):
+        kwargs["pool_size"] = 5
+        kwargs["max_overflow"] = 10
+        kwargs["pool_pre_ping"] = True
     return create_engine(settings.database_url, **kwargs)
 
 

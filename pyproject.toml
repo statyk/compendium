@@ -23,9 +23,13 @@ dependencies = [
 ]
 
 [project.optional-dependencies]
+postgres = [
+    "psycopg[binary]>=3.1",
+]
 dev = [
     "pytest>=8.0",
     "ruff>=0.5",
+    "testcontainers[postgres]>=4.8",
 ]
 
 [project.scripts]
@@ -59,4 +63,9 @@ select = [
 [tool.pytest.ini_options]
 testpaths = ["tests"]
 pythonpath = ["src"]
+
+[dependency-groups]
+dev = [
+    "testcontainers[postgres]>=4.8",
+]
 
