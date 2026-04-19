@@ -10,7 +10,7 @@ class AuditEntityType:
     PATRON = "patron"
     USER = "user"
     POLICY = "policy"
-    ROLE = "role"  # stubbed — role CRUD not yet implemented
+    ROLE = "role"
 
 
 class AuditAction:

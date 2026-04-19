@@ -23,6 +23,7 @@ _ENTITY_CHOICES = [
     (AuditEntityType.PATRON, "Patron"),
     (AuditEntityType.USER, "User"),
     (AuditEntityType.POLICY, "Policy"),
+    (AuditEntityType.ROLE, "Role"),
 ]
 
 

@@ -2,7 +2,7 @@ from typing import Optional
 
 import typer
 
-from compendium.cli.commands import audit, db, hold, item, loan, maintenance, patron, policy, user
+from compendium.cli.commands import audit, db, hold, item, loan, maintenance, patron, policy, role, user
 
 app = typer.Typer(
     name="compendium",
@@ -17,6 +17,7 @@ app.add_typer(patron.app, name="patron")
 app.add_typer(loan.app, name="loan")
 app.add_typer(hold.app, name="hold")
 app.add_typer(policy.app, name="policy")
+app.add_typer(role.app, name="role")
 app.add_typer(maintenance.app, name="maintenance")
 app.add_typer(user.app, name="user")
 

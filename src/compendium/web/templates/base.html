@@ -21,13 +21,13 @@
       <ul>
         <li><a href="/ui/catalog">Catalog</a></li>
         {% if user %}
-          {% if user.role.name in ("Librarian",) or "*" in user.role.permissions %}
-            <li><a href="/ui/circ">Circ Desk</a></li>
-            <li><a href="/ui/patrons">Patrons</a></li>
-            <li><a href="/ui/users">Users</a></li>
-            <li><a href="/ui/items/new">Add Item</a></li>
-            <li><a href="/ui/audit">Audit Log</a></li>
-          {% endif %}
+          {% if has_permission(user, 'loan.checkout') %}<li><a href="/ui/circ">Circ Desk</a></li>{% endif %}
+          {% if has_permission(user, 'patron.manage') %}<li><a href="/ui/patrons">Patrons</a></li>{% endif %}
+          {% if has_permission(user, 'user.manage') %}<li><a href="/ui/users">Users</a></li>{% endif %}
+          {% if has_permission(user, 'item.create') %}<li><a href="/ui/items/new">Add Item</a></li>{% endif %}
+          {% if has_permission(user, 'policy.edit') %}<li><a href="/ui/policies">Policies</a></li>{% endif %}
+          {% if has_permission(user, 'role.manage') %}<li><a href="/ui/roles">Roles</a></li>{% endif %}
+          {% if has_permission(user, 'patron.manage') %}<li><a href="/ui/audit">Audit Log</a></li>{% endif %}
           <li><a href="/ui/me/loans">My Loans</a></li>
           <li><a href="/ui/me/holds">My Holds</a></li>
           <li>

@@ -544,3 +544,198 @@ def test_patron_link_unlink_user(web_client, librarian, web_session):
     assert resp2.status_code == 303
     web_session.refresh(patron)
     assert patron.user_id is None
+
+
+# ── Policy management ─────────────────────────────────────────────────────────
+
+
+def test_policy_list_requires_auth(web_client):
+    resp = web_client.get("/ui/policies")
+    assert resp.status_code == 303
+    assert "/ui/login" in resp.headers["location"]
+
+
+def test_policy_list_renders_for_librarian(web_client, librarian):
+    cookies = _login(web_client, "lib01")
+    resp = web_client.get("/ui/policies", cookies=cookies)
+    assert resp.status_code == 200
+    assert b"Loan Policies" in resp.content
+    assert b"Default" in resp.content  # seed policy
+
+
+def test_policy_new_form_renders(web_client, librarian):
+    cookies = _login(web_client, "lib01")
+    resp = web_client.get("/ui/policies/new", cookies=cookies)
+    assert resp.status_code == 200
+    assert b"Create Loan Policy" in resp.content
+
+
+def test_policy_create_redirects(web_client, librarian):
+    auth_cookies = _login(web_client, "lib01")
+    raw, signed = _make_csrf_pair()
+    resp = web_client.post(
+        "/ui/policies/new",
+        data={"name": "Test Policy", "loan_period_days": "7", "max_renewals": "1", "csrf_token": raw},
+        cookies={**auth_cookies, CSRF_COOKIE: signed},
+    )
+    assert resp.status_code == 303
+    assert "/ui/policies" in resp.headers["location"]
+
+
+def test_policy_update_persists(web_client, librarian, web_session):
+    from compendium.repositories.sql.loan_policy_repository import SqlLoanPolicyRepository
+    policies = SqlLoanPolicyRepository(web_session).list()
+    default_policy = next(p for p in policies if p.is_default)
+
+    auth_cookies = _login(web_client, "lib01")
+    raw, signed = _make_csrf_pair()
+    resp = web_client.post(
+        f"/ui/policies/{default_policy.id}/update",
+        data={
+            "loan_period_days": "28",
+            "max_renewals": "3",
+            "is_default": "on",
+            "csrf_token": raw,
+        },
+        cookies={**auth_cookies, CSRF_COOKIE: signed},
+    )
+    assert resp.status_code == 303
+    web_session.refresh(default_policy)
+    assert default_policy.loan_period_days == 28
+    assert default_policy.max_renewals == 3
+
+
+def test_policy_create_as_default_swaps(web_client, librarian, web_session):
+    from compendium.repositories.sql.loan_policy_repository import SqlLoanPolicyRepository
+    repo = SqlLoanPolicyRepository(web_session)
+    old_default = repo.get_default()
+    assert old_default is not None
+
+    auth_cookies = _login(web_client, "lib01")
+    raw, signed = _make_csrf_pair()
+    resp = web_client.post(
+        "/ui/policies/new",
+        data={
+            "name": "New Default",
+            "loan_period_days": "30",
+            "max_renewals": "0",
+            "is_default": "on",
+            "csrf_token": raw,
+        },
+        cookies={**auth_cookies, CSRF_COOKIE: signed},
+    )
+    assert resp.status_code == 303
+    web_session.refresh(old_default)
+    assert old_default.is_default is False
+    new_default = repo.get_default()
+    assert new_default is not None
+    assert new_default.name == "New Default"
+
+
+# ── Role management ───────────────────────────────────────────────────────────
+
+
+def test_role_list_requires_auth(web_client):
+    resp = web_client.get("/ui/roles")
+    assert resp.status_code == 303
+    assert "/ui/login" in resp.headers["location"]
+
+
+def test_role_list_renders_for_librarian(web_client, librarian):
+    cookies = _login(web_client, "lib01")
+    resp = web_client.get("/ui/roles", cookies=cookies)
+    assert resp.status_code == 200
+    assert b"Roles" in resp.content
+    assert b"Librarian" in resp.content
+
+
+def test_role_new_form_renders(web_client, librarian):
+    cookies = _login(web_client, "lib01")
+    resp = web_client.get("/ui/roles/new", cookies=cookies)
+    assert resp.status_code == 200
+    assert b"Create Role" in resp.content
+    assert b"item.view" in resp.content  # permission picker populated
+
+
+def test_role_create_with_permissions(web_client, librarian, web_session):
+    auth_cookies = _login(web_client, "lib01")
+    raw, signed = _make_csrf_pair()
+    resp = web_client.post(
+        "/ui/roles/new",
+        data={
+            "name": "WebTestRole",
+            "permissions": ["item.view", "loan.checkout"],
+            "csrf_token": raw,
+        },
+        cookies={**auth_cookies, CSRF_COOKIE: signed},
+    )
+    assert resp.status_code == 303
+    from compendium.repositories.sql.role_repository import SqlRoleRepository
+    role = SqlRoleRepository(web_session).get_by_name("WebTestRole")
+    assert role is not None
+    assert "item.view" in role.permissions
+    assert role.is_system is False
+
+
+def test_role_create_full_access(web_client, librarian, web_session):
+    auth_cookies = _login(web_client, "lib01")
+    raw, signed = _make_csrf_pair()
+    resp = web_client.post(
+        "/ui/roles/new",
+        data={"name": "FullRole", "full_access": "on", "csrf_token": raw},
+        cookies={**auth_cookies, CSRF_COOKIE: signed},
+    )
+    assert resp.status_code == 303
+    from compendium.repositories.sql.role_repository import SqlRoleRepository
+    role = SqlRoleRepository(web_session).get_by_name("FullRole")
+    assert role is not None
+    assert role.permissions == ["*"]
+
+
+def test_role_detail_renders(web_client, librarian, web_session):
+    from compendium.repositories.sql.role_repository import SqlRoleRepository
+    patron_role = SqlRoleRepository(web_session).get_by_name("Patron")
+    cookies = _login(web_client, "lib01")
+    resp = web_client.get(f"/ui/roles/{patron_role.id}", cookies=cookies)
+    assert resp.status_code == 200
+    assert b"Patron" in resp.content
+
+
+def test_role_detail_404(web_client, librarian):
+    cookies = _login(web_client, "lib01")
+    resp = web_client.get("/ui/roles/99999", cookies=cookies)
+    assert resp.status_code == 404
+
+
+def test_role_update_blocked_for_preset(web_client, librarian, web_session):
+    from compendium.repositories.sql.role_repository import SqlRoleRepository
+    lib_role = SqlRoleRepository(web_session).get_by_name("Librarian")
+    auth_cookies = _login(web_client, "lib01")
+    raw, signed = _make_csrf_pair()
+    resp = web_client.post(
+        f"/ui/roles/{lib_role.id}/update",
+        data={"name": "Librarian", "permissions": ["item.view"], "csrf_token": raw},
+        cookies={**auth_cookies, CSRF_COOKIE: signed},
+    )
+    assert resp.status_code == 303
+    assert "error" in resp.headers["location"]
+
+
+def test_role_clone_creates_editable_copy(web_client, librarian, web_session):
+    from compendium.repositories.sql.role_repository import SqlRoleRepository
+    read_only = SqlRoleRepository(web_session).get_by_name("ReadOnly")
+    auth_cookies = _login(web_client, "lib01")
+    raw, signed = _make_csrf_pair()
+    resp = web_client.post(
+        f"/ui/roles/{read_only.id}/clone",
+        data={"csrf_token": raw},
+        cookies={**auth_cookies, CSRF_COOKIE: signed},
+    )
+    assert resp.status_code == 303
+    location = resp.headers["location"]
+    assert "/ui/roles/" in location
+    new_id = int(location.rsplit("/", 1)[-1].split("?")[0])
+    cloned = SqlRoleRepository(web_session).get(new_id)
+    assert cloned is not None
+    assert cloned.is_system is False
+    assert cloned.name == "ReadOnly (copy)"

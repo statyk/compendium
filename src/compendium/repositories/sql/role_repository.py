@@ -20,3 +20,7 @@ class SqlRoleRepository:
 
     def list(self) -> list[Role]:
         return self._s.query(Role).order_by(Role.name).all()
+
+    def update(self, role: Role) -> Role:
+        self._s.flush()
+        return role

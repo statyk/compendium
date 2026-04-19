@@ -44,6 +44,21 @@ def add_user(
         raise typer.Exit(1) from exc
 
 
+@app.command("set-role")
+def set_user_role(
+    username: str = typer.Option(..., "--username", help="Username to update"),
+    role: str = typer.Option(..., "--role", help="New role name"),
+) -> None:
+    """Change the role assigned to a user account."""
+    try:
+        with session_scope() as session:
+            user = _auth_svc(session).update_role(username, role)
+            typer.echo(f"\nUser '{user.username}' role set to '{user.role.name}'.")
+    except DomainError as exc:
+        typer.echo(f"Error: {exc}", err=True)
+        raise typer.Exit(1) from exc
+
+
 @app.command("deactivate")
 def deactivate_user(
     username: str = typer.Option(..., "--username", help="Username to deactivate"),

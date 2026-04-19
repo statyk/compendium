@@ -1,0 +1,109 @@
+{% extends "base.html" %}
+{% block title %}{{ role.name }} — Compendium{% endblock %}
+{% block content %}
+<nav aria-label="breadcrumb">
+  <ul>
+    <li><a href="/ui/roles">Roles</a></li>
+    <li>{{ role.name }}</li>
+  </ul>
+</nav>
+
+<hgroup>
+  <h2>{{ role.name }}</h2>
+  <p>{% if role.is_system %}Preset role — read-only{% else %}Custom role{% endif %}</p>
+</hgroup>
+
+{% if message %}<p class="success-banner">{{ message }}</p>{% endif %}
+{% if error %}<p class="error-banner">{{ error }}</p>{% endif %}
+
+{% set is_full_access = "*" in role.permissions %}
+
+{% if role.is_system %}
+<dl>
+  <dt>Permissions</dt>
+  <dd>
+    {% if is_full_access %}
+      <strong>Full access</strong> (<code>["*"]</code>)
+    {% else %}
+      {% for perm in role.permissions %}<code>{{ perm }}</code>{% if not loop.last %}, {% endif %}{% endfor %}
+    {% endif %}
+  </dd>
+  <dt>Users with this role</dt>
+  <dd>
+    {% if role.users %}
+      {% for u in role.users %}<a href="/ui/users/{{ u.username }}">{{ u.username }}</a>{% if not loop.last %}, {% endif %}{% endfor %}
+    {% else %}
+      <em>None</em>
+    {% endif %}
+  </dd>
+</dl>
+<form method="post" action="/ui/roles/{{ role.id }}/clone">
+  <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+  <button type="submit" class="outline">Clone to editable copy</button>
+</form>
+
+{% else %}
+
+<form method="post" action="/ui/roles/{{ role.id }}/update">
+  <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+  <label for="name">Name</label>
+  <input type="text" id="name" name="name" value="{{ role.name }}" required autocomplete="off">
+
+  <fieldset>
+    <legend>Permissions</legend>
+    <label>
+      <input type="checkbox" id="full-access" name="full_access" value="on"
+             {% if is_full_access %}checked{% endif %}
+             onchange="togglePerms(this)">
+      <strong>Full access</strong> — grants all permissions (stores <code>["*"]</code>)
+    </label>
+    <hr>
+    <div id="perm-groups">
+      {% for category, perms in permission_groups %}
+      <fieldset>
+        <legend>{{ category }}</legend>
+        {% for perm in perms %}
+        <label>
+          <input type="checkbox" name="permissions" value="{{ perm }}" class="perm-check"
+                 {% if perm in role.permissions %}checked{% endif %}
+                 {% if is_full_access %}disabled{% endif %}>
+          <code>{{ perm }}</code>
+        </label>
+        {% endfor %}
+      </fieldset>
+      {% endfor %}
+    </div>
+  </fieldset>
+
+  <dt>Users with this role</dt>
+  <dd>
+    {% if role.users %}
+      {% for u in role.users %}<a href="/ui/users/{{ u.username }}">{{ u.username }}</a>{% if not loop.last %}, {% endif %}{% endfor %}
+    {% else %}
+      <em>None</em>
+    {% endif %}
+  </dd>
+
+  <div style="margin-top:1rem; display:flex; gap:0.5rem; flex-wrap:wrap">
+    <button type="submit">Save Changes</button>
+    <a href="/ui/roles" role="button" class="outline secondary">Cancel</a>
+  </div>
+</form>
+
+<hr>
+<form method="post" action="/ui/roles/{{ role.id }}/clone" style="margin-top:0.5rem">
+  <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+  <button type="submit" class="outline">Clone to new role</button>
+</form>
+{% endif %}
+{% endblock %}
+{% block scripts %}
+<script>
+function togglePerms(cb) {
+  document.querySelectorAll('.perm-check').forEach(el => {
+    el.disabled = cb.checked;
+    if (cb.checked) el.checked = false;
+  });
+}
+</script>
+{% endblock %}

@@ -22,21 +22,21 @@ A library card catalog system for physical items — books, vinyl records, DVDs,
 **Debian / Ubuntu**
 ```bash
 sudo apt-get update
-sudo apt-get install -y python3.11 python3.11-venv python3.11-dev build-essential
+sudo apt-get install -y python3 python3-venv python3-dev build-essential
 curl -LsSf https://astral.sh/uv/install.sh | sh
 source $HOME/.local/bin/env
 ```
 
 **RedHat / CentOS / Fedora**
 ```bash
-sudo dnf install -y python3.11 python3.11-devel gcc
+sudo dnf install -y python3 python3-devel gcc
 curl -LsSf https://astral.sh/uv/install.sh | sh
 source $HOME/.local/bin/env
 ```
 
 **macOS**
 ```bash
-brew install python@3.11 uv
+brew install python uv
 ```
 
 ### Run

@@ -33,11 +33,7 @@ class PolicyService:
         is_default: bool = False,
     ) -> LoanPolicy:
         if is_default:
-            existing = self._policies.get_default()
-            if existing is not None:
-                raise BusinessRuleError(
-                    "A default policy already exists. Update it instead."
-                )
+            self._policies.clear_defaults()
         policy = LoanPolicy(
             name=name,
             media_type_id=media_type_id,
@@ -59,17 +55,36 @@ class PolicyService:
         policy_id: int,
         loan_period_days: int | None = None,
         max_renewals: int | None = None,
+        is_default: bool | None = None,
     ) -> LoanPolicy:
         policy = self._policies.get(policy_id)
         if policy is None:
             raise NotFoundError(f"No policy with id={policy_id}")
-        before = {"loan_period_days": policy.loan_period_days, "max_renewals": policy.max_renewals}
+        before = {
+            "loan_period_days": policy.loan_period_days,
+            "max_renewals": policy.max_renewals,
+            "is_default": policy.is_default,
+        }
         if loan_period_days is not None:
             policy.loan_period_days = loan_period_days
         if max_renewals is not None:
             policy.max_renewals = max_renewals
+        if is_default is True:
+            self._policies.clear_defaults()
+            policy.is_default = True
+        elif is_default is False:
+            if policy.is_default:
+                raise BusinessRuleError(
+                    "Cannot remove default from the only default policy. "
+                    "Set another policy as default first."
+                )
+            policy.is_default = False
         self._policies.update(policy)
-        after = {"loan_period_days": policy.loan_period_days, "max_renewals": policy.max_renewals}
+        after = {
+            "loan_period_days": policy.loan_period_days,
+            "max_renewals": policy.max_renewals,
+            "is_default": policy.is_default,
+        }
         self._record(
             AuditEntityType.POLICY,
             policy.id,

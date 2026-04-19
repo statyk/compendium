@@ -5,7 +5,7 @@ from __future__ import annotations
 from fastapi import APIRouter
 
 from compendium.web.deps import NoPatronAccountException, RequiresLoginException
-from compendium.web.routes import audit, auth, catalog, circ, items, me, patrons, users
+from compendium.web.routes import audit, auth, catalog, circ, items, me, patrons, policies, roles, users
 
 
 def create_web_router() -> APIRouter:
@@ -16,6 +16,8 @@ def create_web_router() -> APIRouter:
     router.include_router(items.router)
     router.include_router(me.router)
     router.include_router(patrons.router)
+    router.include_router(policies.router)
+    router.include_router(roles.router)
     router.include_router(users.router)
     router.include_router(audit.router)
     return router
