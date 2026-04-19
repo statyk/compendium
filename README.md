@@ -17,6 +17,30 @@ A library card catalog system for physical items — books, vinyl records, DVDs,
 
 ## Quick start
 
+### Prerequisites
+
+**Debian / Ubuntu**
+```bash
+sudo apt-get update
+sudo apt-get install -y python3.11 python3.11-venv python3.11-dev build-essential
+curl -LsSf https://astral.sh/uv/install.sh | sh
+source $HOME/.local/bin/env
+```
+
+**RedHat / CentOS / Fedora**
+```bash
+sudo dnf install -y python3.11 python3.11-devel gcc
+curl -LsSf https://astral.sh/uv/install.sh | sh
+source $HOME/.local/bin/env
+```
+
+**macOS**
+```bash
+brew install python@3.11 uv
+```
+
+### Run
+
 ```bash
 # Install dependencies
 uv sync --extra dev
