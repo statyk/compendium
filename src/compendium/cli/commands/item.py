@@ -8,36 +8,66 @@ from compendium.repositories.sql.item_repository import SqlItemRepository
 from compendium.repositories.sql.media_type_repository import SqlMediaTypeRepository
 from compendium.repositories.sql.work_repository import SqlWorkRepository
 from compendium.services.catalog import CatalogService
-from compendium.services.metadata import tmdb_search_title
+from compendium.services.metadata import (
+    musicbrainz_search_title,
+    open_library_search_title,
+    tmdb_search_title,
+)
 
 app = typer.Typer(help="Catalog item commands.")
 
+_TITLE_SEARCH_SOURCES: dict[str, tuple[str, str, str]] = {
+    # media_type -> (source_label, identifier_kind_for_picks, search_fn_name)
+    "book": ("Open Library", "isbn", "open_library"),
+    "vinyl": ("MusicBrainz", "mbid", "musicbrainz"),
+    "cd": ("MusicBrainz", "mbid", "musicbrainz"),
+    "dvd": ("TMDb", "tmdb_id", "tmdb"),
+    "bluray": ("TMDb", "tmdb_id", "tmdb"),
+    "vhs": ("TMDb", "tmdb_id", "tmdb"),
+}
 
-def _pick_tmdb_candidate(query: str) -> str | None:
-    """Run a TMDb title search and prompt the user to pick a result.
 
-    Returns the selected tmdb_id as a string, or None if the user cancels
-    or there are no matches. Exits via typer on network/config errors.
+def _title_search(mt_code: str, query: str) -> list[dict]:
+    source = _TITLE_SEARCH_SOURCES[mt_code][2]
+    if source == "open_library":
+        return open_library_search_title(query)
+    if source == "musicbrainz":
+        return musicbrainz_search_title(query)
+    return tmdb_search_title(query)
+
+
+def _pick_title_candidate(mt_code: str, query: str) -> str | None:
+    """Run a title search for the given media type and prompt the user to pick a result.
+
+    Returns the selected candidate's identifier_value (ISBN, MBID, or tmdb_id), or
+    None if the user cancels or there are no matches. Exits via typer on
+    network/config errors.
     """
-    from compendium.domain.errors import ExternalLookupError
+    if mt_code not in _TITLE_SEARCH_SOURCES:
+        typer.echo(
+            f"Error: --title not supported for media type '{mt_code}'.", err=True
+        )
+        raise typer.Exit(1)
+    source_label = _TITLE_SEARCH_SOURCES[mt_code][0]
 
-    typer.echo(f"Searching TMDb for '{query}'…")
+    typer.echo(f"Searching {source_label} for '{query}'…")
     try:
-        candidates = tmdb_search_title(query)
+        candidates = _title_search(mt_code, query)
     except ExternalLookupError as exc:
         typer.echo(f"Lookup failed: {exc}", err=True)
         raise typer.Exit(1) from exc
 
     if not candidates:
-        typer.echo(f"No TMDb results for '{query}'.")
+        typer.echo(f"No {source_label} results for '{query}'.")
         return None
 
     typer.echo("")
     for i, c in enumerate(candidates, start=1):
         year = f" ({c['year']})" if c.get("year") else ""
-        typer.echo(f"  {i}. {c['title']}{year}  [tmdb:{c['tmdb_id']}]")
-        if c.get("overview"):
-            typer.echo(f"     {c['overview']}")
+        tail = f"  [{c['tertiary']}]" if c.get("tertiary") else ""
+        typer.echo(f"  {i}. {c['title']}{year}{tail}")
+        if c.get("secondary"):
+            typer.echo(f"     {c['secondary']}")
     typer.echo("")
 
     choice = typer.prompt(
@@ -46,7 +76,7 @@ def _pick_tmdb_candidate(query: str) -> str | None:
     if choice < 1 or choice > len(candidates):
         typer.echo("Cancelled.")
         return None
-    return str(candidates[choice - 1]["tmdb_id"])
+    return str(candidates[choice - 1]["identifier_value"])
 
 
 def _catalog(session):
@@ -65,33 +95,43 @@ def add_item(
     upc: str | None = typer.Option(None, "--upc", help="UPC/EAN barcode (vinyl, CD)"),
     mbid: str | None = typer.Option(None, "--mbid", help="MusicBrainz release ID (vinyl, CD)"),
     tmdb_id: str | None = typer.Option(None, "--tmdb-id", help="TMDb movie ID (dvd, bluray, vhs) — requires COMPENDIUM_TMDB_API_KEY"),
+    title: str | None = typer.Option(
+        None, "--title", help="Search by title and pick from candidates (requires --media-type)"
+    ),
     tmdb_title: str | None = typer.Option(
-        None, "--tmdb-title", help="Search TMDb by title and pick from candidates (dvd, bluray, vhs)"
+        None, "--tmdb-title", hidden=True, help="Deprecated alias for --title (film only)."
     ),
     media_type: str | None = typer.Option(
-        None, "--media-type", help="Media type code: vinyl, cd, dvd, bluray, vhs (required with --upc/--mbid/--tmdb-id/--tmdb-title)"
+        None, "--media-type", help="Media type code: book, vinyl, cd, dvd, bluray, vhs (required with --upc/--mbid/--tmdb-id/--title)"
     ),
     location: str | None = typer.Option(None, "--location", help="Shelf location note"),
 ) -> None:
     """Add a new item to the catalog.
 
-    Books:  --isbn <ISBN>
+    Books:  --isbn <ISBN>  OR  --title "Name" --media-type book
     Music:  --upc <barcode> --media-type vinyl|cd  OR  --mbid <uuid> --media-type vinyl|cd
+            --title "Name" --media-type vinyl|cd  (interactive picker via MusicBrainz)
     Film:   --tmdb-id <id> --media-type dvd|bluray|vhs  (requires COMPENDIUM_TMDB_API_KEY)
-            --tmdb-title "Name" --media-type dvd|bluray|vhs  (interactive picker)
+            --title "Name" --media-type dvd|bluray|vhs  (interactive picker via TMDb)
     """
-    if tmdb_title is not None and tmdb_id is None:
+    if tmdb_title is not None and title is None:
+        title = tmdb_title
+
+    if title is not None:
         if not media_type:
             typer.echo(
-                "Error: --media-type is required with --tmdb-title (e.g. dvd, bluray, vhs).",
+                "Error: --media-type is required with --title (e.g. book, vinyl, cd, dvd, bluray, vhs).",
                 err=True,
             )
             raise typer.Exit(1)
-        tmdb_id = _pick_tmdb_candidate(tmdb_title.strip())
-        if tmdb_id is None:
+        mt_code = media_type.strip()
+        picked = _pick_title_candidate(mt_code, title.strip())
+        if picked is None:
             raise typer.Exit(1)
-
-    if isbn is not None:
+        kind = _TITLE_SEARCH_SOURCES[mt_code][1]
+        value = picked
+        typer.echo(f"Looking up {kind} {value}…")
+    elif isbn is not None:
         kind, value, mt_code = "isbn", isbn.strip(), "book"
         typer.echo(f"Looking up ISBN {isbn} on Open Library…")
     elif upc is not None:
@@ -117,7 +157,9 @@ def add_item(
         kind, value, mt_code = "tmdb_id", tmdb_id.strip(), media_type.strip()
         typer.echo(f"Looking up TMDb ID {tmdb_id}…")
     else:
-        typer.echo("Error: provide --isbn, --upc, --mbid, or --tmdb-id.", err=True)
+        typer.echo(
+            "Error: provide --isbn, --upc, --mbid, --tmdb-id, or --title.", err=True
+        )
         raise typer.Exit(1)
 
     try:
