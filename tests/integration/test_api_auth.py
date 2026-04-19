@@ -128,6 +128,7 @@ class TestSearchWorks:
             from compendium.repositories.sql.branch_repository import SqlBranchRepository
             from compendium.repositories.sql.creator_repository import SqlCreatorRepository
             from compendium.repositories.sql.item_repository import SqlItemRepository
+            from compendium.repositories.sql.media_type_repository import SqlMediaTypeRepository
             from compendium.repositories.sql.work_repository import SqlWorkRepository
             from compendium.services.catalog import CatalogService
 
@@ -136,6 +137,7 @@ class TestSearchWorks:
                 item_repo=SqlItemRepository(api_session),
                 creator_repo=SqlCreatorRepository(api_session),
                 branch_repo=SqlBranchRepository(api_session),
+                media_type_repo=SqlMediaTypeRepository(api_session),
             ).add_from_isbn("9780441013593")
             api_session.flush()
 

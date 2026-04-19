@@ -16,6 +16,7 @@ from compendium.domain.models import AppUser, Base, Patron
 from compendium.repositories.sql.branch_repository import SqlBranchRepository
 from compendium.repositories.sql.creator_repository import SqlCreatorRepository
 from compendium.repositories.sql.item_repository import SqlItemRepository
+from compendium.repositories.sql.media_type_repository import SqlMediaTypeRepository
 from compendium.repositories.sql.patron_repository import SqlPatronRepository
 from compendium.repositories.sql.role_repository import SqlRoleRepository
 from compendium.repositories.sql.user_repository import SqlUserRepository
@@ -120,6 +121,7 @@ def _catalog(s: Session) -> CatalogService:
         item_repo=SqlItemRepository(s),
         creator_repo=SqlCreatorRepository(s),
         branch_repo=SqlBranchRepository(s),
+        media_type_repo=SqlMediaTypeRepository(s),
     )
 
 

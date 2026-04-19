@@ -10,6 +10,7 @@ from compendium.repositories.sql.hold_repository import SqlHoldRepository
 from compendium.repositories.sql.item_repository import SqlItemRepository
 from compendium.repositories.sql.loan_policy_repository import SqlLoanPolicyRepository
 from compendium.repositories.sql.loan_repository import SqlLoanRepository
+from compendium.repositories.sql.media_type_repository import SqlMediaTypeRepository
 from compendium.repositories.sql.patron_repository import SqlPatronRepository
 from compendium.repositories.sql.work_repository import SqlWorkRepository
 from compendium.services.catalog import CatalogService
@@ -32,6 +33,7 @@ def _catalog(session) -> CatalogService:
         item_repo=SqlItemRepository(session),
         creator_repo=SqlCreatorRepository(session),
         branch_repo=SqlBranchRepository(session),
+        media_type_repo=SqlMediaTypeRepository(session),
     )
 
 

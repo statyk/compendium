@@ -117,3 +117,17 @@ class LoanPolicyResponse(BaseModel):
     loan_period_days: int
     max_renewals: int
     is_default: bool
+
+
+class AuditLogResponse(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    id: int
+    occurred_at: datetime
+    user_id: int | None
+    actor_label: str | None
+    source: str
+    entity_type: str
+    entity_id: int | None
+    action: str
+    details: dict | None

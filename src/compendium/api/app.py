@@ -1,20 +1,31 @@
+import logging
 from pathlib import Path
 
 from fastapi import FastAPI, Request
 from fastapi.responses import HTMLResponse, RedirectResponse
 from fastapi.staticfiles import StaticFiles
 
-from compendium.api.routes import auth, holds, items, loans, me, patrons, policies, users, works
+from compendium.api.routes import audit, auth, holds, items, loans, me, patrons, policies, users, works
+from compendium.config.settings import INSECURE_JWT_DEFAULT
+from compendium.db.engine import get_settings
 from compendium.web.app import NoPatronAccountException, RequiresLoginException, create_web_router
 from compendium.web.jinja import templates
 
 _WEB_STATIC = Path(__file__).parent.parent / "web" / "static"
+_log = logging.getLogger("compendium")
 
 
 def create_app() -> FastAPI:
+    if get_settings().jwt_secret_key == INSECURE_JWT_DEFAULT:
+        _log.warning(
+            "SECURITY: COMPENDIUM_JWT_SECRET_KEY is set to the insecure default. "
+            "Set it to a random secret before exposing this server to the network."
+        )
+
     app = FastAPI(title="Compendium", version="0.1.0")
 
     # JSON API routes
+    app.include_router(audit.router, prefix="/audit", tags=["audit"])
     app.include_router(auth.router, prefix="/auth", tags=["auth"])
     app.include_router(works.router, prefix="/works", tags=["works"])
     app.include_router(items.router, prefix="/items", tags=["items"])

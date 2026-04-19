@@ -42,15 +42,18 @@ def audit_list(
     request: Request,
     entity_type: str = "",
     entity_id: str = "",
+    user_id: str = "",
     limit: int = 50,
     user: AppUser = Depends(require_web_permission(_PERM)),
     session: Session = Depends(get_session),
 ):
     svc = AuditService(SqlAuditLogRepository(session))
     entity_id_int = int(entity_id) if entity_id.strip().isdigit() else None
+    user_id_int = int(user_id) if user_id.strip().isdigit() else None
     entries = svc.list(
         entity_type=entity_type or None,
         entity_id=entity_id_int,
+        user_id=user_id_int,
         limit=min(limit, 200),
     )
     return _render(
@@ -63,6 +66,7 @@ def audit_list(
             "entity_choices": _ENTITY_CHOICES,
             "selected_type": entity_type,
             "selected_id": entity_id,
+            "selected_user_id": user_id,
             "limit": limit,
         },
     )

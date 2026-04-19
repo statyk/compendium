@@ -17,6 +17,7 @@ from compendium.repositories.sql.audit_log_repository import SqlAuditLogReposito
 from compendium.repositories.sql.branch_repository import SqlBranchRepository
 from compendium.repositories.sql.creator_repository import SqlCreatorRepository
 from compendium.repositories.sql.item_repository import SqlItemRepository
+from compendium.repositories.sql.media_type_repository import SqlMediaTypeRepository
 from compendium.repositories.sql.work_repository import SqlWorkRepository
 from compendium.services.audit import AuditService
 from compendium.services.catalog import CatalogService
@@ -37,6 +38,7 @@ def _catalog_svc(session: Session, actor: AppUser) -> CatalogService:
         item_repo=SqlItemRepository(session),
         creator_repo=SqlCreatorRepository(session),
         branch_repo=SqlBranchRepository(session),
+        media_type_repo=SqlMediaTypeRepository(session),
         audit_svc=AuditService(SqlAuditLogRepository(session)),
         actor=actor,
         source="web",

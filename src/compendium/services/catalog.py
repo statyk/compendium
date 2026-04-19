@@ -5,6 +5,7 @@ from compendium.repositories.base import (
     BranchRepository,
     CreatorRepository,
     ItemRepository,
+    MediaTypeRepository,
     WorkRepository,
 )
 from compendium.services.audit import AuditAction, AuditEntityType, AuditService
@@ -18,6 +19,7 @@ class CatalogService:
         item_repo: ItemRepository,
         creator_repo: CreatorRepository,
         branch_repo: BranchRepository,
+        media_type_repo: MediaTypeRepository,
         audit_svc: AuditService | None = None,
         actor: AppUser | None = None,
         actor_label: str | None = None,
@@ -27,6 +29,7 @@ class CatalogService:
         self._items = item_repo
         self._creators = creator_repo
         self._branches = branch_repo
+        self._media_types = media_type_repo
         self._audit = audit_svc
         self._actor = actor
         self._actor_label = actor_label
@@ -104,18 +107,7 @@ class CatalogService:
     # ------------------------------------------------------------------
 
     def _create_work(self, meta: dict) -> Work:
-        from compendium.domain.models import MediaType
-        # Resolve book media type — we created seed data so it will exist.
-        # The repo doesn't have a media_type query yet; use the session via
-        # the item_repo's session. For now, look up by querying through
-        # relationships will be handled by SQLAlchemy once flush is done.
-        # We rely on the caller's session to have MediaType pre-loaded.
-
-        # Get "book" media type id — done by querying via item_repo's underlying session.
-        # Because our repos wrap a session, we reach into the session here.
-        # This is pragmatic for v1; a MediaTypeRepository is the clean solution.
-        session = self._items._s  # type: ignore[attr-defined]
-        book_mt = session.query(MediaType).filter_by(code="book").first()
+        book_mt = self._media_types.get_by_code("book")
 
         work = Work(
             title=meta["title"],

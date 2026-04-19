@@ -21,6 +21,7 @@ def _catalog(item_repo=None):
         item_repo=item_repo,
         creator_repo=MagicMock(),
         branch_repo=MagicMock(),
+        media_type_repo=MagicMock(),
     )
 
 

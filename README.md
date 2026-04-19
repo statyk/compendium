@@ -131,6 +131,7 @@ The API is also available at the root. Use `Authorization: Bearer <token>` from 
 
 | Method | Path | Permission | Description |
 |---|---|---|---|
+| GET | `/audit` | `patron.manage` | Query audit log |
 | POST | `/auth/login` | — | Obtain JWT |
 | GET | `/works/search?q=` | guest / `item.view` | Search catalog |
 | GET | `/items/{barcode}` | `item.view` | Item detail |
@@ -180,7 +181,7 @@ The `compendium maintenance expire-holds` command should run periodically via cr
 uv run pytest -q
 ```
 
-Tests are split into `tests/unit/` (no DB, mock repos) and `tests/integration/` (SQLite in-memory). 168 tests as of the current build.
+Tests are split into `tests/unit/` (no DB, mock repos) and `tests/integration/` (SQLite in-memory). 175 tests as of the current build.
 
 ## Layout
 

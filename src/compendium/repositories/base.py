@@ -12,10 +12,17 @@ from compendium.domain.models import (
     Item,
     Loan,
     LoanPolicy,
+    MediaType,
     Patron,
     Role,
     Work,
 )
+
+
+@runtime_checkable
+class MediaTypeRepository(Protocol):
+    def get_by_code(self, code: str) -> MediaType | None: ...
+    def list(self) -> list[MediaType]: ...
 
 
 @runtime_checkable

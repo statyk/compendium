@@ -1,5 +1,7 @@
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
+INSECURE_JWT_DEFAULT = "insecure-default-change-in-production"
+
 
 class Settings(BaseSettings):
     model_config = SettingsConfigDict(
@@ -12,7 +14,7 @@ class Settings(BaseSettings):
     database_url: str = "sqlite:///compendium.db"
     default_loan_period_days: int = 14
     guest_search_enabled: bool = True
-    jwt_secret_key: str = "insecure-default-change-in-production"
+    jwt_secret_key: str = INSECURE_JWT_DEFAULT
     jwt_algorithm: str = "HS256"
     jwt_expire_minutes: int = 60 * 8
     hold_expiry_days: int = 30

@@ -6,6 +6,7 @@ from compendium.domain.errors import ExternalLookupError
 from compendium.repositories.sql.branch_repository import SqlBranchRepository
 from compendium.repositories.sql.creator_repository import SqlCreatorRepository
 from compendium.repositories.sql.item_repository import SqlItemRepository
+from compendium.repositories.sql.media_type_repository import SqlMediaTypeRepository
 from compendium.repositories.sql.work_repository import SqlWorkRepository
 from compendium.services.catalog import CatalogService
 
@@ -27,6 +28,7 @@ def _service(session) -> CatalogService:
         item_repo=SqlItemRepository(session),
         creator_repo=SqlCreatorRepository(session),
         branch_repo=SqlBranchRepository(session),
+        media_type_repo=SqlMediaTypeRepository(session),
     )
 
 
