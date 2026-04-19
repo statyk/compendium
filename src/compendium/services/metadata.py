@@ -195,6 +195,66 @@ def lookup_lcc_from_loc(isbn: str, lccn: str | None = None) -> str | None:
     return None
 
 
+def _parse_ddc_from_marcxml(xml_text: str) -> str | None:
+    """Extract DDC number from MARC XML (field 082, subfield a)."""
+    try:
+        root = ET.fromstring(xml_text)
+        for df in root.iter(f"{{{_MARC_NS}}}datafield"):
+            if df.get("tag") == "082":
+                a = df.find(f"{{{_MARC_NS}}}subfield[@code='a']")
+                if a is not None and a.text:
+                    return a.text.strip()
+    except ET.ParseError:
+        return None
+    return None
+
+
+def _try_ddc_by_lccn(lccn: str) -> str | None:
+    try:
+        with httpx.Client(timeout=8) as client:
+            resp = client.get(_LOC_LCCN_URL.format(lccn=lccn))
+            if resp.status_code != 200:
+                return None
+            return _parse_ddc_from_marcxml(resp.text)
+    except Exception:
+        return None
+
+
+def _try_ddc_by_isbn(isbn: str) -> str | None:
+    try:
+        with httpx.Client(timeout=8) as client:
+            resp = client.get(
+                _LOC_SRU_URL,
+                params={
+                    "version": "1.1",
+                    "operation": "searchRetrieve",
+                    "recordSchema": "marcxml",
+                    "maximumRecords": "1",
+                    "query": f"bath.isbn={isbn}",
+                },
+            )
+            if resp.status_code != 200:
+                return None
+            return _parse_ddc_from_marcxml(resp.text)
+    except Exception:
+        return None
+
+
+def lookup_ddc_from_loc(isbn: str, lccn: str | None = None) -> str | None:
+    """Fetch DDC number from Library of Congress as a fallback.
+
+    Tries the LCCN permalink MARCXML first, then falls back to SRU ISBN query.
+    Returns None on any failure.
+    """
+    if lccn:
+        result = _try_ddc_by_lccn(lccn)
+        if result:
+            return result
+    if isbn:
+        return _try_ddc_by_isbn(isbn)
+    return None
+
+
 # ---------------------------------------------------------------------------
 # MusicBrainz adapter (vinyl, CD)
 # ---------------------------------------------------------------------------
