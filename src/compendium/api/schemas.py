@@ -119,6 +119,20 @@ class LoanPolicyResponse(BaseModel):
     is_default: bool
 
 
+class BranchResponse(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    id: int
+    code: str
+    name: str
+    is_default: bool
+    default_classification_scheme: str
+
+
+class UpdateBranchRequest(BaseModel):
+    default_classification_scheme: str
+
+
 class AuditLogResponse(BaseModel):
     model_config = ConfigDict(from_attributes=True)
 

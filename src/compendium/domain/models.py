@@ -30,6 +30,9 @@ class Branch(Base):
     name: Mapped[str] = mapped_column(String(128))
     address: Mapped[dict[str, Any] | None] = mapped_column(JSON)
     is_default: Mapped[bool] = mapped_column(Boolean, default=False, server_default="0")
+    default_classification_scheme: Mapped[str] = mapped_column(
+        String(8), default="none", server_default="none"
+    )
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
 
 

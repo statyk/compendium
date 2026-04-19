@@ -11,6 +11,8 @@ from compendium.repositories.base import (
 from compendium.services.audit import AuditAction, AuditEntityType, AuditService
 from compendium.services.metadata import lookup_metadata, normalize_isbn
 
+_SCHEME_TO_META_KEY = {"lcc": "lc_classification", "ddc": "ddc_classification"}
+
 
 class CatalogService:
     def __init__(
@@ -50,9 +52,11 @@ class CatalogService:
 
         If a Work with this identifier already exists, adds a new copy instead.
         """
+        branch = self._branches.get_default()
+
         existing = self._find_existing_work(identifier_kind, identifier_value)
         if existing is not None:
-            item = self._create_item(existing, location=location)
+            item = self._create_item(existing, location=location, branch=branch)
             self._record(
                 AuditEntityType.ITEM, item.id, AuditAction.CREATE,
                 {"snapshot": {"barcode": item.barcode, "work_id": existing.id}},
@@ -71,15 +75,15 @@ class CatalogService:
         if identifier_kind == "mbid" and meta.get("upc"):
             existing = self._works.get_by_upc(meta["upc"])
             if existing is not None:
-                item = self._create_item(existing, location=location)
+                item = self._create_item(existing, location=location, branch=branch)
                 self._record(
                     AuditEntityType.ITEM, item.id, AuditAction.CREATE,
                     {"snapshot": {"barcode": item.barcode, "work_id": existing.id}},
                 )
                 return existing, item
 
-        work = self._create_work(meta, media_type_code)
-        item = self._create_item(work, location=location)
+        work = self._create_work(meta, media_type_code, branch=branch)
+        item = self._create_item(work, location=location, branch=branch)
         self._record(
             AuditEntityType.WORK, work.id, AuditAction.CREATE,
             {"snapshot": {"title": work.title, "isbn": work.isbn, "upc": work.upc}},
@@ -137,7 +141,7 @@ class CatalogService:
             return self._works.get_by_upc(value)
         return None
 
-    def _create_work(self, meta: dict, media_type_code: str) -> Work:
+    def _create_work(self, meta: dict, media_type_code: str, branch=None) -> Work:
         mt = self._media_types.get_by_code(media_type_code)
 
         work = Work(
@@ -154,6 +158,15 @@ class CatalogService:
             external_ids=meta.get("external_ids", {}),
             extra_metadata=meta.get("extra_metadata", {}),
         )
+
+        scheme = (branch.default_classification_scheme if branch else None) or "none"
+        if scheme != "none":
+            meta_key = _SCHEME_TO_META_KEY.get(scheme)
+            if meta_key:
+                code = meta.get(meta_key)
+                if code:
+                    work.classification_scheme = scheme
+                    work.classification_code = code
         self._works.add(work)
 
         # "creators" key carries [(name, role), ...] for multi-role media (film).
@@ -188,8 +201,9 @@ class CatalogService:
             self._creators.add(creator)
         return creator
 
-    def _create_item(self, work: Work, location: str | None = None) -> Item:
-        branch = self._branches.get_default()
+    def _create_item(self, work: Work, location: str | None = None, branch=None) -> Item:
+        if branch is None:
+            branch = self._branches.get_default()
         accession = self._next_accession()
         item = Item(
             work_id=work.id,

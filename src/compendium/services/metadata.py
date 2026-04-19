@@ -79,6 +79,12 @@ def parse_open_library(data: dict, isbn: str) -> dict:
     if m:
         year = int(m.group())
 
+    classifications = data.get("classifications", {}) or {}
+    lc_list = classifications.get("lc_classifications", [])
+    ddc_list = classifications.get("dewey_decimal_class", [])
+    lc_classification: str | None = lc_list[0] if lc_list else None
+    ddc_classification: str | None = ddc_list[0] if ddc_list else None
+
     return {
         "title": data.get("title", "Unknown Title"),
         "subtitle": data.get("subtitle"),
@@ -96,6 +102,8 @@ def parse_open_library(data: dict, isbn: str) -> dict:
         "upc": None,
         "external_ids": {"openlibrary": ol_id} if ol_id else {},
         "extra_metadata": {},
+        "lc_classification": lc_classification,
+        "ddc_classification": ddc_classification,
     }
 
 

@@ -1,0 +1,54 @@
+import typer
+
+from compendium.db.session import session_scope
+from compendium.domain.errors import DomainError
+from compendium.repositories.sql.branch_repository import SqlBranchRepository
+
+app = typer.Typer(help="Branch commands.")
+
+_VALID_SCHEMES = {"lcc", "ddc", "none"}
+
+
+@app.command("list")
+def branch_list() -> None:
+    """List all branches and their classification settings."""
+    with session_scope() as session:
+        branches = SqlBranchRepository(session).list()
+        if not branches:
+            typer.echo("No branches configured.")
+            return
+        for b in branches:
+            default_marker = " [default]" if b.is_default else ""
+            scheme = b.default_classification_scheme.upper() if b.default_classification_scheme != "none" else "none"
+            typer.echo(f"  {b.code}{default_marker}: {b.name}  (classification: {scheme})")
+
+
+@app.command("set")
+def branch_set(
+    code: str = typer.Option(..., "--code", help="Branch code"),
+    classification: str = typer.Option(
+        ..., "--classification", help="Classification scheme: lcc, ddc, or none"
+    ),
+) -> None:
+    """Set the auto-population classification scheme for a branch."""
+    scheme = classification.strip().lower()
+    if scheme not in _VALID_SCHEMES:
+        typer.echo(
+            f"Error: invalid scheme '{scheme}'. Must be one of: lcc, ddc, none.", err=True
+        )
+        raise typer.Exit(1)
+
+    try:
+        with session_scope() as session:
+            repo = SqlBranchRepository(session)
+            branch = repo.get_by_code(code)
+            if branch is None:
+                typer.echo(f"Error: no branch with code '{code}'.", err=True)
+                raise typer.Exit(1)
+            branch.default_classification_scheme = scheme
+            repo.update(branch)
+            label = scheme.upper() if scheme != "none" else "none (manual entry only)"
+            typer.echo(f"Branch '{code}' classification scheme set to: {label}")
+    except DomainError as exc:
+        typer.echo(f"Error: {exc}", err=True)
+        raise typer.Exit(1) from exc

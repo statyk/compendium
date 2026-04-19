@@ -1,0 +1,37 @@
+{% extends "base.html" %}
+{% block title %}Branches — Compendium{% endblock %}
+{% block content %}
+<div style="display:flex; align-items:baseline; gap:1rem; margin-bottom:1rem">
+  <h2 style="margin:0">Branches</h2>
+</div>
+
+{% if message %}<p class="success-banner">{{ message }}</p>{% endif %}
+{% if error %}<p class="error-banner">{{ error }}</p>{% endif %}
+
+{% if not branches %}
+  <p><em>No branches configured.</em></p>
+{% else %}
+<table>
+  <thead>
+    <tr>
+      <th>Code</th>
+      <th>Name</th>
+      <th>Default</th>
+      <th>Classification scheme</th>
+      <th></th>
+    </tr>
+  </thead>
+  <tbody>
+    {% for b in branches %}
+    <tr>
+      <td>{{ b.code }}</td>
+      <td>{{ b.name }}</td>
+      <td>{% if b.is_default %}Yes{% endif %}</td>
+      <td>{{ b.default_classification_scheme | upper if b.default_classification_scheme != "none" else "None (manual entry)" }}</td>
+      <td><a href="/ui/branches/{{ b.id }}/edit" role="button" class="outline" style="padding:0.2rem 0.6rem">Edit</a></td>
+    </tr>
+    {% endfor %}
+  </tbody>
+</table>
+{% endif %}
+{% endblock %}
