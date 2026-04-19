@@ -4,12 +4,14 @@ from sqlalchemy.orm import Session, sessionmaker
 
 from compendium.config.seed import seed_defaults
 from compendium.domain.models import Base
+from tests.helpers import setup_sqlite_fts
 
 
 @pytest.fixture(scope="session")
 def engine():
     eng = create_engine("sqlite:///:memory:", connect_args={"check_same_thread": False})
     Base.metadata.create_all(eng)
+    setup_sqlite_fts(eng)
     return eng
 
 
@@ -32,12 +34,19 @@ def pg_engine():
         pytest.skip("testcontainers not installed")
 
     try:
+        from sqlalchemy import text as _text
         with PostgresContainer("postgres:16-alpine") as pg:
             url = pg.get_connection_url().replace(
                 "postgresql+psycopg2://", "postgresql+psycopg://"
             )
             eng = create_engine(url, pool_pre_ping=True)
             Base.metadata.create_all(eng)
+            with eng.connect() as conn:
+                conn.execute(_text(
+                    "CREATE INDEX IF NOT EXISTS ix_work_search_gin ON work"
+                    " USING GIN (to_tsvector('english', COALESCE(search_text, '')))"
+                ))
+                conn.commit()
             yield eng
             Base.metadata.drop_all(eng)
     except Exception as exc:

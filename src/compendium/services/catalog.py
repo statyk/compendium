@@ -172,7 +172,13 @@ class CatalogService:
                     WorkCreator(creator=creator, role=creator_role, display_order=order)
                 )
 
+        self._rebuild_search_text(work)
         return work
+
+    def _rebuild_search_text(self, work: Work) -> None:
+        parts = [work.title or "", work.subtitle or "", work.description or ""]
+        parts += [wc.creator.display_name for wc in work.creators]
+        work.search_text = " ".join(p.strip() for p in parts if p and p.strip())
 
     def _get_or_create_creator(self, display_name: str) -> Creator:
         sort_name = _to_sort_name(display_name)

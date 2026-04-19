@@ -9,6 +9,7 @@ from sqlalchemy.orm import Session, sessionmaker
 from sqlalchemy.pool import StaticPool
 
 from compendium.api.app import create_app
+from tests.helpers import setup_sqlite_fts
 from compendium.config.seed import seed_defaults
 from compendium.config.settings import Settings
 from compendium.db.session import get_session
@@ -47,6 +48,7 @@ def me_engine():
         poolclass=StaticPool,
     )
     Base.metadata.create_all(engine)
+    setup_sqlite_fts(engine)
     return engine
 
 

@@ -140,3 +140,41 @@ def test_pg_json_columns_round_trip(_, session):
     session.refresh(work)
     assert isinstance(work.external_ids, dict)
     assert isinstance(work.extra_metadata, dict)
+
+
+# ── full-text search (Postgres tsvector/GIN) ──────────────────────────────────
+
+_OPEN_LIB_FOUNDATION = {
+    "title": "Foundation",
+    "authors": [{"name": "Isaac Asimov"}],
+    "publishers": [{"name": "Gnome Press"}],
+    "publish_date": "1951",
+    "cover": {},
+    "identifiers": {},
+}
+_ISBN_FOUNDATION = "9780553293357"
+
+
+@patch("compendium.services.metadata.lookup_isbn", return_value=_OPEN_LIB_DUNE)
+def test_pg_fts_finds_by_title(_, session):
+    _catalog(session).add_from_isbn(_ISBN)
+    session.flush()
+    results = SqlWorkRepository(session).search("Dune")
+    assert any(w.title == "Dune" for w in results)
+
+
+@patch("compendium.services.metadata.lookup_isbn", return_value=_OPEN_LIB_FOUNDATION)
+def test_pg_fts_finds_by_author(_, session):
+    _catalog(session).add_from_isbn(_ISBN_FOUNDATION)
+    session.flush()
+    results = SqlWorkRepository(session).search("Asimov")
+    assert any(w.title == "Foundation" for w in results)
+
+
+@patch("compendium.services.metadata.lookup_isbn", return_value=_OPEN_LIB_DUNE)
+def test_pg_search_text_populated(_, session):
+    work, _ = _catalog(session).add_from_isbn("9780441013595")
+    session.refresh(work)
+    assert work.search_text is not None
+    assert "Dune" in work.search_text
+    assert "Frank Herbert" in work.search_text
