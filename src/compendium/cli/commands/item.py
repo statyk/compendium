@@ -8,8 +8,45 @@ from compendium.repositories.sql.item_repository import SqlItemRepository
 from compendium.repositories.sql.media_type_repository import SqlMediaTypeRepository
 from compendium.repositories.sql.work_repository import SqlWorkRepository
 from compendium.services.catalog import CatalogService
+from compendium.services.metadata import tmdb_search_title
 
 app = typer.Typer(help="Catalog item commands.")
+
+
+def _pick_tmdb_candidate(query: str) -> str | None:
+    """Run a TMDb title search and prompt the user to pick a result.
+
+    Returns the selected tmdb_id as a string, or None if the user cancels
+    or there are no matches. Exits via typer on network/config errors.
+    """
+    from compendium.domain.errors import ExternalLookupError
+
+    typer.echo(f"Searching TMDb for '{query}'…")
+    try:
+        candidates = tmdb_search_title(query)
+    except ExternalLookupError as exc:
+        typer.echo(f"Lookup failed: {exc}", err=True)
+        raise typer.Exit(1) from exc
+
+    if not candidates:
+        typer.echo(f"No TMDb results for '{query}'.")
+        return None
+
+    typer.echo("")
+    for i, c in enumerate(candidates, start=1):
+        year = f" ({c['year']})" if c.get("year") else ""
+        typer.echo(f"  {i}. {c['title']}{year}  [tmdb:{c['tmdb_id']}]")
+        if c.get("overview"):
+            typer.echo(f"     {c['overview']}")
+    typer.echo("")
+
+    choice = typer.prompt(
+        f"Select [1-{len(candidates)}] or 0 to cancel", type=int, default=0
+    )
+    if choice < 1 or choice > len(candidates):
+        typer.echo("Cancelled.")
+        return None
+    return str(candidates[choice - 1]["tmdb_id"])
 
 
 def _catalog(session):
@@ -28,8 +65,11 @@ def add_item(
     upc: str | None = typer.Option(None, "--upc", help="UPC/EAN barcode (vinyl, CD)"),
     mbid: str | None = typer.Option(None, "--mbid", help="MusicBrainz release ID (vinyl, CD)"),
     tmdb_id: str | None = typer.Option(None, "--tmdb-id", help="TMDb movie ID (dvd, bluray, vhs) — requires COMPENDIUM_TMDB_API_KEY"),
+    tmdb_title: str | None = typer.Option(
+        None, "--tmdb-title", help="Search TMDb by title and pick from candidates (dvd, bluray, vhs)"
+    ),
     media_type: str | None = typer.Option(
-        None, "--media-type", help="Media type code: vinyl, cd, dvd, bluray, vhs (required with --upc/--mbid/--tmdb-id)"
+        None, "--media-type", help="Media type code: vinyl, cd, dvd, bluray, vhs (required with --upc/--mbid/--tmdb-id/--tmdb-title)"
     ),
     location: str | None = typer.Option(None, "--location", help="Shelf location note"),
 ) -> None:
@@ -38,7 +78,19 @@ def add_item(
     Books:  --isbn <ISBN>
     Music:  --upc <barcode> --media-type vinyl|cd  OR  --mbid <uuid> --media-type vinyl|cd
     Film:   --tmdb-id <id> --media-type dvd|bluray|vhs  (requires COMPENDIUM_TMDB_API_KEY)
+            --tmdb-title "Name" --media-type dvd|bluray|vhs  (interactive picker)
     """
+    if tmdb_title is not None and tmdb_id is None:
+        if not media_type:
+            typer.echo(
+                "Error: --media-type is required with --tmdb-title (e.g. dvd, bluray, vhs).",
+                err=True,
+            )
+            raise typer.Exit(1)
+        tmdb_id = _pick_tmdb_candidate(tmdb_title.strip())
+        if tmdb_id is None:
+            raise typer.Exit(1)
+
     if isbn is not None:
         kind, value, mt_code = "isbn", isbn.strip(), "book"
         typer.echo(f"Looking up ISBN {isbn} on Open Library…")
