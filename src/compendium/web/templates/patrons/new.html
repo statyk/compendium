@@ -20,6 +20,13 @@
   <input type="email" id="contact_email" name="contact_email">
   <label for="contact_phone">Phone <small>(optional)</small></label>
   <input type="tel" id="contact_phone" name="contact_phone">
+  <label for="user_id">Link user account <small>(optional)</small></label>
+  <select id="user_id" name="user_id">
+    <option value="">— none —</option>
+    {% for u in unlinked_users %}
+    <option value="{{ u.id }}">{{ u.username }}{% if u.email %} ({{ u.email }}){% endif %} — {{ u.role.name }}</option>
+    {% endfor %}
+  </select>
   <small>A library card number will be assigned automatically.</small>
   <div style="margin-top:1rem; display:flex; gap:0.5rem">
     <button type="submit">Add Patron</button>

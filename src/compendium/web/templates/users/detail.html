@@ -1,0 +1,66 @@
+{% extends "base.html" %}
+{% block title %}{{ target.username }} — Compendium{% endblock %}
+{% block content %}
+<nav aria-label="breadcrumb">
+  <ul>
+    <li><a href="/ui/users">Users</a></li>
+    <li>{{ target.username }}</li>
+  </ul>
+</nav>
+
+<hgroup>
+  <h2>{{ target.username }}</h2>
+  <p>{{ target.role.name }}{% if not target.is_active %} &mdash; <em>Inactive</em>{% endif %}</p>
+</hgroup>
+
+{% if message %}<p class="success-banner">{{ message }}</p>{% endif %}
+{% if error %}<p class="error-banner">{{ error }}</p>{% endif %}
+
+<dl>
+  {% if target.email %}<dt>Email</dt><dd>{{ target.email }}</dd>{% endif %}
+  <dt>Role</dt>
+  <dd id="user-role">
+    {% if target.is_active %}
+    <form method="post" action="/ui/users/{{ target.username }}/change-role" style="display:flex; gap:0.5rem; align-items:center">
+      <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+      <select name="role_name" style="margin:0; width:auto">
+        {% for r in roles %}
+        <option value="{{ r.name }}"{% if r.id == target.role_id %} selected{% endif %}>{{ r.name }}</option>
+        {% endfor %}
+      </select>
+      <button type="submit" style="padding:0.2rem 0.6rem; margin:0">Change</button>
+    </form>
+    {% else %}
+      {{ target.role.name }}
+    {% endif %}
+  </dd>
+  <dt>Status</dt>
+  <dd id="user-status">
+    {% if target.is_active %}
+      Active
+      <form
+        style="display:inline"
+        hx-post="/ui/users/{{ target.username }}/deactivate"
+        hx-target="#user-status"
+        hx-swap="innerHTML"
+        hx-include="[name='csrf_token']"
+        hx-confirm="Deactivate this user? They will not be able to log in."
+      >
+        <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+        <button type="submit" class="outline contrast" style="padding:0.2rem 0.6rem; margin-left:1rem">Deactivate</button>
+      </form>
+    {% else %}
+      <em>Inactive</em>
+    {% endif %}
+  </dd>
+  <dt>Patron record</dt>
+  <dd>
+    {% if patron %}
+      <a href="/ui/patrons/{{ patron.library_card_number }}">{{ patron.full_name }}</a>
+      <small>(<code>{{ patron.library_card_number }}</code>)</small>
+    {% else %}
+      <em>None</em> — <a href="/ui/patrons/new">create a patron record</a>
+    {% endif %}
+  </dd>
+</dl>
+{% endblock %}

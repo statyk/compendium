@@ -21,3 +21,6 @@ class SqlUserRepository:
     def update(self, user: AppUser) -> AppUser:
         self._s.flush()
         return user
+
+    def list(self, limit: int = 50, offset: int = 0) -> list[AppUser]:
+        return self._s.query(AppUser).order_by(AppUser.username).offset(offset).limit(limit).all()

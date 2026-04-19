@@ -157,6 +157,8 @@ class Patron(Base):
         DateTime(timezone=True), onupdate=func.now()
     )
 
+    user: Mapped[AppUser | None] = relationship(foreign_keys=[user_id])
+
 
 class Loan(Base):
     __tablename__ = "loan"

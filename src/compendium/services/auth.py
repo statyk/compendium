@@ -94,6 +94,27 @@ class AuthService:
             algorithm=self._settings.jwt_algorithm,
         )
 
+    def list_users(self, limit: int = 50, offset: int = 0) -> list[AppUser]:
+        return self._users.list(limit=limit, offset=offset)
+
+    def update_role(self, username: str, role_name: str) -> AppUser:
+        user = self._users.get_by_username(username)
+        if user is None:
+            raise NotFoundError(f"No user with username '{username}'")
+        role = self._roles.get_by_name(role_name)
+        if role is None:
+            raise NotFoundError(f"No role named '{role_name}'")
+        old_role = user.role.name
+        user.role_id = role.id
+        result = self._users.update(user)
+        self._record(
+            AuditEntityType.USER,
+            result.id,
+            AuditAction.UPDATE,
+            {"snapshot": {"username": result.username, "old_role": old_role, "new_role": role_name}},
+        )
+        return result
+
     def deactivate_user(self, username: str) -> AppUser:
         user = self._users.get_by_username(username)
         if user is None:

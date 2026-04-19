@@ -13,6 +13,9 @@
   <p><code>{{ patron.library_card_number }}</code></p>
 </hgroup>
 
+{% if message %}<p class="success-banner">{{ message }}</p>{% endif %}
+{% if error %}<p class="error-banner">{{ error }}</p>{% endif %}
+
 <dl>
   <dt>Status</dt>
   <dd id="patron-status">
@@ -35,6 +38,34 @@
   </dd>
   {% if patron.contact_email %}<dt>Email</dt><dd>{{ patron.contact_email }}</dd>{% endif %}
   {% if patron.contact_phone %}<dt>Phone</dt><dd>{{ patron.contact_phone }}</dd>{% endif %}
+  <dt>User account</dt>
+  <dd>
+    {% if linked_user %}
+      <a href="/ui/users/{{ linked_user.username }}">{{ linked_user.username }}</a>
+      <small>({{ linked_user.role.name }})</small>
+      {% if patron.is_active %}
+      <form method="post" action="/ui/patrons/{{ patron.library_card_number }}/unlink-user" style="display:inline">
+        <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+        <button type="submit" class="outline contrast" style="padding:0.2rem 0.6rem; margin-left:1rem"
+          onclick="return confirm('Unlink this user account from the patron?')">Unlink</button>
+      </form>
+      {% endif %}
+    {% elif patron.is_active and unlinked_users %}
+      <form method="post" action="/ui/patrons/{{ patron.library_card_number }}/link-user" style="display:flex; gap:0.5rem; align-items:center; margin-top:0.25rem">
+        <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+        <select name="user_id" style="margin:0; width:auto">
+          {% for u in unlinked_users %}
+          <option value="{{ u.id }}">{{ u.username }}{% if u.email %} ({{ u.email }}){% endif %} — {{ u.role.name }}</option>
+          {% endfor %}
+        </select>
+        <button type="submit" style="padding:0.2rem 0.6rem; margin:0">Link</button>
+      </form>
+    {% elif patron.is_active %}
+      <em>None</em> — <a href="/ui/users/new">create a user first</a>
+    {% else %}
+      <em>None</em>
+    {% endif %}
+  </dd>
 </dl>
 
 <h3>Active Loans</h3>

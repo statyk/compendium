@@ -401,3 +401,146 @@ def test_item_create_via_web(web_client, librarian):
         )
     assert resp.status_code == 303
     assert "/ui/items/" in resp.headers["location"]
+
+
+# ── User management ───────────────────────────────────────────────────────────
+
+
+def test_user_list_requires_auth(web_client):
+    resp = web_client.get("/ui/users")
+    assert resp.status_code == 303
+    assert "/ui/login" in resp.headers["location"]
+
+
+def test_user_list_renders_for_librarian(web_client, librarian):
+    cookies = _login(web_client, "lib01")
+    resp = web_client.get("/ui/users", cookies=cookies)
+    assert resp.status_code == 200
+    assert b"Users" in resp.content
+    assert b"lib01" in resp.content
+
+
+def test_user_new_form_renders(web_client, librarian):
+    cookies = _login(web_client, "lib01")
+    resp = web_client.get("/ui/users/new", cookies=cookies)
+    assert resp.status_code == 200
+    assert b"Create User" in resp.content
+    assert b"Patron" in resp.content  # role dropdown populated
+
+
+def test_user_create_redirects_to_detail(web_client, librarian):
+    auth_cookies = _login(web_client, "lib01")
+    raw, signed = _make_csrf_pair()
+    resp = web_client.post(
+        "/ui/users/new",
+        data={"username": "newuser01", "password": "secret99", "role_name": "Patron", "csrf_token": raw},
+        cookies={**auth_cookies, CSRF_COOKIE: signed},
+    )
+    assert resp.status_code == 303
+    assert "/ui/users/newuser01" in resp.headers["location"]
+
+
+def test_user_detail_renders(web_client, librarian):
+    cookies = _login(web_client, "lib01")
+    resp = web_client.get("/ui/users/lib01", cookies=cookies)
+    assert resp.status_code == 200
+    assert b"lib01" in resp.content
+    assert b"Librarian" in resp.content
+
+
+def test_user_detail_404(web_client, librarian):
+    cookies = _login(web_client, "lib01")
+    resp = web_client.get("/ui/users/nosuchuser", cookies=cookies)
+    assert resp.status_code == 404
+
+
+def test_user_change_role_redirects(web_client, librarian, web_session):
+    # Create a separate user to change role for (can't easily change own role in test)
+    role = SqlRoleRepository(web_session).get_by_name("ReadOnly")
+    from compendium.services.auth import hash_password as hp
+    u = AppUser(username="roletest01", password_hash=hp("pw"), role_id=role.id)
+    SqlUserRepository(web_session).add(u)
+    web_session.flush()
+
+    auth_cookies = _login(web_client, "lib01")
+    raw, signed = _make_csrf_pair()
+    resp = web_client.post(
+        "/ui/users/roletest01/change-role",
+        data={"role_name": "Patron", "csrf_token": raw},
+        cookies={**auth_cookies, CSRF_COOKIE: signed},
+    )
+    assert resp.status_code == 303
+    assert "roletest01" in resp.headers["location"]
+
+
+# ── Patron↔user linking ───────────────────────────────────────────────────────
+
+
+def test_patron_new_form_shows_user_dropdown(web_client, librarian, web_session):
+    # Ensure there's at least one unlinked active user
+    role = SqlRoleRepository(web_session).get_by_name("Patron")
+    from compendium.services.auth import hash_password as hp
+    u = AppUser(username="unlinked01", password_hash=hp("pw"), role_id=role.id)
+    SqlUserRepository(web_session).add(u)
+    web_session.flush()
+
+    cookies = _login(web_client, "lib01")
+    resp = web_client.get("/ui/patrons/new", cookies=cookies)
+    assert resp.status_code == 200
+    assert b"unlinked01" in resp.content
+
+
+def test_patron_create_with_linked_user(web_client, librarian, web_session):
+    role = SqlRoleRepository(web_session).get_by_name("Patron")
+    from compendium.services.auth import hash_password as hp
+    u = AppUser(username="linkme01", password_hash=hp("pw"), role_id=role.id)
+    SqlUserRepository(web_session).add(u)
+    web_session.flush()
+
+    auth_cookies = _login(web_client, "lib01")
+    raw, signed = _make_csrf_pair()
+    resp = web_client.post(
+        "/ui/patrons/new",
+        data={"full_name": "Linked Person", "user_id": str(u.id), "csrf_token": raw},
+        cookies={**auth_cookies, CSRF_COOKIE: signed},
+    )
+    assert resp.status_code == 303
+    card = resp.headers["location"].split("/")[-1]
+    patron = SqlPatronRepository(web_session).get_by_card_number(card)
+    assert patron is not None
+    assert patron.user_id == u.id
+
+
+def test_patron_link_unlink_user(web_client, librarian, web_session):
+    role = SqlRoleRepository(web_session).get_by_name("Patron")
+    from compendium.services.auth import hash_password as hp
+    u = AppUser(username="linktest02", password_hash=hp("pw"), role_id=role.id)
+    SqlUserRepository(web_session).add(u)
+    web_session.flush()
+    patron = Patron(library_card_number="LINK0001", full_name="Link Test")
+    SqlPatronRepository(web_session).add(patron)
+    web_session.flush()
+
+    auth_cookies = _login(web_client, "lib01")
+    raw, signed = _make_csrf_pair()
+
+    # Link
+    resp = web_client.post(
+        f"/ui/patrons/LINK0001/link-user",
+        data={"user_id": str(u.id), "csrf_token": raw},
+        cookies={**auth_cookies, CSRF_COOKIE: signed},
+    )
+    assert resp.status_code == 303
+    web_session.refresh(patron)
+    assert patron.user_id == u.id
+
+    # Unlink
+    raw2, signed2 = _make_csrf_pair()
+    resp2 = web_client.post(
+        f"/ui/patrons/LINK0001/unlink-user",
+        data={"csrf_token": raw2},
+        cookies={**auth_cookies, CSRF_COOKIE: signed2},
+    )
+    assert resp2.status_code == 303
+    web_session.refresh(patron)
+    assert patron.user_id is None

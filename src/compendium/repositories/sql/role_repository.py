@@ -17,3 +17,6 @@ class SqlRoleRepository:
 
     def get_by_name(self, name: str) -> Role | None:
         return self._s.query(Role).filter_by(name=name).first()
+
+    def list(self) -> list[Role]:
+        return self._s.query(Role).order_by(Role.name).all()

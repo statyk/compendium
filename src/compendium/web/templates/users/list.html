@@ -1,0 +1,27 @@
+{% extends "base.html" %}
+{% block title %}Users — Compendium{% endblock %}
+{% block content %}
+<div style="display:flex; align-items:baseline; gap:1rem; margin-bottom:1rem">
+  <h2 style="margin:0">Users</h2>
+  <a href="/ui/users/new" role="button" class="outline" style="padding:0.25rem 0.75rem">+ New User</a>
+</div>
+{% if not users %}
+  <p><em>No users on record.</em></p>
+{% else %}
+<table>
+  <thead>
+    <tr><th>Username</th><th>Email</th><th>Role</th><th>Status</th></tr>
+  </thead>
+  <tbody>
+    {% for u in users %}
+    <tr>
+      <td><a href="/ui/users/{{ u.username }}">{{ u.username }}</a></td>
+      <td>{{ u.email or "—" }}</td>
+      <td>{{ u.role.name }}</td>
+      <td>{% if u.is_active %}Active{% else %}<em>Inactive</em>{% endif %}</td>
+    </tr>
+    {% endfor %}
+  </tbody>
+</table>
+{% endif %}
+{% endblock %}
