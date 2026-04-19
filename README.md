@@ -83,9 +83,15 @@ Log in at `http://localhost:8000/ui/login` with the username and password you se
 | `compendium hold cancel --id <hold_id> --card <c>` | Cancel a hold |
 | `compendium hold list --card <card>` | List active holds for a patron |
 | `compendium policy list` | List loan policies |
-| `compendium policy set --id <id> --loan-days <d>` | Update a loan policy |
+| `compendium policy create --name <n> --loan-days <d>` | Create a loan policy (`--default` to make it the default) |
+| `compendium policy set --id <id> --loan-days <d>` | Update a loan policy (`--default/--no-default` to change default flag) |
+| `compendium role list` | List all roles |
+| `compendium role create --name <n> --permissions <p,...>` | Create a custom role (`--full-access` for `["*"]`) |
+| `compendium role update --id <id> --name <n>` | Rename or change permissions on a custom role |
+| `compendium role clone --id <id> --name <n>` | Clone any role (including presets) into a new editable role |
 | `compendium maintenance expire-holds` | Expire overdue waiting holds (for cron) |
 | `compendium user add --username <u> --role <r>` | Create a user account |
+| `compendium user set-role --username <u> --role <r>` | Change a user's role |
 | `compendium user deactivate --username <u>` | Deactivate a user account |
 | `compendium audit list` | Browse audit log (supports `--entity`, `--id`, `--user-id`, `--limit`) |
 | `compendium serve` | Start the API + web UI server |
@@ -107,6 +113,14 @@ Start the server with `compendium serve` and open your browser to `http://localh
 | `/ui/patrons` | Librarian | Patron list |
 | `/ui/patrons/new` | Librarian | Create patron |
 | `/ui/patrons/{card}` | Librarian | Patron detail with active loans, holds, deactivate |
+| `/ui/users` | Librarian | User list |
+| `/ui/users/new` | Librarian | Create user |
+| `/ui/users/{username}` | Librarian | User detail — change role, deactivate |
+| `/ui/policies` | Librarian | Loan policy list with inline edit |
+| `/ui/policies/new` | Librarian | Create loan policy |
+| `/ui/roles` | Librarian | Role list |
+| `/ui/roles/new` | Librarian | Create custom role |
+| `/ui/roles/{id}` | Librarian | Role detail — edit permissions, clone |
 | `/ui/audit` | Librarian | Audit log viewer |
 
 Guest catalog search is enabled by default (`COMPENDIUM_GUEST_SEARCH_ENABLED=true`).
@@ -166,7 +180,7 @@ The `compendium maintenance expire-holds` command should run periodically via cr
 uv run pytest -q
 ```
 
-Tests are split into `tests/unit/` (no DB, mock repos) and `tests/integration/` (SQLite in-memory). 111 tests as of the current build.
+Tests are split into `tests/unit/` (no DB, mock repos) and `tests/integration/` (SQLite in-memory). 168 tests as of the current build.
 
 ## Layout
 
