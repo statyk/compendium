@@ -9,7 +9,7 @@ from compendium.repositories.base import (
     WorkRepository,
 )
 from compendium.services.audit import AuditAction, AuditEntityType, AuditService
-from compendium.services.metadata import lookup_metadata, normalize_isbn
+from compendium.services.metadata import lookup_lcc_from_loc, lookup_metadata, normalize_isbn
 
 _SCHEME_TO_META_KEY = {"lcc": "lc_classification", "ddc": "ddc_classification"}
 
@@ -164,6 +164,11 @@ class CatalogService:
             meta_key = _SCHEME_TO_META_KEY.get(scheme)
             if meta_key:
                 code = meta.get(meta_key)
+                if not code and scheme == "lcc":
+                    code = lookup_lcc_from_loc(
+                        isbn=meta.get("isbn") or "",
+                        lccn=meta.get("lccn"),
+                    )
                 if code:
                     work.classification_scheme = scheme
                     work.classification_code = code

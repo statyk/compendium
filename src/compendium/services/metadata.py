@@ -1,5 +1,6 @@
 import os
 import re
+import xml.etree.ElementTree as ET
 from typing import Protocol, runtime_checkable
 
 import httpx
@@ -7,6 +8,9 @@ import httpx
 from compendium.domain.errors import ExternalLookupError, ValidationError
 
 _OPENLIBRARY_URL = "https://openlibrary.org/api/books"
+_LOC_LCCN_URL = "https://lccn.loc.gov/{lccn}/marcxml"
+_LOC_SRU_URL = "https://lx2.loc.gov/sru/catalog"
+_MARC_NS = "http://www.loc.gov/MARC21/slim"
 _MB_BASE = "https://musicbrainz.org/ws/2"
 _MB_UA = "Compendium/0.1.0 (open-source library catalog)"
 _TMDB_BASE = "https://api.themoviedb.org/3"
@@ -72,6 +76,8 @@ def parse_open_library(data: dict, isbn: str) -> dict:
 
     identifiers = data.get("identifiers", {})
     ol_id = identifiers.get("openlibrary", [None])[0]
+    lccn_list = identifiers.get("lccn", [])
+    lccn: str | None = lccn_list[0] if lccn_list else None
 
     pub_date: str = data.get("publish_date", "")
     year: int | None = None
@@ -104,6 +110,7 @@ def parse_open_library(data: dict, isbn: str) -> dict:
         "extra_metadata": {},
         "lc_classification": lc_classification,
         "ddc_classification": ddc_classification,
+        "lccn": lccn,
     }
 
 
@@ -115,6 +122,77 @@ class OpenLibraryAdapter:
         if not data:
             return None
         return parse_open_library(data, value)
+
+
+# ---------------------------------------------------------------------------
+# Library of Congress — LCC fallback lookup
+# ---------------------------------------------------------------------------
+
+def _parse_lcc_from_marcxml(xml_text: str) -> str | None:
+    """Extract LCC call number from MARC XML (field 050, subfields a+b).
+
+    Works for both the bare LCCN permalink response and the SRU wrapper.
+    """
+    try:
+        root = ET.fromstring(xml_text)
+        for df in root.iter(f"{{{_MARC_NS}}}datafield"):
+            if df.get("tag") == "050":
+                a = df.find(f"{{{_MARC_NS}}}subfield[@code='a']")
+                b = df.find(f"{{{_MARC_NS}}}subfield[@code='b']")
+                if a is not None and a.text:
+                    parts = [a.text.strip()]
+                    if b is not None and b.text:
+                        parts.append(b.text.strip())
+                    return " ".join(parts)
+    except ET.ParseError:
+        return None
+    return None
+
+
+def _try_lcc_by_lccn(lccn: str) -> str | None:
+    try:
+        with httpx.Client(timeout=8) as client:
+            resp = client.get(_LOC_LCCN_URL.format(lccn=lccn))
+            if resp.status_code != 200:
+                return None
+            return _parse_lcc_from_marcxml(resp.text)
+    except Exception:
+        return None
+
+
+def _try_lcc_by_isbn(isbn: str) -> str | None:
+    try:
+        with httpx.Client(timeout=8) as client:
+            resp = client.get(
+                _LOC_SRU_URL,
+                params={
+                    "version": "1.1",
+                    "operation": "searchRetrieve",
+                    "recordSchema": "marcxml",
+                    "maximumRecords": "1",
+                    "query": f"bath.isbn={isbn}",
+                },
+            )
+            if resp.status_code != 200:
+                return None
+            return _parse_lcc_from_marcxml(resp.text)
+    except Exception:
+        return None
+
+
+def lookup_lcc_from_loc(isbn: str, lccn: str | None = None) -> str | None:
+    """Fetch LCC call number from Library of Congress as a fallback.
+
+    Tries the LCCN permalink MARCXML first (faster, more reliable when LCCN is
+    available), then falls back to SRU ISBN query.  Returns None on any failure.
+    """
+    if lccn:
+        result = _try_lcc_by_lccn(lccn)
+        if result:
+            return result
+    if isbn:
+        return _try_lcc_by_isbn(isbn)
+    return None
 
 
 # ---------------------------------------------------------------------------
