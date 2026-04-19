@@ -4,6 +4,7 @@ import re
 
 from fastapi import APIRouter, Depends, Form, Request
 from fastapi.responses import HTMLResponse, RedirectResponse
+from markupsafe import escape
 from sqlalchemy.orm import Session
 
 from compendium.db.engine import get_settings
@@ -118,17 +119,18 @@ def item_lookup(
     try:
         kind, value = _detect_kind(raw, mt)
     except (ValidationError, Exception) as exc:
-        return HTMLResponse(f"<p class='error-banner'>{exc}</p>")
+        return HTMLResponse(f"<p class='error-banner'>{escape(str(exc))}</p>")
 
     # Title search for film types → show candidate picker, not a preview.
     if kind == "title":
         try:
             candidates = tmdb_search_title(value)
         except ExternalLookupError as exc:
-            return HTMLResponse(f"<p class='error-banner'>{exc}</p>")
+            return HTMLResponse(f"<p class='error-banner'>{escape(str(exc))}</p>")
         if not candidates:
             return HTMLResponse(
-                f"<p class='error-banner'>No TMDb results for '{value}'. Try a different title.</p>"
+                f"<p class='error-banner'>No TMDb results for '{escape(value)}'. "
+                "Try a different title.</p>"
             )
         return _partial(
             "_partials/tmdb_candidates.html",
@@ -164,12 +166,12 @@ def item_lookup(
     try:
         meta = lookup_metadata(mt, kind, value)
     except ExternalLookupError as exc:
-        return HTMLResponse(f"<p class='error-banner'>{exc}</p>")
+        return HTMLResponse(f"<p class='error-banner'>{escape(str(exc))}</p>")
 
     if not meta:
         return HTMLResponse(
-            f"<p class='error-banner'>No metadata found for {kind} '{value}'. "
-            "Check the identifier and try again.</p>"
+            f"<p class='error-banner'>No metadata found for {escape(kind)} "
+            f"'{escape(value)}'. Check the identifier and try again.</p>"
         )
 
     suggested = pick_classification_code(scheme, meta) if scheme != "none" else None
@@ -258,4 +260,4 @@ def withdraw_item(
         _catalog_svc(session, user).withdraw_item(barcode)
         return HTMLResponse("<span class='error-banner'>Item withdrawn.</span>")
     except (BusinessRuleError, NotFoundError) as exc:
-        return HTMLResponse(f"<span class='error-banner'>{exc}</span>")
+        return HTMLResponse(f"<span class='error-banner'>{escape(str(exc))}</span>")

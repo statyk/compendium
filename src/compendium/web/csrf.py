@@ -20,8 +20,16 @@ def _sign(token: str, secret: str) -> str:
 
 
 def set_csrf_cookie(response, token: str, secret: str) -> None:
+    from compendium.db.engine import get_settings
+
     signed = f"{token}.{_sign(token, secret)}"
-    response.set_cookie(_COOKIE, signed, httponly=True, samesite="strict")
+    response.set_cookie(
+        _COOKIE,
+        signed,
+        httponly=True,
+        samesite="strict",
+        secure=get_settings().secure_cookies,
+    )
 
 
 def get_csrf_token(request: Request) -> str:

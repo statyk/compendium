@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 import jwt
-from fastapi import Cookie, Depends, Request
+from fastapi import Cookie, Depends, HTTPException, Request
 from sqlalchemy.orm import Session
 
 from compendium.db.engine import get_settings
@@ -34,12 +34,14 @@ def _decode_token(token: str) -> dict | None:
 
 
 def set_auth_cookie(response, token: str) -> None:
+    settings = get_settings()
     response.set_cookie(
         AUTH_COOKIE,
         token,
         httponly=True,
         samesite="strict",
-        max_age=get_settings().jwt_expire_minutes * 60,
+        secure=settings.secure_cookies,
+        max_age=settings.jwt_expire_minutes * 60,
     )
 
 
@@ -77,7 +79,7 @@ def require_web_permission(permission: str):
         user: AppUser = Depends(require_web_user),
     ) -> AppUser:
         if not has_permission(user.role.permissions, permission):
-            raise RequiresLoginException(next_url=str(request.url.path))
+            raise HTTPException(status_code=403, detail="Forbidden")
         return user
 
     return _dep

@@ -33,6 +33,8 @@ def deactivate_user(
     session: Session = Depends(get_session),
     user: AppUser = Depends(require_permission("user.manage")),
 ) -> UserResponse:
+    if username == user.username:
+        raise HTTPException(status_code=422, detail="You cannot deactivate your own account")
     try:
         result = _auth(session, user).deactivate_user(username)
     except NotFoundError as exc:

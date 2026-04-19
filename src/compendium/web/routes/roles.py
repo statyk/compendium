@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from urllib.parse import quote
+
 from fastapi import APIRouter, Depends, Form, Query, Request
 from fastapi.responses import RedirectResponse
 from sqlalchemy.orm import Session
@@ -155,7 +157,7 @@ def role_update(
         _role_svc(session, user).update(role_id, name=name.strip() or None, permissions=perms)
         return RedirectResponse(f"/ui/roles/{role_id}?message=Role+updated.", status_code=303)
     except (BusinessRuleError, ConflictError, NotFoundError) as exc:
-        return RedirectResponse(f"/ui/roles/{role_id}?error={exc}", status_code=303)
+        return RedirectResponse(f"/ui/roles/{role_id}?error={quote(str(exc))}", status_code=303)
 
 
 @router.post("/roles/{role_id}/clone")
@@ -176,4 +178,4 @@ def role_clone(
         new_role = svc.clone(role_id, new_name=new_name)
         return RedirectResponse(f"/ui/roles/{new_role.id}", status_code=303)
     except (BusinessRuleError, ConflictError, NotFoundError) as exc:
-        return RedirectResponse(f"/ui/roles/{role_id}?error={exc}", status_code=303)
+        return RedirectResponse(f"/ui/roles/{role_id}?error={quote(str(exc))}", status_code=303)

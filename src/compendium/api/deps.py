@@ -53,7 +53,10 @@ def get_optional_user(
         )
     except jwt.PyJWTError:
         return None
-    return SqlUserRepository(session).get(int(payload["sub"]))
+    user = SqlUserRepository(session).get(int(payload["sub"]))
+    if user is None or not user.is_active:
+        return None
+    return user
 
 
 def get_current_patron(

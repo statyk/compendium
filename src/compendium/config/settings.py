@@ -22,3 +22,4 @@ class Settings(BaseSettings):
     ssl_certfile: str | None = None
     ssl_keyfile: str | None = None
     tmdb_api_key: str | None = None
+    secure_cookies: bool = False

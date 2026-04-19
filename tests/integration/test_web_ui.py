@@ -828,3 +828,116 @@ def test_role_clone_creates_editable_copy(web_client, librarian, web_session):
     assert cloned is not None
     assert cloned.is_system is False
     assert cloned.name == "ReadOnly (copy)"
+
+
+# ── Security regressions ──────────────────────────────────────────────────────
+
+
+def test_circ_checkout_escapes_barcode_and_card(web_client, librarian):
+    """HTMLResponse error path must HTML-escape user-supplied input."""
+    cookies = _login(web_client, "lib01")
+    raw, signed = _make_csrf_pair()
+    resp = web_client.post(
+        "/ui/circ/checkout",
+        data={
+            "barcode": "<script>alert('xss')</script>",
+            "card_number": "<img src=x onerror=alert(1)>",
+            "csrf_token": raw,
+        },
+        cookies={**cookies, CSRF_COOKIE: signed},
+    )
+    assert resp.status_code == 200
+    body = resp.text
+    assert "<script>" not in body
+    assert "onerror=" not in body
+    assert "&lt;script&gt;" in body or "&#x27;" in body or "&lt;img" in body
+
+
+def test_me_renew_loan_escapes_error_message(web_client, patron_user):
+    """Error branch returns HTMLResponse; make sure user input can't break HTML."""
+    cookies = _login(web_client, "patron01")
+    raw, signed = _make_csrf_pair()
+    # Loan 999999 doesn't exist → NotFoundError → exc message goes into response.
+    resp = web_client.post(
+        "/ui/me/loans/999999/renew",
+        data={"csrf_token": raw},
+        cookies={**cookies, CSRF_COOKIE: signed},
+    )
+    assert resp.status_code == 200
+    # Error response must not contain a raw "<script>" tag from the exception text.
+    assert "<script>" not in resp.text
+
+
+def test_item_lookup_error_escapes_identifier(web_client, librarian):
+    """If identifier triggers an error path, the echoed value must be escaped."""
+    cookies = _login(web_client, "lib01")
+    raw, signed = _make_csrf_pair()
+    # Supply an invalid ISBN containing HTML; the detect_kind / normalize_isbn path
+    # raises ValidationError which is echoed back via HTMLResponse.
+    resp = web_client.post(
+        "/ui/items/lookup",
+        data={
+            "media_type": "book",
+            "identifier": "<script>x</script>",
+            "csrf_token": raw,
+        },
+        cookies={**cookies, CSRF_COOKIE: signed},
+    )
+    assert resp.status_code == 200
+    assert "<script>x</script>" not in resp.text
+
+
+def test_open_redirect_on_login_falls_back_to_catalog(web_client, librarian):
+    """next= must only accept /ui/ paths; protocol-relative URLs fall back."""
+    raw, signed = _make_csrf_pair()
+    resp = web_client.post(
+        "/ui/login?next=//evil.example.com/path",
+        data={"username": "lib01", "password": "secret", "csrf_token": raw},
+        cookies={CSRF_COOKIE: signed},
+    )
+    assert resp.status_code == 303
+    assert resp.headers["location"].startswith("/ui/catalog")
+
+
+def test_open_redirect_absolute_url_falls_back(web_client, librarian):
+    raw, signed = _make_csrf_pair()
+    resp = web_client.post(
+        "/ui/login?next=https://evil.example.com/",
+        data={"username": "lib01", "password": "secret", "csrf_token": raw},
+        cookies={CSRF_COOKIE: signed},
+    )
+    assert resp.status_code == 303
+    assert resp.headers["location"].startswith("/ui/catalog")
+
+
+def test_patron_sees_403_not_login_redirect_on_librarian_page(web_client, patron_user):
+    """A logged-in user without the permission should get 403, not a login loop."""
+    cookies = _login(web_client, "patron01")
+    resp = web_client.get("/ui/circ", cookies=cookies)
+    assert resp.status_code == 403
+
+
+def test_csrf_signature_tamper_rejected(web_client, librarian):
+    """Tampering with the signed cookie (not just the raw token) must fail."""
+    cookies = _login(web_client, "lib01")
+    raw = generate_token()
+    # Sign with the wrong secret.
+    bad_signed = f"{raw}.{_sign(raw, 'wrong-secret')}"
+    resp = web_client.post(
+        "/ui/circ/checkout",
+        data={"barcode": "X", "card_number": "Y", "csrf_token": raw},
+        cookies={**cookies, CSRF_COOKIE: bad_signed},
+    )
+    assert resp.status_code == 403
+
+
+def test_inactive_user_cookie_denied(web_client, web_session, librarian):
+    """An inactive user's still-valid auth cookie must not grant access."""
+    cookies = _login(web_client, "lib01")
+    librarian.is_active = False
+    SqlUserRepository(web_session).update(librarian)
+    web_session.commit()
+    resp = web_client.get("/ui/circ", cookies=cookies)
+    # get_web_user returns None for inactive users → RequiresLoginException.
+    assert resp.status_code == 303
+    assert "/ui/login" in resp.headers["location"]

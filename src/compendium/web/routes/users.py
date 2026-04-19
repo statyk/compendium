@@ -1,7 +1,10 @@
 from __future__ import annotations
 
+from urllib.parse import quote
+
 from fastapi import APIRouter, Depends, Form, Query, Request
 from fastapi.responses import HTMLResponse, RedirectResponse
+from markupsafe import escape
 from sqlalchemy.orm import Session
 
 from compendium.db.engine import get_settings
@@ -152,7 +155,7 @@ def user_change_role(
         )
     except (NotFoundError, BusinessRuleError) as exc:
         return RedirectResponse(
-            f"/ui/users/{username}?error={exc}", status_code=303
+            f"/ui/users/{quote(username)}?error={quote(str(exc))}", status_code=303
         )
 
 
@@ -165,8 +168,12 @@ def user_deactivate(
     session: Session = Depends(get_session),
 ):
     check_csrf_form(request, csrf_token)
+    if username == user.username:
+        return HTMLResponse(
+            "<span class='error-banner'>You cannot deactivate your own account.</span>"
+        )
     try:
         _auth_svc(session, user).deactivate_user(username)
         return HTMLResponse("<span class='error-banner'>User deactivated.</span>")
     except (BusinessRuleError, NotFoundError) as exc:
-        return HTMLResponse(f"<span class='error-banner'>{exc}</span>")
+        return HTMLResponse(f"<span class='error-banner'>{escape(str(exc))}</span>")

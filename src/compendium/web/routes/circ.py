@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from fastapi import APIRouter, Depends, Form, Request
 from fastapi.responses import HTMLResponse
+from markupsafe import escape
 from sqlalchemy.orm import Session
 
 from compendium.db.engine import get_settings
@@ -69,11 +70,11 @@ def checkout(
         loan = _circ(session).checkout(barcode, card_number)
         due = loan.due_at.strftime("%Y-%m-%d") if loan.due_at else "—"
         return HTMLResponse(
-            f"<p class='success-banner'>Checked out <strong>{barcode}</strong> to "
-            f"<strong>{card_number}</strong>. Due: {due}</p>"
+            f"<p class='success-banner'>Checked out <strong>{escape(barcode)}</strong> to "
+            f"<strong>{escape(card_number)}</strong>. Due: {escape(due)}</p>"
         )
     except (BusinessRuleError, NotFoundError) as exc:
-        return HTMLResponse(f"<p class='error-banner'>{exc}</p>")
+        return HTMLResponse(f"<p class='error-banner'>{escape(str(exc))}</p>")
 
 
 @router.post("/circ/checkin", response_class=HTMLResponse)
@@ -87,9 +88,11 @@ def checkin(
     check_csrf_form(request, csrf_token)
     try:
         _circ(session).checkin(barcode)
-        return HTMLResponse(f"<p class='success-banner'>Checked in <strong>{barcode}</strong>.</p>")
+        return HTMLResponse(
+            f"<p class='success-banner'>Checked in <strong>{escape(barcode)}</strong>.</p>"
+        )
     except (BusinessRuleError, NotFoundError) as exc:
-        return HTMLResponse(f"<p class='error-banner'>{exc}</p>")
+        return HTMLResponse(f"<p class='error-banner'>{escape(str(exc))}</p>")
 
 
 @router.post("/circ/renew", response_class=HTMLResponse)
@@ -106,7 +109,8 @@ def renew(
         loan = _circ(session).renew(barcode, card_number)
         due = loan.due_at.strftime("%Y-%m-%d") if loan.due_at else "—"
         return HTMLResponse(
-            f"<p class='success-banner'>Renewed <strong>{barcode}</strong>. New due date: {due}</p>"
+            f"<p class='success-banner'>Renewed <strong>{escape(barcode)}</strong>. "
+            f"New due date: {escape(due)}</p>"
         )
     except (BusinessRuleError, NotFoundError) as exc:
-        return HTMLResponse(f"<p class='error-banner'>{exc}</p>")
+        return HTMLResponse(f"<p class='error-banner'>{escape(str(exc))}</p>")

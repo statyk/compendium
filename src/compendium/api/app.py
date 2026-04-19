@@ -4,6 +4,7 @@ from pathlib import Path
 from fastapi import FastAPI, Request
 from fastapi.responses import HTMLResponse, RedirectResponse
 from fastapi.staticfiles import StaticFiles
+from starlette.middleware.base import BaseHTTPMiddleware
 
 from compendium.api.routes import audit, auth, branches, holds, items, loans, me, patrons, policies, users, works
 from compendium.config.settings import INSECURE_JWT_DEFAULT
@@ -15,6 +16,28 @@ _WEB_STATIC = Path(__file__).parent.parent / "web" / "static"
 _log = logging.getLogger("compendium")
 
 
+class _SecurityHeadersMiddleware(BaseHTTPMiddleware):
+    """Apply baseline security headers to every response.
+
+    CSP includes a small allowance for the inline JS used in a few HTMX partials
+    and the ZXing WebAssembly worker. Tighten once inline scripts are eliminated.
+    """
+
+    async def dispatch(self, request: Request, call_next):
+        response = await call_next(request)
+        response.headers.setdefault("X-Frame-Options", "DENY")
+        response.headers.setdefault("X-Content-Type-Options", "nosniff")
+        response.headers.setdefault("Referrer-Policy", "no-referrer")
+        response.headers.setdefault(
+            "Content-Security-Policy",
+            "default-src 'self'; img-src 'self' data: https://covers.openlibrary.org "
+            "https://image.tmdb.org; script-src 'self' 'unsafe-inline'; "
+            "style-src 'self' 'unsafe-inline'; object-src 'none'; base-uri 'self'; "
+            "frame-ancestors 'none'; worker-src 'self' blob:",
+        )
+        return response
+
+
 def create_app() -> FastAPI:
     if get_settings().jwt_secret_key == INSECURE_JWT_DEFAULT:
         _log.warning(
@@ -23,6 +46,7 @@ def create_app() -> FastAPI:
         )
 
     app = FastAPI(title="Compendium", version="0.1.0")
+    app.add_middleware(_SecurityHeadersMiddleware)
 
     # JSON API routes
     app.include_router(branches.router, prefix="/branches", tags=["branches"])

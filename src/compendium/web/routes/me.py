@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from fastapi import APIRouter, Depends, Form, Request
 from fastapi.responses import HTMLResponse
+from markupsafe import escape
 from sqlalchemy.orm import Session
 
 from compendium.db.engine import get_settings
@@ -86,13 +87,13 @@ def renew_loan(
         loan = _circ(session).renew_by_id(loan_id, patron_id=patron.id)
         due = loan.due_at.strftime("%Y-%m-%d") if loan.due_at else "—"
         return HTMLResponse(
-            f"<td>{loan.item.barcode}</td>"
-            f"<td>{loan.item.work.title}</td>"
-            f"<td>{due} <small>(renewal {loan.renewal_count})</small></td>"
+            f"<td>{escape(loan.item.barcode)}</td>"
+            f"<td>{escape(loan.item.work.title)}</td>"
+            f"<td>{escape(due)} <small>(renewal {int(loan.renewal_count)})</small></td>"
             f"<td><em>Renewed</em></td>"
         )
     except (BusinessRuleError, NotFoundError) as exc:
-        return HTMLResponse(f"<td colspan='4' class='error-banner'>{exc}</td>")
+        return HTMLResponse(f"<td colspan='4' class='error-banner'>{escape(str(exc))}</td>")
 
 
 @router.get("/me/holds")
@@ -124,4 +125,6 @@ def cancel_hold(
         _holds_svc(session).cancel(hold_id, patron_id=patron.id)
         return HTMLResponse("<tr><td colspan='4'><em>Hold cancelled.</em></td></tr>")
     except (BusinessRuleError, NotFoundError) as exc:
-        return HTMLResponse(f"<tr><td colspan='4' class='error-banner'>{exc}</td></tr>")
+        return HTMLResponse(
+            f"<tr><td colspan='4' class='error-banner'>{escape(str(exc))}</td></tr>"
+        )

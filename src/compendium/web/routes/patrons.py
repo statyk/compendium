@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from fastapi import APIRouter, Depends, Form, Query, Request
 from fastapi.responses import HTMLResponse, RedirectResponse
+from markupsafe import escape
 from sqlalchemy.orm import Session
 
 from compendium.db.engine import get_settings
@@ -212,4 +213,4 @@ def deactivate_patron(
         _patron_svc(session, user).deactivate(card_number)
         return HTMLResponse("<span class='error-banner'>Patron deactivated.</span>")
     except (BusinessRuleError, NotFoundError) as exc:
-        return HTMLResponse(f"<span class='error-banner'>{exc}</span>")
+        return HTMLResponse(f"<span class='error-banner'>{escape(str(exc))}</span>")

@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from fastapi import APIRouter, Depends, Form, Request
 from fastapi.responses import HTMLResponse
+from markupsafe import escape
 from sqlalchemy.orm import Session
 
 from compendium.db.engine import get_settings
@@ -114,4 +115,4 @@ def place_hold(
         _holds_svc(session).place(work_id, patron.library_card_number)
         return HTMLResponse("<p class='success-banner'>Hold placed successfully.</p>")
     except (BusinessRuleError, NotFoundError) as exc:
-        return HTMLResponse(f"<p class='error-banner'>{exc}</p>")
+        return HTMLResponse(f"<p class='error-banner'>{escape(str(exc))}</p>")

@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from urllib.parse import quote
+
 from fastapi import APIRouter, Depends, Form, Query, Request
 from fastapi.responses import HTMLResponse, RedirectResponse
 from sqlalchemy.orm import Session
@@ -133,4 +135,4 @@ def policy_update(
         )
         return RedirectResponse("/ui/policies?message=Policy+updated.", status_code=303)
     except (BusinessRuleError, NotFoundError) as exc:
-        return RedirectResponse(f"/ui/policies?error={exc}", status_code=303)
+        return RedirectResponse(f"/ui/policies?error={quote(str(exc))}", status_code=303)
