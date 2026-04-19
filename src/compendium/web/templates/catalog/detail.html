@@ -23,6 +23,7 @@
   {% if work.publication_year %}<dt>Year</dt><dd>{{ work.publication_year }}</dd>{% endif %}
   {% if work.isbn %}<dt>ISBN</dt><dd>{{ work.isbn }}</dd>{% endif %}
   {% if work.upc %}<dt>UPC</dt><dd>{{ work.upc }}</dd>{% endif %}
+  {% if work.classification_code %}<dt>Classification</dt><dd>{{ work.classification_scheme | upper }}: {{ work.classification_code }}</dd>{% endif %}
   {% if work.description %}<dt>Description</dt><dd>{{ work.description }}</dd>{% endif %}
   {% if work.extra_metadata and work.extra_metadata.get('format') %}<dt>Format</dt><dd>{{ work.extra_metadata['format'] }}</dd>{% endif %}
   {% if work.extra_metadata and work.extra_metadata.get('runtime_minutes') %}<dt>Runtime</dt><dd>{{ work.extra_metadata['runtime_minutes'] }} min</dd>{% endif %}
