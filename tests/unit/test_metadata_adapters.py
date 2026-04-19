@@ -8,7 +8,9 @@ from compendium.domain.errors import ExternalLookupError
 from compendium.services.metadata import (
     MusicBrainzAdapter,
     OpenLibraryAdapter,
+    TMDbAdapter,
     _parse_mb_release,
+    _parse_tmdb_movie,
     normalize_upc,
 )
 
@@ -145,3 +147,90 @@ def test_open_library_adapter_returns_none_when_not_found(_):
     adapter = OpenLibraryAdapter()
     result = adapter.lookup("isbn", "9780441013593")
     assert result is None
+
+
+# ---------------------------------------------------------------------------
+# TMDbAdapter
+# ---------------------------------------------------------------------------
+
+_TMDB_RESPONSE = {
+    "id": 497,
+    "title": "The Green Mile",
+    "release_date": "1999-12-10",
+    "overview": "A supernatural tale set on death row.",
+    "runtime": 189,
+    "tagline": "Miracles do happen.",
+    "original_language": "en",
+    "poster_path": "/poster.jpg",
+    "imdb_id": "tt0120689",
+    "genres": [{"id": 18, "name": "Drama"}, {"id": 878, "name": "Fantasy"}],
+    "credits": {
+        "crew": [
+            {"name": "Frank Darabont", "job": "Director", "department": "Directing"},
+            {"name": "Frank Darabont", "job": "Screenplay", "department": "Writing"},
+        ],
+        "cast": [
+            {"name": "Tom Hanks", "order": 0},
+            {"name": "Michael Clarke Duncan", "order": 1},
+        ],
+    },
+}
+
+
+def test_parse_tmdb_movie_extracts_title():
+    meta = _parse_tmdb_movie(_TMDB_RESPONSE)
+    assert meta["title"] == "The Green Mile"
+
+
+def test_parse_tmdb_movie_extracts_year():
+    meta = _parse_tmdb_movie(_TMDB_RESPONSE)
+    assert meta["publication_year"] == 1999
+
+
+def test_parse_tmdb_movie_extracts_director_and_writer_creators():
+    meta = _parse_tmdb_movie(_TMDB_RESPONSE)
+    # Frank Darabont is both director and screenplay — deduplicated by name only in writers
+    roles = [(name, role) for name, role in meta["creators"]]
+    assert ("Frank Darabont", "director") in roles
+    # Screenplay credit is also Frank Darabont — appears once as director, once as writer
+    assert any(role == "director" for _, role in roles)
+
+
+def test_parse_tmdb_movie_extracts_runtime_and_genres():
+    meta = _parse_tmdb_movie(_TMDB_RESPONSE)
+    assert meta["extra_metadata"]["runtime_minutes"] == 189
+    assert "Drama" in meta["extra_metadata"]["genres"]
+    assert "Fantasy" in meta["extra_metadata"]["genres"]
+
+
+def test_parse_tmdb_movie_extracts_external_ids():
+    meta = _parse_tmdb_movie(_TMDB_RESPONSE)
+    assert meta["external_ids"]["tmdb"] == "497"
+    assert meta["external_ids"]["imdb"] == "tt0120689"
+
+
+def test_parse_tmdb_movie_extracts_cast():
+    meta = _parse_tmdb_movie(_TMDB_RESPONSE)
+    assert "Tom Hanks" in meta["extra_metadata"]["cast"]
+
+
+def test_tmdb_adapter_raises_for_non_tmdb_id():
+    adapter = TMDbAdapter()
+    with pytest.raises(ExternalLookupError, match="does not support"):
+        adapter.lookup("upc", "12345")
+
+
+def test_tmdb_adapter_raises_when_no_api_key():
+    adapter = TMDbAdapter()
+    with patch.dict("os.environ", {}, clear=True):
+        with pytest.raises(ExternalLookupError, match="API key not configured"):
+            adapter.lookup("tmdb_id", "497")
+
+
+@patch("compendium.services.metadata._tmdb_fetch_movie", return_value=_TMDB_RESPONSE)
+def test_tmdb_adapter_delegates_tmdb_id(mock_fetch):
+    adapter = TMDbAdapter()
+    with patch.dict("os.environ", {"COMPENDIUM_TMDB_API_KEY": "testkey"}):
+        result = adapter.lookup("tmdb_id", "497")
+    mock_fetch.assert_called_once_with("497", "testkey")
+    assert result["title"] == "The Green Mile"

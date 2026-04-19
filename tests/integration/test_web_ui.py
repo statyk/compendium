@@ -411,6 +411,85 @@ def test_item_create_via_web(web_client, librarian):
     assert "/ui/items/" in resp.headers["location"]
 
 
+# ── Film (TMDb) item flow ─────────────────────────────────────────────────────
+
+_TMDB_CANDIDATES = [
+    {
+        "tmdb_id": 497,
+        "title": "The Green Mile",
+        "year": "1999",
+        "overview": "A supernatural tale.",
+        "poster_url": None,
+    }
+]
+
+_TMDB_MOVIE_DATA = {
+    "id": 497,
+    "title": "The Green Mile",
+    "release_date": "1999-12-10",
+    "overview": "A supernatural tale.",
+    "runtime": 189,
+    "tagline": None,
+    "original_language": "en",
+    "poster_path": None,
+    "imdb_id": "tt0120689",
+    "genres": [{"id": 18, "name": "Drama"}],
+    "credits": {
+        "crew": [{"name": "Frank Darabont", "job": "Director", "department": "Directing"}],
+        "cast": [{"name": "Tom Hanks", "order": 0}],
+    },
+}
+
+
+def test_item_lookup_film_title_shows_candidates(web_client, librarian):
+    auth_cookies = _login(web_client, "lib01")
+    raw, signed = _make_csrf_pair()
+    with patch("compendium.services.metadata._tmdb_search_candidates", return_value=_TMDB_CANDIDATES):
+        with patch.dict("os.environ", {"COMPENDIUM_TMDB_API_KEY": "testkey"}):
+            resp = web_client.post(
+                "/ui/items/lookup",
+                data={"media_type": "dvd", "identifier": "The Green Mile", "csrf_token": raw},
+                cookies={**auth_cookies, CSRF_COOKIE: signed},
+            )
+    assert resp.status_code == 200
+    assert b"The Green Mile" in resp.content
+    assert b"1999" in resp.content
+
+
+def test_item_lookup_film_tmdb_id_shows_preview(web_client, librarian):
+    auth_cookies = _login(web_client, "lib01")
+    raw, signed = _make_csrf_pair()
+    with patch("compendium.services.metadata._tmdb_fetch_movie", return_value=_TMDB_MOVIE_DATA):
+        with patch.dict("os.environ", {"COMPENDIUM_TMDB_API_KEY": "testkey"}):
+            resp = web_client.post(
+                "/ui/items/lookup",
+                data={"media_type": "dvd", "identifier": "497", "csrf_token": raw},
+                cookies={**auth_cookies, CSRF_COOKIE: signed},
+            )
+    assert resp.status_code == 200
+    assert b"The Green Mile" in resp.content
+    assert b"189 min" in resp.content
+
+
+def test_item_create_dvd_via_web(web_client, librarian):
+    auth_cookies = _login(web_client, "lib01")
+    raw, signed = _make_csrf_pair()
+    with patch("compendium.services.metadata._tmdb_fetch_movie", return_value=_TMDB_MOVIE_DATA):
+        with patch.dict("os.environ", {"COMPENDIUM_TMDB_API_KEY": "testkey"}):
+            resp = web_client.post(
+                "/ui/items/new",
+                data={
+                    "media_type": "dvd",
+                    "identifier_kind": "tmdb_id",
+                    "identifier_value": "497",
+                    "csrf_token": raw,
+                },
+                cookies={**auth_cookies, CSRF_COOKIE: signed},
+            )
+    assert resp.status_code == 303
+    assert "/ui/items/" in resp.headers["location"]
+
+
 # ── User management ───────────────────────────────────────────────────────────
 
 

@@ -18,10 +18,13 @@
       <label><input type="radio" name="media_type" value="book" checked> Book <small>(ISBN)</small></label>
       <label><input type="radio" name="media_type" value="vinyl"> Vinyl Record <small>(UPC or MusicBrainz ID)</small></label>
       <label><input type="radio" name="media_type" value="cd"> CD <small>(UPC or MusicBrainz ID)</small></label>
+      <label><input type="radio" name="media_type" value="dvd"> DVD <small>(title or TMDb ID)</small></label>
+      <label><input type="radio" name="media_type" value="bluray"> Blu-ray <small>(title or TMDb ID)</small></label>
+      <label><input type="radio" name="media_type" value="vhs"> VHS <small>(title or TMDb ID)</small></label>
     </fieldset>
     <label for="identifier">Identifier</label>
     <fieldset role="group">
-      <input type="text" id="identifier" name="identifier" placeholder="Scan or type ISBN / UPC" autocomplete="off" autofocus>
+      <input type="text" id="identifier" name="identifier" placeholder="Scan or type ISBN / UPC / title" autocomplete="off" autofocus>
       <button type="button" class="outline secondary" data-scan-target="identifier">Scan</button>
     </fieldset>
     <button type="submit">Look Up</button>

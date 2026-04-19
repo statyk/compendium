@@ -21,3 +21,4 @@ class Settings(BaseSettings):
     hold_pickup_days: int = 3
     ssl_certfile: str | None = None
     ssl_keyfile: str | None = None
+    tmdb_api_key: str | None = None

@@ -17,6 +17,9 @@
     {% if meta.extra_metadata and meta.extra_metadata.format %}
     <br><small>{{ meta.extra_metadata.format }}{% if meta.extra_metadata.track_count %} &middot; {{ meta.extra_metadata.track_count }} tracks{% endif %}</small>
     {% endif %}
+    {% if meta.extra_metadata and meta.extra_metadata.runtime_minutes %}
+    <br><small>{{ meta.extra_metadata.runtime_minutes }} min{% if meta.extra_metadata.genres %} &middot; {{ meta.extra_metadata.genres | join(", ") }}{% endif %}</small>
+    {% endif %}
   </div>
 </div>
 {% if meta.extra_metadata and meta.extra_metadata.tracks %}

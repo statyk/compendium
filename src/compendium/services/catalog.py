@@ -156,12 +156,21 @@ class CatalogService:
         )
         self._works.add(work)
 
-        creator_role = meta.get("creator_role", "author")
-        for order, name in enumerate(meta.get("authors", [])):
-            creator = self._get_or_create_creator(name)
-            work.creators.append(
-                WorkCreator(creator=creator, role=creator_role, display_order=order)
-            )
+        # "creators" key carries [(name, role), ...] for multi-role media (film).
+        # Falls back to flat "authors" + single "creator_role" for books/music.
+        if meta.get("creators"):
+            for order, (name, role) in enumerate(meta["creators"]):
+                creator = self._get_or_create_creator(name)
+                work.creators.append(
+                    WorkCreator(creator=creator, role=role, display_order=order)
+                )
+        else:
+            creator_role = meta.get("creator_role", "author")
+            for order, name in enumerate(meta.get("authors", [])):
+                creator = self._get_or_create_creator(name)
+                work.creators.append(
+                    WorkCreator(creator=creator, role=creator_role, display_order=order)
+                )
 
         return work
 

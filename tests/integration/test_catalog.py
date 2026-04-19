@@ -129,3 +129,89 @@ def test_add_same_upc_twice_reuses_work(_, session):
 def test_add_from_lookup_raises_when_not_found(_, session):
     with pytest.raises(ExternalLookupError):
         _service(session).add_from_lookup("vinyl", "upc", _UPC)
+
+
+# ── TMDb / DVD / Blu-ray / VHS ────────────────────────────────────────────────
+
+_TMDB_ID = "497"
+
+_TMDB_MOVIE_META = {
+    "title": "The Green Mile",
+    "subtitle": None,
+    "authors": ["Frank Darabont"],
+    "creator_role": "director",
+    "creators": [("Frank Darabont", "director")],
+    "publisher": None,
+    "publication_year": 1999,
+    "description": "A supernatural tale set on death row.",
+    "cover_image_url": None,
+    "isbn": None,
+    "upc": None,
+    "external_ids": {"tmdb": "497", "imdb": "tt0120689"},
+    "extra_metadata": {
+        "runtime_minutes": 189,
+        "genres": ["Drama", "Fantasy"],
+        "original_language": "en",
+        "tagline": "Miracles do happen.",
+        "release_date": "1999-12-10",
+        "cast": ["Tom Hanks", "Michael Clarke Duncan"],
+    },
+}
+
+
+@patch("compendium.services.metadata._tmdb_fetch_movie", return_value={
+    "id": 497, "title": "The Green Mile", "release_date": "1999-12-10",
+    "overview": "A supernatural tale.", "runtime": 189, "tagline": "Miracles do happen.",
+    "original_language": "en", "poster_path": None, "imdb_id": "tt0120689",
+    "genres": [{"id": 18, "name": "Drama"}],
+    "credits": {
+        "crew": [{"name": "Frank Darabont", "job": "Director", "department": "Directing"}],
+        "cast": [{"name": "Tom Hanks", "order": 0}],
+    },
+})
+def test_add_dvd_by_tmdb_id_creates_work_and_item(mock_fetch, session):
+    import os
+    with patch.dict(os.environ, {"COMPENDIUM_TMDB_API_KEY": "testkey"}):
+        work, item = _service(session).add_from_lookup("dvd", "tmdb_id", _TMDB_ID)
+
+    assert work.title == "The Green Mile"
+    assert work.isbn is None
+    assert work.upc is None
+    assert work.publication_year == 1999
+    assert work.external_ids["tmdb"] == "497"
+    assert work.extra_metadata["runtime_minutes"] == 189
+    assert "Drama" in work.extra_metadata["genres"]
+    assert item.status == "available"
+
+
+@patch("compendium.services.metadata._tmdb_fetch_movie", return_value={
+    "id": 497, "title": "The Green Mile", "release_date": "1999-12-10",
+    "overview": "A supernatural tale.", "runtime": 189, "tagline": None,
+    "original_language": "en", "poster_path": None, "imdb_id": "tt0120689",
+    "genres": [],
+    "credits": {
+        "crew": [
+            {"name": "Frank Darabont", "job": "Director", "department": "Directing"},
+            {"name": "Frank Darabont", "job": "Screenplay", "department": "Writing"},
+        ],
+        "cast": [],
+    },
+})
+def test_add_dvd_director_and_writer_as_creators(mock_fetch, session):
+    import os
+    with patch.dict(os.environ, {"COMPENDIUM_TMDB_API_KEY": "testkey"}):
+        work, _ = _service(session).add_from_lookup("dvd", "tmdb_id", _TMDB_ID)
+
+    roles = {wc.role for wc in work.creators}
+    names = {wc.creator.display_name for wc in work.creators}
+    assert "Frank Darabont" in names
+    assert "director" in roles
+    assert "writer" in roles
+
+
+@patch("compendium.services.metadata._tmdb_fetch_movie", return_value={"success": False})
+def test_add_dvd_raises_when_not_found(mock_fetch, session):
+    import os
+    with patch.dict(os.environ, {"COMPENDIUM_TMDB_API_KEY": "testkey"}):
+        with pytest.raises(ExternalLookupError):
+            _service(session).add_from_lookup("dvd", "tmdb_id", "99999")

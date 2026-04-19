@@ -25,6 +25,10 @@
   {% if work.upc %}<dt>UPC</dt><dd>{{ work.upc }}</dd>{% endif %}
   {% if work.description %}<dt>Description</dt><dd>{{ work.description }}</dd>{% endif %}
   {% if work.extra_metadata and work.extra_metadata.get('format') %}<dt>Format</dt><dd>{{ work.extra_metadata['format'] }}</dd>{% endif %}
+  {% if work.extra_metadata and work.extra_metadata.get('runtime_minutes') %}<dt>Runtime</dt><dd>{{ work.extra_metadata['runtime_minutes'] }} min</dd>{% endif %}
+  {% if work.extra_metadata and work.extra_metadata.get('genres') %}<dt>Genres</dt><dd>{{ work.extra_metadata['genres'] | join(", ") }}</dd>{% endif %}
+  {% if work.extra_metadata and work.extra_metadata.get('tagline') %}<dt>Tagline</dt><dd><em>{{ work.extra_metadata['tagline'] }}</em></dd>{% endif %}
+  {% if work.extra_metadata and work.extra_metadata.get('cast') %}<dt>Cast</dt><dd>{{ work.extra_metadata['cast'] | join(", ") }}</dd>{% endif %}
   {% if work.extra_metadata and work.extra_metadata.get('tracks') %}
   <dt>Tracklist</dt>
   <dd>
@@ -83,5 +87,13 @@
   <p><em>Your account has no patron record — contact a librarian to place holds.</em></p>
 {% else %}
   <p><a href="/ui/login?next=/ui/catalog/{{ work.id }}">Log in</a> to place a hold.</p>
+{% endif %}
+
+{% if work.external_ids and work.external_ids.get('tmdb') %}
+<hr>
+<p style="font-size:0.8rem; color:var(--pico-muted-color)">
+  Film data provided by TMDb.
+  This product uses the TMDB API but is not endorsed or certified by TMDB.
+</p>
 {% endif %}
 {% endblock %}

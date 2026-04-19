@@ -1,3 +1,4 @@
+import os
 import re
 from typing import Protocol, runtime_checkable
 
@@ -8,6 +9,8 @@ from compendium.domain.errors import ExternalLookupError, ValidationError
 _OPENLIBRARY_URL = "https://openlibrary.org/api/books"
 _MB_BASE = "https://musicbrainz.org/ws/2"
 _MB_UA = "Compendium/0.1.0 (open-source library catalog)"
+_TMDB_BASE = "https://api.themoviedb.org/3"
+_TMDB_IMAGE_BASE = "https://image.tmdb.org/t/p/w500"
 
 
 # ---------------------------------------------------------------------------
@@ -210,13 +213,148 @@ class MusicBrainzAdapter:
 
 
 # ---------------------------------------------------------------------------
+# TMDb adapter (dvd, bluray, vhs)
+# ---------------------------------------------------------------------------
+
+def _tmdb_get(path: str, params: dict, api_key: str) -> dict:
+    try:
+        with httpx.Client(timeout=10) as client:
+            resp = client.get(
+                f"{_TMDB_BASE}/{path}",
+                params={"api_key": api_key, **params},
+            )
+            resp.raise_for_status()
+    except httpx.HTTPError as exc:
+        raise ExternalLookupError(f"TMDb request failed: {exc}") from exc
+    return resp.json()
+
+
+def _tmdb_search_candidates(query: str, api_key: str) -> list[dict]:
+    data = _tmdb_get("search/movie", {"query": query, "language": "en-US"}, api_key)
+    candidates = []
+    for r in data.get("results", [])[:10]:
+        poster = f"{_TMDB_IMAGE_BASE}{r['poster_path']}" if r.get("poster_path") else None
+        release = r.get("release_date") or ""
+        year = release[:4] if len(release) >= 4 else None
+        overview = r.get("overview") or ""
+        candidates.append({
+            "tmdb_id": r["id"],
+            "title": r.get("title", ""),
+            "year": year,
+            "overview": overview[:150] + ("…" if len(overview) > 150 else ""),
+            "poster_url": poster,
+        })
+    return candidates
+
+
+def _tmdb_fetch_movie(tmdb_id: str, api_key: str) -> dict:
+    return _tmdb_get(
+        f"movie/{tmdb_id}",
+        {"append_to_response": "credits", "language": "en-US"},
+        api_key,
+    )
+
+
+def _parse_tmdb_movie(data: dict) -> dict:
+    credits = data.get("credits", {})
+    crew = credits.get("crew", [])
+    cast = credits.get("cast", [])
+
+    directors = [p["name"] for p in crew if p.get("job") == "Director"]
+    writer_jobs = {"Screenplay", "Writer", "Story"}
+    seen: set[str] = set()
+    writers = [
+        p["name"] for p in crew
+        if p.get("department") == "Writing" and p.get("job") in writer_jobs
+        and not (p["name"] in seen or seen.add(p["name"]))  # type: ignore[func-returns-value]
+    ]
+
+    creators: list[tuple[str, str]] = (
+        [(name, "director") for name in directors]
+        + [(name, "writer") for name in writers[:3]]
+    )
+
+    genres = [g["name"] for g in data.get("genres", [])]
+    cast_names = [p["name"] for p in cast[:10]]
+
+    release_date = data.get("release_date") or ""
+    year = int(release_date[:4]) if len(release_date) >= 4 else None
+
+    poster_path = data.get("poster_path")
+    poster_url = f"{_TMDB_IMAGE_BASE}{poster_path}" if poster_path else None
+
+    tmdb_id = data.get("id")
+    imdb_id = data.get("imdb_id")
+    external_ids: dict = {}
+    if tmdb_id:
+        external_ids["tmdb"] = str(tmdb_id)
+    if imdb_id:
+        external_ids["imdb"] = imdb_id
+
+    extra: dict = {
+        "runtime_minutes": data.get("runtime"),
+        "genres": genres,
+        "original_language": data.get("original_language"),
+        "tagline": data.get("tagline") or None,
+        "release_date": release_date or None,
+        "cast": cast_names,
+    }
+
+    return {
+        "title": data.get("title", "Unknown Title"),
+        "subtitle": None,
+        "authors": [name for name, _ in creators],
+        "creator_role": "director",
+        "creators": creators,
+        "publisher": None,
+        "publication_year": year,
+        "description": data.get("overview") or None,
+        "cover_image_url": poster_url,
+        "isbn": None,
+        "upc": None,
+        "external_ids": external_ids,
+        "extra_metadata": extra,
+    }
+
+
+def tmdb_search_title(query: str) -> list[dict]:
+    """Search TMDb by title; returns a list of candidate dicts for the picker UI."""
+    api_key = os.getenv("COMPENDIUM_TMDB_API_KEY")
+    if not api_key:
+        raise ExternalLookupError(
+            "TMDb API key not configured. Set COMPENDIUM_TMDB_API_KEY to enable film metadata lookup."
+        )
+    return _tmdb_search_candidates(query, api_key)
+
+
+class TMDbAdapter:
+    def lookup(self, kind: str, value: str) -> dict | None:
+        if kind != "tmdb_id":
+            raise ExternalLookupError(f"TMDb adapter does not support identifier kind '{kind}'")
+        api_key = os.getenv("COMPENDIUM_TMDB_API_KEY")
+        if not api_key:
+            raise ExternalLookupError(
+                "TMDb API key not configured. Set COMPENDIUM_TMDB_API_KEY to enable film metadata lookup."
+            )
+        data = _tmdb_fetch_movie(value, api_key)
+        if data.get("success") is False:
+            return None
+        return _parse_tmdb_movie(data)
+
+
+# ---------------------------------------------------------------------------
 # Registry and dispatcher
 # ---------------------------------------------------------------------------
+
+_tmdb_adapter = TMDbAdapter()
 
 _ADAPTERS: dict[str, MetadataAdapter] = {
     "book": OpenLibraryAdapter(),
     "vinyl": MusicBrainzAdapter(),
     "cd": MusicBrainzAdapter(),
+    "dvd": _tmdb_adapter,
+    "bluray": _tmdb_adapter,
+    "vhs": _tmdb_adapter,
 }
 
 

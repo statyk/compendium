@@ -23,7 +23,12 @@ from compendium.repositories.sql.media_type_repository import SqlMediaTypeReposi
 from compendium.repositories.sql.work_repository import SqlWorkRepository
 from compendium.services.audit import AuditService
 from compendium.services.catalog import CatalogService
-from compendium.services.metadata import lookup_metadata, normalize_isbn, normalize_upc
+from compendium.services.metadata import (
+    lookup_metadata,
+    normalize_isbn,
+    normalize_upc,
+    tmdb_search_title,
+)
 from compendium.web.csrf import check_csrf_form, ensure_csrf, set_csrf_cookie
 from compendium.web.deps import require_web_permission
 from compendium.web.jinja import templates
@@ -36,6 +41,7 @@ _PERM_MANAGE = "item.delete"
 _MBID_RE = re.compile(
     r"^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$", re.I
 )
+_FILM_TYPES = {"dvd", "bluray", "vhs"}
 
 
 def _catalog_svc(session: Session, actor: AppUser) -> CatalogService:
@@ -73,6 +79,11 @@ def _detect_kind(raw: str, media_type: str) -> tuple[str, str]:
     """Return (identifier_kind, normalised_value) based on media type and input format."""
     if media_type == "book":
         return "isbn", normalize_isbn(raw)
+    if media_type in _FILM_TYPES:
+        stripped = raw.strip()
+        if stripped.isdigit():
+            return "tmdb_id", stripped
+        return "title", stripped
     if _MBID_RE.match(raw.strip()):
         return "mbid", raw.strip()
     return "upc", normalize_upc(raw)
@@ -107,6 +118,22 @@ def item_lookup(
         kind, value = _detect_kind(raw, mt)
     except (ValidationError, Exception) as exc:
         return HTMLResponse(f"<p class='error-banner'>{exc}</p>")
+
+    # Title search for film types → show candidate picker, not a preview.
+    if kind == "title":
+        try:
+            candidates = tmdb_search_title(value)
+        except ExternalLookupError as exc:
+            return HTMLResponse(f"<p class='error-banner'>{exc}</p>")
+        if not candidates:
+            return HTMLResponse(
+                f"<p class='error-banner'>No TMDb results for '{value}'. Try a different title.</p>"
+            )
+        return _partial(
+            "_partials/tmdb_candidates.html",
+            request,
+            {"media_type": mt, "query": value, "candidates": candidates},
+        )
 
     work_repo = SqlWorkRepository(session)
     existing_work = None

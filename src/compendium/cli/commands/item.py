@@ -25,17 +25,19 @@ def _catalog(session):
 @app.command("add")
 def add_item(
     isbn: str | None = typer.Option(None, "--isbn", help="ISBN-10 or ISBN-13 (books)"),
-    upc: str | None = typer.Option(None, "--upc", help="UPC/EAN barcode (vinyl, CD, DVD, Blu-ray, VHS)"),
+    upc: str | None = typer.Option(None, "--upc", help="UPC/EAN barcode (vinyl, CD)"),
     mbid: str | None = typer.Option(None, "--mbid", help="MusicBrainz release ID (vinyl, CD)"),
+    tmdb_id: str | None = typer.Option(None, "--tmdb-id", help="TMDb movie ID (dvd, bluray, vhs) — requires COMPENDIUM_TMDB_API_KEY"),
     media_type: str | None = typer.Option(
-        None, "--media-type", help="Media type code: vinyl, cd (required with --upc/--mbid)"
+        None, "--media-type", help="Media type code: vinyl, cd, dvd, bluray, vhs (required with --upc/--mbid/--tmdb-id)"
     ),
     location: str | None = typer.Option(None, "--location", help="Shelf location note"),
 ) -> None:
     """Add a new item to the catalog.
 
-    Books: --isbn <ISBN>
-    Music: --upc <barcode> --media-type vinyl|cd  OR  --mbid <uuid> --media-type vinyl|cd
+    Books:  --isbn <ISBN>
+    Music:  --upc <barcode> --media-type vinyl|cd  OR  --mbid <uuid> --media-type vinyl|cd
+    Film:   --tmdb-id <id> --media-type dvd|bluray|vhs  (requires COMPENDIUM_TMDB_API_KEY)
     """
     if isbn is not None:
         kind, value, mt_code = "isbn", isbn.strip(), "book"
@@ -43,7 +45,7 @@ def add_item(
     elif upc is not None:
         if not media_type:
             typer.echo(
-                "Error: --media-type is required with --upc (e.g. vinyl, cd, dvd, bluray, vhs).",
+                "Error: --media-type is required with --upc (e.g. vinyl, cd).",
                 err=True,
             )
             raise typer.Exit(1)
@@ -53,8 +55,17 @@ def add_item(
         mt_code = (media_type or "vinyl").strip()
         kind, value = "mbid", mbid.strip()
         typer.echo(f"Looking up MusicBrainz release {mbid}…")
+    elif tmdb_id is not None:
+        if not media_type:
+            typer.echo(
+                "Error: --media-type is required with --tmdb-id (e.g. dvd, bluray, vhs).",
+                err=True,
+            )
+            raise typer.Exit(1)
+        kind, value, mt_code = "tmdb_id", tmdb_id.strip(), media_type.strip()
+        typer.echo(f"Looking up TMDb ID {tmdb_id}…")
     else:
-        typer.echo("Error: provide --isbn, --upc, or --mbid.", err=True)
+        typer.echo("Error: provide --isbn, --upc, --mbid, or --tmdb-id.", err=True)
         raise typer.Exit(1)
 
     try:
@@ -69,7 +80,10 @@ def add_item(
         typer.echo(f"Error: {exc}", err=True)
         raise typer.Exit(1) from exc
 
-    creators = ", ".join(wc.creator.display_name for wc in work.creators)
+    creators = ", ".join(
+        f"{wc.creator.display_name} ({wc.role})" if wc.role != "author" else wc.creator.display_name
+        for wc in work.creators
+    )
     typer.echo(f"\nAdded: {work.title}" + (f" — {creators}" if creators else ""))
     if work.publication_year:
         typer.echo(f"  Year      : {work.publication_year}")
@@ -77,6 +91,10 @@ def add_item(
         typer.echo(f"  Publisher : {work.publisher}")
     if work.upc:
         typer.echo(f"  UPC       : {work.upc}")
+    if work.extra_metadata.get("runtime_minutes"):
+        typer.echo(f"  Runtime   : {work.extra_metadata['runtime_minutes']} min")
+    if work.extra_metadata.get("genres"):
+        typer.echo(f"  Genres    : {', '.join(work.extra_metadata['genres'])}")
     typer.echo(f"  Barcode   : {item.barcode}")
     typer.echo(f"  Accession : {item.accession_number}")
     if item.location:
