@@ -47,11 +47,19 @@ def catalog_search(
     q: str = "",
     field: str = "all",
     user=Depends(get_web_user),
+    session: Session = Depends(get_session),
 ):
+    settings = get_settings()
+    works = []
+    if settings.guest_search_enabled or user is not None:
+        if q:
+            works = SqlWorkRepository(session).search(q, field=field)
+        else:
+            works = SqlWorkRepository(session).list(limit=50)
     return _render(
         "catalog/search.html",
         request,
-        {"request": request, "user": user, "works": [], "q": q, "field": field},
+        {"request": request, "user": user, "works": works, "q": q, "field": field},
     )
 
 
@@ -65,8 +73,11 @@ def catalog_search_results(
 ):
     settings = get_settings()
     works = []
-    if q and (settings.guest_search_enabled or user is not None):
-        works = SqlWorkRepository(session).search(q, field=field)
+    if settings.guest_search_enabled or user is not None:
+        if q:
+            works = SqlWorkRepository(session).search(q, field=field)
+        else:
+            works = SqlWorkRepository(session).list(limit=50)
     return templates.TemplateResponse(
         request,
         "_partials/work_list.html",

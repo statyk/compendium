@@ -82,6 +82,24 @@ Rationale:
 
 Ship sample crontab entries and a systemd unit file in `docs/`.
 
+### CLI / Web UI feature parity
+
+Feature parity between the CLI and Web UI is a **design goal**. Any operation a
+librarian or patron can perform in one interface should be available in the
+other, so that CLI-only and daemon deployments are both fully usable.
+
+Approved exceptions (CLI-only by design):
+- `db init` / `db upgrade` / `db history` — deployment-time migrations.
+- `maintenance *` subcommands — invoked externally by cron/systemd, not from
+  the running daemon.
+
+Approved exceptions (Web-only by design):
+- `/ui/login` / `/ui/logout` — CLI trust is OS-level; no login flow needed.
+
+Any other gap should be closed or explicitly added to this list with a
+rationale. When adding a new feature, implement it on both interfaces (or
+open the parity exception explicitly) in the same slice.
+
 ---
 
 ## Tech stack

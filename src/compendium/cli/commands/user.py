@@ -59,6 +59,21 @@ def set_user_role(
         raise typer.Exit(1) from exc
 
 
+@app.command("list")
+def list_users(
+    limit: int = typer.Option(50, "--limit"),
+) -> None:
+    """List user accounts."""
+    with session_scope() as session:
+        users = SqlUserRepository(session).list(limit=limit)
+        if not users:
+            typer.echo("No users found.")
+            return
+        for u in users:
+            status = "" if u.is_active else " [inactive]"
+            typer.echo(f"  {u.username}  ({u.role.name}){status}")
+
+
 @app.command("deactivate")
 def deactivate_user(
     username: str = typer.Option(..., "--username", help="Username to deactivate"),

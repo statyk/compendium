@@ -181,6 +181,19 @@ def test_catalog_search_results_partial(web_client, work):
     assert b"Dune" in resp.content
 
 
+def test_catalog_empty_query_browses_all_works(web_client, work):
+    """Parity with CLI `item list`: visiting /ui/catalog with no query lists works."""
+    resp = web_client.get("/ui/catalog")
+    assert resp.status_code == 200
+    assert b"Dune" in resp.content
+
+
+def test_catalog_search_results_empty_query_lists_works(web_client, work):
+    resp = web_client.get("/ui/catalog/search-results")
+    assert resp.status_code == 200
+    assert b"Dune" in resp.content
+
+
 def test_catalog_detail_renders(web_client, work):
     w, _ = work
     resp = web_client.get(f"/ui/catalog/{w.id}")

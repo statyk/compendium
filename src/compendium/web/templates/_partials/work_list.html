@@ -1,6 +1,7 @@
 {% if not works %}
-  <p><em>{% if q %}No results for "{{ q }}".{% else %}Enter a title to search.{% endif %}</em></p>
+  <p><em>{% if q %}No results for "{{ q }}".{% else %}No works in catalog yet.{% endif %}</em></p>
 {% else %}
+  {% if not q %}<p><small><em>Browsing all works — type to search.</em></small></p>{% endif %}
 <ul>
   {% for work in works %}
   <li>
