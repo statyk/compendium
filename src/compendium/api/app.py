@@ -50,19 +50,34 @@ def create_app() -> FastAPI:
 
     @app.exception_handler(NoPatronAccountException)
     async def _no_patron(request: Request, exc: NoPatronAccountException) -> HTMLResponse:
+        from compendium.db.session import get_session
+        from compendium.repositories.sql.user_repository import SqlUserRepository
         from compendium.web.deps import AUTH_COOKIE, _decode_token
 
+        user = None
         username = None
         token = request.cookies.get(AUTH_COOKIE)
-        if token:
-            payload = _decode_token(token)
-            if payload:
-                username = payload.get("username")
-        return templates.TemplateResponse(
-            request,
-            "error_no_patron.html",
-            {"user": None, "csrf_token": "", "username": username},
-            status_code=403,
-        )
+        session_gen = None
+        try:
+            if token:
+                payload = _decode_token(token)
+                if payload:
+                    username = payload.get("username")
+                    session_gen = get_session()
+                    session = next(session_gen)
+                    user = SqlUserRepository(session).get(int(payload["sub"]))
+                    if user is not None and not user.is_active:
+                        user = None
+                    if user is not None:
+                        _ = user.role.permissions  # force lazy load before session close
+            return templates.TemplateResponse(
+                request,
+                "error_no_patron.html",
+                {"user": user, "csrf_token": "", "username": username},
+                status_code=403,
+            )
+        finally:
+            if session_gen is not None:
+                session_gen.close()
 
     return app

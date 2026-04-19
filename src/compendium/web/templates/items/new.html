@@ -13,14 +13,14 @@
     hx-swap="innerHTML"
   >
     <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
-    <label>Media type</label>
     <fieldset>
-      <label><input type="radio" name="media_type" value="book" checked> Book <small>(ISBN)</small></label>
-      <label><input type="radio" name="media_type" value="vinyl"> Vinyl Record <small>(UPC or MusicBrainz ID)</small></label>
-      <label><input type="radio" name="media_type" value="cd"> CD <small>(UPC or MusicBrainz ID)</small></label>
-      <label><input type="radio" name="media_type" value="dvd"> DVD <small>(title or TMDb ID)</small></label>
-      <label><input type="radio" name="media_type" value="bluray"> Blu-ray <small>(title or TMDb ID)</small></label>
-      <label><input type="radio" name="media_type" value="vhs"> VHS <small>(title or TMDb ID)</small></label>
+      <legend>Media type</legend>
+      <label><input type="radio" name="media_type" value="book" checked> <span>Book <small>(ISBN)</small></span></label>
+      <label><input type="radio" name="media_type" value="vinyl"> <span>Vinyl Record <small>(UPC or MusicBrainz ID)</small></span></label>
+      <label><input type="radio" name="media_type" value="cd"> <span>CD <small>(UPC or MusicBrainz ID)</small></span></label>
+      <label><input type="radio" name="media_type" value="dvd"> <span>DVD <small>(title or TMDb ID)</small></span></label>
+      <label><input type="radio" name="media_type" value="bluray"> <span>Blu-ray <small>(title or TMDb ID)</small></span></label>
+      <label><input type="radio" name="media_type" value="vhs"> <span>VHS <small>(title or TMDb ID)</small></span></label>
     </fieldset>
     <label for="identifier">Identifier</label>
     <fieldset role="group">
