@@ -26,6 +26,7 @@ from compendium.services.audit import AuditService
 from compendium.services.catalog import CatalogService
 from compendium.services.metadata import (
     lookup_metadata,
+    musicbrainz_search_title,
     normalize_isbn,
     normalize_upc,
     open_library_search_title,
@@ -45,6 +46,7 @@ _MBID_RE = re.compile(
     r"^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$", re.I
 )
 _FILM_TYPES = {"dvd", "bluray", "vhs"}
+_MUSIC_TYPES = {"vinyl", "cd"}
 
 
 def _catalog_svc(session: Session, actor: AppUser) -> CatalogService:
@@ -92,6 +94,11 @@ def _detect_kind(raw: str, media_type: str) -> tuple[str, str]:
         return "title", stripped
     if _MBID_RE.match(stripped):
         return "mbid", stripped
+    if media_type in _MUSIC_TYPES:
+        digits = re.sub(r"[\s\-]", "", stripped)
+        if digits.isdigit() and len(digits) in (8, 12, 13):
+            return "upc", normalize_upc(raw)
+        return "title", stripped
     return "upc", normalize_upc(raw)
 
 
@@ -130,6 +137,8 @@ def item_lookup(
         try:
             if mt == "book":
                 candidates = open_library_search_title(value)
+            elif mt in _MUSIC_TYPES:
+                candidates = musicbrainz_search_title(value)
             else:
                 candidates = tmdb_search_title(value)
         except ExternalLookupError as exc:

@@ -419,6 +419,41 @@ class MusicBrainzAdapter:
         raise ExternalLookupError(f"MusicBrainz does not support identifier kind '{kind}'")
 
 
+def musicbrainz_search_title(query: str) -> list[dict]:
+    """Search MusicBrainz releases by title; returns candidate dicts for the picker UI."""
+    escaped = query.replace('"', '\\"')
+    data = _mb_get(
+        "release",
+        {"query": f'release:"{escaped}"', "fmt": "json", "limit": "10"},
+    )
+    candidates: list[dict] = []
+    for r in data.get("releases", []):
+        mbid = r.get("id")
+        if not mbid:
+            continue
+        artists = [
+            ac["artist"]["name"]
+            for ac in r.get("artist-credit", [])
+            if isinstance(ac, dict) and "artist" in ac
+        ]
+        secondary = "by " + ", ".join(artists[:2]) if artists else ""
+        date_str = r.get("date") or ""
+        year = date_str[:4] if len(date_str) >= 4 and date_str[:4].isdigit() else None
+        media_list = r.get("media", []) or []
+        fmt = media_list[0].get("format", "") if media_list else ""
+        country = r.get("country") or ""
+        tertiary_parts = [p for p in (country, fmt) if p]
+        candidates.append({
+            "identifier_value": mbid,
+            "title": r.get("title", ""),
+            "year": year,
+            "secondary": secondary,
+            "tertiary": " · ".join(tertiary_parts),
+            "image_url": None,
+        })
+    return candidates
+
+
 # ---------------------------------------------------------------------------
 # TMDb adapter (dvd, bluray, vhs)
 # ---------------------------------------------------------------------------

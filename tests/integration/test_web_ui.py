@@ -588,6 +588,68 @@ def test_item_lookup_book_title_shows_candidates(web_client, librarian):
     assert b"9780441013593" in resp.content
 
 
+# ── Music title search (MusicBrainz) ─────────────────────────────────────────
+
+_MB_SEARCH_RESPONSE = {
+    "releases": [
+        {
+            "id": "11111111-2222-3333-4444-555555555555",
+            "title": "Kind of Blue",
+            "date": "1959-08-17",
+            "country": "US",
+            "artist-credit": [{"artist": {"name": "Miles Davis"}}],
+            "media": [{"format": "Vinyl"}],
+        },
+        {
+            "id": "66666666-7777-8888-9999-aaaaaaaaaaaa",
+            "title": "Kind of Blue (Reissue)",
+            "date": "1997",
+            "country": "GB",
+            "artist-credit": [{"artist": {"name": "Miles Davis"}}],
+            "media": [{"format": "CD"}],
+        },
+    ]
+}
+
+
+def test_item_lookup_vinyl_title_shows_candidates(web_client, librarian):
+    """Vinyl media type with a non-UPC, non-MBID identifier triggers MB title search."""
+    auth_cookies = _login(web_client, "lib01")
+    raw, signed = _make_csrf_pair()
+
+    class _FakeResp:
+        def raise_for_status(self):
+            pass
+
+        def json(self):
+            return _MB_SEARCH_RESPONSE
+
+    class _FakeClient:
+        def __init__(self, *a, **kw):
+            pass
+
+        def __enter__(self):
+            return self
+
+        def __exit__(self, *a):
+            return False
+
+        def get(self, *a, **kw):
+            return _FakeResp()
+
+    with patch("compendium.services.metadata.httpx.Client", _FakeClient):
+        resp = web_client.post(
+            "/ui/items/lookup",
+            data={"media_type": "vinyl", "identifier": "Kind of Blue", "csrf_token": raw},
+            cookies={**auth_cookies, CSRF_COOKIE: signed},
+        )
+    assert resp.status_code == 200
+    assert b"Kind of Blue" in resp.content
+    assert b"Miles Davis" in resp.content
+    assert b"11111111-2222-3333-4444-555555555555" in resp.content
+    assert b"Vinyl" in resp.content
+
+
 # ── Film (TMDb) item flow ─────────────────────────────────────────────────────
 
 _TMDB_CANDIDATES = [
