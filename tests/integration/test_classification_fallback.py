@@ -61,7 +61,7 @@ def _set_lcc(session) -> None:
 def test_loc_fallback_called_when_ol_has_no_lcc(session):
     _set_lcc(session)
     with patch("compendium.services.metadata.lookup_isbn", return_value=_OL_NO_CLASSIFICATION), \
-         patch("compendium.services.catalog.lookup_lcc_from_loc", return_value="PS3558.E63 D8") as mock_loc:
+         patch("compendium.services.metadata.lookup_lcc_from_loc", return_value="PS3558.E63 D8") as mock_loc:
         work, _ = _catalog(session).add_from_isbn(_ISBN)
     mock_loc.assert_called_once_with(isbn=_ISBN, lccn="65012174")
     assert work.classification_scheme == "lcc"
@@ -71,7 +71,7 @@ def test_loc_fallback_called_when_ol_has_no_lcc(session):
 def test_loc_fallback_not_called_when_ol_has_lcc(session):
     _set_lcc(session)
     with patch("compendium.services.metadata.lookup_isbn", return_value=_OL_WITH_LCC), \
-         patch("compendium.services.catalog.lookup_lcc_from_loc") as mock_loc:
+         patch("compendium.services.metadata.lookup_lcc_from_loc") as mock_loc:
         work, _ = _catalog(session).add_from_isbn(_ISBN)
     mock_loc.assert_not_called()
     assert work.classification_code == "PS3558.E63 D8"
@@ -80,7 +80,7 @@ def test_loc_fallback_not_called_when_ol_has_lcc(session):
 def test_loc_fallback_with_isbn_when_no_lccn(session):
     _set_lcc(session)
     with patch("compendium.services.metadata.lookup_isbn", return_value=_OL_NO_CLASSIFICATION_NO_LCCN), \
-         patch("compendium.services.catalog.lookup_lcc_from_loc", return_value="PS3558.E63") as mock_loc:
+         patch("compendium.services.metadata.lookup_lcc_from_loc", return_value="PS3558.E63") as mock_loc:
         work, _ = _catalog(session).add_from_isbn(_ISBN)
     mock_loc.assert_called_once_with(isbn=_ISBN, lccn=None)
     assert work.classification_code == "PS3558.E63"
@@ -89,7 +89,7 @@ def test_loc_fallback_with_isbn_when_no_lccn(session):
 def test_loc_fallback_failure_leaves_classification_null(session):
     _set_lcc(session)
     with patch("compendium.services.metadata.lookup_isbn", return_value=_OL_NO_CLASSIFICATION), \
-         patch("compendium.services.catalog.lookup_lcc_from_loc", return_value=None):
+         patch("compendium.services.metadata.lookup_lcc_from_loc", return_value=None):
         work, _ = _catalog(session).add_from_isbn(_ISBN)
     assert work.classification_scheme is None
     assert work.classification_code is None
@@ -103,6 +103,6 @@ def test_loc_fallback_not_called_for_ddc_branch(session):
     session.flush()
 
     with patch("compendium.services.metadata.lookup_isbn", return_value=_OL_NO_CLASSIFICATION), \
-         patch("compendium.services.catalog.lookup_lcc_from_loc") as mock_loc:
+         patch("compendium.services.metadata.lookup_lcc_from_loc") as mock_loc:
         _catalog(session).add_from_isbn(_ISBN)
     mock_loc.assert_not_called()

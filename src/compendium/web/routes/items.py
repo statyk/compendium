@@ -27,6 +27,7 @@ from compendium.services.metadata import (
     lookup_metadata,
     normalize_isbn,
     normalize_upc,
+    pick_classification_code,
     tmdb_search_title,
 )
 from compendium.web.csrf import check_csrf_form, ensure_csrf, set_csrf_cookie
@@ -142,6 +143,9 @@ def item_lookup(
     elif kind == "upc":
         existing_work = work_repo.get_by_upc(value)
 
+    branch = SqlBranchRepository(session).get_default()
+    scheme = branch.default_classification_scheme if branch else "none"
+
     if existing_work is not None:
         return _partial(
             "_partials/item_preview.html",
@@ -153,6 +157,7 @@ def item_lookup(
                 "work": existing_work,
                 "meta": None,
                 "existing": True,
+                "suggested_call_number": existing_work.classification_code,
             },
         )
 
@@ -167,6 +172,8 @@ def item_lookup(
             "Check the identifier and try again.</p>"
         )
 
+    suggested = pick_classification_code(scheme, meta) if scheme != "none" else None
+
     return _partial(
         "_partials/item_preview.html",
         request,
@@ -177,6 +184,7 @@ def item_lookup(
             "work": None,
             "meta": meta,
             "existing": False,
+            "suggested_call_number": suggested,
         },
     )
 

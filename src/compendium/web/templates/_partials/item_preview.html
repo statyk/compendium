@@ -48,7 +48,7 @@
   <label for="ip-location">Location <small>(optional)</small></label>
   <input type="text" id="ip-location" name="location" placeholder="e.g. Shelf A3" autocomplete="off">
   <label for="ip-call-number">Call number <small>(optional)</small></label>
-  <input type="text" id="ip-call-number" name="call_number" autocomplete="off">
+  <input type="text" id="ip-call-number" name="call_number" value="{{ suggested_call_number or '' }}" autocomplete="off">
   <label for="ip-condition">Condition <small>(optional)</small></label>
   <select id="ip-condition" name="condition">
     <option value="">—</option>

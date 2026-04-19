@@ -52,7 +52,7 @@ def _set_ddc(session) -> None:
 def test_loc_ddc_fallback_called_when_ol_has_no_ddc(session):
     _set_ddc(session)
     with patch("compendium.services.metadata.lookup_isbn", return_value=_OL_NO_DDC), \
-         patch("compendium.services.catalog.lookup_ddc_from_loc", return_value="813.54") as mock_loc:
+         patch("compendium.services.metadata.lookup_ddc_from_loc", return_value="813.54") as mock_loc:
         work, _ = _catalog(session).add_from_isbn(_ISBN)
     mock_loc.assert_called_once_with(isbn=_ISBN, lccn="65012174")
     assert work.classification_scheme == "ddc"
@@ -62,7 +62,7 @@ def test_loc_ddc_fallback_called_when_ol_has_no_ddc(session):
 def test_loc_ddc_fallback_not_called_when_ol_has_ddc(session):
     _set_ddc(session)
     with patch("compendium.services.metadata.lookup_isbn", return_value=_OL_WITH_DDC), \
-         patch("compendium.services.catalog.lookup_ddc_from_loc") as mock_loc:
+         patch("compendium.services.metadata.lookup_ddc_from_loc") as mock_loc:
         work, _ = _catalog(session).add_from_isbn(_ISBN)
     mock_loc.assert_not_called()
     assert work.classification_code == "813.54"
@@ -71,7 +71,7 @@ def test_loc_ddc_fallback_not_called_when_ol_has_ddc(session):
 def test_loc_ddc_fallback_failure_leaves_classification_null(session):
     _set_ddc(session)
     with patch("compendium.services.metadata.lookup_isbn", return_value=_OL_NO_DDC), \
-         patch("compendium.services.catalog.lookup_ddc_from_loc", return_value=None):
+         patch("compendium.services.metadata.lookup_ddc_from_loc", return_value=None):
         work, _ = _catalog(session).add_from_isbn(_ISBN)
     assert work.classification_scheme is None
     assert work.classification_code is None
@@ -84,6 +84,6 @@ def test_loc_ddc_fallback_not_called_for_lcc_branch(session):
     repo.update(branch)
     session.flush()
     with patch("compendium.services.metadata.lookup_isbn", return_value=_OL_NO_DDC), \
-         patch("compendium.services.catalog.lookup_ddc_from_loc") as mock_loc:
+         patch("compendium.services.metadata.lookup_ddc_from_loc") as mock_loc:
         _catalog(session).add_from_isbn(_ISBN)
     mock_loc.assert_not_called()

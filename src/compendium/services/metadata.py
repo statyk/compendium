@@ -255,6 +255,24 @@ def lookup_ddc_from_loc(isbn: str, lccn: str | None = None) -> str | None:
     return None
 
 
+def pick_classification_code(scheme: str, meta: dict) -> str | None:
+    """Resolve a classification code for the given scheme from metadata.
+
+    Prefers the number supplied by the metadata source (e.g. Open Library);
+    falls back to a Library of Congress lookup when the source lacks it.
+    Returns None for ``scheme == "none"`` or when no number is available.
+    """
+    if scheme == "lcc":
+        return meta.get("lc_classification") or lookup_lcc_from_loc(
+            isbn=meta.get("isbn") or "", lccn=meta.get("lccn")
+        )
+    if scheme == "ddc":
+        return meta.get("ddc_classification") or lookup_ddc_from_loc(
+            isbn=meta.get("isbn") or "", lccn=meta.get("lccn")
+        )
+    return None
+
+
 # ---------------------------------------------------------------------------
 # MusicBrainz adapter (vinyl, CD)
 # ---------------------------------------------------------------------------

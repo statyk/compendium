@@ -9,9 +9,7 @@ from compendium.repositories.base import (
     WorkRepository,
 )
 from compendium.services.audit import AuditAction, AuditEntityType, AuditService
-from compendium.services.metadata import lookup_ddc_from_loc, lookup_lcc_from_loc, lookup_metadata, normalize_isbn
-
-_SCHEME_TO_META_KEY = {"lcc": "lc_classification", "ddc": "ddc_classification"}
+from compendium.services.metadata import lookup_metadata, normalize_isbn, pick_classification_code
 
 
 class CatalogService:
@@ -161,22 +159,10 @@ class CatalogService:
 
         scheme = (branch.default_classification_scheme if branch else None) or "none"
         if scheme != "none":
-            meta_key = _SCHEME_TO_META_KEY.get(scheme)
-            if meta_key:
-                code = meta.get(meta_key)
-                if not code and scheme == "lcc":
-                    code = lookup_lcc_from_loc(
-                        isbn=meta.get("isbn") or "",
-                        lccn=meta.get("lccn"),
-                    )
-                elif not code and scheme == "ddc":
-                    code = lookup_ddc_from_loc(
-                        isbn=meta.get("isbn") or "",
-                        lccn=meta.get("lccn"),
-                    )
-                if code:
-                    work.classification_scheme = scheme
-                    work.classification_code = code
+            code = pick_classification_code(scheme, meta)
+            if code:
+                work.classification_scheme = scheme
+                work.classification_code = code
         self._works.add(work)
 
         # "creators" key carries [(name, role), ...] for multi-role media (film).
