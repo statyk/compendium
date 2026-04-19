@@ -73,10 +73,75 @@ COMPENDIUM_HOLD_PICKUP_DAYS=3
 
 | Backend | Collection size | Concurrent users | Notes |
 |---|---|---|---|
-| SQLite | up to ~10k items | 1–2 writers | Home, classroom. Simple file-based setup. |
-| PostgreSQL | up to ~500k items | 10–100 | Schools, institutions. Set `DATABASE_URL=postgresql+psycopg2://user:pass@host/db`. |
+| SQLite | up to ~10k items | 1–2 writers | Home, classroom. Simple file-based setup. Default. |
+| PostgreSQL | up to ~500k items | 10–100 | Schools, institutions. See [PostgreSQL setup](#postgresql-setup). |
 
-SQLite is the default and requires no additional setup. PostgreSQL requires `psycopg2` or `psycopg` to be installed.
+SQLite is the default and requires no additional setup — `compendium db init` will create `compendium.db` in the current working directory unless `COMPENDIUM_DATABASE_URL` says otherwise.
+
+### PostgreSQL setup
+
+#### 1. Install Compendium with the `postgres` extra
+
+The psycopg driver is an optional dependency, not bundled by default:
+
+```bash
+uv sync --extra postgres
+```
+
+#### 2. Create the database and role
+
+On the Postgres host:
+
+```bash
+sudo -u postgres createuser --pwprompt compendium
+sudo -u postgres createdb --owner=compendium compendium
+```
+
+Compendium doesn't require any superuser privileges at runtime. The role only needs ownership of (or full privileges on) its own database.
+
+#### 3. Point Compendium at the database
+
+Set `COMPENDIUM_DATABASE_URL` in your `.env` or environment. The URL uses SQLAlchemy's `postgresql+psycopg://` scheme (psycopg v3):
+
+```dotenv
+COMPENDIUM_DATABASE_URL=postgresql+psycopg://compendium:<password>@localhost:5432/compendium
+```
+
+URL-encode any special characters in the password (e.g. `@` → `%40`).
+
+For a remote host with TLS, append `?sslmode=require`:
+
+```dotenv
+COMPENDIUM_DATABASE_URL=postgresql+psycopg://compendium:<password>@db.example.com:5432/compendium?sslmode=require
+```
+
+#### 4. Run migrations and seed defaults
+
+```bash
+compendium db init
+```
+
+This applies all Alembic migrations and seeds the default branch, media types, roles, and loan policy. It is safe to re-run; subsequent invocations are no-ops once schema and seed rows are in place.
+
+#### 5. Create the first Librarian
+
+```bash
+compendium user add --username admin --role Librarian
+compendium serve
+```
+
+#### Backups
+
+Use `pg_dump` / `pg_restore` for backups. A typical nightly dump:
+
+```bash
+pg_dump --format=custom --file=/var/backups/compendium-$(date +%F).dump \
+        --dbname=postgresql://compendium@localhost/compendium
+```
+
+#### Switching an existing SQLite deployment to PostgreSQL
+
+There is no built-in migration tool. For an existing deployment, export data with a manual script (the `compendium` CLI can enumerate works/items/patrons) and replay against a fresh Postgres-backed install. This is easier before the catalog grows — plan your backend up front if you anticipate crossing ~10k items.
 
 ---
 

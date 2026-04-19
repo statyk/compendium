@@ -171,6 +171,22 @@ Settings are read from environment variables (prefix `COMPENDIUM_`) or a `.env` 
 
 See [`docs/deployment.md`](docs/deployment.md) for full deployment guidance.
 
+### PostgreSQL
+
+SQLite is the default and fine for home or classroom use (up to ~10k items). For larger collections or multiple concurrent writers, use PostgreSQL:
+
+```bash
+uv sync --extra postgres
+```
+
+Then set:
+
+```dotenv
+COMPENDIUM_DATABASE_URL=postgresql+psycopg://compendium:<password>@localhost:5432/compendium
+```
+
+and run `compendium db init` to apply migrations. Full setup (creating the role and database, TLS, backups) is in [`docs/deployment.md`](docs/deployment.md#postgresql-setup).
+
 ## Scheduled maintenance
 
 The `compendium maintenance expire-holds` command should run periodically via cron or a systemd timer. See [`docs/crontab.sample`](docs/crontab.sample) and [`docs/compendium.service.sample`](docs/compendium.service.sample).
