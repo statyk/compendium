@@ -28,6 +28,7 @@ from compendium.services.metadata import (
     lookup_metadata,
     normalize_isbn,
     normalize_upc,
+    open_library_search_title,
     pick_classification_code,
     tmdb_search_title,
 )
@@ -79,15 +80,18 @@ def _partial(name: str, request: Request, ctx: dict):
 
 def _detect_kind(raw: str, media_type: str) -> tuple[str, str]:
     """Return (identifier_kind, normalised_value) based on media type and input format."""
+    stripped = raw.strip()
     if media_type == "book":
-        return "isbn", normalize_isbn(raw)
+        digits = re.sub(r"[\s\-]", "", stripped)
+        if digits.isdigit() and len(digits) in (10, 13):
+            return "isbn", normalize_isbn(stripped)
+        return "title", stripped
     if media_type in _FILM_TYPES:
-        stripped = raw.strip()
         if stripped.isdigit():
             return "tmdb_id", stripped
         return "title", stripped
-    if _MBID_RE.match(raw.strip()):
-        return "mbid", raw.strip()
+    if _MBID_RE.match(stripped):
+        return "mbid", stripped
     return "upc", normalize_upc(raw)
 
 
@@ -121,19 +125,22 @@ def item_lookup(
     except (ValidationError, Exception) as exc:
         return HTMLResponse(f"<p class='error-banner'>{escape(str(exc))}</p>")
 
-    # Title search for film types → show candidate picker, not a preview.
+    # Title search → show candidate picker, not a preview.
     if kind == "title":
         try:
-            candidates = tmdb_search_title(value)
+            if mt == "book":
+                candidates = open_library_search_title(value)
+            else:
+                candidates = tmdb_search_title(value)
         except ExternalLookupError as exc:
             return HTMLResponse(f"<p class='error-banner'>{escape(str(exc))}</p>")
         if not candidates:
             return HTMLResponse(
-                f"<p class='error-banner'>No TMDb results for '{escape(value)}'. "
+                f"<p class='error-banner'>No results for '{escape(value)}'. "
                 "Try a different title.</p>"
             )
         return _partial(
-            "_partials/tmdb_candidates.html",
+            "_partials/title_candidates.html",
             request,
             {"media_type": mt, "query": value, "candidates": candidates},
         )

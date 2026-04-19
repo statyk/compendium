@@ -8,6 +8,8 @@ import httpx
 from compendium.domain.errors import ExternalLookupError, ValidationError
 
 _OPENLIBRARY_URL = "https://openlibrary.org/api/books"
+_OPENLIBRARY_SEARCH_URL = "https://openlibrary.org/search.json"
+_OPENLIBRARY_COVER_URL = "https://covers.openlibrary.org/b/id/{cover_id}-M.jpg"
 _LOC_LCCN_URL = "https://lccn.loc.gov/{lccn}/marcxml"
 _LOC_SRU_URL = "https://lx2.loc.gov/sru/catalog"
 _MARC_NS = "http://www.loc.gov/MARC21/slim"
@@ -122,6 +124,47 @@ class OpenLibraryAdapter:
         if not data:
             return None
         return parse_open_library(data, value)
+
+
+def open_library_search_title(query: str) -> list[dict]:
+    """Search Open Library by title; returns candidate dicts for the picker UI.
+
+    Only includes results with at least one ISBN, because the downstream add-by-ISBN
+    path is the only way to populate a Work from an Open Library pick today.
+    """
+    try:
+        with httpx.Client(timeout=10) as client:
+            resp = client.get(
+                _OPENLIBRARY_SEARCH_URL,
+                params={"title": query, "limit": "15"},
+            )
+            resp.raise_for_status()
+    except httpx.HTTPError as exc:
+        raise ExternalLookupError(f"Open Library request failed: {exc}") from exc
+
+    candidates: list[dict] = []
+    for doc in resp.json().get("docs", []):
+        isbns = doc.get("isbn") or []
+        isbn13 = next((i for i in isbns if len(i) == 13 and i.isdigit()), None)
+        isbn = isbn13 or next((i for i in isbns if i), None)
+        if not isbn:
+            continue
+        authors = doc.get("author_name") or []
+        secondary = "by " + ", ".join(authors[:2]) if authors else ""
+        year = str(doc["first_publish_year"]) if doc.get("first_publish_year") else None
+        cover_id = doc.get("cover_i")
+        image_url = _OPENLIBRARY_COVER_URL.format(cover_id=cover_id) if cover_id else None
+        candidates.append({
+            "identifier_value": isbn,
+            "title": doc.get("title", ""),
+            "year": year,
+            "secondary": secondary,
+            "tertiary": f"ISBN {isbn}",
+            "image_url": image_url,
+        })
+        if len(candidates) >= 10:
+            break
+    return candidates
 
 
 # ---------------------------------------------------------------------------
@@ -401,11 +444,18 @@ def _tmdb_search_candidates(query: str, api_key: str) -> list[dict]:
         release = r.get("release_date") or ""
         year = release[:4] if len(release) >= 4 else None
         overview = r.get("overview") or ""
+        overview_trunc = overview[:150] + ("…" if len(overview) > 150 else "")
         candidates.append({
-            "tmdb_id": r["id"],
+            "identifier_value": str(r["id"]),
             "title": r.get("title", ""),
             "year": year,
-            "overview": overview[:150] + ("…" if len(overview) > 150 else ""),
+            "secondary": overview_trunc,
+            "tertiary": "",
+            "image_url": poster,
+            # Backwards-compat keys (used by CLI picker and any callers predating
+            # the unified title-candidate shape).
+            "tmdb_id": r["id"],
+            "overview": overview_trunc,
             "poster_url": poster,
         })
     return candidates

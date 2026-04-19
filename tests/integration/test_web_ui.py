@@ -522,13 +522,83 @@ def test_item_create_via_web(web_client, librarian):
     assert "/ui/items/" in resp.headers["location"]
 
 
+# ── Book title search (Open Library) ─────────────────────────────────────────
+
+_OL_SEARCH_RESPONSE = {
+    "docs": [
+        {
+            "title": "Dune",
+            "author_name": ["Frank Herbert"],
+            "first_publish_year": 1965,
+            "cover_i": 12345,
+            "isbn": ["9780441013593", "0441013597"],
+        },
+        {
+            "title": "Dune Messiah",
+            "author_name": ["Frank Herbert"],
+            "first_publish_year": 1969,
+            "isbn": ["9780441172696"],
+        },
+        {
+            "title": "No ISBN edition",
+            "author_name": ["Obscure Author"],
+            "isbn": [],
+        },
+    ]
+}
+
+
+def test_item_lookup_book_title_shows_candidates(web_client, librarian):
+    """Book media type with a non-ISBN identifier triggers OL title search."""
+    auth_cookies = _login(web_client, "lib01")
+    raw, signed = _make_csrf_pair()
+
+    class _FakeResp:
+        def raise_for_status(self):
+            pass
+
+        def json(self):
+            return _OL_SEARCH_RESPONSE
+
+    class _FakeClient:
+        def __init__(self, *a, **kw):
+            pass
+
+        def __enter__(self):
+            return self
+
+        def __exit__(self, *a):
+            return False
+
+        def get(self, *a, **kw):
+            return _FakeResp()
+
+    with patch("compendium.services.metadata.httpx.Client", _FakeClient):
+        resp = web_client.post(
+            "/ui/items/lookup",
+            data={"media_type": "book", "identifier": "Dune", "csrf_token": raw},
+            cookies={**auth_cookies, CSRF_COOKIE: signed},
+        )
+    assert resp.status_code == 200
+    assert b"Dune" in resp.content
+    assert b"Frank Herbert" in resp.content
+    # Result without ISBN should be filtered out.
+    assert b"Obscure Author" not in resp.content
+    # Candidate button re-submits with the ISBN as identifier.
+    assert b"9780441013593" in resp.content
+
+
 # ── Film (TMDb) item flow ─────────────────────────────────────────────────────
 
 _TMDB_CANDIDATES = [
     {
-        "tmdb_id": 497,
+        "identifier_value": "497",
         "title": "The Green Mile",
         "year": "1999",
+        "secondary": "A supernatural tale.",
+        "tertiary": "",
+        "image_url": None,
+        "tmdb_id": 497,
         "overview": "A supernatural tale.",
         "poster_url": None,
     }
