@@ -21,6 +21,9 @@ class SqlWorkRepository:
     def get_by_isbn(self, isbn: str) -> Work | None:
         return self._s.query(Work).filter_by(isbn=isbn).first()
 
+    def get_by_upc(self, upc: str) -> Work | None:
+        return self._s.query(Work).filter_by(upc=upc).first()
+
     def list(self, limit: int = 50, offset: int = 0) -> list[Work]:
         return self._s.query(Work).order_by(Work.title).offset(offset).limit(limit).all()
 

@@ -115,7 +115,7 @@ class TestAuditEndpoint:
             role_repo=SqlRoleRepository(audit_session),
             settings=_TEST_SETTINGS,
         ).issue_token(librarian)
-        with patch("compendium.services.catalog.lookup_isbn", return_value=_OPEN_LIB_DUNE):
+        with patch("compendium.services.metadata.lookup_isbn", return_value=_OPEN_LIB_DUNE):
             from compendium.repositories.sql.audit_log_repository import SqlAuditLogRepository
             from compendium.services.audit import AuditService
 

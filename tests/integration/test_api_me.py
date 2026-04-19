@@ -158,7 +158,7 @@ class TestMeLoans:
 class TestMeHolds:
     def test_place_hold_via_me(self, me_client, me_session):
         _, _, token = _make_patron_user(me_session, "patron_holds1")
-        with patch("compendium.services.catalog.lookup_isbn", return_value=_OPEN_LIB_DUNE):
+        with patch("compendium.services.metadata.lookup_isbn", return_value=_OPEN_LIB_DUNE):
             work, _ = _catalog(me_session).add_from_isbn("9780441013000")
         me_session.flush()
 
@@ -174,7 +174,7 @@ class TestMeHolds:
 
     def test_place_duplicate_hold_returns_422(self, me_client, me_session):
         _, _, token = _make_patron_user(me_session, "patron_holds2")
-        with patch("compendium.services.catalog.lookup_isbn", return_value=_OPEN_LIB_DUNE):
+        with patch("compendium.services.metadata.lookup_isbn", return_value=_OPEN_LIB_DUNE):
             work, _ = _catalog(me_session).add_from_isbn("9780441013001")
         me_session.flush()
 
@@ -192,7 +192,7 @@ class TestMeHolds:
 
     def test_list_and_cancel_hold(self, me_client, me_session):
         _, _, token = _make_patron_user(me_session, "patron_holds3")
-        with patch("compendium.services.catalog.lookup_isbn", return_value=_OPEN_LIB_DUNE):
+        with patch("compendium.services.metadata.lookup_isbn", return_value=_OPEN_LIB_DUNE):
             work, _ = _catalog(me_session).add_from_isbn("9780441013002")
         me_session.flush()
 
@@ -219,7 +219,7 @@ class TestMeHolds:
     def test_cancel_other_patrons_hold_returns_422(self, me_client, me_session):
         _, patron_a, token_a = _make_patron_user(me_session, "patron_cancel_a")
         _, _, token_b = _make_patron_user(me_session, "patron_cancel_b")
-        with patch("compendium.services.catalog.lookup_isbn", return_value=_OPEN_LIB_DUNE):
+        with patch("compendium.services.metadata.lookup_isbn", return_value=_OPEN_LIB_DUNE):
             work, _ = _catalog(me_session).add_from_isbn("9780441013003")
         me_session.flush()
 
@@ -249,7 +249,7 @@ class TestMeRenew:
 
     def test_renew_own_loan_via_me(self, me_client, me_session):
         _, patron, token = _make_patron_user(me_session, "patron_renew1")
-        with patch("compendium.services.catalog.lookup_isbn", return_value=_OPEN_LIB_DUNE):
+        with patch("compendium.services.metadata.lookup_isbn", return_value=_OPEN_LIB_DUNE):
             _, item = _catalog(me_session).add_from_isbn("9780441099001")
         me_session.flush()
 
@@ -287,7 +287,7 @@ class TestMeRenew:
     def test_renew_other_patrons_loan_returns_422(self, me_client, me_session):
         _, patron_a, _ = _make_patron_user(me_session, "patron_renew_a")
         _, _, token_b = _make_patron_user(me_session, "patron_renew_b")
-        with patch("compendium.services.catalog.lookup_isbn", return_value=_OPEN_LIB_DUNE):
+        with patch("compendium.services.metadata.lookup_isbn", return_value=_OPEN_LIB_DUNE):
             _, item = _catalog(me_session).add_from_isbn("9780441099002")
         me_session.flush()
 

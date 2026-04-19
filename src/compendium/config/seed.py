@@ -5,8 +5,10 @@ from compendium.domain.models import Branch, LoanPolicy, MediaType, Role
 _MEDIA_TYPES = [
     ("book", "Book"),
     ("vinyl", "Vinyl Record"),
-    ("dvd", "DVD"),
     ("cd", "CD"),
+    ("dvd", "DVD"),
+    ("bluray", "Blu-ray"),
+    ("vhs", "VHS"),
 ]
 
 _PRESET_ROLES = [

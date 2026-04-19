@@ -126,7 +126,7 @@ def test_policy_update_records_audit(session):
 
 # ── Item / Catalog ────────────────────────────────────────────────────────────
 
-@patch("compendium.services.catalog.lookup_isbn", return_value=_OPEN_LIB_DUNE)
+@patch("compendium.services.metadata.lookup_isbn", return_value=_OPEN_LIB_DUNE)
 def test_add_from_isbn_records_work_and_item_audit(_, session):
     _catalog(session).add_from_isbn(_ISBN)
 
@@ -137,7 +137,7 @@ def test_add_from_isbn_records_work_and_item_audit(_, session):
     assert len(item_entries) == 1
 
 
-@patch("compendium.services.catalog.lookup_isbn", return_value=_OPEN_LIB_DUNE)
+@patch("compendium.services.metadata.lookup_isbn", return_value=_OPEN_LIB_DUNE)
 def test_add_same_isbn_twice_records_only_one_work_audit(_, session):
     _catalog(session).add_from_isbn(_ISBN)
     _catalog(session).add_from_isbn(_ISBN)
@@ -148,7 +148,7 @@ def test_add_same_isbn_twice_records_only_one_work_audit(_, session):
     assert len(item_entries) == 2
 
 
-@patch("compendium.services.catalog.lookup_isbn", return_value=_OPEN_LIB_DUNE)
+@patch("compendium.services.metadata.lookup_isbn", return_value=_OPEN_LIB_DUNE)
 def test_withdraw_item_records_audit(_, session):
     _, item = _catalog(session).add_from_isbn(_ISBN)
     _catalog(session).withdraw_item(item.barcode)

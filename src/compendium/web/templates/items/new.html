@@ -6,18 +6,23 @@
 {% if error %}<p class="error-banner">{{ error }}</p>{% endif %}
 
 <article>
-  <header><strong>Look up by ISBN</strong></header>
+  <header><strong>Look up by identifier</strong></header>
   <form
     hx-post="/ui/items/lookup"
     hx-target="#item-preview"
     hx-swap="innerHTML"
-    hx-include="[name='csrf_token']"
   >
     <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
-    <label for="isbn">ISBN</label>
+    <label>Media type</label>
+    <fieldset>
+      <label><input type="radio" name="media_type" value="book" checked> Book <small>(ISBN)</small></label>
+      <label><input type="radio" name="media_type" value="vinyl"> Vinyl Record <small>(UPC or MusicBrainz ID)</small></label>
+      <label><input type="radio" name="media_type" value="cd"> CD <small>(UPC or MusicBrainz ID)</small></label>
+    </fieldset>
+    <label for="identifier">Identifier</label>
     <fieldset role="group">
-      <input type="text" id="isbn" name="isbn" placeholder="Scan or type ISBN" autocomplete="off" autofocus>
-      <button type="button" class="outline secondary" data-scan-target="isbn">Scan</button>
+      <input type="text" id="identifier" name="identifier" placeholder="Scan or type ISBN / UPC" autocomplete="off" autofocus>
+      <button type="button" class="outline secondary" data-scan-target="identifier">Scan</button>
     </fieldset>
     <button type="submit">Look Up</button>
   </form>

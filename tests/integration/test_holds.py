@@ -66,7 +66,7 @@ def _holds(session) -> HoldService:
 
 @pytest.fixture
 def work_and_item(session):
-    with patch("compendium.services.catalog.lookup_isbn", return_value=_OPEN_LIB_DUNE):
+    with patch("compendium.services.metadata.lookup_isbn", return_value=_OPEN_LIB_DUNE):
         work, item = _catalog(session).add_from_isbn(_ISBN)
     session.flush()
     return work, item

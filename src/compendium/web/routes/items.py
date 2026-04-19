@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import re
+
 from fastapi import APIRouter, Depends, Form, Request
 from fastapi.responses import HTMLResponse, RedirectResponse
 from sqlalchemy.orm import Session
@@ -21,7 +23,7 @@ from compendium.repositories.sql.media_type_repository import SqlMediaTypeReposi
 from compendium.repositories.sql.work_repository import SqlWorkRepository
 from compendium.services.audit import AuditService
 from compendium.services.catalog import CatalogService
-from compendium.services.metadata import lookup_isbn, normalize_isbn, parse_open_library
+from compendium.services.metadata import lookup_metadata, normalize_isbn, normalize_upc
 from compendium.web.csrf import check_csrf_form, ensure_csrf, set_csrf_cookie
 from compendium.web.deps import require_web_permission
 from compendium.web.jinja import templates
@@ -30,6 +32,10 @@ router = APIRouter()
 
 _PERM_VIEW = "item.view"
 _PERM_MANAGE = "item.delete"
+
+_MBID_RE = re.compile(
+    r"^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$", re.I
+)
 
 
 def _catalog_svc(session: Session, actor: AppUser) -> CatalogService:
@@ -63,6 +69,15 @@ def _partial(name: str, request: Request, ctx: dict):
     return resp
 
 
+def _detect_kind(raw: str, media_type: str) -> tuple[str, str]:
+    """Return (identifier_kind, normalised_value) based on media type and input format."""
+    if media_type == "book":
+        return "isbn", normalize_isbn(raw)
+    if _MBID_RE.match(raw.strip()):
+        return "mbid", raw.strip()
+    return "upc", normalize_upc(raw)
+
+
 # /items/new must be defined before /items/{barcode} so the literal segment wins.
 
 @router.get("/items/new")
@@ -76,51 +91,75 @@ def item_new_form(
 @router.post("/items/lookup", response_class=HTMLResponse)
 def item_lookup(
     request: Request,
-    isbn: str = Form(default=""),
+    media_type: str = Form(default="book"),
+    identifier: str = Form(default=""),
     csrf_token: str = Form(default=""),
     user: AppUser = Depends(require_web_permission(_PERM_MANAGE)),
     session: Session = Depends(get_session),
 ):
     check_csrf_form(request, csrf_token)
-    isbn_raw = isbn.strip()
-    if not isbn_raw:
-        return HTMLResponse("<p class='error-banner'>Please enter an ISBN.</p>")
+    raw = identifier.strip()
+    if not raw:
+        return HTMLResponse("<p class='error-banner'>Please enter an identifier.</p>")
+
+    mt = media_type.strip()
     try:
-        normalized = normalize_isbn(isbn_raw)
+        kind, value = _detect_kind(raw, mt)
     except (ValidationError, Exception) as exc:
         return HTMLResponse(f"<p class='error-banner'>{exc}</p>")
 
-    existing_work = SqlWorkRepository(session).get_by_isbn(normalized)
+    work_repo = SqlWorkRepository(session)
+    existing_work = None
+    if kind == "isbn":
+        existing_work = work_repo.get_by_isbn(value)
+    elif kind == "upc":
+        existing_work = work_repo.get_by_upc(value)
+
     if existing_work is not None:
         return _partial(
             "_partials/item_preview.html",
             request,
-            {"isbn": normalized, "work": existing_work, "meta": None, "existing": True},
+            {
+                "media_type": mt,
+                "identifier_kind": kind,
+                "identifier_value": value,
+                "work": existing_work,
+                "meta": None,
+                "existing": True,
+            },
         )
 
     try:
-        data = lookup_isbn(normalized)
+        meta = lookup_metadata(mt, kind, value)
     except ExternalLookupError as exc:
         return HTMLResponse(f"<p class='error-banner'>{exc}</p>")
 
-    if not data:
+    if not meta:
         return HTMLResponse(
-            f"<p class='error-banner'>ISBN {normalized} not found in Open Library. "
-            "Check the ISBN and try again.</p>"
+            f"<p class='error-banner'>No metadata found for {kind} '{value}'. "
+            "Check the identifier and try again.</p>"
         )
 
-    meta = parse_open_library(data, normalized)
     return _partial(
         "_partials/item_preview.html",
         request,
-        {"isbn": normalized, "work": None, "meta": meta, "existing": False},
+        {
+            "media_type": mt,
+            "identifier_kind": kind,
+            "identifier_value": value,
+            "work": None,
+            "meta": meta,
+            "existing": False,
+        },
     )
 
 
 @router.post("/items/new")
 def item_create(
     request: Request,
-    isbn: str = Form(),
+    media_type: str = Form(default="book"),
+    identifier_kind: str = Form(default="isbn"),
+    identifier_value: str = Form(default=""),
     location: str = Form(default=""),
     call_number: str = Form(default=""),
     condition: str = Form(default=""),
@@ -130,8 +169,10 @@ def item_create(
 ):
     check_csrf_form(request, csrf_token)
     try:
-        work, item = _catalog_svc(session, user).add_from_isbn(
-            isbn.strip(),
+        work, item = _catalog_svc(session, user).add_from_lookup(
+            media_type.strip(),
+            identifier_kind.strip(),
+            identifier_value.strip(),
             location=location.strip() or None,
         )
     except (BusinessRuleError, NotFoundError, ExternalLookupError, ValidationError) as exc:

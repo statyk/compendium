@@ -50,7 +50,7 @@ def _circulation(session) -> CirculationService:
 
 @pytest.fixture
 def item(session):
-    with patch("compendium.services.catalog.lookup_isbn", return_value=_OPEN_LIB_DUNE):
+    with patch("compendium.services.metadata.lookup_isbn", return_value=_OPEN_LIB_DUNE):
         _, item = _catalog(session).add_from_isbn(_ISBN)
     session.flush()
     return item

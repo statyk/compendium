@@ -124,7 +124,7 @@ class TestSearchWorks:
         assert resp.json() == []
 
     def test_search_returns_matching_work(self, api_client, api_session):
-        with patch("compendium.services.catalog.lookup_isbn", return_value=_OPEN_LIB_DUNE):
+        with patch("compendium.services.metadata.lookup_isbn", return_value=_OPEN_LIB_DUNE):
             from compendium.repositories.sql.branch_repository import SqlBranchRepository
             from compendium.repositories.sql.creator_repository import SqlCreatorRepository
             from compendium.repositories.sql.item_repository import SqlItemRepository

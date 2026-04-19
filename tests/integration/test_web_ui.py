@@ -104,7 +104,7 @@ def patron_user(web_session):
 
 @pytest.fixture
 def work(web_session):
-    with patch("compendium.services.catalog.lookup_isbn", return_value=_OPEN_LIB_DUNE):
+    with patch("compendium.services.metadata.lookup_isbn", return_value=_OPEN_LIB_DUNE):
         work, item = CatalogService(
             work_repo=SqlWorkRepository(web_session),
             item_repo=SqlItemRepository(web_session),
@@ -370,10 +370,10 @@ def test_item_new_requires_auth(web_client):
 def test_item_lookup_returns_preview(web_client, librarian):
     auth_cookies = _login(web_client, "lib01")
     raw, signed = _make_csrf_pair()
-    with patch("compendium.web.routes.items.lookup_isbn", return_value=_OPEN_LIB_DUNE):
+    with patch("compendium.services.metadata.lookup_isbn", return_value=_OPEN_LIB_DUNE):
         resp = web_client.post(
             "/ui/items/lookup",
-            data={"isbn": _ISBN, "csrf_token": raw},
+            data={"media_type": "book", "identifier": _ISBN, "csrf_token": raw},
             cookies={**auth_cookies, CSRF_COOKIE: signed},
         )
     assert resp.status_code == 200
@@ -385,7 +385,7 @@ def test_item_lookup_existing_work(web_client, librarian, work):
     raw, signed = _make_csrf_pair()
     resp = web_client.post(
         "/ui/items/lookup",
-        data={"isbn": _ISBN, "csrf_token": raw},
+        data={"media_type": "book", "identifier": _ISBN, "csrf_token": raw},
         cookies={**auth_cookies, CSRF_COOKIE: signed},
     )
     assert resp.status_code == 200
@@ -395,10 +395,16 @@ def test_item_lookup_existing_work(web_client, librarian, work):
 def test_item_create_via_web(web_client, librarian):
     auth_cookies = _login(web_client, "lib01")
     raw, signed = _make_csrf_pair()
-    with patch("compendium.services.catalog.lookup_isbn", return_value=_OPEN_LIB_DUNE):
+    with patch("compendium.services.metadata.lookup_isbn", return_value=_OPEN_LIB_DUNE):
         resp = web_client.post(
             "/ui/items/new",
-            data={"isbn": "9780441013594", "csrf_token": raw, "location": "Shelf B"},
+            data={
+                "media_type": "book",
+                "identifier_kind": "isbn",
+                "identifier_value": "9780441013594",
+                "csrf_token": raw,
+                "location": "Shelf B",
+            },
             cookies={**auth_cookies, CSRF_COOKIE: signed},
         )
     assert resp.status_code == 303

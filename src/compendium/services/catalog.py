@@ -9,7 +9,7 @@ from compendium.repositories.base import (
     WorkRepository,
 )
 from compendium.services.audit import AuditAction, AuditEntityType, AuditService
-from compendium.services.metadata import lookup_isbn, normalize_isbn, parse_open_library
+from compendium.services.metadata import lookup_metadata, normalize_isbn
 
 
 class CatalogService:
@@ -39,41 +39,65 @@ class CatalogService:
     # Public API
     # ------------------------------------------------------------------
 
-    def add_from_isbn(
+    def add_from_lookup(
         self,
-        raw_isbn: str,
+        media_type_code: str,
+        identifier_kind: str,
+        identifier_value: str,
         location: str | None = None,
     ) -> tuple[Work, Item]:
-        """Look up an ISBN on Open Library, create Work + Item, return both.
+        """Look up an item via the appropriate metadata adapter and add Work + Item.
 
-        If a Work with this ISBN already exists, a new Item (copy) is added
-        to that Work rather than creating a duplicate Work record.
+        If a Work with this identifier already exists, adds a new copy instead.
         """
-        isbn = normalize_isbn(raw_isbn)
-
-        work = self._works.get_by_isbn(isbn)
-        new_work = work is None
-        if work is None:
-            data = lookup_isbn(isbn)
-            if not data:
-                raise ExternalLookupError(
-                    f"ISBN {isbn} was not found in Open Library. "
-                    "Use 'item add-manual' to enter metadata by hand."
-                )
-            meta = parse_open_library(data, isbn)
-            work = self._create_work(meta)
-
-        item = self._create_item(work, location=location)
-        if new_work:
+        existing = self._find_existing_work(identifier_kind, identifier_value)
+        if existing is not None:
+            item = self._create_item(existing, location=location)
             self._record(
-                AuditEntityType.WORK, work.id, AuditAction.CREATE,
-                {"snapshot": {"title": work.title, "isbn": work.isbn}},
+                AuditEntityType.ITEM, item.id, AuditAction.CREATE,
+                {"snapshot": {"barcode": item.barcode, "work_id": existing.id}},
             )
+            return existing, item
+
+        meta = lookup_metadata(media_type_code, identifier_kind, identifier_value)
+        if not meta:
+            raise ExternalLookupError(
+                f"No metadata found for {identifier_kind} '{identifier_value}'. "
+                "Check the identifier and try again."
+            )
+
+        # For MBID lookups the returned meta may carry a UPC — check for an
+        # existing Work by that UPC to avoid duplicate records.
+        if identifier_kind == "mbid" and meta.get("upc"):
+            existing = self._works.get_by_upc(meta["upc"])
+            if existing is not None:
+                item = self._create_item(existing, location=location)
+                self._record(
+                    AuditEntityType.ITEM, item.id, AuditAction.CREATE,
+                    {"snapshot": {"barcode": item.barcode, "work_id": existing.id}},
+                )
+                return existing, item
+
+        work = self._create_work(meta, media_type_code)
+        item = self._create_item(work, location=location)
+        self._record(
+            AuditEntityType.WORK, work.id, AuditAction.CREATE,
+            {"snapshot": {"title": work.title, "isbn": work.isbn, "upc": work.upc}},
+        )
         self._record(
             AuditEntityType.ITEM, item.id, AuditAction.CREATE,
             {"snapshot": {"barcode": item.barcode, "work_id": work.id}},
         )
         return work, item
+
+    def add_from_isbn(
+        self,
+        raw_isbn: str,
+        location: str | None = None,
+    ) -> tuple[Work, Item]:
+        """Convenience wrapper: normalise ISBN then delegate to add_from_lookup."""
+        isbn = normalize_isbn(raw_isbn)
+        return self.add_from_lookup("book", "isbn", isbn, location=location)
 
     def withdraw_item(self, barcode: str) -> Item:
         item = self._items.get_by_barcode(barcode)
@@ -106,28 +130,38 @@ class CatalogService:
     # Internals
     # ------------------------------------------------------------------
 
-    def _create_work(self, meta: dict) -> Work:
-        book_mt = self._media_types.get_by_code("book")
+    def _find_existing_work(self, kind: str, value: str) -> Work | None:
+        if kind == "isbn":
+            return self._works.get_by_isbn(value)
+        if kind == "upc":
+            return self._works.get_by_upc(value)
+        return None
+
+    def _create_work(self, meta: dict, media_type_code: str) -> Work:
+        mt = self._media_types.get_by_code(media_type_code)
 
         work = Work(
             title=meta["title"],
             subtitle=meta.get("subtitle"),
-            media_type_id=book_mt.id,
+            media_type_id=mt.id,  # type: ignore[union-attr]
             publisher=meta.get("publisher"),
             publication_year=meta.get("publication_year"),
             language="en",
             description=meta.get("description"),
-            isbn=meta["isbn"],
+            isbn=meta.get("isbn"),
+            upc=meta.get("upc"),
             cover_image_url=meta.get("cover_image_url"),
             external_ids=meta.get("external_ids", {}),
+            extra_metadata=meta.get("extra_metadata", {}),
         )
         self._works.add(work)
 
+        creator_role = meta.get("creator_role", "author")
         for order, name in enumerate(meta.get("authors", [])):
             creator = self._get_or_create_creator(name)
-            # Append to collection — back_populates sets wc.work automatically.
-            # Do NOT also pass work= to the constructor; that would add it twice.
-            work.creators.append(WorkCreator(creator=creator, role="author", display_order=order))
+            work.creators.append(
+                WorkCreator(creator=creator, role=creator_role, display_order=order)
+            )
 
         return work
 

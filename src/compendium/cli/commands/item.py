@@ -24,21 +24,44 @@ def _catalog(session):
 
 @app.command("add")
 def add_item(
-    isbn: str | None = typer.Option(None, "--isbn", help="ISBN-10 or ISBN-13"),
+    isbn: str | None = typer.Option(None, "--isbn", help="ISBN-10 or ISBN-13 (books)"),
+    upc: str | None = typer.Option(None, "--upc", help="UPC/EAN barcode (vinyl, CD, DVD, Blu-ray, VHS)"),
+    mbid: str | None = typer.Option(None, "--mbid", help="MusicBrainz release ID (vinyl, CD)"),
+    media_type: str | None = typer.Option(
+        None, "--media-type", help="Media type code: vinyl, cd (required with --upc/--mbid)"
+    ),
     location: str | None = typer.Option(None, "--location", help="Shelf location note"),
 ) -> None:
     """Add a new item to the catalog.
 
-    Provide --isbn to look up metadata from Open Library automatically.
+    Books: --isbn <ISBN>
+    Music: --upc <barcode> --media-type vinyl|cd  OR  --mbid <uuid> --media-type vinyl|cd
     """
-    if isbn is None:
-        typer.echo("Error: --isbn is required (manual entry not yet supported).", err=True)
+    if isbn is not None:
+        kind, value, mt_code = "isbn", isbn.strip(), "book"
+        typer.echo(f"Looking up ISBN {isbn} on Open Library…")
+    elif upc is not None:
+        if not media_type:
+            typer.echo(
+                "Error: --media-type is required with --upc (e.g. vinyl, cd, dvd, bluray, vhs).",
+                err=True,
+            )
+            raise typer.Exit(1)
+        kind, value, mt_code = "upc", upc.strip(), media_type.strip()
+        typer.echo(f"Looking up UPC {upc} on MusicBrainz…")
+    elif mbid is not None:
+        mt_code = (media_type or "vinyl").strip()
+        kind, value = "mbid", mbid.strip()
+        typer.echo(f"Looking up MusicBrainz release {mbid}…")
+    else:
+        typer.echo("Error: provide --isbn, --upc, or --mbid.", err=True)
         raise typer.Exit(1)
 
-    typer.echo(f"Looking up ISBN {isbn} on Open Library…")
     try:
         with session_scope() as session:
-            work, item = _catalog(session).add_from_isbn(isbn, location=location)
+            work, item = _catalog(session).add_from_lookup(
+                mt_code, kind, value, location=location
+            )
     except ExternalLookupError as exc:
         typer.echo(f"Lookup failed: {exc}", err=True)
         raise typer.Exit(1) from exc
@@ -46,12 +69,14 @@ def add_item(
         typer.echo(f"Error: {exc}", err=True)
         raise typer.Exit(1) from exc
 
-    authors = ", ".join(wc.creator.display_name for wc in work.creators)
-    typer.echo(f"\nAdded: {work.title}" + (f" — {authors}" if authors else ""))
+    creators = ", ".join(wc.creator.display_name for wc in work.creators)
+    typer.echo(f"\nAdded: {work.title}" + (f" — {creators}" if creators else ""))
     if work.publication_year:
         typer.echo(f"  Year      : {work.publication_year}")
     if work.publisher:
         typer.echo(f"  Publisher : {work.publisher}")
+    if work.upc:
+        typer.echo(f"  UPC       : {work.upc}")
     typer.echo(f"  Barcode   : {item.barcode}")
     typer.echo(f"  Accession : {item.accession_number}")
     if item.location:
@@ -72,8 +97,8 @@ def show_item(
                 raise typer.Exit(1)
 
             work = item.work
-            authors = ", ".join(wc.creator.display_name for wc in work.creators)
-            typer.echo(f"\n{work.title}" + (f" — {authors}" if authors else ""))
+            creators = ", ".join(wc.creator.display_name for wc in work.creators)
+            typer.echo(f"\n{work.title}" + (f" — {creators}" if creators else ""))
             typer.echo(f"  Barcode   : {item.barcode}")
             typer.echo(f"  Accession : {item.accession_number}")
             typer.echo(f"  Status    : {item.status}")
@@ -112,7 +137,7 @@ def list_items(
             typer.echo("No items in catalog.")
             return
         for work in works:
-            authors = ", ".join(wc.creator.display_name for wc in work.creators)
+            creators = ", ".join(wc.creator.display_name for wc in work.creators)
             copies = len(work.items)
             suffix = f" [{copies} cop{'y' if copies == 1 else 'ies'}]"
-            typer.echo(f"  {work.title}" + (f" — {authors}" if authors else "") + suffix)
+            typer.echo(f"  {work.title}" + (f" — {creators}" if creators else "") + suffix)
