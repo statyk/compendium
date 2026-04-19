@@ -89,13 +89,28 @@
 <h3>Active Holds</h3>
 {% if holds %}
 <table>
-  <thead><tr><th>Title</th><th>Status</th><th>Expires</th></tr></thead>
+  <thead><tr><th>Title</th><th>Status</th><th>Expires</th>{% if has_permission(user, 'hold.place.any') %}<th></th>{% endif %}</tr></thead>
   <tbody>
     {% for hold in holds %}
-    <tr>
+    <tr id="hold-row-{{ hold.id }}">
       <td><a href="/ui/catalog/{{ hold.work_id }}">{{ hold.work.title }}</a></td>
       <td>{{ hold.status }}</td>
       <td>{{ hold.expires_at.strftime("%Y-%m-%d") if hold.expires_at else "—" }}</td>
+      {% if has_permission(user, 'hold.place.any') %}
+      <td>
+        <form
+          hx-post="/ui/patrons/{{ patron.library_card_number }}/holds/{{ hold.id }}/cancel"
+          hx-target="closest tr"
+          hx-swap="outerHTML"
+          hx-include="[name='csrf_token']"
+          hx-confirm="Cancel this hold?"
+          style="display:inline"
+        >
+          <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+          <button type="submit" class="outline contrast" style="padding:0.2rem 0.6rem">Cancel</button>
+        </form>
+      </td>
+      {% endif %}
     </tr>
     {% endfor %}
   </tbody>

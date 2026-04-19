@@ -14,7 +14,10 @@ from compendium.repositories.sql.hold_repository import SqlHoldRepository
 from compendium.repositories.sql.loan_repository import SqlLoanRepository
 from compendium.repositories.sql.patron_repository import SqlPatronRepository
 from compendium.repositories.sql.user_repository import SqlUserRepository
+from compendium.repositories.sql.branch_repository import SqlBranchRepository
+from compendium.repositories.sql.work_repository import SqlWorkRepository
 from compendium.services.audit import AuditService
+from compendium.services.holds import HoldService
 from compendium.services.patrons import PatronService
 from compendium.web.csrf import check_csrf_form, ensure_csrf, set_csrf_cookie
 from compendium.web.deps import require_web_permission
@@ -197,6 +200,42 @@ def patron_unlink_user(
     except (BusinessRuleError, NotFoundError) as exc:
         return RedirectResponse(
             f"/ui/patrons/{card_number}?error={exc}", status_code=303
+        )
+
+
+@router.post("/patrons/{card_number}/holds/{hold_id}/cancel", response_class=HTMLResponse)
+def patron_cancel_hold(
+    card_number: str,
+    hold_id: int,
+    request: Request,
+    csrf_token: str = Form(default=""),
+    user: AppUser = Depends(require_web_permission("hold.place.any")),
+    session: Session = Depends(get_session),
+):
+    check_csrf_form(request, csrf_token)
+    hold_repo = SqlHoldRepository(session)
+    hold = hold_repo.get(hold_id)
+    if hold is None:
+        return HTMLResponse("<span class='error-banner'>Hold not found.</span>")
+    patron = SqlPatronRepository(session).get_by_card_number(card_number)
+    if patron is None or hold.patron_id != patron.id:
+        return HTMLResponse("<span class='error-banner'>Hold does not belong to this patron.</span>")
+    holds_svc = HoldService(
+        hold_repo=hold_repo,
+        patron_repo=SqlPatronRepository(session),
+        work_repo=SqlWorkRepository(session),
+        branch_repo=SqlBranchRepository(session),
+        hold_expiry_days=get_settings().hold_expiry_days,
+    )
+    try:
+        holds_svc.cancel(hold_id, hold.patron_id)
+        return HTMLResponse(
+            f"<tr><td colspan='4'><em>Hold on "
+            f"'{escape(hold.work.title)}' cancelled.</em></td></tr>"
+        )
+    except (BusinessRuleError, NotFoundError) as exc:
+        return HTMLResponse(
+            f"<tr><td colspan='4' class='error-banner'>{escape(str(exc))}</td></tr>"
         )
 
 

@@ -302,6 +302,55 @@ def test_patron_cannot_access_hold_for(web_client, patron_user, work):
     assert resp.status_code == 403
 
 
+def test_librarian_cancels_patron_hold(web_client, librarian, patron_user, work, web_session):
+    """Librarian views a patron and cancels one of their holds."""
+    from compendium.repositories.sql.hold_repository import SqlHoldRepository
+
+    w, _ = work
+    _, patron = patron_user
+    cookies_lib = _login(web_client, "lib01")
+    raw, signed = _make_csrf_pair()
+    # Librarian places a hold for the patron first (exercises P4 path).
+    place = web_client.post(
+        f"/ui/catalog/{w.id}/hold-for",
+        data={"card_number": patron.library_card_number, "csrf_token": raw},
+        cookies={**cookies_lib, CSRF_COOKIE: signed},
+    )
+    assert place.status_code == 200
+    holds = SqlHoldRepository(web_session).get_active_for_patron(patron.id)
+    assert len(holds) == 1
+    hold_id = holds[0].id
+
+    resp = web_client.post(
+        f"/ui/patrons/{patron.library_card_number}/holds/{hold_id}/cancel",
+        data={"csrf_token": raw},
+        cookies={**cookies_lib, CSRF_COOKIE: signed},
+    )
+    assert resp.status_code == 200
+    assert b"cancelled" in resp.content.lower()
+
+
+def test_patron_cannot_cancel_via_librarian_route(web_client, patron_user, work, web_session):
+    from compendium.repositories.sql.hold_repository import SqlHoldRepository
+
+    w, _ = work
+    _, patron = patron_user
+    cookies = _login(web_client, "patron01")
+    raw, signed = _make_csrf_pair()
+    web_client.post(
+        f"/ui/catalog/{w.id}/hold",
+        data={"csrf_token": raw},
+        cookies={**cookies, CSRF_COOKIE: signed},
+    )
+    hold = SqlHoldRepository(web_session).get_active_for_patron(patron.id)[0]
+    resp = web_client.post(
+        f"/ui/patrons/{patron.library_card_number}/holds/{hold.id}/cancel",
+        data={"csrf_token": raw},
+        cookies={**cookies, CSRF_COOKIE: signed},
+    )
+    assert resp.status_code == 403
+
+
 def test_csrf_mismatch_rejected(web_client, librarian):
     auth_cookies = _login(web_client, "lib01")
     raw, signed = _make_csrf_pair()
