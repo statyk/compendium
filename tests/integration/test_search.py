@@ -75,6 +75,13 @@ def test_fts_field_title_still_works(session, two_books):
     assert any(w.title == "Dune" for w in results)
 
 
+def test_fts_tolerates_special_characters(session, two_books):
+    # FTS5 treats '.', '-', '*' etc. as syntax; they must not raise a 500.
+    for q in ["thishasa.", "hello-world", "foo*", "a.b.c", "(parens)"]:
+        results = SqlWorkRepository(session).search(q)
+        assert isinstance(results, list)
+
+
 def test_search_text_populated_on_work(session):
     with patch("compendium.services.metadata.lookup_isbn", return_value=_OPEN_LIB_DUNE):
         work, _ = _catalog(session).add_from_isbn("9780441013594")

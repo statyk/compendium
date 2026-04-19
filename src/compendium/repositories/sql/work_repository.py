@@ -82,11 +82,13 @@ class SqlWorkRepository:
         return None
 
     def _fts_sqlite(self, q: str, limit: int) -> list[Work]:
+        # Wrap in FTS5 phrase quotes so special chars (., -, *, etc.) are literals.
+        fts_query = '"' + q.replace('"', '""') + '"'
         rows = self._s.execute(
             text(
                 "SELECT rowid FROM work_fts WHERE work_fts MATCH :q ORDER BY rank LIMIT :lim"
             ),
-            {"q": q, "lim": limit},
+            {"q": fts_query, "lim": limit},
         ).fetchall()
         ids = [r[0] for r in rows]
         if not ids:
