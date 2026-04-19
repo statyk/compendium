@@ -90,6 +90,25 @@
   <p><a href="/ui/login?next=/ui/catalog/{{ work.id }}">Log in</a> to place a hold.</p>
 {% endif %}
 
+{% if has_permission(user, 'hold.place.any') %}
+<hr>
+<div id="hold-for-action">
+  <form
+    hx-post="/ui/catalog/{{ work.id }}/hold-for"
+    hx-target="#hold-for-action"
+    hx-swap="innerHTML"
+    hx-include="[name='csrf_token']"
+  >
+    <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+    <label for="hold-for-card">Place hold for patron</label>
+    <div role="group">
+      <input type="text" id="hold-for-card" name="card_number" placeholder="Library card number" required>
+      <button type="submit">Place Hold</button>
+    </div>
+  </form>
+</div>
+{% endif %}
+
 {% if work.external_ids and work.external_ids.get('tmdb') %}
 <hr>
 <p style="font-size:0.8rem; color:var(--pico-muted-color)">

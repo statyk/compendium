@@ -14,7 +14,7 @@ from compendium.repositories.sql.patron_repository import SqlPatronRepository
 from compendium.repositories.sql.work_repository import SqlWorkRepository
 from compendium.services.holds import HoldService
 from compendium.web.csrf import check_csrf_form, ensure_csrf, set_csrf_cookie
-from compendium.web.deps import get_web_user, require_web_user
+from compendium.web.deps import get_web_user, require_web_permission, require_web_user
 from compendium.web.jinja import templates
 
 router = APIRouter()
@@ -125,5 +125,27 @@ def place_hold(
     try:
         _holds_svc(session).place(work_id, patron.library_card_number)
         return HTMLResponse("<p class='success-banner'>Hold placed successfully.</p>")
+    except (BusinessRuleError, NotFoundError) as exc:
+        return HTMLResponse(f"<p class='error-banner'>{escape(str(exc))}</p>")
+
+
+@router.post("/catalog/{work_id:int}/hold-for", response_class=HTMLResponse)
+def place_hold_for(
+    work_id: int,
+    request: Request,
+    card_number: str = Form(default=""),
+    csrf_token: str = Form(default=""),
+    user=Depends(require_web_permission("hold.place.any")),
+    session: Session = Depends(get_session),
+):
+    check_csrf_form(request, csrf_token)
+    card = card_number.strip()
+    if not card:
+        return HTMLResponse("<p class='error-banner'>Enter a patron card number.</p>")
+    try:
+        _holds_svc(session).place(work_id, card)
+        return HTMLResponse(
+            f"<p class='success-banner'>Hold placed for card {escape(card)}.</p>"
+        )
     except (BusinessRuleError, NotFoundError) as exc:
         return HTMLResponse(f"<p class='error-banner'>{escape(str(exc))}</p>")

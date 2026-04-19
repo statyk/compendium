@@ -275,6 +275,33 @@ def test_place_hold_via_catalog(web_client, patron_user, work):
     assert b"Hold placed" in resp.content
 
 
+def test_librarian_places_hold_for_patron(web_client, librarian, patron_user, work):
+    w, _ = work
+    _, patron = patron_user
+    cookies = _login(web_client, "lib01")
+    raw, signed = _make_csrf_pair()
+    resp = web_client.post(
+        f"/ui/catalog/{w.id}/hold-for",
+        data={"card_number": patron.library_card_number, "csrf_token": raw},
+        cookies={**cookies, CSRF_COOKIE: signed},
+    )
+    assert resp.status_code == 200
+    assert b"Hold placed" in resp.content
+    assert patron.library_card_number.encode() in resp.content
+
+
+def test_patron_cannot_access_hold_for(web_client, patron_user, work):
+    w, _ = work
+    cookies = _login(web_client, "patron01")
+    raw, signed = _make_csrf_pair()
+    resp = web_client.post(
+        f"/ui/catalog/{w.id}/hold-for",
+        data={"card_number": "WEB0001", "csrf_token": raw},
+        cookies={**cookies, CSRF_COOKIE: signed},
+    )
+    assert resp.status_code == 403
+
+
 def test_csrf_mismatch_rejected(web_client, librarian):
     auth_cookies = _login(web_client, "lib01")
     raw, signed = _make_csrf_pair()
