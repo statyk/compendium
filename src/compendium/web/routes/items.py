@@ -207,6 +207,82 @@ def item_lookup(
     )
 
 
+@router.get("/items/new/manual")
+def item_new_manual_form(
+    request: Request,
+    user: AppUser = Depends(require_web_permission(_PERM_MANAGE)),
+):
+    return _render(
+        "items/new_manual.html",
+        request,
+        {"request": request, "user": user, "error": None, "form": {}},
+    )
+
+
+@router.post("/items/new/manual")
+def item_create_manual(
+    request: Request,
+    media_type: str = Form(default="book"),
+    title: str = Form(default=""),
+    authors: str = Form(default=""),
+    publisher: str = Form(default=""),
+    year: str = Form(default=""),
+    isbn: str = Form(default=""),
+    upc: str = Form(default=""),
+    description: str = Form(default=""),
+    location: str = Form(default=""),
+    csrf_token: str = Form(default=""),
+    user: AppUser = Depends(require_web_permission(_PERM_MANAGE)),
+    session: Session = Depends(get_session),
+):
+    check_csrf_form(request, csrf_token)
+
+    form = {
+        "media_type": media_type,
+        "title": title,
+        "authors": authors,
+        "publisher": publisher,
+        "year": year,
+        "isbn": isbn,
+        "upc": upc,
+        "description": description,
+        "location": location,
+    }
+
+    parsed_year: int | None = None
+    if year.strip():
+        try:
+            parsed_year = int(year.strip())
+        except ValueError:
+            return _render(
+                "items/new_manual.html",
+                request,
+                {"request": request, "user": user, "error": "Year must be a number.", "form": form},
+            )
+
+    author_list = [a.strip() for a in authors.split(",") if a.strip()]
+
+    try:
+        _work, item = _catalog_svc(session, user).add_manual(
+            media_type.strip(),
+            title,
+            authors=author_list,
+            publisher=publisher or None,
+            publication_year=parsed_year,
+            isbn=isbn.strip() or None,
+            upc=upc.strip() or None,
+            description=description or None,
+            location=location.strip() or None,
+        )
+    except (BusinessRuleError, NotFoundError, ValidationError) as exc:
+        return _render(
+            "items/new_manual.html",
+            request,
+            {"request": request, "user": user, "error": str(exc), "form": form},
+        )
+    return RedirectResponse(f"/ui/items/{item.barcode}", status_code=303)
+
+
 @router.post("/items/new")
 def item_create(
     request: Request,

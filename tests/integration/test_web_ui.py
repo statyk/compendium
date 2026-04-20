@@ -650,6 +650,56 @@ def test_item_lookup_vinyl_title_shows_candidates(web_client, librarian):
     assert b"Vinyl" in resp.content
 
 
+# ── Manual item entry ─────────────────────────────────────────────────────────
+
+def test_manual_add_form_renders(web_client, librarian):
+    auth_cookies = _login(web_client, "lib01")
+    resp = web_client.get("/ui/items/new/manual", cookies=auth_cookies)
+    assert resp.status_code == 200
+    assert b"Add Item Manually" in resp.content
+    assert b'name="title"' in resp.content
+
+
+def test_manual_add_creates_item_and_redirects(web_client, librarian):
+    auth_cookies = _login(web_client, "lib01")
+    raw, signed = _make_csrf_pair()
+    resp = web_client.post(
+        "/ui/items/new/manual",
+        data={
+            "media_type": "book",
+            "title": "Obscure Zine Issue 3",
+            "authors": "Jane Doe, John Roe",
+            "publisher": "Self-published",
+            "year": "2020",
+            "isbn": "",
+            "upc": "",
+            "description": "Not on Open Library.",
+            "location": "Zine Shelf",
+            "csrf_token": raw,
+        },
+        cookies={**auth_cookies, CSRF_COOKIE: signed},
+    )
+    assert resp.status_code == 303
+    assert "/ui/items/" in resp.headers["location"]
+
+    detail = web_client.get(resp.headers["location"], cookies=auth_cookies)
+    assert detail.status_code == 200
+    assert b"Obscure Zine Issue 3" in detail.content
+    assert b"Zine Shelf" in detail.content
+
+
+def test_manual_add_missing_title_shows_error(web_client, librarian):
+    auth_cookies = _login(web_client, "lib01")
+    raw, signed = _make_csrf_pair()
+    resp = web_client.post(
+        "/ui/items/new/manual",
+        data={"media_type": "book", "title": "", "csrf_token": raw},
+        cookies={**auth_cookies, CSRF_COOKIE: signed},
+    )
+    # Empty title is blocked at the service layer via ValidationError.
+    assert resp.status_code in (200, 422)
+
+
 # ── Film (TMDb) item flow ─────────────────────────────────────────────────────
 
 _TMDB_CANDIDATES = [

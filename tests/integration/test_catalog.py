@@ -2,7 +2,7 @@ from unittest.mock import patch
 
 import pytest
 
-from compendium.domain.errors import ExternalLookupError
+from compendium.domain.errors import ExternalLookupError, ValidationError
 from compendium.repositories.sql.branch_repository import SqlBranchRepository
 from compendium.repositories.sql.creator_repository import SqlCreatorRepository
 from compendium.repositories.sql.item_repository import SqlItemRepository
@@ -215,3 +215,51 @@ def test_add_dvd_raises_when_not_found(mock_fetch, session):
     with patch.dict(os.environ, {"COMPENDIUM_TMDB_API_KEY": "testkey"}):
         with pytest.raises(ExternalLookupError):
             _service(session).add_from_lookup("dvd", "tmdb_id", "99999")
+
+
+# ── Manual entry ──────────────────────────────────────────────────────────────
+
+def test_add_manual_book(session):
+    work, item = _service(session).add_manual(
+        "book",
+        "A Very Obscure Zine",
+        authors=["Jane Doe", "John Roe"],
+        publisher="Self-published",
+        publication_year=2018,
+        isbn="9780000000002",
+        description="Not on Open Library.",
+        location="Shelf Z",
+    )
+    assert work.title == "A Very Obscure Zine"
+    assert work.isbn == "9780000000002"
+    assert work.publisher == "Self-published"
+    assert work.publication_year == 2018
+    assert {wc.creator.display_name for wc in work.creators} == {"Jane Doe", "John Roe"}
+    assert all(wc.role == "author" for wc in work.creators)
+    assert item.status == "available"
+    assert item.location == "Shelf Z"
+
+
+def test_add_manual_vinyl_uses_artist_role(session):
+    work, _ = _service(session).add_manual(
+        "vinyl", "Basement Tapes", authors=["Obscure Band"]
+    )
+    assert work.creators[0].role == "artist"
+
+
+def test_add_manual_dedupes_by_isbn(session):
+    svc = _service(session)
+    work1, item1 = svc.add_manual("book", "Widgets", isbn="9780000000019")
+    work2, item2 = svc.add_manual("book", "Different Title", isbn="9780000000019")
+    assert work1.id == work2.id
+    assert item1.id != item2.id
+
+
+def test_add_manual_requires_title(session):
+    with pytest.raises(ValidationError):
+        _service(session).add_manual("book", "   ")
+
+
+def test_add_manual_rejects_bad_isbn(session):
+    with pytest.raises(ValidationError):
+        _service(session).add_manual("book", "Title", isbn="not-an-isbn")

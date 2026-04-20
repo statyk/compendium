@@ -1,0 +1,58 @@
+{% extends "base.html" %}
+{% block title %}Add Item Manually — Compendium{% endblock %}
+{% block content %}
+<h2>Add Item Manually</h2>
+<p><small>Use this form for items that external lookup can't find (obscure releases, zines, self-published works, etc.). <a href="/ui/items/new">Back to lookup</a>.</small></p>
+
+{% if error %}<p class="error-banner">{{ error }}</p>{% endif %}
+
+<form method="post" action="/ui/items/new/manual">
+  <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+
+  <fieldset>
+    <legend>Media type</legend>
+    <label><input type="radio" name="media_type" value="book" {% if form.media_type == 'book' or not form.media_type %}checked{% endif %}> Book</label>
+    <label><input type="radio" name="media_type" value="vinyl" {% if form.media_type == 'vinyl' %}checked{% endif %}> Vinyl Record</label>
+    <label><input type="radio" name="media_type" value="cd" {% if form.media_type == 'cd' %}checked{% endif %}> CD</label>
+    <label><input type="radio" name="media_type" value="dvd" {% if form.media_type == 'dvd' %}checked{% endif %}> DVD</label>
+    <label><input type="radio" name="media_type" value="bluray" {% if form.media_type == 'bluray' %}checked{% endif %}> Blu-ray</label>
+    <label><input type="radio" name="media_type" value="vhs" {% if form.media_type == 'vhs' %}checked{% endif %}> VHS</label>
+  </fieldset>
+
+  <label for="title">Title <small>(required)</small></label>
+  <input type="text" id="title" name="title" value="{{ form.title or '' }}" required autofocus>
+
+  <label for="authors">Author / artist / director <small>(comma-separated)</small></label>
+  <input type="text" id="authors" name="authors" value="{{ form.authors or '' }}" placeholder="e.g. Jane Doe, John Roe">
+
+  <div class="grid">
+    <div>
+      <label for="publisher">Publisher</label>
+      <input type="text" id="publisher" name="publisher" value="{{ form.publisher or '' }}">
+    </div>
+    <div>
+      <label for="year">Year</label>
+      <input type="number" id="year" name="year" value="{{ form.year or '' }}" min="1" max="9999">
+    </div>
+  </div>
+
+  <div class="grid">
+    <div>
+      <label for="isbn">ISBN <small>(optional)</small></label>
+      <input type="text" id="isbn" name="isbn" value="{{ form.isbn or '' }}" autocomplete="off">
+    </div>
+    <div>
+      <label for="upc">UPC <small>(optional)</small></label>
+      <input type="text" id="upc" name="upc" value="{{ form.upc or '' }}" autocomplete="off">
+    </div>
+  </div>
+
+  <label for="description">Description / notes</label>
+  <textarea id="description" name="description" rows="3">{{ form.description or '' }}</textarea>
+
+  <label for="location">Shelf location</label>
+  <input type="text" id="location" name="location" value="{{ form.location or '' }}">
+
+  <button type="submit">Add Item</button>
+</form>
+{% endblock %}

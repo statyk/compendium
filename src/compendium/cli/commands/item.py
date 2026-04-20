@@ -195,6 +195,56 @@ def add_item(
         typer.echo(f"  Location  : {item.location}")
 
 
+@app.command("add-manual")
+def add_manual_item(
+    title: str = typer.Option(..., "--title", help="Title (required)"),
+    media_type: str = typer.Option(
+        "book", "--media-type", help="Media type code: book, vinyl, cd, dvd, bluray, vhs"
+    ),
+    author: list[str] = typer.Option(
+        [], "--author", help="Author/artist/director (repeatable)"
+    ),
+    publisher: str | None = typer.Option(None, "--publisher"),
+    year: int | None = typer.Option(None, "--year", help="Publication year"),
+    isbn: str | None = typer.Option(None, "--isbn", help="ISBN, optional"),
+    upc: str | None = typer.Option(None, "--upc", help="UPC, optional"),
+    description: str | None = typer.Option(None, "--description"),
+    location: str | None = typer.Option(None, "--location", help="Shelf location"),
+) -> None:
+    """Add an item by manually entering its metadata (skips external lookup)."""
+    try:
+        with session_scope() as session:
+            work, item = _catalog(session).add_manual(
+                media_type.strip(),
+                title,
+                authors=list(author),
+                publisher=publisher,
+                publication_year=year,
+                isbn=isbn,
+                upc=upc,
+                description=description,
+                location=location,
+            )
+    except DomainError as exc:
+        typer.echo(f"Error: {exc}", err=True)
+        raise typer.Exit(1) from exc
+
+    creators = ", ".join(wc.creator.display_name for wc in work.creators)
+    typer.echo(f"\nAdded: {work.title}" + (f" — {creators}" if creators else ""))
+    if work.publication_year:
+        typer.echo(f"  Year      : {work.publication_year}")
+    if work.publisher:
+        typer.echo(f"  Publisher : {work.publisher}")
+    if work.isbn:
+        typer.echo(f"  ISBN      : {work.isbn}")
+    if work.upc:
+        typer.echo(f"  UPC       : {work.upc}")
+    typer.echo(f"  Barcode   : {item.barcode}")
+    typer.echo(f"  Accession : {item.accession_number}")
+    if item.location:
+        typer.echo(f"  Location  : {item.location}")
+
+
 @app.command("show")
 def show_item(
     barcode: str = typer.Argument(..., help="Item barcode"),

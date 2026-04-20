@@ -1,5 +1,10 @@
 from compendium.domain.enums import ItemStatus
-from compendium.domain.errors import BusinessRuleError, ExternalLookupError, NotFoundError
+from compendium.domain.errors import (
+    BusinessRuleError,
+    ExternalLookupError,
+    NotFoundError,
+    ValidationError,
+)
 from compendium.domain.models import AppUser, Creator, Item, Work, WorkCreator
 from compendium.repositories.base import (
     BranchRepository,
@@ -9,7 +14,21 @@ from compendium.repositories.base import (
     WorkRepository,
 )
 from compendium.services.audit import AuditAction, AuditEntityType, AuditService
-from compendium.services.metadata import lookup_metadata, normalize_isbn, pick_classification_code
+from compendium.services.metadata import (
+    lookup_metadata,
+    normalize_isbn,
+    normalize_upc,
+    pick_classification_code,
+)
+
+_DEFAULT_CREATOR_ROLE: dict[str, str] = {
+    "book": "author",
+    "vinyl": "artist",
+    "cd": "artist",
+    "dvd": "director",
+    "bluray": "director",
+    "vhs": "director",
+}
 
 
 class CatalogService:
@@ -100,6 +119,70 @@ class CatalogService:
         """Convenience wrapper: normalise ISBN then delegate to add_from_lookup."""
         isbn = normalize_isbn(raw_isbn)
         return self.add_from_lookup("book", "isbn", isbn, location=location)
+
+    def add_manual(
+        self,
+        media_type_code: str,
+        title: str,
+        *,
+        authors: list[str] | None = None,
+        publisher: str | None = None,
+        publication_year: int | None = None,
+        isbn: str | None = None,
+        upc: str | None = None,
+        description: str | None = None,
+        location: str | None = None,
+    ) -> tuple[Work, Item]:
+        """Create a Work + Item from manually-entered fields (no external lookup).
+
+        If ``isbn`` or ``upc`` is supplied and a matching Work already exists,
+        adds a new copy to that Work rather than creating a duplicate.
+        """
+        if not title or not title.strip():
+            raise ValidationError("Title is required.")
+        norm_isbn = normalize_isbn(isbn) if isbn else None
+        norm_upc = normalize_upc(upc) if upc else None
+
+        branch = self._branches.get_default()
+
+        existing: Work | None = None
+        if norm_isbn:
+            existing = self._works.get_by_isbn(norm_isbn)
+        if existing is None and norm_upc:
+            existing = self._works.get_by_upc(norm_upc)
+        if existing is not None:
+            item = self._create_item(existing, location=location, branch=branch)
+            self._record(
+                AuditEntityType.ITEM, item.id, AuditAction.CREATE,
+                {"snapshot": {"barcode": item.barcode, "work_id": existing.id}},
+            )
+            return existing, item
+
+        meta: dict = {
+            "title": title.strip(),
+            "subtitle": None,
+            "authors": [a.strip() for a in (authors or []) if a and a.strip()],
+            "creator_role": _DEFAULT_CREATOR_ROLE.get(media_type_code, "author"),
+            "publisher": publisher.strip() if publisher else None,
+            "publication_year": publication_year,
+            "description": description.strip() if description else None,
+            "cover_image_url": None,
+            "isbn": norm_isbn,
+            "upc": norm_upc,
+            "external_ids": {},
+            "extra_metadata": {},
+        }
+        work = self._create_work(meta, media_type_code, branch=branch)
+        item = self._create_item(work, location=location, branch=branch)
+        self._record(
+            AuditEntityType.WORK, work.id, AuditAction.CREATE,
+            {"snapshot": {"title": work.title, "isbn": work.isbn, "upc": work.upc, "manual": True}},
+        )
+        self._record(
+            AuditEntityType.ITEM, item.id, AuditAction.CREATE,
+            {"snapshot": {"barcode": item.barcode, "work_id": work.id}},
+        )
+        return work, item
 
     def withdraw_item(self, barcode: str) -> Item:
         item = self._items.get_by_barcode(barcode)
