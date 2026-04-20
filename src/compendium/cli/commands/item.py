@@ -32,7 +32,7 @@ def _title_search(mt_code: str, query: str) -> list[dict]:
     if source == "open_library":
         return open_library_search_title(query)
     if source == "musicbrainz":
-        return musicbrainz_search_title(query)
+        return musicbrainz_search_title(query, media_type=mt_code)
     return tmdb_search_title(query)
 
 

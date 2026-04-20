@@ -136,7 +136,12 @@ def open_library_search_title(query: str) -> list[dict]:
         with httpx.Client(timeout=10) as client:
             resp = client.get(
                 _OPENLIBRARY_SEARCH_URL,
-                params={"title": query, "limit": "15"},
+                params={
+                    "title": query,
+                    "limit": "15",
+                    # OL's default response omits the isbn field; request it explicitly.
+                    "fields": "title,author_name,first_publish_year,cover_i,isbn",
+                },
             )
             resp.raise_for_status()
     except httpx.HTTPError as exc:
@@ -419,17 +424,36 @@ class MusicBrainzAdapter:
         raise ExternalLookupError(f"MusicBrainz does not support identifier kind '{kind}'")
 
 
-def musicbrainz_search_title(query: str) -> list[dict]:
-    """Search MusicBrainz releases by title; returns candidate dicts for the picker UI."""
+_MB_FORMAT_KEYWORDS: dict[str, str] = {
+    # media_type -> substring that must appear in the release's first-medium format
+    "vinyl": "vinyl",
+    "cd": "cd",
+}
+
+
+def musicbrainz_search_title(query: str, media_type: str | None = None) -> list[dict]:
+    """Search MusicBrainz releases by title; returns candidate dicts for the picker UI.
+
+    When ``media_type`` is ``vinyl`` or ``cd``, results are filtered client-side to
+    releases whose first medium's format matches that type. Other media types (or
+    ``None``) return unfiltered results.
+    """
     escaped = query.replace('"', '\\"')
+    keyword = _MB_FORMAT_KEYWORDS.get(media_type or "")
+    # When filtering, widen the initial pull so the filter has enough to work with.
+    limit = "25" if keyword else "10"
     data = _mb_get(
         "release",
-        {"query": f'release:"{escaped}"', "fmt": "json", "limit": "10"},
+        {"query": f'release:"{escaped}"', "fmt": "json", "limit": limit},
     )
     candidates: list[dict] = []
     for r in data.get("releases", []):
         mbid = r.get("id")
         if not mbid:
+            continue
+        media_list = r.get("media", []) or []
+        fmt = media_list[0].get("format", "") if media_list else ""
+        if keyword and keyword not in fmt.lower():
             continue
         artists = [
             ac["artist"]["name"]
@@ -439,8 +463,6 @@ def musicbrainz_search_title(query: str) -> list[dict]:
         secondary = "by " + ", ".join(artists[:2]) if artists else ""
         date_str = r.get("date") or ""
         year = date_str[:4] if len(date_str) >= 4 and date_str[:4].isdigit() else None
-        media_list = r.get("media", []) or []
-        fmt = media_list[0].get("format", "") if media_list else ""
         country = r.get("country") or ""
         tertiary_parts = [p for p in (country, fmt) if p]
         candidates.append({
@@ -451,6 +473,8 @@ def musicbrainz_search_title(query: str) -> list[dict]:
             "tertiary": " · ".join(tertiary_parts),
             "image_url": None,
         })
+        if len(candidates) >= 10:
+            break
     return candidates
 
 

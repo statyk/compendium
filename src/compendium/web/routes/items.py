@@ -138,7 +138,7 @@ def item_lookup(
             if mt == "book":
                 candidates = open_library_search_title(value)
             elif mt in _MUSIC_TYPES:
-                candidates = musicbrainz_search_title(value)
+                candidates = musicbrainz_search_title(value, media_type=mt)
             else:
                 candidates = tmdb_search_title(value)
         except ExternalLookupError as exc:
