@@ -10,8 +10,20 @@
     nav .brand { font-weight: bold; font-size: 1.1rem; text-decoration: none; color: inherit; }
     .error-banner { color: var(--pico-color-red-500); }
     .success-banner { color: var(--pico-color-green-500); }
-    /* Inline forms inside a dropdown item (e.g. Logout) should look like the
-       surrounding anchor links. */
+    /* Pico v2 sets nav details.dropdown to display:inline, which Firefox
+       treats as zero-width when sizing the absolutely-positioned menu,
+       causing the menu to stretch the full page width. inline-block gives
+       it a proper containing block in all three browsers. */
+    nav details.dropdown { display: inline-block; }
+    /* Size the menu to its content and anchor it to the right edge of its
+       summary so right-side nav dropdowns don't overflow the viewport. */
+    nav details.dropdown summary + ul {
+      width: max-content;
+      left: auto;
+      right: 0;
+    }
+    /* The Logout form inside the username dropdown should look like the
+       surrounding anchor items. */
     nav details.dropdown form.dropdown-form { margin: 0; }
     nav details.dropdown form.dropdown-form button {
       width: 100%;
