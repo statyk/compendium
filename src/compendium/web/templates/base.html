@@ -10,6 +10,22 @@
     nav .brand { font-weight: bold; font-size: 1.1rem; text-decoration: none; color: inherit; }
     .error-banner { color: var(--pico-color-red-500); }
     .success-banner { color: var(--pico-color-green-500); }
+    /* Inline forms inside a dropdown item (e.g. Logout) should look like the
+       surrounding anchor links. */
+    nav details.dropdown form.dropdown-form { margin: 0; }
+    nav details.dropdown form.dropdown-form button {
+      width: 100%;
+      text-align: left;
+      background: transparent;
+      color: inherit;
+      border: none;
+      padding: var(--pico-form-element-spacing-vertical) var(--pico-form-element-spacing-horizontal);
+      font-size: 1rem;
+      cursor: pointer;
+    }
+    nav details.dropdown form.dropdown-form button:hover {
+      background: var(--pico-dropdown-hover-background-color);
+    }
   </style>
 </head>
 <body>
@@ -22,23 +38,42 @@
         <li><a href="/ui/catalog">Catalog</a></li>
         {% if user %}
           {% if has_permission(user, 'loan.checkout') %}<li><a href="/ui/circ">Circ Desk</a></li>{% endif %}
-          {% if has_permission(user, 'patron.manage') %}<li><a href="/ui/patrons">Patrons</a></li>{% endif %}
-          {% if has_permission(user, 'user.manage') %}<li><a href="/ui/users">Users</a></li>{% endif %}
           {% if has_permission(user, 'item.create') %}<li><a href="/ui/items/new">Add Item</a></li>{% endif %}
-          {% if has_permission(user, 'policy.edit') %}<li><a href="/ui/policies">Policies</a></li>{% endif %}
-          {% if has_permission(user, 'role.manage') %}<li><a href="/ui/roles">Roles</a></li>{% endif %}
-          {% if has_permission(user, 'branch.edit') %}<li><a href="/ui/branches">Branches</a></li>{% endif %}
-          {% if has_permission(user, 'patron.manage') %}<li><a href="/ui/audit">Audit Log</a></li>{% endif %}
-          <li><a href="/ui/me/loans">My Loans</a></li>
-          <li><a href="/ui/me/holds">My Holds</a></li>
-          <li><a href="/ui/me/password">Password</a></li>
+          {% if has_permission(user, 'patron.manage') %}<li><a href="/ui/patrons">Patrons</a></li>{% endif %}
+          {% set show_admin = has_permission(user, 'user.manage')
+                              or has_permission(user, 'role.manage')
+                              or has_permission(user, 'policy.edit')
+                              or has_permission(user, 'branch.edit')
+                              or has_permission(user, 'patron.manage') %}
+          {% if show_admin %}
           <li>
-            <form method="post" action="/ui/logout" style="margin:0">
-              <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
-              <button type="submit" class="outline contrast" style="padding: 0.25rem 0.75rem">
-                Logout ({{ user.username }})
-              </button>
-            </form>
+            <details class="dropdown">
+              <summary>Admin</summary>
+              <ul>
+                {% if has_permission(user, 'user.manage') %}<li><a href="/ui/users">Users</a></li>{% endif %}
+                {% if has_permission(user, 'role.manage') %}<li><a href="/ui/roles">Roles</a></li>{% endif %}
+                {% if has_permission(user, 'policy.edit') %}<li><a href="/ui/policies">Policies</a></li>{% endif %}
+                {% if has_permission(user, 'branch.edit') %}<li><a href="/ui/branches">Branches</a></li>{% endif %}
+                {% if has_permission(user, 'patron.manage') %}<li><a href="/ui/audit">Audit Log</a></li>{% endif %}
+              </ul>
+            </details>
+          </li>
+          {% endif %}
+          <li>
+            <details class="dropdown">
+              <summary>{{ user.username }}</summary>
+              <ul>
+                <li><a href="/ui/me/loans">My Loans</a></li>
+                <li><a href="/ui/me/holds">My Holds</a></li>
+                <li><a href="/ui/me/password">Change Password</a></li>
+                <li>
+                  <form method="post" action="/ui/logout" class="dropdown-form">
+                    <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+                    <button type="submit">Logout</button>
+                  </form>
+                </li>
+              </ul>
+            </details>
           </li>
         {% else %}
           <li><a href="/ui/login" role="button" class="outline">Login</a></li>
