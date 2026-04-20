@@ -31,6 +31,7 @@
           {% if has_permission(user, 'patron.manage') %}<li><a href="/ui/audit">Audit Log</a></li>{% endif %}
           <li><a href="/ui/me/loans">My Loans</a></li>
           <li><a href="/ui/me/holds">My Holds</a></li>
+          <li><a href="/ui/me/password">Password</a></li>
           <li>
             <form method="post" action="/ui/logout" style="margin:0">
               <input type="hidden" name="csrf_token" value="{{ csrf_token }}">

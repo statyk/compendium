@@ -63,4 +63,29 @@
     {% endif %}
   </dd>
 </dl>
+
+{% if target.is_active and target.username != user.username %}
+<details>
+  <summary>Reset password</summary>
+  <p>
+    Set a new password for <strong>{{ target.username }}</strong>. Requires your
+    own current password to authorize. Tell the user their new password out of
+    band; they should change it themselves via <code>/ui/me/password</code>
+    afterwards.
+  </p>
+  <form method="post" action="/ui/users/{{ target.username }}/reset-password" style="max-width:30rem">
+    <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+    <label for="actor_current_password">Your current password
+      <input type="password" id="actor_current_password" name="actor_current_password" autocomplete="current-password" required>
+    </label>
+    <label for="new_password">New password for {{ target.username }}
+      <input type="password" id="new_password" name="new_password" autocomplete="new-password" required>
+    </label>
+    <label for="confirm_password">Confirm new password
+      <input type="password" id="confirm_password" name="confirm_password" autocomplete="new-password" required>
+    </label>
+    <button type="submit" class="outline">Reset password</button>
+  </form>
+</details>
+{% endif %}
 {% endblock %}

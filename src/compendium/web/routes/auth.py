@@ -25,14 +25,25 @@ def _auth_svc(session=Depends(get_session)) -> AuthService:
 
 
 @router.get("/login")
-def login_page(request: Request, next: str = "", user=Depends(get_web_user)):
+def login_page(
+    request: Request,
+    next: str = "",
+    message: str = "",
+    user=Depends(get_web_user),
+):
     if user is not None:
         return RedirectResponse(url="/ui/catalog", status_code=303)
     token = generate_token()
     resp = templates.TemplateResponse(
         request,
         "login.html",
-        {"user": None, "next": next, "csrf_token": token, "error": None},
+        {
+            "user": None,
+            "next": next,
+            "csrf_token": token,
+            "error": None,
+            "message": message or None,
+        },
     )
     set_csrf_cookie(resp, token, get_settings().jwt_secret_key)
     return resp
@@ -56,7 +67,13 @@ def login_submit(
         resp = templates.TemplateResponse(
             request,
             "login.html",
-            {"user": None, "next": next, "csrf_token": token, "error": str(exc)},
+            {
+                "user": None,
+                "next": next,
+                "csrf_token": token,
+                "error": str(exc),
+                "message": None,
+            },
             status_code=401,
         )
         set_csrf_cookie(resp, token, get_settings().jwt_secret_key)

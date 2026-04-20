@@ -115,7 +115,7 @@ class AuthService:
         )
         return result
 
-    def set_password(self, username: str, password: str) -> AppUser:
+    def set_password(self, username: str, password: str, *, by: str = "cli") -> AppUser:
         if not password:
             raise BusinessRuleError("Password must not be empty")
         user = self._users.get_by_username(username)
@@ -127,9 +127,39 @@ class AuthService:
             AuditEntityType.USER,
             result.id,
             AuditAction.UPDATE,
-            {"snapshot": {"username": result.username, "password_reset": True}},
+            {"snapshot": {"username": result.username, "password_reset": True, "by": by}},
         )
         return result
+
+    def change_password(
+        self, username: str, current_password: str, new_password: str
+    ) -> AppUser:
+        """Self-service: the user supplies their current password to authorize."""
+        user = self._users.get_by_username(username)
+        if user is None:
+            raise NotFoundError(f"No user with username '{username}'")
+        if not verify_password(current_password, user.password_hash):
+            raise AuthError("Current password is incorrect")
+        return self.set_password(username, new_password, by="self")
+
+    def admin_reset_password(
+        self,
+        target_username: str,
+        actor_current_password: str,
+        new_password: str,
+    ) -> AppUser:
+        """Librarian reset of another user's password. Requires the actor to
+        re-authenticate with their own current password. Refuses self-reset —
+        that path goes through change_password."""
+        if self._actor is None:
+            raise BusinessRuleError("Admin reset requires an authenticated actor")
+        if target_username == self._actor.username:
+            raise BusinessRuleError(
+                "Use the self-service change-password page to reset your own password"
+            )
+        if not verify_password(actor_current_password, self._actor.password_hash):
+            raise AuthError("Your current password is incorrect")
+        return self.set_password(target_username, new_password, by="admin")
 
     def deactivate_user(self, username: str) -> AppUser:
         user = self._users.get_by_username(username)

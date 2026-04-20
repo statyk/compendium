@@ -1248,6 +1248,172 @@ def test_csrf_signature_tamper_rejected(web_client, librarian):
     assert resp.status_code == 403
 
 
+# ── Password change / reset ───────────────────────────────────────────────────
+
+
+AUTH_COOKIE = "compendium_auth"
+
+
+def test_me_password_form_renders(web_client, patron_user):
+    _login(web_client, "patron01")
+    resp = web_client.get("/ui/me/password")
+    assert resp.status_code == 200
+    assert b"Change Password" in resp.content
+
+
+def test_me_password_change_succeeds(web_client, patron_user):
+    _login(web_client, "patron01")
+    raw, signed = _make_csrf_pair()
+    resp = web_client.post(
+        "/ui/me/password",
+        data={
+            "current_password": "secret",
+            "new_password": "newsecret",
+            "confirm_password": "newsecret",
+            "csrf_token": raw,
+        },
+        cookies={CSRF_COOKIE: signed},
+    )
+    assert resp.status_code == 303
+    assert "/ui/login" in resp.headers["location"]
+    # Auth cookie was cleared so the user is logged out.
+    set_cookie = " ".join(resp.headers.get_list("set-cookie"))
+    assert AUTH_COOKIE in set_cookie
+    # Old password no longer authenticates.
+    raw2, signed2 = _make_csrf_pair()
+    bad = web_client.post(
+        "/ui/login",
+        data={"username": "patron01", "password": "secret", "csrf_token": raw2},
+        cookies={CSRF_COOKIE: signed2},
+    )
+    assert bad.status_code == 401
+    # New password works.
+    raw3, signed3 = _make_csrf_pair()
+    good = web_client.post(
+        "/ui/login",
+        data={"username": "patron01", "password": "newsecret", "csrf_token": raw3},
+        cookies={CSRF_COOKIE: signed3},
+    )
+    assert good.status_code == 303
+
+
+def test_me_password_wrong_current_rejected(web_client, patron_user):
+    _login(web_client, "patron01")
+    raw, signed = _make_csrf_pair()
+    resp = web_client.post(
+        "/ui/me/password",
+        data={
+            "current_password": "wrong",
+            "new_password": "newsecret",
+            "confirm_password": "newsecret",
+            "csrf_token": raw,
+        },
+        cookies={CSRF_COOKIE: signed},
+    )
+    assert resp.status_code == 401
+    assert b"Current password is incorrect" in resp.content
+
+
+def test_me_password_mismatched_confirmation_rejected(web_client, patron_user):
+    _login(web_client, "patron01")
+    raw, signed = _make_csrf_pair()
+    resp = web_client.post(
+        "/ui/me/password",
+        data={
+            "current_password": "secret",
+            "new_password": "newsecret",
+            "confirm_password": "different",
+            "csrf_token": raw,
+        },
+        cookies={CSRF_COOKIE: signed},
+    )
+    assert resp.status_code == 400
+    assert b"do not match" in resp.content
+
+
+def test_admin_reset_password_succeeds(web_client, librarian, patron_user):
+    _login(web_client, "lib01")
+    raw, signed = _make_csrf_pair()
+    resp = web_client.post(
+        "/ui/users/patron01/reset-password",
+        data={
+            "actor_current_password": "secret",  # librarian's password
+            "new_password": "forced-new",
+            "confirm_password": "forced-new",
+            "csrf_token": raw,
+        },
+        cookies={CSRF_COOKIE: signed},
+    )
+    assert resp.status_code == 303
+    assert "message=Password" in resp.headers["location"]
+    # patron01 can now log in with the reset password.
+    raw2, signed2 = _make_csrf_pair()
+    login = web_client.post(
+        "/ui/login",
+        data={"username": "patron01", "password": "forced-new", "csrf_token": raw2},
+        cookies={CSRF_COOKIE: signed2},
+    )
+    assert login.status_code == 303
+
+
+def test_admin_reset_wrong_actor_password_rejected(web_client, librarian, patron_user):
+    _login(web_client, "lib01")
+    raw, signed = _make_csrf_pair()
+    resp = web_client.post(
+        "/ui/users/patron01/reset-password",
+        data={
+            "actor_current_password": "wrong",
+            "new_password": "forced-new",
+            "confirm_password": "forced-new",
+            "csrf_token": raw,
+        },
+        cookies={CSRF_COOKIE: signed},
+    )
+    assert resp.status_code == 303
+    assert "error=" in resp.headers["location"]
+    # Patron's original password still works.
+    raw2, signed2 = _make_csrf_pair()
+    login = web_client.post(
+        "/ui/login",
+        data={"username": "patron01", "password": "secret", "csrf_token": raw2},
+        cookies={CSRF_COOKIE: signed2},
+    )
+    assert login.status_code == 303
+
+
+def test_admin_reset_self_redirects_to_self_service(web_client, librarian):
+    _login(web_client, "lib01")
+    raw, signed = _make_csrf_pair()
+    resp = web_client.post(
+        "/ui/users/lib01/reset-password",
+        data={
+            "actor_current_password": "secret",
+            "new_password": "newsecret",
+            "confirm_password": "newsecret",
+            "csrf_token": raw,
+        },
+        cookies={CSRF_COOKIE: signed},
+    )
+    assert resp.status_code == 303
+    assert resp.headers["location"] == "/ui/me/password"
+
+
+def test_patron_cannot_reset_other_user_password(web_client, patron_user, librarian):
+    _login(web_client, "patron01")
+    raw, signed = _make_csrf_pair()
+    resp = web_client.post(
+        "/ui/users/lib01/reset-password",
+        data={
+            "actor_current_password": "secret",
+            "new_password": "hax",
+            "confirm_password": "hax",
+            "csrf_token": raw,
+        },
+        cookies={CSRF_COOKIE: signed},
+    )
+    assert resp.status_code == 403
+
+
 def test_inactive_user_cookie_denied(web_client, web_session, librarian):
     """An inactive user's still-valid auth cookie must not grant access."""
     cookies = _login(web_client, "lib01")

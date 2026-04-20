@@ -9,7 +9,7 @@ from sqlalchemy.orm import Session
 
 from compendium.db.engine import get_settings
 from compendium.db.session import get_session
-from compendium.domain.errors import BusinessRuleError, ConflictError, NotFoundError
+from compendium.domain.errors import AuthError, BusinessRuleError, ConflictError, NotFoundError
 from compendium.domain.models import AppUser
 from compendium.repositories.sql.audit_log_repository import SqlAuditLogRepository
 from compendium.repositories.sql.patron_repository import SqlPatronRepository
@@ -157,6 +157,42 @@ def user_change_role(
         return RedirectResponse(
             f"/ui/users/{quote(username)}?error={quote(str(exc))}", status_code=303
         )
+
+
+@router.post("/users/{username}/reset-password")
+def user_reset_password(
+    username: str,
+    request: Request,
+    actor_current_password: str = Form(),
+    new_password: str = Form(),
+    confirm_password: str = Form(),
+    csrf_token: str = Form(default=""),
+    user: AppUser = Depends(require_web_permission(_PERM)),
+    session: Session = Depends(get_session),
+):
+    check_csrf_form(request, csrf_token)
+    if username == user.username:
+        return RedirectResponse("/ui/me/password", status_code=303)
+    if new_password != confirm_password:
+        return RedirectResponse(
+            f"/ui/users/{quote(username)}?error={quote('New passwords do not match.')}",
+            status_code=303,
+        )
+    try:
+        _auth_svc(session, user).admin_reset_password(
+            target_username=username,
+            actor_current_password=actor_current_password,
+            new_password=new_password,
+        )
+    except (AuthError, BusinessRuleError, NotFoundError) as exc:
+        return RedirectResponse(
+            f"/ui/users/{quote(username)}?error={quote(str(exc))}",
+            status_code=303,
+        )
+    return RedirectResponse(
+        f"/ui/users/{quote(username)}?message={quote('Password reset.')}",
+        status_code=303,
+    )
 
 
 @router.post("/users/{username}/deactivate", response_class=HTMLResponse)
