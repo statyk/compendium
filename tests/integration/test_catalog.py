@@ -65,6 +65,25 @@ def test_add_from_isbn_raises_when_not_found(_, session):
         _service(session).add_from_isbn(_ISBN)
 
 
+_OPEN_LIB_DUPLICATE_AUTHOR = {
+    "title": "Dune",
+    "authors": [{"name": "Frank Herbert"}, {"name": "Frank Herbert"}],
+    "publishers": [{"name": "Chilton Books"}],
+    "publish_date": "1965",
+    "cover": {},
+    "identifiers": {},
+}
+
+
+@patch("compendium.services.metadata.lookup_isbn", return_value=_OPEN_LIB_DUPLICATE_AUTHOR)
+def test_add_from_isbn_dedupes_duplicate_authors(_, session):
+    """Regression: some Open Library records list the same author twice, which
+    used to raise a UNIQUE-constraint error on work_creator."""
+    work, _ = _service(session).add_from_isbn(_ISBN)
+    assert len(work.creators) == 1
+    assert work.creators[0].creator.display_name == "Frank Herbert"
+
+
 @patch("compendium.services.metadata.lookup_isbn", return_value=_OPEN_LIB_DUNE)
 def test_add_item_to_work_adds_copy(_, session):
     work, item1 = _service(session).add_from_isbn(_ISBN)

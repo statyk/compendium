@@ -251,18 +251,25 @@ class CatalogService:
         # "creators" key carries [(name, role), ...] for multi-role media (film).
         # Falls back to flat "authors" + single "creator_role" for books/music.
         if meta.get("creators"):
-            for order, (name, role) in enumerate(meta["creators"]):
-                creator = self._get_or_create_creator(name)
-                work.creators.append(
-                    WorkCreator(creator=creator, role=role, display_order=order)
-                )
+            pairs = [(name, role) for name, role in meta["creators"]]
         else:
             creator_role = meta.get("creator_role", "author")
-            for order, name in enumerate(meta.get("authors", [])):
-                creator = self._get_or_create_creator(name)
-                work.creators.append(
-                    WorkCreator(creator=creator, role=creator_role, display_order=order)
-                )
+            pairs = [(name, creator_role) for name in meta.get("authors", [])]
+
+        # External sources (e.g. Open Library) occasionally list the same author
+        # twice; dedupe by (sort_name, role) so the work_creator PK isn't violated.
+        seen: set[tuple[str, str]] = set()
+        order = 0
+        for name, role in pairs:
+            creator = self._get_or_create_creator(name)
+            key = (creator.sort_name, role)
+            if key in seen:
+                continue
+            seen.add(key)
+            work.creators.append(
+                WorkCreator(creator=creator, role=role, display_order=order)
+            )
+            order += 1
 
         self._rebuild_search_text(work)
         return work

@@ -262,6 +262,32 @@ def test_my_holds_renders_empty(web_client, patron_user):
     assert b"no active holds" in resp.content.lower()
 
 
+def test_no_patron_account_page_has_working_logout(web_client, web_session):
+    """Regression: logged-in user with no linked patron hits /ui/me/* → the error
+    page must embed a valid CSRF token so its Logout form works."""
+    import re
+
+    role = SqlRoleRepository(web_session).get_by_name("Patron")
+    user = AppUser(
+        username="orphan01", password_hash=hash_password("secret"), role_id=role.id
+    )
+    SqlUserRepository(web_session).add(user)
+    web_session.flush()
+
+    _login(web_client, "orphan01")
+    resp = web_client.get("/ui/me/loans")
+    assert resp.status_code == 403
+    assert b"No patron account" in resp.content
+
+    match = re.search(rb'name="csrf_token"\s+value="([^"]+)"', resp.content)
+    assert match is not None, "CSRF token input missing from page"
+    raw = match.group(1).decode()
+    assert raw, "CSRF token must not be empty"
+
+    logout = web_client.post("/ui/logout", data={"csrf_token": raw})
+    assert logout.status_code == 303
+
+
 def test_place_hold_via_catalog(web_client, patron_user, work):
     w, _ = work
     cookies = _login(web_client, "patron01")

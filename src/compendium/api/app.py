@@ -74,34 +74,34 @@ def create_app() -> FastAPI:
 
     @app.exception_handler(NoPatronAccountException)
     async def _no_patron(request: Request, exc: NoPatronAccountException) -> HTMLResponse:
-        from compendium.db.session import get_session
-        from compendium.repositories.sql.user_repository import SqlUserRepository
+        from types import SimpleNamespace
+
+        from compendium.web.csrf import ensure_csrf, set_csrf_cookie
         from compendium.web.deps import AUTH_COOKIE, _decode_token
 
+        # Build a lightweight user view from the JWT payload so the nav can
+        # render without a DB round-trip. The exception handler runs outside
+        # FastAPI DI, so we can't rely on a request-scoped session.
         user = None
         username = None
         token = request.cookies.get(AUTH_COOKIE)
-        session_gen = None
-        try:
-            if token:
-                payload = _decode_token(token)
-                if payload:
-                    username = payload.get("username")
-                    session_gen = get_session()
-                    session = next(session_gen)
-                    user = SqlUserRepository(session).get(int(payload["sub"]))
-                    if user is not None and not user.is_active:
-                        user = None
-                    if user is not None:
-                        _ = user.role.permissions  # force lazy load before session close
-            return templates.TemplateResponse(
-                request,
-                "error_no_patron.html",
-                {"user": user, "csrf_token": "", "username": username},
-                status_code=403,
-            )
-        finally:
-            if session_gen is not None:
-                session_gen.close()
+        if token:
+            payload = _decode_token(token)
+            if payload:
+                username = payload.get("username")
+                user = SimpleNamespace(
+                    username=username,
+                    role=SimpleNamespace(permissions=payload.get("permissions", [])),
+                )
+        csrf_token, fresh = ensure_csrf(request)
+        response = templates.TemplateResponse(
+            request,
+            "error_no_patron.html",
+            {"user": user, "csrf_token": csrf_token, "username": username},
+            status_code=403,
+        )
+        if fresh:
+            set_csrf_cookie(response, fresh, get_settings().jwt_secret_key)
+        return response
 
     return app
