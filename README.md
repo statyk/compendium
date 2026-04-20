@@ -2,6 +2,12 @@
 
 A library card catalog system for physical items — books, vinyl records, DVDs, CDs.
 
+WARNING NOTICE CAVEAT EMPTOR:
+This project is 100% vibe coded.  Not only did I not write the code, I've barely even looked at it.
+I worked with the model (Sonnet and Opus, mostly) on design decisions and the like, but it's pretty much all AI-generated code and documentation.
+This paragraph here is the only part of the project manually written by a human.
+
+
 **Status:** Active development. Core circulation, holds, patron management, and a full web UI are complete. See [`docs/architecture.md`](docs/architecture.md) for architecture and design decisions.
 
 ## Features
