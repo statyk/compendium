@@ -50,8 +50,16 @@
   <label for="description">Description / notes</label>
   <textarea id="description" name="description" rows="3">{{ form.description or '' }}</textarea>
 
-  <label for="location">Shelf location</label>
-  <input type="text" id="location" name="location" value="{{ form.location or '' }}">
+  <div class="grid">
+    <div>
+      <label for="location">Shelf location</label>
+      <input type="text" id="location" name="location" value="{{ form.location or '' }}">
+    </div>
+    <div>
+      <label for="call_number">Call number</label>
+      <input type="text" id="call_number" name="call_number" value="{{ form.call_number or '' }}">
+    </div>
+  </div>
 
   <button type="submit">Add Item</button>
 </form>

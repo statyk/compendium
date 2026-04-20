@@ -210,6 +210,7 @@ def add_manual_item(
     upc: str | None = typer.Option(None, "--upc", help="UPC, optional"),
     description: str | None = typer.Option(None, "--description"),
     location: str | None = typer.Option(None, "--location", help="Shelf location"),
+    call_number: str | None = typer.Option(None, "--call-number", help="Call number on the spine label"),
 ) -> None:
     """Add an item by manually entering its metadata (skips external lookup)."""
     try:
@@ -225,6 +226,8 @@ def add_manual_item(
                 description=description,
                 location=location,
             )
+            if call_number and call_number.strip():
+                item.call_number = call_number.strip()
     except DomainError as exc:
         typer.echo(f"Error: {exc}", err=True)
         raise typer.Exit(1) from exc
@@ -241,6 +244,8 @@ def add_manual_item(
         typer.echo(f"  UPC       : {work.upc}")
     typer.echo(f"  Barcode   : {item.barcode}")
     typer.echo(f"  Accession : {item.accession_number}")
+    if item.call_number:
+        typer.echo(f"  Call #    : {item.call_number}")
     if item.location:
         typer.echo(f"  Location  : {item.location}")
 

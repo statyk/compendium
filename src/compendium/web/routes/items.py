@@ -231,6 +231,7 @@ def item_create_manual(
     upc: str = Form(default=""),
     description: str = Form(default=""),
     location: str = Form(default=""),
+    call_number: str = Form(default=""),
     csrf_token: str = Form(default=""),
     user: AppUser = Depends(require_web_permission(_PERM_MANAGE)),
     session: Session = Depends(get_session),
@@ -247,6 +248,7 @@ def item_create_manual(
         "upc": upc,
         "description": description,
         "location": location,
+        "call_number": call_number,
     }
 
     parsed_year: int | None = None
@@ -280,6 +282,8 @@ def item_create_manual(
             request,
             {"request": request, "user": user, "error": str(exc), "form": form},
         )
+    if call_number.strip():
+        item.call_number = call_number.strip()
     return RedirectResponse(f"/ui/items/{item.barcode}", status_code=303)
 
 
