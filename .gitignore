@@ -48,3 +48,6 @@ dev.db
 docker/.env
 docker/certs/*
 !docker/certs/.gitkeep
+
+# Local-only project notes (not published)
+CLAUDE.md

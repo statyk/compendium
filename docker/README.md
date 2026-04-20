@@ -69,8 +69,7 @@ user exists. Run:
 docker compose exec compendium compendium user set-password --username admin
 ```
 
-(A password-change flow in the web UI is planned; see the top-level CLAUDE.md
-"High-priority follow-ups" section.)
+(A password-change flow in the web UI is a planned follow-up.)
 
 ## Persistence
 

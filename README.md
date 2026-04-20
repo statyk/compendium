@@ -2,7 +2,7 @@
 
 A library card catalog system for physical items — books, vinyl records, DVDs, CDs.
 
-**Status:** Active development. Core circulation, holds, patron management, and a full web UI are complete. See [`CLAUDE.md`](CLAUDE.md) for architecture and design decisions.
+**Status:** Active development. Core circulation, holds, patron management, and a full web UI are complete. See [`docs/architecture.md`](docs/architecture.md) for architecture and design decisions.
 
 ## Features
 

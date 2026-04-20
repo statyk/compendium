@@ -153,7 +153,7 @@ For items that external sources can't find (zines, obscure self-releases, out-of
 
 Adapters are registered in `services/metadata.py` via `_ADAPTERS: dict[str, MetadataAdapter]`. Adding a new media type requires implementing the `MetadataAdapter` protocol and registering it.
 
-Note: TMDb does not index physical-disc UPCs, so film items are added via a title-search candidate picker rather than direct barcode scan. A UPC→title bridge is a deferred enhancement (see CLAUDE.md).
+Note: TMDb does not index physical-disc UPCs, so film items are added via a title-search candidate picker rather than direct barcode scan. A UPC→title bridge is a deferred enhancement.
 
 ---
 
