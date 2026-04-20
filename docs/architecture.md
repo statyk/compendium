@@ -42,7 +42,7 @@ Business logic. Services are plain classes whose constructors accept repository 
 
 | Service | Responsibility |
 |---------|---------------|
-| `CatalogService` | Add works from ISBN/UPC/TMDb, add/withdraw items |
+| `CatalogService` | Add works from ISBN/UPC/MBID/TMDb/title search, add manual items, withdraw items |
 | `CirculationService` | Checkout, checkin, renew |
 | `HoldService` | Place, cancel, expire holds |
 | `PatronService` | Patron CRUD, user linking |
@@ -145,9 +145,11 @@ When adding items by identifier, Compendium looks up metadata from external sour
 
 | Media type | Primary source | Identifier |
 |-----------|---------------|------------|
-| book | Open Library (CC0, no key) | ISBN |
-| vinyl, cd | MusicBrainz (CC0, no key) | UPC or MBID |
+| book | Open Library (CC0, no key) | ISBN or title search |
+| vinyl, cd | MusicBrainz (CC0, no key) | UPC, MBID, or title search (format-filtered, artist+title fuzzy) |
 | dvd, bluray, vhs | TMDb (requires key) | TMDb ID or title search |
+
+For items that external sources can't find (zines, obscure self-releases, out-of-print rarities), `CatalogService.add_manual()` accepts user-supplied metadata directly. Exposed via the web UI at `/ui/items/new/manual` and the CLI `compendium item add-manual`.
 
 Adapters are registered in `services/metadata.py` via `_ADAPTERS: dict[str, MetadataAdapter]`. Adding a new media type requires implementing the `MetadataAdapter` protocol and registering it.
 

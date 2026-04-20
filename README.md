@@ -6,7 +6,7 @@ A library card catalog system for physical items — books, vinyl records, DVDs,
 
 ## Features
 
-- **Catalog** — add items by ISBN (Open Library lookup), search, browse works and copies
+- **Catalog** — add items by ISBN / UPC / MusicBrainz ID / TMDb ID / title search (Open Library, MusicBrainz, TMDb) or manually for obscure items; search and browse works and copies
 - **Circulation** — checkout, checkin, loan renewal with configurable per-media-type loan policies
 - **Holds** — patron reservation queue; automatic promotion on checkin; expiry via maintenance command
 - **Auth** — role/permission model (ReadOnly, Patron, Librarian); JWT for API, cookie-based for web UI
@@ -68,12 +68,21 @@ Log in at `http://localhost:8000/ui/login` with the username and password you se
 | Command | Description |
 |---|---|
 | `compendium db init` | Initialise / migrate the database |
-| `compendium item add --isbn <isbn>` | Add an item by ISBN |
-| `compendium item show --barcode <barcode>` | Show item detail |
+| `compendium item add --isbn <isbn>` | Add a book by ISBN (Open Library lookup) |
+| `compendium item add --upc <upc> --media-type <vinyl\|cd>` | Add music by UPC (MusicBrainz lookup) |
+| `compendium item add --mbid <uuid> --media-type <vinyl\|cd>` | Add music by MusicBrainz release ID |
+| `compendium item add --tmdb-id <id> --media-type <dvd\|bluray\|vhs>` | Add film by TMDb ID (requires `COMPENDIUM_TMDB_API_KEY`) |
+| `compendium item add --title "..." --media-type <code>` | Title search + interactive candidate picker (any media type) |
+| `compendium item add-manual --title "..." --media-type <code>` | Manually enter metadata for items not in any external source |
+| `compendium item show <barcode>` | Show item detail |
 | `compendium item list` | List all items |
 | `compendium item withdraw --barcode <barcode>` | Withdraw (soft-remove) an item |
-| `compendium patron add --name <name>` | Add a patron |
+| `compendium work search <query>` | Search works (title / author / description) |
+| `compendium work show <work_id>` | Show work detail and copies |
+| `compendium patron add --name <name>` | Add a patron (optional `--link-user <username>`) |
 | `compendium patron list` | List patrons |
+| `compendium patron link-user --card <c> --username <u>` | Link an existing patron to a user account |
+| `compendium patron unlink-user --card <c>` | Unlink the user account from a patron |
 | `compendium patron deactivate --card <card>` | Deactivate a patron account |
 | `compendium loan checkout --barcode <b> --card <c>` | Check out an item |
 | `compendium loan checkin --barcode <barcode>` | Check in an item |
@@ -89,9 +98,12 @@ Log in at `http://localhost:8000/ui/login` with the username and password you se
 | `compendium role create --name <n> --permissions <p,...>` | Create a custom role (`--full-access` for `["*"]`) |
 | `compendium role update --id <id> --name <n>` | Rename or change permissions on a custom role |
 | `compendium role clone --id <id> --name <n>` | Clone any role (including presets) into a new editable role |
+| `compendium branch list` | List branches and their classification schemes |
+| `compendium branch set --code <c> --classification <lcc\|ddc\|none>` | Set a branch's auto-populate classification scheme |
 | `compendium maintenance expire-holds` | Expire overdue waiting holds (for cron) |
 | `compendium user add --username <u> --role <r>` | Create a user account |
 | `compendium user set-role --username <u> --role <r>` | Change a user's role |
+| `compendium user set-password --username <u>` | Reset a user's password (prompts if `--password` omitted) |
 | `compendium user deactivate --username <u>` | Deactivate a user account |
 | `compendium audit list` | Browse audit log (supports `--entity`, `--id`, `--user-id`, `--limit`) |
 | `compendium serve` | Start the API + web UI server |
@@ -108,11 +120,13 @@ Start the server with `compendium serve` and open your browser to `http://localh
 | `/ui/me/loans` | Patron | Active loans with inline renew |
 | `/ui/me/holds` | Patron | Active holds with inline cancel |
 | `/ui/circ` | Librarian | Circulation desk — checkout / checkin / renew |
-| `/ui/items/new` | Librarian | Add item by ISBN (with barcode scanner) |
+| `/ui/items/new` | Librarian | Add item by ISBN / UPC / MBID / TMDb ID / title search (with barcode scanner) |
+| `/ui/items/new/manual` | Librarian | Manually add an item not found in external sources |
 | `/ui/items/{barcode}` | Librarian | Item detail and withdraw |
 | `/ui/patrons` | Librarian | Patron list |
 | `/ui/patrons/new` | Librarian | Create patron |
-| `/ui/patrons/{card}` | Librarian | Patron detail with active loans, holds, deactivate |
+| `/ui/patrons/{card}` | Librarian | Patron detail with active loans, holds, link/unlink user, deactivate |
+| `/ui/patrons/{card}/loans` | Librarian | Full patron loan history |
 | `/ui/users` | Librarian | User list |
 | `/ui/users/new` | Librarian | Create user |
 | `/ui/users/{username}` | Librarian | User detail — change role, deactivate |
@@ -121,6 +135,8 @@ Start the server with `compendium serve` and open your browser to `http://localh
 | `/ui/roles` | Librarian | Role list |
 | `/ui/roles/new` | Librarian | Create custom role |
 | `/ui/roles/{id}` | Librarian | Role detail — edit permissions, clone |
+| `/ui/branches` | Librarian | Branch list with classification scheme |
+| `/ui/branches/{id}/edit` | Librarian | Edit a branch's default classification scheme |
 | `/ui/audit` | Librarian | Audit log viewer |
 
 Guest catalog search is enabled by default (`COMPENDIUM_GUEST_SEARCH_ENABLED=true`).
@@ -169,7 +185,7 @@ Settings are read from environment variables (prefix `COMPENDIUM_`) or a `.env` 
 | `COMPENDIUM_HOLD_EXPIRY_DAYS` | `30` | Days before a waiting hold expires |
 | `COMPENDIUM_HOLD_PICKUP_DAYS` | `3` | Days a patron has to collect an available hold |
 
-See [`docs/deployment.md`](docs/deployment.md) for full deployment guidance.
+See [`docs/deployment.md`](docs/deployment.md) for full deployment guidance, or [`docker/README.md`](docker/README.md) for the bundled Docker Compose setup (app + Postgres + nginx with auto-generated self-signed TLS).
 
 ### PostgreSQL
 
@@ -197,7 +213,7 @@ The `compendium maintenance expire-holds` command should run periodically via cr
 uv run pytest -q
 ```
 
-Tests are split into `tests/unit/` (no DB, mock repos) and `tests/integration/` (SQLite in-memory). 175 tests as of the current build.
+Tests are split into `tests/unit/` (no DB, mock repos) and `tests/integration/` (SQLite in-memory). 311 tests as of the current build.
 
 ## Layout
 

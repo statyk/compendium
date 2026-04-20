@@ -59,6 +59,28 @@ def set_user_role(
         raise typer.Exit(1) from exc
 
 
+@app.command("set-password")
+def set_user_password(
+    username: str = typer.Option(..., "--username", help="Username to update"),
+    password: str | None = typer.Option(
+        None,
+        "--password",
+        help="New password. Prompted if omitted.",
+        hide_input=True,
+    ),
+) -> None:
+    """Reset a user's password."""
+    if password is None:
+        password = typer.prompt("Password", hide_input=True, confirmation_prompt=True)
+    try:
+        with session_scope() as session:
+            user = _auth_svc(session).set_password(username, password)
+            typer.echo(f"\nPassword reset for user '{user.username}'.")
+    except DomainError as exc:
+        typer.echo(f"Error: {exc}", err=True)
+        raise typer.Exit(1) from exc
+
+
 @app.command("list")
 def list_users(
     limit: int = typer.Option(50, "--limit"),

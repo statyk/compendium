@@ -1,0 +1,59 @@
+services:
+  db:
+    image: postgres:16-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: compendium
+      POSTGRES_USER: compendium
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?POSTGRES_PASSWORD must be set in .env}
+    volumes:
+      - db_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U compendium -d compendium"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  compendium:
+    build:
+      context: ..
+      dockerfile: docker/Dockerfile
+    image: compendium:latest
+    restart: unless-stopped
+    depends_on:
+      db:
+        condition: service_healthy
+    environment:
+      COMPENDIUM_DATABASE_URL: postgresql+psycopg://compendium:${POSTGRES_PASSWORD}@db:5432/compendium
+      COMPENDIUM_JWT_SECRET_KEY: ${COMPENDIUM_JWT_SECRET_KEY:?COMPENDIUM_JWT_SECRET_KEY must be set in .env}
+      COMPENDIUM_JWT_EXPIRE_MINUTES: ${COMPENDIUM_JWT_EXPIRE_MINUTES:-480}
+      COMPENDIUM_GUEST_SEARCH_ENABLED: ${COMPENDIUM_GUEST_SEARCH_ENABLED:-true}
+      COMPENDIUM_DEFAULT_LOAN_PERIOD_DAYS: ${COMPENDIUM_DEFAULT_LOAN_PERIOD_DAYS:-14}
+      COMPENDIUM_HOLD_EXPIRY_DAYS: ${COMPENDIUM_HOLD_EXPIRY_DAYS:-30}
+      COMPENDIUM_HOLD_PICKUP_DAYS: ${COMPENDIUM_HOLD_PICKUP_DAYS:-3}
+      COMPENDIUM_TMDB_API_KEY: ${COMPENDIUM_TMDB_API_KEY:-}
+      COMPENDIUM_ADMIN_USERNAME: ${COMPENDIUM_ADMIN_USERNAME:-admin}
+      COMPENDIUM_ADMIN_PASSWORD: ${COMPENDIUM_ADMIN_PASSWORD:-compendium}
+      COMPENDIUM_ADMIN_ROLE: ${COMPENDIUM_ADMIN_ROLE:-Librarian}
+    # No ports published — nginx is the only external-facing service.
+    expose:
+      - "8000"
+
+  nginx:
+    image: nginx:1.27-alpine
+    restart: unless-stopped
+    depends_on:
+      - compendium
+    ports:
+      - "${HTTP_PORT:-80}:80"
+      - "${HTTPS_PORT:-443}:443"
+    environment:
+      COMPENDIUM_CERT_CN: ${COMPENDIUM_CERT_CN:-compendium.local}
+    volumes:
+      - ./nginx/nginx.conf:/etc/nginx/nginx.conf:ro
+      - ./nginx/entrypoint.sh:/docker-entrypoint.d/99-compendium-cert.sh:ro
+      - ./certs:/etc/nginx/certs
+    entrypoint: ["/bin/sh", "/docker-entrypoint.d/99-compendium-cert.sh"]
+
+volumes:
+  db_data:

@@ -115,6 +115,22 @@ class AuthService:
         )
         return result
 
+    def set_password(self, username: str, password: str) -> AppUser:
+        if not password:
+            raise BusinessRuleError("Password must not be empty")
+        user = self._users.get_by_username(username)
+        if user is None:
+            raise NotFoundError(f"No user with username '{username}'")
+        user.password_hash = hash_password(password)
+        result = self._users.update(user)
+        self._record(
+            AuditEntityType.USER,
+            result.id,
+            AuditAction.UPDATE,
+            {"snapshot": {"username": result.username, "password_reset": True}},
+        )
+        return result
+
     def deactivate_user(self, username: str) -> AppUser:
         user = self._users.get_by_username(username)
         if user is None:

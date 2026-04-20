@@ -3,7 +3,7 @@ from unittest.mock import MagicMock
 import pytest
 
 from compendium.config.settings import Settings
-from compendium.domain.errors import AuthError, ConflictError, NotFoundError
+from compendium.domain.errors import AuthError, BusinessRuleError, ConflictError, NotFoundError
 from compendium.domain.models import AppUser, Role
 from compendium.services.auth import AuthService, has_permission, hash_password, verify_password
 
@@ -158,3 +158,28 @@ class TestCreateUser:
         svc = AuthService(user_repo=user_repo, role_repo=role_repo, settings=_settings())
         with pytest.raises(NotFoundError):
             svc.create_user("charlie", "pw", "NonExistentRole")
+
+
+class TestSetPassword:
+    def test_updates_hash_and_allows_login(self):
+        role = _librarian_role()
+        user = _make_user(role)
+        user_repo = MagicMock()
+        user_repo.get_by_username.return_value = user
+        user_repo.update.return_value = user
+        svc = AuthService(user_repo=user_repo, role_repo=MagicMock(), settings=_settings())
+        svc.set_password("alice", "new-secret")
+        assert verify_password("new-secret", user.password_hash)
+        assert not verify_password("hunter2", user.password_hash)
+
+    def test_unknown_user_raises(self):
+        svc = _service()
+        with pytest.raises(NotFoundError):
+            svc.set_password("nobody", "x")
+
+    def test_empty_password_raises(self):
+        role = _librarian_role()
+        user = _make_user(role)
+        svc = _service(user=user)
+        with pytest.raises(BusinessRuleError):
+            svc.set_password("alice", "")

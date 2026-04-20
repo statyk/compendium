@@ -43,3 +43,8 @@ Thumbs.db
 *.db-wal
 compendium.db
 dev.db
+
+# Docker deployment
+docker/.env
+docker/certs/*
+!docker/certs/.gitkeep
