@@ -430,6 +430,27 @@ _MB_FORMAT_KEYWORDS: dict[str, str] = {
     "cd": "cd",
 }
 
+# Articles/conjunctions that users routinely omit when searching. Stripping them
+# lets "Dark Side of the Moon" match "The Dark Side of the Moon".
+_MB_STOPWORDS = {"a", "an", "the", "of", "and"}
+
+
+def _mb_build_release_query(query: str) -> str:
+    """Build a MusicBrainz release-search Lucene query from free-form user input.
+
+    Tokenises on alphanumerics (which also sidesteps Lucene escaping) and drops
+    common articles so "Dark Side of the Moon" matches "The Dark Side of the
+    Moon". Each remaining token must appear in either the release title or the
+    artist, so mixed queries like "pink floyd dark side" also work.
+    """
+    tokens = [
+        t for t in re.findall(r"[a-z0-9]+", query.lower()) if t not in _MB_STOPWORDS
+    ]
+    if not tokens:
+        escaped = query.replace('"', '\\"')
+        return f'release:"{escaped}"'
+    return " AND ".join(f"(release:{t} OR artist:{t})" for t in tokens)
+
 
 def musicbrainz_search_title(query: str, media_type: str | None = None) -> list[dict]:
     """Search MusicBrainz releases by title; returns candidate dicts for the picker UI.
@@ -438,13 +459,12 @@ def musicbrainz_search_title(query: str, media_type: str | None = None) -> list[
     releases whose first medium's format matches that type. Other media types (or
     ``None``) return unfiltered results.
     """
-    escaped = query.replace('"', '\\"')
     keyword = _MB_FORMAT_KEYWORDS.get(media_type or "")
     # When filtering, widen the initial pull so the filter has enough to work with.
-    limit = "25" if keyword else "10"
+    limit = "50" if keyword else "15"
     data = _mb_get(
         "release",
-        {"query": f'release:"{escaped}"', "fmt": "json", "limit": limit},
+        {"query": _mb_build_release_query(query), "fmt": "json", "limit": limit},
     )
     candidates: list[dict] = []
     for r in data.get("releases", []):
