@@ -35,6 +35,8 @@ services:
       COMPENDIUM_ADMIN_USERNAME: ${COMPENDIUM_ADMIN_USERNAME:-admin}
       COMPENDIUM_ADMIN_PASSWORD: ${COMPENDIUM_ADMIN_PASSWORD:-compendium}
       COMPENDIUM_ADMIN_ROLE: ${COMPENDIUM_ADMIN_ROLE:-Librarian}
+    volumes:
+      - cover_cache:/var/cache/compendium/covers
     # No ports published — nginx is the only external-facing service.
     expose:
       - "8000"
@@ -64,3 +66,4 @@ services:
 
 volumes:
   db_data:
+  cover_cache:

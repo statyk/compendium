@@ -27,13 +27,16 @@ FROM python:3.11-slim AS runtime
 
 ENV PYTHONDONTWRITEBYTECODE=1 \
     PYTHONUNBUFFERED=1 \
-    PATH="/app/.venv/bin:${PATH}"
+    PATH="/app/.venv/bin:${PATH}" \
+    COMPENDIUM_COVER_CACHE_DIR=/var/cache/compendium/covers
 
 RUN apt-get update \
     && apt-get install -y --no-install-recommends libpq5 \
     && rm -rf /var/lib/apt/lists/* \
     && groupadd --system --gid 1000 compendium \
-    && useradd --system --uid 1000 --gid compendium --home /app compendium
+    && useradd --system --uid 1000 --gid compendium --home /app compendium \
+    && mkdir -p /var/cache/compendium/covers \
+    && chown -R compendium:compendium /var/cache/compendium
 
 WORKDIR /app
 
