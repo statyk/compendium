@@ -1,3 +1,4 @@
+{% from "_macros.html" import media_pill %}
 {% if not works %}
   <p><em>{% if q %}No results for "{{ q }}".{% else %}No works in catalog yet.{% endif %}</em></p>
 {% else %}
@@ -17,7 +18,7 @@
         {% for wc in work.creators %}{{ wc.creator.display_name }}{% if not loop.last %}, {% endif %}{% endfor %}
       {% endif %}
       {% if work.publication_year %}({{ work.publication_year }}){% endif %}
-      <small>{{ work.media_type.display_name }}</small>
+      {{ media_pill(work.media_type) }}
     </div>
   </li>
   {% endfor %}

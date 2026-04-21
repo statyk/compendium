@@ -1,4 +1,5 @@
 {% extends "base.html" %}
+{% from "_macros.html" import status_pill %}
 {% block title %}Item {{ item.barcode }} — Compendium{% endblock %}
 {% block content %}
 <nav aria-label="breadcrumb">
@@ -19,7 +20,7 @@
 <dl>
   <dt>Status</dt>
   <dd id="item-status">
-    {{ item.status }}
+    {{ status_pill(item.status) }}
     {% if user and ("*" in user.role.permissions or "item.delete" in user.role.permissions) %}
       {% if item.status != "withdrawn" %}
       <form

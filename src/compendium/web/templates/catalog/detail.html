@@ -1,4 +1,5 @@
 {% extends "base.html" %}
+{% from "_macros.html" import status_pill, media_pill %}
 {% block title %}{{ work.title }} — Compendium{% endblock %}
 {% block content %}
 <nav aria-label="breadcrumb">
@@ -37,7 +38,7 @@
   <dt>Creator(s)</dt>
   <dd>{% for wc in work.creators %}{{ wc.creator.display_name }} ({{ wc.role }}){% if not loop.last %}, {% endif %}{% endfor %}</dd>
   {% endif %}
-  <dt>Type</dt><dd>{{ work.media_type.display_name }}</dd>
+  <dt>Type</dt><dd>{{ media_pill(work.media_type) }}</dd>
   {% if work.publisher %}<dt>Publisher</dt><dd>{{ work.publisher }}</dd>{% endif %}
   {% if work.publication_year %}<dt>Year</dt><dd>{{ work.publication_year }}</dd>{% endif %}
   {% if work.isbn %}<dt>ISBN</dt><dd>{{ work.isbn }}</dd>{% endif %}
@@ -76,7 +77,7 @@
     <tr>
       <td><a href="/ui/items/{{ item.barcode }}"><code>{{ item.barcode }}</code></a></td>
       <td>{{ item.branch.name }}</td>
-      <td>{{ item.status }}</td>
+      <td>{{ status_pill(item.status) }}</td>
       <td>{{ item.call_number or "—" }}</td>
     </tr>
     {% endfor %}

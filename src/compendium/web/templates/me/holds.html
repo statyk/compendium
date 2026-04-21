@@ -1,4 +1,5 @@
 {% extends "base.html" %}
+{% from "_macros.html" import status_pill %}
 {% block title %}My Holds — Compendium{% endblock %}
 {% block content %}
 <h2>My Holds</h2>
@@ -13,7 +14,7 @@
     {% for hold in holds %}
     <tr id="hold-{{ hold.id }}">
       <td><a href="/ui/catalog/{{ hold.work_id }}">{{ hold.work.title }}</a></td>
-      <td>{{ hold.status }}</td>
+      <td>{{ status_pill(hold.status) }}</td>
       <td>{{ hold.expires_at.strftime("%Y-%m-%d") if hold.expires_at else "—" }}</td>
       <td>
         <form

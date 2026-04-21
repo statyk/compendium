@@ -1,0 +1,7 @@
+{% macro status_pill(value) -%}
+<span class="pill pill-{{ value }}">{{ value | replace("_", " ") }}</span>
+{%- endmacro %}
+
+{% macro media_pill(media_type) -%}
+<span class="pill pill-{{ media_type.code }}">{{ media_type.display_name }}</span>
+{%- endmacro %}

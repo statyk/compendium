@@ -60,6 +60,38 @@
     .work-list .work-entry { flex: 1; min-width: 0; }
     .work-header { display: flex; gap: 1.5rem; align-items: flex-start; margin-bottom: 1rem; }
     .work-header .work-header-text { flex: 1; min-width: 0; }
+    .pill {
+      display: inline-block;
+      padding: 0.1rem 0.55rem;
+      border-radius: 999px;
+      font-size: 0.75rem;
+      font-weight: 500;
+      line-height: 1.5;
+      white-space: nowrap;
+      vertical-align: middle;
+      background: var(--pico-muted-border-color);
+      color: var(--pico-color);
+      text-transform: capitalize;
+    }
+    /* Pastel bg + dark fg pairs chosen to stay readable on both light and
+       dark page backgrounds — the pill is an island, so contrast is between
+       its own bg and fg, not the surrounding page. */
+    .pill-available   { background: #d1fadf; color: #036b44; }
+    .pill-checked_out { background: #fef3c7; color: #92400e; }
+    .pill-on_hold     { background: #d6ecff; color: #0353a4; }
+    .pill-lost        { background: #fee2e2; color: #991b1b; }
+    .pill-damaged     { background: #ffedd5; color: #9a3412; }
+    .pill-withdrawn   { background: #e5e7eb; color: #374151; }
+    .pill-waiting     { background: #fef3c7; color: #92400e; }
+    .pill-fulfilled   { background: #e5e7eb; color: #374151; }
+    .pill-cancelled   { background: #e5e7eb; color: #374151; }
+    .pill-expired     { background: #fee2e2; color: #991b1b; }
+    .pill-book        { background: #d6ecff; color: #0353a4; }
+    .pill-vinyl       { background: #ede9fe; color: #5b21b6; }
+    .pill-cd          { background: #cffafe; color: #0e7490; }
+    .pill-dvd         { background: #ffedd5; color: #9a3412; }
+    .pill-bluray      { background: #e0e7ff; color: #3730a3; }
+    .pill-vhs         { background: #e5e7eb; color: #374151; }
   </style>
 </head>
 <body>
