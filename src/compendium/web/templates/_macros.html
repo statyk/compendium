@@ -5,3 +5,7 @@
 {% macro media_pill(media_type) -%}
 <span class="pill pill-{{ media_type.code }}">{{ media_type.display_name }}</span>
 {%- endmacro %}
+
+{% macro cover_url(raw) -%}
+/ui/covers?url={{ raw | urlencode }}
+{%- endmacro %}

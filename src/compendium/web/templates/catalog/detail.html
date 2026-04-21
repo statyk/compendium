@@ -1,5 +1,5 @@
 {% extends "base.html" %}
-{% from "_macros.html" import status_pill, media_pill %}
+{% from "_macros.html" import status_pill, media_pill, cover_url %}
 {% block title %}{{ work.title }} — Compendium{% endblock %}
 {% block content %}
 <nav aria-label="breadcrumb">
@@ -12,7 +12,7 @@
 <div class="work-header">
   <div class="cover-thumb cover-thumb-lg" aria-hidden="true">
     {% if work.cover_image_url %}
-    <img src="{{ work.cover_image_url }}" alt="" loading="lazy">
+    <img src="{{ cover_url(work.cover_image_url) }}" alt="" loading="lazy">
     {% endif %}
   </div>
   <div class="work-header-text">

@@ -66,3 +66,23 @@ def prune_audit_log(
             return
         count = repo.delete_older_than(cutoff)
         typer.echo(f"Pruned {count} audit row(s) older than {days} day(s).")
+
+
+@app.command("prune-cover-cache")
+def prune_cover_cache(
+    max_mb: int = typer.Option(
+        500, "--max-mb",
+        help="Cache size cap in MB. Oldest files (by mtime) are deleted until under cap.",
+    ),
+) -> None:
+    """Evict oldest cover-cache files until total size ≤ --max-mb."""
+    if max_mb < 1:
+        typer.echo("Error: --max-mb must be at least 1.", err=True)
+        raise typer.Exit(1)
+    from compendium.services.covers import prune
+
+    removed, freed = prune(max_mb * 1024 * 1024)
+    if removed == 0:
+        typer.echo(f"Cover cache under {max_mb} MB cap; nothing to prune.")
+    else:
+        typer.echo(f"Pruned {removed} file(s), freed {freed // 1024} KB.")

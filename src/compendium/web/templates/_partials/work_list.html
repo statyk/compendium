@@ -1,4 +1,4 @@
-{% from "_macros.html" import media_pill %}
+{% from "_macros.html" import media_pill, cover_url %}
 {% if not works %}
   <p><em>{% if q %}No results for "{{ q }}".{% else %}No works in catalog yet.{% endif %}</em></p>
 {% else %}
@@ -8,7 +8,7 @@
   <li>
     <div class="cover-thumb" aria-hidden="true">
       {% if work.cover_image_url %}
-      <img src="{{ work.cover_image_url }}" alt="" loading="lazy">
+      <img src="{{ cover_url(work.cover_image_url) }}" alt="" loading="lazy">
       {% endif %}
     </div>
     <div class="work-entry">
