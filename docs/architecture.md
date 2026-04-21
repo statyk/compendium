@@ -119,7 +119,16 @@ Maintenance tasks are CLI subcommands invoked externally by cron, systemd timers
 The same repository code targets both backends. Dialect-specific features:
 - **FTS:** SQLite uses an FTS5 virtual table with triggers; Postgres uses a GIN index on `to_tsvector()`
 - **JSON:** `sa.JSON` maps to SQLite TEXT and Postgres JSONB
-- **Timestamps:** `DateTime(timezone=True)` maps to `timestamptz` on Postgres and ISO text on SQLite
+- **Timestamps:** stored as tz-aware UTC end-to-end. A `UtcDateTime` type decorator normalizes the SQLite round-trip (SQLite's SQLAlchemy dialect otherwise strips tzinfo); Postgres uses native `timestamptz` and is unaffected
+
+### Search behavior
+
+The catalog search box has two modes, and they match differently:
+
+- **All Fields** (default) runs full-text search — whole tokens only, with stemming. `"civil"` matches `"Civil War"`; `"civ"` does **not**.
+- **Field-scoped** (Title, Author, Publisher, …) uses substring matching. `"civ"` does match `"Civil"`.
+
+If a partial-word query returns nothing from the default box, switch to a field-scoped search. This asymmetry is a known quirk; we're leaving it as-is until real-world feedback says otherwise.
 
 ### Migrating from SQLite to Postgres
 
