@@ -8,10 +8,19 @@
   </ul>
 </nav>
 
-<hgroup>
-  <h2>{{ work.title }}</h2>
-  {% if work.subtitle %}<p>{{ work.subtitle }}</p>{% endif %}
-</hgroup>
+<div class="work-header">
+  <div class="cover-thumb cover-thumb-lg" aria-hidden="true">
+    {% if work.cover_image_url %}
+    <img src="{{ work.cover_image_url }}" alt="" loading="lazy">
+    {% endif %}
+  </div>
+  <div class="work-header-text">
+    <hgroup>
+      <h2>{{ work.title }}</h2>
+      {% if work.subtitle %}<p>{{ work.subtitle }}</p>{% endif %}
+    </hgroup>
+  </div>
+</div>
 
 {% if message %}<p class="success-banner">{{ message }}</p>{% endif %}
 {% if error %}<p class="error-banner">{{ error }}</p>{% endif %}

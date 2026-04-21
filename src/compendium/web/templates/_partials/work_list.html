@@ -2,16 +2,23 @@
   <p><em>{% if q %}No results for "{{ q }}".{% else %}No works in catalog yet.{% endif %}</em></p>
 {% else %}
   {% if not q %}<p><small><em>Browsing all works — type to search.</em></small></p>{% endif %}
-<ul>
+<ul class="work-list">
   {% for work in works %}
   <li>
-    <a href="/ui/catalog/{{ work.id }}">{{ work.title }}</a>
-    {% if work.creators %}
-      &mdash;
-      {% for wc in work.creators %}{{ wc.creator.display_name }}{% if not loop.last %}, {% endif %}{% endfor %}
-    {% endif %}
-    {% if work.publication_year %}({{ work.publication_year }}){% endif %}
-    <small>{{ work.media_type.display_name }}</small>
+    <div class="cover-thumb" aria-hidden="true">
+      {% if work.cover_image_url %}
+      <img src="{{ work.cover_image_url }}" alt="" loading="lazy">
+      {% endif %}
+    </div>
+    <div class="work-entry">
+      <a href="/ui/catalog/{{ work.id }}">{{ work.title }}</a>
+      {% if work.creators %}
+        &mdash;
+        {% for wc in work.creators %}{{ wc.creator.display_name }}{% if not loop.last %}, {% endif %}{% endfor %}
+      {% endif %}
+      {% if work.publication_year %}({{ work.publication_year }}){% endif %}
+      <small>{{ work.media_type.display_name }}</small>
+    </div>
   </li>
   {% endfor %}
 </ul>
