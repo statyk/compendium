@@ -1,9 +1,18 @@
 <!doctype html>
-<html lang="en" data-theme="light">
+{% set _theme = default_theme() %}
+<html lang="en"{% if _theme != "auto" %} data-theme="{{ _theme }}"{% endif %}>
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>{% block title %}Compendium{% endblock %}</title>
+  <script>
+    // Apply per-browser theme override before first paint to avoid FOUC.
+    try {
+      var t = localStorage.getItem('compendium_theme');
+      if (t === 'light' || t === 'dark') document.documentElement.setAttribute('data-theme', t);
+      else if (t === 'auto') document.documentElement.removeAttribute('data-theme');
+    } catch (_) {}
+  </script>
   <link rel="stylesheet" href="/ui/static/pico.min.css">
   <script src="/ui/static/htmx.min.js" defer></script>
   <style>
@@ -102,6 +111,18 @@
       </ul>
       <ul>
         <li><a href="/ui/catalog">Catalog</a></li>
+        <li>
+          <details class="dropdown" id="theme-menu">
+            <summary aria-label="Theme">
+              <span aria-hidden="true" data-theme-icon>◐</span>
+            </summary>
+            <ul>
+              <li><a href="#" data-set-theme="auto">System</a></li>
+              <li><a href="#" data-set-theme="light">Light</a></li>
+              <li><a href="#" data-set-theme="dark">Dark</a></li>
+            </ul>
+          </details>
+        </li>
         {% if user %}
           {% if has_permission(user, 'loan.checkout') %}<li><a href="/ui/circ">Circ Desk</a></li>{% endif %}
           {% if has_permission(user, 'item.create') %}<li><a href="/ui/items/new">Add Item</a></li>{% endif %}
@@ -155,6 +176,26 @@
   <footer class="container">
     <small>Compendium &mdash; library catalog system</small>
   </footer>
+  <script>
+    (function () {
+      var menu = document.getElementById('theme-menu');
+      if (!menu) return;
+      var items = menu.querySelectorAll('[data-set-theme]');
+      items.forEach(function (a) {
+        a.addEventListener('click', function (e) {
+          e.preventDefault();
+          var t = a.getAttribute('data-set-theme');
+          try { localStorage.setItem('compendium_theme', t); } catch (_) {}
+          if (t === 'light' || t === 'dark') {
+            document.documentElement.setAttribute('data-theme', t);
+          } else {
+            document.documentElement.removeAttribute('data-theme');
+          }
+          menu.open = false;
+        });
+      });
+    })();
+  </script>
   {% block scripts %}{% endblock %}
 </body>
 </html>

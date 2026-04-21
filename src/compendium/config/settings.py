@@ -1,3 +1,5 @@
+from typing import Literal
+
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 INSECURE_JWT_DEFAULT = "insecure-default-change-in-production"
@@ -24,3 +26,4 @@ class Settings(BaseSettings):
     tmdb_api_key: str | None = None
     secure_cookies: bool = False
     audit_retention_days: int | None = None
+    default_theme: Literal["light", "dark", "auto"] = "light"

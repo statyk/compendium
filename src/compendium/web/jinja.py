@@ -2,6 +2,7 @@ from pathlib import Path
 
 from fastapi.templating import Jinja2Templates
 
+from compendium.config.settings import Settings
 from compendium.services.auth import has_permission as _has_permission
 
 templates = Jinja2Templates(directory=str(Path(__file__).parent / "templates"))
@@ -13,4 +14,9 @@ def _jinja_has_permission(user, perm: str) -> bool:
     return _has_permission(user.role.permissions, perm)
 
 
+def _jinja_default_theme() -> str:
+    return Settings().default_theme
+
+
 templates.env.globals["has_permission"] = _jinja_has_permission
+templates.env.globals["default_theme"] = _jinja_default_theme

@@ -139,6 +139,19 @@ def test_login_page_renders(web_client):
     assert b"Login" in resp.content
 
 
+def test_base_template_applies_default_theme(web_client):
+    resp = web_client.get("/ui/login")
+    assert b'data-theme="light"' in resp.content
+    assert b"compendium_theme" in resp.content  # localStorage override script
+    assert b'data-set-theme="auto"' in resp.content  # theme picker present
+
+
+def test_base_template_auto_theme_omits_attribute(web_client, monkeypatch):
+    monkeypatch.setenv("COMPENDIUM_DEFAULT_THEME", "auto")
+    resp = web_client.get("/ui/login")
+    assert b"data-theme=" not in resp.content.split(b"</head>")[0]
+
+
 def test_login_bad_credentials(web_client, librarian):
     raw, signed = _make_csrf_pair()
     resp = web_client.post(
