@@ -250,6 +250,56 @@ def add_manual_item(
         typer.echo(f"  Location  : {item.location}")
 
 
+@app.command("edit")
+def edit_item(
+    barcode: str = typer.Option(..., "--barcode", help="Item barcode"),
+    location: str | None = typer.Option(
+        None, "--location", help="Shelf location. Pass empty string to clear."
+    ),
+    call_number: str | None = typer.Option(
+        None, "--call-number", help="Call number. Pass empty string to clear."
+    ),
+    condition: str | None = typer.Option(
+        None, "--condition", help="Condition note. Pass empty string to clear."
+    ),
+    notes: str | None = typer.Option(
+        None, "--notes", help="Free-form notes. Pass empty string to clear."
+    ),
+) -> None:
+    """Edit editable fields on an item (location, call number, condition, notes).
+
+    Only flags that are passed take effect — omitted flags leave the current
+    value alone. Pass an empty string (e.g. ``--location ""``) to clear a
+    field.
+    """
+    kwargs: dict[str, str | None] = {}
+    if location is not None:
+        kwargs["location"] = location
+    if call_number is not None:
+        kwargs["call_number"] = call_number
+    if condition is not None:
+        kwargs["condition"] = condition
+    if notes is not None:
+        kwargs["notes"] = notes
+    if not kwargs:
+        typer.echo("Nothing to update. Pass one of --location/--call-number/--condition/--notes.", err=True)
+        raise typer.Exit(1)
+
+    try:
+        with session_scope() as session:
+            item = _catalog(session).update_item(barcode, **kwargs)
+            typer.echo(f"\nUpdated: {item.work.title}")
+            typer.echo(f"  Barcode   : {item.barcode}")
+            typer.echo(f"  Location  : {item.location or 'not set'}")
+            typer.echo(f"  Call #    : {item.call_number or 'not set'}")
+            typer.echo(f"  Condition : {item.condition or 'not set'}")
+            if item.notes:
+                typer.echo(f"  Notes     : {item.notes}")
+    except DomainError as exc:
+        typer.echo(f"Error: {exc}", err=True)
+        raise typer.Exit(1) from exc
+
+
 @app.command("show")
 def show_item(
     barcode: str = typer.Argument(..., help="Item barcode"),

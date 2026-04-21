@@ -1,0 +1,43 @@
+{% extends "base.html" %}
+{% block title %}Edit item {{ item.barcode }} — Compendium{% endblock %}
+{% block content %}
+<nav aria-label="breadcrumb">
+  <ul>
+    <li><a href="/ui/catalog/{{ item.work_id }}">{{ item.work.title }}</a></li>
+    <li><a href="/ui/items/{{ item.barcode }}">{{ item.barcode }}</a></li>
+    <li>Edit</li>
+  </ul>
+</nav>
+
+<hgroup>
+  <h2>Edit item <code>{{ item.barcode }}</code></h2>
+  <p>{{ item.work.title }}</p>
+</hgroup>
+
+{% if error %}<p class="error-banner">{{ error }}</p>{% endif %}
+
+<form method="post" action="/ui/items/{{ item.barcode }}/edit">
+  <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+
+  <label for="location">Shelf location</label>
+  <input type="text" id="location" name="location" value="{{ item.location or '' }}">
+
+  <label for="call_number">Call number</label>
+  <input type="text" id="call_number" name="call_number" value="{{ item.call_number or '' }}">
+
+  <label for="condition">Condition</label>
+  <input type="text" id="condition" name="condition" value="{{ item.condition or '' }}" placeholder="e.g. good, worn, damaged">
+
+  <label for="notes">Notes</label>
+  <textarea id="notes" name="notes" rows="3">{{ item.notes or '' }}</textarea>
+
+  <p><small>
+    Barcode, accession #, branch, status, and the linked work are not editable
+    from this form. To withdraw a copy or move it to a different edition, use
+    the dedicated flows from the item or catalog detail pages.
+  </small></p>
+
+  <button type="submit">Save</button>
+  <a href="/ui/items/{{ item.barcode }}" role="button" class="outline secondary">Cancel</a>
+</form>
+{% endblock %}

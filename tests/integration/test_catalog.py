@@ -2,12 +2,14 @@ from unittest.mock import patch
 
 import pytest
 
-from compendium.domain.errors import ExternalLookupError, ValidationError
+from compendium.domain.errors import ExternalLookupError, NotFoundError, ValidationError
+from compendium.repositories.sql.audit_log_repository import SqlAuditLogRepository
 from compendium.repositories.sql.branch_repository import SqlBranchRepository
 from compendium.repositories.sql.creator_repository import SqlCreatorRepository
 from compendium.repositories.sql.item_repository import SqlItemRepository
 from compendium.repositories.sql.media_type_repository import SqlMediaTypeRepository
 from compendium.repositories.sql.work_repository import SqlWorkRepository
+from compendium.services.audit import AuditEntityType, AuditService
 from compendium.services.catalog import CatalogService
 
 _OPEN_LIB_DUNE = {
@@ -282,3 +284,74 @@ def test_add_manual_requires_title(session):
 def test_add_manual_rejects_bad_isbn(session):
     with pytest.raises(ValidationError):
         _service(session).add_manual("book", "Title", isbn="not-an-isbn")
+
+
+# ── Item edit ─────────────────────────────────────────────────────────────────
+
+
+def _audited_service(session):
+    return CatalogService(
+        work_repo=SqlWorkRepository(session),
+        item_repo=SqlItemRepository(session),
+        creator_repo=SqlCreatorRepository(session),
+        branch_repo=SqlBranchRepository(session),
+        media_type_repo=SqlMediaTypeRepository(session),
+        audit_svc=AuditService(SqlAuditLogRepository(session)),
+        source="test",
+    )
+
+
+def test_update_item_sets_location_and_call_number(session):
+    _work, item = _audited_service(session).add_manual("book", "X")
+    svc = _audited_service(session)
+    updated = svc.update_item(
+        item.barcode, location="Shelf A", call_number="FIC HER"
+    )
+    assert updated.location == "Shelf A"
+    assert updated.call_number == "FIC HER"
+
+
+def test_update_item_empty_string_clears_field(session):
+    _, item = _audited_service(session).add_manual("book", "X", location="Shelf A")
+    svc = _audited_service(session)
+    updated = svc.update_item(item.barcode, location="")
+    assert updated.location is None
+
+
+def test_update_item_omitted_fields_unchanged(session):
+    _, item = _audited_service(session).add_manual("book", "X", location="Shelf A")
+    svc = _audited_service(session)
+    updated = svc.update_item(item.barcode, call_number="FIC HER")
+    assert updated.location == "Shelf A"
+    assert updated.call_number == "FIC HER"
+
+
+def test_update_item_records_audit(session):
+    _, item = _audited_service(session).add_manual("book", "X")
+    svc = _audited_service(session)
+    svc.update_item(item.barcode, location="Shelf B", notes="dog-eared")
+    entries = SqlAuditLogRepository(session).list(
+        entity_type=AuditEntityType.ITEM, entity_id=item.id
+    )
+    update_entries = [e for e in entries if e.action == "update"]
+    assert len(update_entries) == 1
+    assert update_entries[0].details["changes"] == {
+        "location": "Shelf B",
+        "notes": "dog-eared",
+    }
+
+
+def test_update_item_no_changes_skips_audit(session):
+    _, item = _audited_service(session).add_manual("book", "X", location="Shelf A")
+    svc = _audited_service(session)
+    svc.update_item(item.barcode, location="Shelf A")
+    entries = SqlAuditLogRepository(session).list(
+        entity_type=AuditEntityType.ITEM, entity_id=item.id
+    )
+    assert not any(e.action == "update" for e in entries)
+
+
+def test_update_item_unknown_barcode_raises(session):
+    svc = _audited_service(session)
+    with pytest.raises(NotFoundError):
+        svc.update_item("nonexistent", location="Shelf A")

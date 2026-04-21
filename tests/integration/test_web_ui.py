@@ -476,6 +476,67 @@ def test_item_detail_404(web_client, librarian):
     assert resp.status_code == 404
 
 
+def test_item_edit_form_renders_for_librarian(web_client, librarian, work):
+    _, item = work
+    cookies = _login(web_client, "lib01")
+    resp = web_client.get(f"/ui/items/{item.barcode}/edit", cookies=cookies)
+    assert resp.status_code == 200
+    assert b"Shelf location" in resp.content
+    assert b"Call number" in resp.content
+
+
+def test_item_edit_form_denied_for_patron(web_client, patron_user, work):
+    _, item = work
+    cookies = _login(web_client, "patron01")
+    resp = web_client.get(f"/ui/items/{item.barcode}/edit", cookies=cookies)
+    assert resp.status_code == 403
+
+
+def test_item_edit_submit_updates_fields(web_client, librarian, work, web_session):
+    _, item = work
+    auth_cookies = _login(web_client, "lib01")
+    raw, signed = _make_csrf_pair()
+    resp = web_client.post(
+        f"/ui/items/{item.barcode}/edit",
+        data={
+            "location": "Shelf Z",
+            "call_number": "FIC HER",
+            "condition": "worn",
+            "notes": "cover repaired",
+            "csrf_token": raw,
+        },
+        cookies={**auth_cookies, CSRF_COOKIE: signed},
+    )
+    assert resp.status_code == 303
+    assert f"/ui/items/{item.barcode}" in resp.headers["location"]
+    assert "message=" in resp.headers["location"]
+
+    refreshed = SqlItemRepository(web_session).get_by_barcode(item.barcode)
+    assert refreshed.location == "Shelf Z"
+    assert refreshed.call_number == "FIC HER"
+    assert refreshed.condition == "worn"
+    assert refreshed.notes == "cover repaired"
+
+
+def test_item_edit_submit_unknown_barcode_404(web_client, librarian):
+    auth_cookies = _login(web_client, "lib01")
+    raw, signed = _make_csrf_pair()
+    resp = web_client.post(
+        "/ui/items/NOSUCH/edit",
+        data={"location": "X", "csrf_token": raw},
+        cookies={**auth_cookies, CSRF_COOKIE: signed},
+    )
+    assert resp.status_code == 404
+
+
+def test_item_detail_shows_edit_button_for_librarian(web_client, librarian, work):
+    _, item = work
+    cookies = _login(web_client, "lib01")
+    resp = web_client.get(f"/ui/items/{item.barcode}", cookies=cookies)
+    assert resp.status_code == 200
+    assert f"/ui/items/{item.barcode}/edit".encode() in resp.content
+
+
 def test_item_withdraw_via_web(web_client, librarian, work):
     _, item = work
     auth_cookies = _login(web_client, "lib01")

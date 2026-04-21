@@ -37,6 +37,16 @@ class ItemDetail(BaseModel):
     condition: str | None
 
 
+class ItemUpdate(BaseModel):
+    # None means "clear this field"; an omitted field means "leave it".
+    # Fields outside this set (barcode, accession, status, work_id, branch_id)
+    # are intentionally not editable via PATCH.
+    location: str | None = None
+    call_number: str | None = None
+    condition: str | None = None
+    notes: str | None = None
+
+
 class CreatePatronRequest(BaseModel):
     full_name: str
     contact_email: str | None = None

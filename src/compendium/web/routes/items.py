@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import re
 
-from fastapi import APIRouter, Depends, Form, Request
+from fastapi import APIRouter, Depends, Form, Query, Request
 from fastapi.responses import HTMLResponse, RedirectResponse
 from markupsafe import escape
 from sqlalchemy.orm import Session
@@ -41,6 +41,7 @@ router = APIRouter()
 
 _PERM_VIEW = "item.view"
 _PERM_MANAGE = "item.delete"
+_PERM_EDIT = "item.edit"
 
 _MBID_RE = re.compile(
     r"^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$", re.I
@@ -325,6 +326,8 @@ def item_create(
 def item_detail(
     barcode: str,
     request: Request,
+    message: str | None = Query(default=None),
+    error: str | None = Query(default=None),
     user: AppUser = Depends(require_web_permission(_PERM_VIEW)),
     session: Session = Depends(get_session),
 ):
@@ -339,8 +342,74 @@ def item_detail(
     return _render(
         "items/detail.html",
         request,
-        {"request": request, "user": user, "item": item},
+        {
+            "request": request,
+            "user": user,
+            "item": item,
+            "message": message,
+            "error": error,
+        },
     )
+
+
+@router.get("/items/{barcode}/edit")
+def item_edit_form(
+    barcode: str,
+    request: Request,
+    user: AppUser = Depends(require_web_permission(_PERM_EDIT)),
+    session: Session = Depends(get_session),
+):
+    item = SqlItemRepository(session).get_by_barcode(barcode)
+    if item is None:
+        return _render(
+            "error.html",
+            request,
+            {"request": request, "user": user, "message": f"Item '{barcode}' not found"},
+            status_code=404,
+        )
+    return _render(
+        "items/edit.html",
+        request,
+        {"request": request, "user": user, "item": item, "error": None},
+    )
+
+
+@router.post("/items/{barcode}/edit")
+def item_edit_submit(
+    barcode: str,
+    request: Request,
+    location: str = Form(default=""),
+    call_number: str = Form(default=""),
+    condition: str = Form(default=""),
+    notes: str = Form(default=""),
+    csrf_token: str = Form(default=""),
+    user: AppUser = Depends(require_web_permission(_PERM_EDIT)),
+    session: Session = Depends(get_session),
+):
+    check_csrf_form(request, csrf_token)
+    try:
+        _catalog_svc(session, user).update_item(
+            barcode,
+            location=location,
+            call_number=call_number,
+            condition=condition,
+            notes=notes,
+        )
+    except NotFoundError:
+        return _render(
+            "error.html",
+            request,
+            {"request": request, "user": user, "message": f"Item '{barcode}' not found"},
+            status_code=404,
+        )
+    except (BusinessRuleError, ValidationError) as exc:
+        item = SqlItemRepository(session).get_by_barcode(barcode)
+        return _render(
+            "items/edit.html",
+            request,
+            {"request": request, "user": user, "item": item, "error": str(exc)},
+        )
+    return RedirectResponse(f"/ui/items/{barcode}?message=Item+updated.", status_code=303)
 
 
 @router.post("/items/{barcode}/withdraw", response_class=HTMLResponse)

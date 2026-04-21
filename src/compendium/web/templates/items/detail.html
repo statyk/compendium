@@ -13,6 +13,9 @@
   <p>Item <code>{{ item.barcode }}</code></p>
 </hgroup>
 
+{% if message %}<p class="success-banner">{{ message }}</p>{% endif %}
+{% if error %}<p class="error-banner">{{ error }}</p>{% endif %}
+
 <dl>
   <dt>Status</dt>
   <dd id="item-status">
@@ -45,4 +48,7 @@
 <a href="/ui/catalog/{{ item.work_id }}" role="button" class="outline secondary">
   &larr; Back to work
 </a>
+{% if has_permission(user, 'item.edit') %}
+<a href="/ui/items/{{ item.barcode }}/edit" role="button" class="outline">Edit</a>
+{% endif %}
 {% endblock %}

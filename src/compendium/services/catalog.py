@@ -21,6 +21,8 @@ from compendium.services.metadata import (
     pick_classification_code,
 )
 
+_MISSING = object()
+
 _DEFAULT_CREATOR_ROLE: dict[str, str] = {
     "book": "author",
     "vinyl": "artist",
@@ -183,6 +185,53 @@ class CatalogService:
             {"snapshot": {"barcode": item.barcode, "work_id": work.id}},
         )
         return work, item
+
+    def update_item(
+        self,
+        barcode: str,
+        *,
+        location: str | None = _MISSING,  # type: ignore[assignment]
+        call_number: str | None = _MISSING,  # type: ignore[assignment]
+        condition: str | None = _MISSING,  # type: ignore[assignment]
+        notes: str | None = _MISSING,  # type: ignore[assignment]
+    ) -> Item:
+        """Update editable fields on an item. Pass a value (or None to clear);
+        omit a kwarg to leave that field untouched."""
+        item = self._items.get_by_barcode(barcode)
+        if item is None:
+            raise NotFoundError(f"No item with barcode '{barcode}'")
+
+        changes: dict[str, object | None] = {}
+        if location is not _MISSING:
+            new = location.strip() if isinstance(location, str) and location.strip() else None
+            if new != item.location:
+                item.location = new
+                changes["location"] = new
+        if call_number is not _MISSING:
+            new = call_number.strip() if isinstance(call_number, str) and call_number.strip() else None
+            if new != item.call_number:
+                item.call_number = new
+                changes["call_number"] = new
+        if condition is not _MISSING:
+            new = condition.strip() if isinstance(condition, str) and condition.strip() else None
+            if new != item.condition:
+                item.condition = new
+                changes["condition"] = new
+        if notes is not _MISSING:
+            new = notes.strip() if isinstance(notes, str) and notes.strip() else None
+            if new != item.notes:
+                item.notes = new
+                changes["notes"] = new
+
+        if not changes:
+            return item
+
+        result = self._items.update(item)
+        self._record(
+            AuditEntityType.ITEM, item.id, AuditAction.UPDATE,
+            {"barcode": item.barcode, "changes": changes},
+        )
+        return result
 
     def withdraw_item(self, barcode: str) -> Item:
         item = self._items.get_by_barcode(barcode)
