@@ -12,6 +12,7 @@ from compendium.domain.errors import (
     NotFoundError,
     ValidationError,
 )
+from compendium.domain.enums import CreatorRole
 from compendium.domain.models import AppUser
 from compendium.repositories.sql.audit_log_repository import SqlAuditLogRepository
 from compendium.repositories.sql.branch_repository import SqlBranchRepository
@@ -229,6 +230,150 @@ def work_edit_submit(
     return RedirectResponse(
         f"/ui/catalog/{work_id}?message=Work+updated.", status_code=303
     )
+
+
+@router.get("/catalog/{work_id:int}/creators")
+def work_creators_page(
+    work_id: int,
+    request: Request,
+    message: str | None = Query(default=None),
+    error: str | None = Query(default=None),
+    user: AppUser = Depends(require_web_permission("work.edit")),
+    session: Session = Depends(get_session),
+):
+    work = SqlWorkRepository(session).get(work_id)
+    if work is None:
+        return _render(
+            "error.html",
+            request,
+            {"request": request, "user": user, "message": "Work not found"},
+            status_code=404,
+        )
+    return _render(
+        "catalog/creators.html",
+        request,
+        {
+            "request": request,
+            "user": user,
+            "work": work,
+            "roles": [r.value for r in CreatorRole],
+            "message": message,
+            "error": error,
+        },
+    )
+
+
+def _current_creators(work) -> list[tuple[str, str]]:
+    return [(wc.creator.display_name, wc.role) for wc in work.creators]
+
+
+def _creators_redirect(work_id: int, *, message: str | None = None, error: str | None = None) -> RedirectResponse:
+    from urllib.parse import urlencode
+
+    params: dict[str, str] = {}
+    if message:
+        params["message"] = message
+    if error:
+        params["error"] = error
+    qs = ("?" + urlencode(params)) if params else ""
+    return RedirectResponse(f"/ui/catalog/{work_id}/creators{qs}", status_code=303)
+
+
+@router.post("/catalog/{work_id:int}/creators/add")
+def work_creator_add(
+    work_id: int,
+    request: Request,
+    name: str = Form(default=""),
+    role: str = Form(default=""),
+    csrf_token: str = Form(default=""),
+    user: AppUser = Depends(require_web_permission("work.edit")),
+    session: Session = Depends(get_session),
+):
+    check_csrf_form(request, csrf_token)
+    work = SqlWorkRepository(session).get(work_id)
+    if work is None:
+        return _render(
+            "error.html",
+            request,
+            {"request": request, "user": user, "message": "Work not found"},
+            status_code=404,
+        )
+    new_list = _current_creators(work) + [(name, role)]
+    try:
+        _catalog_svc(session, user).replace_creators(work_id, new_list)
+    except (BusinessRuleError, ValidationError) as exc:
+        return _creators_redirect(work_id, error=str(exc))
+    return _creators_redirect(work_id, message="Creator added.")
+
+
+@router.post("/catalog/{work_id:int}/creators/remove")
+def work_creator_remove(
+    work_id: int,
+    request: Request,
+    creator_id: int = Form(...),
+    role: str = Form(...),
+    csrf_token: str = Form(default=""),
+    user: AppUser = Depends(require_web_permission("work.edit")),
+    session: Session = Depends(get_session),
+):
+    check_csrf_form(request, csrf_token)
+    work = SqlWorkRepository(session).get(work_id)
+    if work is None:
+        return _render(
+            "error.html",
+            request,
+            {"request": request, "user": user, "message": "Work not found"},
+            status_code=404,
+        )
+    new_list = [
+        (wc.creator.display_name, wc.role)
+        for wc in work.creators
+        if not (wc.creator_id == creator_id and wc.role == role)
+    ]
+    try:
+        _catalog_svc(session, user).replace_creators(work_id, new_list)
+    except (BusinessRuleError, ValidationError) as exc:
+        return _creators_redirect(work_id, error=str(exc))
+    return _creators_redirect(work_id, message="Creator removed.")
+
+
+@router.post("/catalog/{work_id:int}/creators/move")
+def work_creator_move(
+    work_id: int,
+    request: Request,
+    creator_id: int = Form(...),
+    role: str = Form(...),
+    direction: str = Form(...),
+    csrf_token: str = Form(default=""),
+    user: AppUser = Depends(require_web_permission("work.edit")),
+    session: Session = Depends(get_session),
+):
+    check_csrf_form(request, csrf_token)
+    work = SqlWorkRepository(session).get(work_id)
+    if work is None:
+        return _render(
+            "error.html",
+            request,
+            {"request": request, "user": user, "message": "Work not found"},
+            status_code=404,
+        )
+    ordered = [(wc.creator_id, wc.role, wc.creator.display_name) for wc in work.creators]
+    idx = next(
+        (i for i, (cid, r, _) in enumerate(ordered) if cid == creator_id and r == role),
+        None,
+    )
+    if idx is None:
+        return _creators_redirect(work_id, error="Creator not found on this work.")
+    if direction == "up" and idx > 0:
+        ordered[idx - 1], ordered[idx] = ordered[idx], ordered[idx - 1]
+    elif direction == "down" and idx < len(ordered) - 1:
+        ordered[idx + 1], ordered[idx] = ordered[idx], ordered[idx + 1]
+    new_list = [(name, r) for _cid, r, name in ordered]
+    try:
+        _catalog_svc(session, user).replace_creators(work_id, new_list)
+    except (BusinessRuleError, ValidationError) as exc:
+        return _creators_redirect(work_id, error=str(exc))
+    return _creators_redirect(work_id, message="Order updated.")
 
 
 @router.post("/catalog/{work_id:int}/hold", response_class=HTMLResponse)

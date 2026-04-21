@@ -10,6 +10,8 @@ from compendium.repositories.sql.work_repository import SqlWorkRepository
 from compendium.services.catalog import CatalogService
 
 app = typer.Typer(help="Work (catalog title) commands.")
+creator_app = typer.Typer(help="Manage creators on a specific work.")
+app.add_typer(creator_app, name="creator")
 
 
 def _catalog(session):
@@ -122,6 +124,135 @@ def edit_work(
             if updated.classification_code:
                 scheme = updated.classification_scheme or "?"
                 typer.echo(f"  Class     : {scheme} {updated.classification_code}")
+    except NotFoundError as exc:
+        typer.echo(f"Error: {exc}", err=True)
+        raise typer.Exit(1) from exc
+    except DomainError as exc:
+        typer.echo(f"Error: {exc}", err=True)
+        raise typer.Exit(1) from exc
+
+
+def _resolve_work(session, work_id, isbn, upc):
+    from compendium.repositories.sql.work_repository import SqlWorkRepository
+
+    repo = SqlWorkRepository(session)
+    if work_id is not None:
+        return repo.get(work_id)
+    if isbn is not None:
+        return repo.get_by_isbn(isbn.strip())
+    if upc is not None:
+        return repo.get_by_upc(upc.strip())
+    return None
+
+
+def _require_one_id(work_id, isbn, upc) -> None:
+    supplied = sum(1 for v in (work_id, isbn, upc) if v is not None)
+    if supplied != 1:
+        typer.echo("Error: provide exactly one of --work-id, --isbn, --upc.", err=True)
+        raise typer.Exit(1)
+
+
+@creator_app.command("add")
+def creator_add(
+    work_id: int | None = typer.Option(None, "--work-id"),
+    isbn: str | None = typer.Option(None, "--isbn"),
+    upc: str | None = typer.Option(None, "--upc"),
+    name: str = typer.Option(..., "--name", help="Creator display name."),
+    role: str = typer.Option(..., "--role", help="Creator role (author, director, …)."),
+    position: int | None = typer.Option(None, "--position", help="0-based slot to insert at; omit to append."),
+) -> None:
+    """Add a creator to a work."""
+    _require_one_id(work_id, isbn, upc)
+    try:
+        with session_scope() as session:
+            work = _resolve_work(session, work_id, isbn, upc)
+            if work is None:
+                typer.echo("Error: work not found.", err=True)
+                raise typer.Exit(1)
+            current = [(wc.creator.display_name, wc.role) for wc in work.creators]
+            entry = (name, role)
+            if position is None or position >= len(current):
+                new_list = current + [entry]
+            else:
+                pos = max(position, 0)
+                new_list = current[:pos] + [entry] + current[pos:]
+            updated = _catalog(session).replace_creators(work.id, new_list)
+            typer.echo(
+                f"Creators for {updated.title}: "
+                + ", ".join(f"{wc.creator.display_name} ({wc.role})" for wc in updated.creators)
+            )
+    except NotFoundError as exc:
+        typer.echo(f"Error: {exc}", err=True)
+        raise typer.Exit(1) from exc
+    except DomainError as exc:
+        typer.echo(f"Error: {exc}", err=True)
+        raise typer.Exit(1) from exc
+
+
+@creator_app.command("remove")
+def creator_remove(
+    work_id: int | None = typer.Option(None, "--work-id"),
+    isbn: str | None = typer.Option(None, "--isbn"),
+    upc: str | None = typer.Option(None, "--upc"),
+    name: str = typer.Option(..., "--name"),
+    role: str = typer.Option(..., "--role"),
+) -> None:
+    """Remove a creator from a work."""
+    _require_one_id(work_id, isbn, upc)
+    try:
+        with session_scope() as session:
+            work = _resolve_work(session, work_id, isbn, upc)
+            if work is None:
+                typer.echo("Error: work not found.", err=True)
+                raise typer.Exit(1)
+            new_list = [
+                (wc.creator.display_name, wc.role)
+                for wc in work.creators
+                if not (wc.creator.display_name == name and wc.role == role)
+            ]
+            if len(new_list) == len(work.creators):
+                typer.echo(f"Error: no creator '{name}' with role '{role}' on this work.", err=True)
+                raise typer.Exit(1)
+            _catalog(session).replace_creators(work.id, new_list)
+            typer.echo(f"Removed {name} ({role}).")
+    except NotFoundError as exc:
+        typer.echo(f"Error: {exc}", err=True)
+        raise typer.Exit(1) from exc
+    except DomainError as exc:
+        typer.echo(f"Error: {exc}", err=True)
+        raise typer.Exit(1) from exc
+
+
+@creator_app.command("set-order")
+def creator_set_order(
+    work_id: int | None = typer.Option(None, "--work-id"),
+    isbn: str | None = typer.Option(None, "--isbn"),
+    upc: str | None = typer.Option(None, "--upc"),
+    name: str = typer.Option(..., "--name"),
+    role: str = typer.Option(..., "--role"),
+    position: int = typer.Option(..., "--position", help="0-based target position."),
+) -> None:
+    """Move a creator to a specific position (0-based)."""
+    _require_one_id(work_id, isbn, upc)
+    try:
+        with session_scope() as session:
+            work = _resolve_work(session, work_id, isbn, upc)
+            if work is None:
+                typer.echo("Error: work not found.", err=True)
+                raise typer.Exit(1)
+            current = [(wc.creator.display_name, wc.role) for wc in work.creators]
+            idx = next(
+                (i for i, (n, r) in enumerate(current) if n == name and r == role),
+                None,
+            )
+            if idx is None:
+                typer.echo(f"Error: no creator '{name}' with role '{role}' on this work.", err=True)
+                raise typer.Exit(1)
+            entry = current.pop(idx)
+            target = max(0, min(position, len(current)))
+            current.insert(target, entry)
+            _catalog(session).replace_creators(work.id, current)
+            typer.echo("Order updated.")
     except NotFoundError as exc:
         typer.echo(f"Error: {exc}", err=True)
         raise typer.Exit(1) from exc

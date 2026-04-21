@@ -1,6 +1,6 @@
 from sqlalchemy.orm import Session
 
-from compendium.domain.models import Creator
+from compendium.domain.models import Creator, Work, WorkCreator
 
 
 class SqlCreatorRepository:
@@ -12,5 +12,21 @@ class SqlCreatorRepository:
         self._s.flush()
         return creator
 
+    def get(self, id: int) -> Creator | None:
+        return self._s.get(Creator, id)
+
     def get_by_sort_name(self, sort_name: str) -> Creator | None:
         return self._s.query(Creator).filter_by(sort_name=sort_name).first()
+
+    def update(self, creator: Creator) -> Creator:
+        self._s.flush()
+        return creator
+
+    def list_works(self, creator_id: int) -> list[Work]:
+        return (
+            self._s.query(Work)
+            .join(WorkCreator, WorkCreator.work_id == Work.id)
+            .filter(WorkCreator.creator_id == creator_id)
+            .distinct()
+            .all()
+        )

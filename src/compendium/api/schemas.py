@@ -71,6 +71,27 @@ class WorkUpdate(BaseModel):
     cover_image_url: str | None = None
 
 
+class CreatorInput(BaseModel):
+    name: str
+    role: str
+
+
+class WorkCreatorsReplace(BaseModel):
+    creators: list[CreatorInput]
+
+
+class CreatorSummary(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    id: int
+    display_name: str
+    sort_name: str
+
+
+class CreatorRename(BaseModel):
+    display_name: str
+
+
 class ItemUpdate(BaseModel):
     # None means "clear this field"; an omitted field means "leave it".
     # Fields outside this set (barcode, accession, status, work_id, branch_id)

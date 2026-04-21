@@ -11,6 +11,7 @@ class AuditEntityType:
     USER = "user"
     POLICY = "policy"
     ROLE = "role"
+    CREATOR = "creator"
 
 
 class AuditAction:

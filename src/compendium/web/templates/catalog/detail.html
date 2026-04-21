@@ -17,7 +17,10 @@
 {% if error %}<p class="error-banner">{{ error }}</p>{% endif %}
 
 {% if has_permission(user, 'work.edit') %}
-<p><a href="/ui/catalog/{{ work.id }}/edit" role="button" class="outline">Edit work</a></p>
+<p>
+  <a href="/ui/catalog/{{ work.id }}/edit" role="button" class="outline">Edit work</a>
+  <a href="/ui/catalog/{{ work.id }}/creators" role="button" class="outline">Manage creators</a>
+</p>
 {% endif %}
 
 <dl>

@@ -1,4 +1,4 @@
-from compendium.domain.enums import ItemStatus
+from compendium.domain.enums import CreatorRole, ItemStatus
 from compendium.domain.errors import (
     BusinessRuleError,
     ExternalLookupError,
@@ -329,6 +329,101 @@ class CatalogService:
         self._record(
             AuditEntityType.ITEM, item.id, AuditAction.UPDATE,
             {"barcode": item.barcode, "changes": changes},
+        )
+        return result
+
+    def replace_creators(
+        self,
+        work_id: int,
+        creators: list[tuple[str, str]],
+    ) -> Work:
+        """Replace a work's full creators list.
+
+        ``creators`` is ``[(display_name, role), ...]`` in the desired display
+        order. An empty list removes all creators. Roles must be valid
+        ``CreatorRole`` values. Duplicates by ``(sort_name, role)`` are rejected
+        (the composite PK forbids them).
+        """
+        work = self._works.get(work_id)
+        if work is None:
+            raise NotFoundError(f"No Work with id={work_id}")
+
+        valid_roles = {r.value for r in CreatorRole}
+        cleaned: list[tuple[str, str]] = []
+        seen_keys: set[tuple[str, str]] = set()
+        for name, role in creators:
+            name_clean = (name or "").strip()
+            if not name_clean:
+                raise ValidationError("Creator name is required.")
+            if role not in valid_roles:
+                raise ValidationError(
+                    f"Unknown role '{role}'. Valid roles: {sorted(valid_roles)}"
+                )
+            key = (_to_sort_name(name_clean), role)
+            if key in seen_keys:
+                raise ValidationError(
+                    f"Duplicate creator ({name_clean}, {role}) in list."
+                )
+            seen_keys.add(key)
+            cleaned.append((name_clean, role))
+
+        old_list = [(wc.creator.display_name, wc.role) for wc in work.creators]
+        new_list = cleaned
+        if old_list == new_list:
+            return work
+
+        work.creators.clear()
+        for order, (name, role) in enumerate(cleaned):
+            creator = self._get_or_create_creator(name)
+            work.creators.append(
+                WorkCreator(creator=creator, role=role, display_order=order)
+            )
+
+        self._rebuild_search_text(work)
+        result = self._works.update(work)
+        self._record(
+            AuditEntityType.WORK, work.id, AuditAction.UPDATE,
+            {"title": work.title, "creators": {"old": old_list, "new": new_list}},
+        )
+        return result
+
+    def update_creator(
+        self,
+        creator_id: int,
+        *,
+        display_name: str,
+    ) -> Creator:
+        """Rename a Creator. Fans out a search_text rebuild to all linked works."""
+        creator = self._creators.get(creator_id)
+        if creator is None:
+            raise NotFoundError(f"No Creator with id={creator_id}")
+        new_display = (display_name or "").strip()
+        if not new_display:
+            raise ValidationError("Display name is required.")
+        if new_display == creator.display_name:
+            return creator
+
+        new_sort = _to_sort_name(new_display)
+        if new_sort != creator.sort_name:
+            clash = self._creators.get_by_sort_name(new_sort)
+            if clash is not None and clash.id != creator.id:
+                raise BusinessRuleError(
+                    f"Another creator already exists with sort_name '{new_sort}'. "
+                    "Merging creators is not supported in this version."
+                )
+
+        old_display = creator.display_name
+        creator.display_name = new_display
+        creator.sort_name = new_sort
+        result = self._creators.update(creator)
+
+        for work in self._creators.list_works(creator.id):
+            self._rebuild_search_text(work)
+            self._works.update(work)
+
+        self._record(
+            AuditEntityType.CREATOR, creator.id, AuditAction.UPDATE,
+            {"changes": {"display_name": {"old": old_display, "new": new_display}}},
         )
         return result
 

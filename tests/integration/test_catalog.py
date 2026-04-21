@@ -444,3 +444,141 @@ def test_update_work_unknown_id_raises(session):
     svc = _audited_service(session)
     with pytest.raises(NotFoundError):
         svc.update_work(99999, title="X")
+
+
+# ── Creators edit ─────────────────────────────────────────────────────────────
+
+
+def test_replace_creators_add_and_remove(session):
+    svc = _audited_service(session)
+    work, _ = svc.add_manual("book", "T", authors=["Jane Doe"])
+
+    svc.replace_creators(work.id, [("John Roe", "author"), ("Ed Itor", "editor")])
+
+    names_roles = [(wc.creator.display_name, wc.role) for wc in work.creators]
+    assert names_roles == [("John Roe", "author"), ("Ed Itor", "editor")]
+    assert [wc.display_order for wc in work.creators] == [0, 1]
+
+
+def test_replace_creators_same_person_two_roles(session):
+    svc = _audited_service(session)
+    work, _ = svc.add_manual("book", "T")
+    svc.replace_creators(
+        work.id, [("Jane Doe", "author"), ("Jane Doe", "editor")]
+    )
+    assert len(work.creators) == 2
+    assert {wc.role for wc in work.creators} == {"author", "editor"}
+    # Should share the same Creator row
+    assert work.creators[0].creator_id == work.creators[1].creator_id
+
+
+def test_replace_creators_empty_list_removes_all(session):
+    svc = _audited_service(session)
+    work, _ = svc.add_manual("book", "T", authors=["Jane Doe", "John Roe"])
+    svc.replace_creators(work.id, [])
+    assert work.creators == []
+
+
+def test_replace_creators_rejects_unknown_role(session):
+    svc = _audited_service(session)
+    work, _ = svc.add_manual("book", "T")
+    with pytest.raises(ValidationError):
+        svc.replace_creators(work.id, [("Jane Doe", "bogus")])
+
+
+def test_replace_creators_rejects_empty_name(session):
+    svc = _audited_service(session)
+    work, _ = svc.add_manual("book", "T")
+    with pytest.raises(ValidationError):
+        svc.replace_creators(work.id, [("  ", "author")])
+
+
+def test_replace_creators_rejects_duplicate(session):
+    svc = _audited_service(session)
+    work, _ = svc.add_manual("book", "T")
+    with pytest.raises(ValidationError):
+        svc.replace_creators(
+            work.id, [("Jane Doe", "author"), ("Jane Doe", "author")]
+        )
+
+
+def test_replace_creators_rebuilds_search_text(session):
+    svc = _audited_service(session)
+    work, _ = svc.add_manual("book", "Some Title", authors=["Old Author"])
+    svc.replace_creators(work.id, [("New Author", "author")])
+    assert "New Author" in (work.search_text or "")
+    assert "Old Author" not in (work.search_text or "")
+
+
+def test_replace_creators_no_changes_skips_audit(session):
+    svc = _audited_service(session)
+    work, _ = svc.add_manual("book", "T", authors=["Jane Doe"])
+    svc.replace_creators(work.id, [("Jane Doe", "author")])
+    update_entries = [
+        e for e in SqlAuditLogRepository(session).list(
+            entity_type=AuditEntityType.WORK, entity_id=work.id
+        )
+        if e.action == "update"
+    ]
+    assert update_entries == []
+
+
+def test_replace_creators_records_audit_diff(session):
+    svc = _audited_service(session)
+    work, _ = svc.add_manual("book", "T", authors=["Jane Doe"])
+    svc.replace_creators(work.id, [("John Roe", "author")])
+    update_entries = [
+        e for e in SqlAuditLogRepository(session).list(
+            entity_type=AuditEntityType.WORK, entity_id=work.id
+        )
+        if e.action == "update"
+    ]
+    assert len(update_entries) == 1
+    diff = update_entries[0].details["creators"]
+    assert diff["old"] == [("Jane Doe", "author")] or diff["old"] == [["Jane Doe", "author"]]
+    assert diff["new"] == [("John Roe", "author")] or diff["new"] == [["John Roe", "author"]]
+
+
+def test_replace_creators_unknown_work_raises(session):
+    svc = _audited_service(session)
+    with pytest.raises(NotFoundError):
+        svc.replace_creators(99999, [("Jane Doe", "author")])
+
+
+def test_update_creator_rename_fans_out_search_text(session):
+    svc = _audited_service(session)
+    w1, _ = svc.add_manual("book", "A", authors=["Frank Herbert"])
+    w2, _ = svc.add_manual("book", "B", authors=["Frank Herbert"])
+    creator_id = w1.creators[0].creator_id
+
+    svc.update_creator(creator_id, display_name="F. Herbert")
+
+    assert "F. Herbert" in (w1.search_text or "")
+    assert "F. Herbert" in (w2.search_text or "")
+    assert "Frank Herbert" not in (w1.search_text or "")
+
+
+def test_update_creator_rename_rejects_empty(session):
+    svc = _audited_service(session)
+    work, _ = svc.add_manual("book", "A", authors=["Frank Herbert"])
+    creator_id = work.creators[0].creator_id
+    with pytest.raises(ValidationError):
+        svc.update_creator(creator_id, display_name="   ")
+
+
+def test_update_creator_rename_conflict_with_existing(session):
+    svc = _audited_service(session)
+    w1, _ = svc.add_manual("book", "A", authors=["Frank Herbert"])
+    svc.add_manual("book", "B", authors=["George RR Martin"])
+    herbert_id = w1.creators[0].creator_id
+    # Renaming Herbert to produce sort_name "Martin, George RR" should clash.
+    from compendium.domain.errors import BusinessRuleError
+
+    with pytest.raises(BusinessRuleError):
+        svc.update_creator(herbert_id, display_name="George RR Martin")
+
+
+def test_update_creator_unknown_raises(session):
+    svc = _audited_service(session)
+    with pytest.raises(NotFoundError):
+        svc.update_creator(99999, display_name="X")

@@ -612,6 +612,134 @@ def test_item_detail_shows_edit_button_for_librarian(web_client, librarian, work
     assert f"/ui/items/{item.barcode}/edit".encode() in resp.content
 
 
+# ── Creators editing ──────────────────────────────────────────────────────────
+
+
+def test_work_creators_page_renders_for_librarian(web_client, librarian, work):
+    w, _ = work
+    cookies = _login(web_client, "lib01")
+    resp = web_client.get(f"/ui/catalog/{w.id}/creators", cookies=cookies)
+    assert resp.status_code == 200
+    assert b"Manage creators" in resp.content
+    assert b"Frank Herbert" in resp.content
+
+
+def test_work_creators_page_denied_for_patron(web_client, patron_user, work):
+    w, _ = work
+    cookies = _login(web_client, "patron01")
+    resp = web_client.get(f"/ui/catalog/{w.id}/creators", cookies=cookies)
+    assert resp.status_code == 403
+
+
+def test_work_creators_add(web_client, librarian, work, web_session):
+    w, _ = work
+    auth = _login(web_client, "lib01")
+    raw, signed = _make_csrf_pair()
+    resp = web_client.post(
+        f"/ui/catalog/{w.id}/creators/add",
+        data={"name": "Kevin J. Anderson", "role": "author", "csrf_token": raw},
+        cookies={**auth, CSRF_COOKIE: signed},
+    )
+    assert resp.status_code == 303
+    refreshed = SqlWorkRepository(web_session).get(w.id)
+    names = [wc.creator.display_name for wc in refreshed.creators]
+    assert "Kevin J. Anderson" in names
+
+
+def test_work_creators_remove(web_client, librarian, work, web_session):
+    w, _ = work
+    creator_id = w.creators[0].creator_id
+    auth = _login(web_client, "lib01")
+    raw, signed = _make_csrf_pair()
+    resp = web_client.post(
+        f"/ui/catalog/{w.id}/creators/remove",
+        data={"creator_id": str(creator_id), "role": "author", "csrf_token": raw},
+        cookies={**auth, CSRF_COOKIE: signed},
+    )
+    assert resp.status_code == 303
+    refreshed = SqlWorkRepository(web_session).get(w.id)
+    assert refreshed.creators == []
+
+
+def test_work_creators_move_down(web_client, librarian, work, web_session):
+    w, _ = work
+    svc = CatalogService(
+        work_repo=SqlWorkRepository(web_session),
+        item_repo=SqlItemRepository(web_session),
+        creator_repo=SqlCreatorRepository(web_session),
+        branch_repo=SqlBranchRepository(web_session),
+        media_type_repo=SqlMediaTypeRepository(web_session),
+    )
+    svc.replace_creators(
+        w.id, [("Frank Herbert", "author"), ("Brian Herbert", "author")]
+    )
+    web_session.flush()
+    first_cid = w.creators[0].creator_id
+    auth = _login(web_client, "lib01")
+    raw, signed = _make_csrf_pair()
+    resp = web_client.post(
+        f"/ui/catalog/{w.id}/creators/move",
+        data={
+            "creator_id": str(first_cid),
+            "role": "author",
+            "direction": "down",
+            "csrf_token": raw,
+        },
+        cookies={**auth, CSRF_COOKIE: signed},
+    )
+    assert resp.status_code == 303
+    refreshed = SqlWorkRepository(web_session).get(w.id)
+    names = [wc.creator.display_name for wc in refreshed.creators]
+    assert names == ["Brian Herbert", "Frank Herbert"]
+
+
+def test_work_creators_add_bad_role_shows_error(web_client, librarian, work):
+    w, _ = work
+    auth = _login(web_client, "lib01")
+    raw, signed = _make_csrf_pair()
+    resp = web_client.post(
+        f"/ui/catalog/{w.id}/creators/add",
+        data={"name": "Jane", "role": "bogus", "csrf_token": raw},
+        cookies={**auth, CSRF_COOKIE: signed},
+        follow_redirects=True,
+    )
+    assert resp.status_code == 200
+    assert b"Unknown role" in resp.content
+
+
+def test_creator_rename_form_renders_for_librarian(web_client, librarian, work):
+    w, _ = work
+    creator_id = w.creators[0].creator_id
+    cookies = _login(web_client, "lib01")
+    resp = web_client.get(f"/ui/creators/{creator_id}/edit", cookies=cookies)
+    assert resp.status_code == 200
+    assert b"Rename creator" in resp.content
+    assert b"Frank Herbert" in resp.content
+
+
+def test_creator_rename_submit_updates_everywhere(web_client, librarian, work, web_session):
+    w, _ = work
+    creator_id = w.creators[0].creator_id
+    auth = _login(web_client, "lib01")
+    raw, signed = _make_csrf_pair()
+    resp = web_client.post(
+        f"/ui/creators/{creator_id}/edit",
+        data={"display_name": "F. Herbert", "csrf_token": raw},
+        cookies={**auth, CSRF_COOKIE: signed},
+    )
+    assert resp.status_code == 303
+    refreshed = SqlWorkRepository(web_session).get(w.id)
+    assert refreshed.creators[0].creator.display_name == "F. Herbert"
+
+
+def test_work_detail_shows_manage_creators_link(web_client, librarian, work):
+    w, _ = work
+    cookies = _login(web_client, "lib01")
+    resp = web_client.get(f"/ui/catalog/{w.id}", cookies=cookies)
+    assert resp.status_code == 200
+    assert f"/ui/catalog/{w.id}/creators".encode() in resp.content
+
+
 def test_item_withdraw_via_web(web_client, librarian, work):
     _, item = work
     auth_cookies = _login(web_client, "lib01")

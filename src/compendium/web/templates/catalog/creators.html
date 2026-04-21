@@ -1,0 +1,78 @@
+{% extends "base.html" %}
+{% block title %}Creators — {{ work.title }} — Compendium{% endblock %}
+{% block content %}
+<nav aria-label="breadcrumb">
+  <ul>
+    <li><a href="/ui/catalog">Catalog</a></li>
+    <li><a href="/ui/catalog/{{ work.id }}">{{ work.title }}</a></li>
+    <li>Creators</li>
+  </ul>
+</nav>
+
+<hgroup>
+  <h2>Manage creators</h2>
+  <p>{{ work.title }}</p>
+</hgroup>
+
+{% if message %}<p class="success-banner">{{ message }}</p>{% endif %}
+{% if error %}<p class="error-banner">{{ error }}</p>{% endif %}
+
+{% if work.creators %}
+<table>
+  <thead>
+    <tr><th>Name</th><th>Role</th><th style="width:1%;">Order</th><th style="width:1%;"></th></tr>
+  </thead>
+  <tbody>
+    {% for wc in work.creators %}
+    <tr>
+      <td><a href="/ui/creators/{{ wc.creator.id }}/edit">{{ wc.creator.display_name }}</a></td>
+      <td>{{ wc.role }}</td>
+      <td>
+        <form method="post" action="/ui/catalog/{{ work.id }}/creators/move" style="display:inline;">
+          <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+          <input type="hidden" name="creator_id" value="{{ wc.creator_id }}">
+          <input type="hidden" name="role" value="{{ wc.role }}">
+          <button type="submit" name="direction" value="up" class="outline" {% if loop.first %}disabled{% endif %}>&uarr;</button>
+          <button type="submit" name="direction" value="down" class="outline" {% if loop.last %}disabled{% endif %}>&darr;</button>
+        </form>
+      </td>
+      <td>
+        <form method="post" action="/ui/catalog/{{ work.id }}/creators/remove" style="display:inline;">
+          <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+          <input type="hidden" name="creator_id" value="{{ wc.creator_id }}">
+          <input type="hidden" name="role" value="{{ wc.role }}">
+          <button type="submit" class="outline secondary">Remove</button>
+        </form>
+      </td>
+    </tr>
+    {% endfor %}
+  </tbody>
+</table>
+{% else %}
+<p><em>No creators yet.</em></p>
+{% endif %}
+
+<h3>Add creator</h3>
+<form method="post" action="/ui/catalog/{{ work.id }}/creators/add">
+  <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+  <div class="grid">
+    <div>
+      <label for="name">Name</label>
+      <input type="text" id="name" name="name" required>
+    </div>
+    <div>
+      <label for="role">Role</label>
+      <select id="role" name="role" required>
+        {% for r in roles %}<option value="{{ r }}">{{ r }}</option>{% endfor %}
+      </select>
+    </div>
+  </div>
+  <button type="submit">Add</button>
+  <a href="/ui/catalog/{{ work.id }}" role="button" class="outline secondary">Done</a>
+</form>
+
+<p><small>
+  Renaming a creator affects every work they appear on — click their name above to
+  rename. Merging duplicate creator rows is not supported yet.
+</small></p>
+{% endblock %}

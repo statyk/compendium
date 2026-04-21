@@ -65,9 +65,10 @@
   <input type="url" id="cover_image_url" name="cover_image_url" value="{{ work.cover_image_url or '' }}">
 
   <p><small>
-    ISBN, UPC, media type, creators, and raw external metadata are not editable
+    ISBN, UPC, media type, and raw external metadata are not editable
     from this form. Fixing those typically requires a merge/split flow that
-    Compendium doesn't offer yet.
+    Compendium doesn't offer yet. To add, remove, reorder, or rename creators, see
+    <a href="/ui/catalog/{{ work.id }}/creators">Manage creators</a>.
   </small></p>
 
   <button type="submit">Save</button>

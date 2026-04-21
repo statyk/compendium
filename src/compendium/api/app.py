@@ -6,7 +6,7 @@ from fastapi.responses import HTMLResponse, RedirectResponse
 from fastapi.staticfiles import StaticFiles
 from starlette.middleware.base import BaseHTTPMiddleware
 
-from compendium.api.routes import audit, auth, branches, holds, items, loans, me, patrons, policies, users, works
+from compendium.api.routes import audit, auth, branches, creators, holds, items, loans, me, patrons, policies, users, works
 from compendium.config.settings import INSECURE_JWT_DEFAULT
 from compendium.db.engine import get_settings
 from compendium.web.app import NoPatronAccountException, RequiresLoginException, create_web_router
@@ -53,6 +53,7 @@ def create_app() -> FastAPI:
     app.include_router(audit.router, prefix="/audit", tags=["audit"])
     app.include_router(auth.router, prefix="/auth", tags=["auth"])
     app.include_router(works.router, prefix="/works", tags=["works"])
+    app.include_router(creators.router, prefix="/creators", tags=["creators"])
     app.include_router(items.router, prefix="/items", tags=["items"])
     app.include_router(patrons.router, prefix="/patrons", tags=["patrons"])
     app.include_router(loans.router, prefix="/loans", tags=["loans"])

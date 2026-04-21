@@ -1,0 +1,36 @@
+{% extends "base.html" %}
+{% block title %}Rename {{ creator.display_name }} — Compendium{% endblock %}
+{% block content %}
+<nav aria-label="breadcrumb">
+  <ul>
+    <li><a href="/ui/catalog">Catalog</a></li>
+    <li>Rename creator</li>
+  </ul>
+</nav>
+
+<hgroup>
+  <h2>Rename creator</h2>
+  <p>Currently <strong>{{ creator.display_name }}</strong></p>
+</hgroup>
+
+{% if error %}<p class="error-banner">{{ error }}</p>{% endif %}
+
+<form method="post" action="/ui/creators/{{ creator.id }}/edit">
+  <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+  <label for="display_name">Display name</label>
+  <input type="text" id="display_name" name="display_name" value="{{ creator.display_name }}" required>
+
+  <p><small>
+    This change will update every work this creator appears on
+    ({{ work_count }} work{{ '' if work_count == 1 else 's' }}).
+    Merging two creators into one is not supported yet.
+  </small></p>
+
+  <button type="submit">Save</button>
+  {% if return_to %}
+  <a href="{{ return_to }}" role="button" class="outline secondary">Cancel</a>
+  {% else %}
+  <a href="/ui/catalog" role="button" class="outline secondary">Cancel</a>
+  {% endif %}
+</form>
+{% endblock %}

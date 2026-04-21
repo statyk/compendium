@@ -2,7 +2,12 @@ from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy.orm import Session
 
 from compendium.api.deps import get_optional_user, require_permission
-from compendium.api.schemas import WorkDetail, WorkSummary, WorkUpdate
+from compendium.api.schemas import (
+    WorkCreatorsReplace,
+    WorkDetail,
+    WorkSummary,
+    WorkUpdate,
+)
 from compendium.db.engine import get_settings
 from compendium.db.session import get_session
 from compendium.domain.errors import (
@@ -59,6 +64,23 @@ def update_work(
     kwargs = payload.model_dump(include=payload.model_fields_set)
     try:
         work = _catalog(session, user).update_work(work_id, **kwargs)
+    except NotFoundError as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
+    except (BusinessRuleError, ValidationError) as exc:
+        raise HTTPException(status_code=422, detail=str(exc)) from exc
+    return WorkDetail.model_validate(work)
+
+
+@router.put("/{work_id}/creators", response_model=WorkDetail)
+def replace_work_creators(
+    work_id: int,
+    payload: WorkCreatorsReplace,
+    session: Session = Depends(get_session),
+    user: AppUser = Depends(require_permission("work.edit")),
+) -> WorkDetail:
+    pairs = [(c.name, c.role) for c in payload.creators]
+    try:
+        work = _catalog(session, user).replace_creators(work_id, pairs)
     except NotFoundError as exc:
         raise HTTPException(status_code=404, detail=str(exc)) from exc
     except (BusinessRuleError, ValidationError) as exc:
