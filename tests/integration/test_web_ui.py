@@ -146,6 +146,12 @@ def test_base_template_applies_default_theme(web_client):
     assert b'data-set-theme="auto"' in resp.content  # theme picker present
 
 
+def test_base_template_favicon_and_brand_logo(web_client):
+    resp = web_client.get("/ui/login")
+    assert b'href="/ui/static/favicon.svg"' in resp.content
+    assert b'class="brand-logo"' in resp.content
+
+
 def test_base_template_auto_theme_omits_attribute(web_client, monkeypatch):
     monkeypatch.setenv("COMPENDIUM_DEFAULT_THEME", "auto")
     resp = web_client.get("/ui/login")
