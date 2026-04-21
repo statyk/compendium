@@ -355,3 +355,92 @@ def test_update_item_unknown_barcode_raises(session):
     svc = _audited_service(session)
     with pytest.raises(NotFoundError):
         svc.update_item("nonexistent", location="Shelf A")
+
+
+# ── Work edit ─────────────────────────────────────────────────────────────────
+
+
+def test_update_work_title_and_publisher(session):
+    work, _ = _audited_service(session).add_manual(
+        "book", "Original Title", publisher="Old House"
+    )
+    svc = _audited_service(session)
+    updated = svc.update_work(work.id, title="Better Title", publisher="New House")
+    assert updated.title == "Better Title"
+    assert updated.publisher == "New House"
+
+
+def test_update_work_rebuilds_search_text_on_title_change(session):
+    work, _ = _audited_service(session).add_manual(
+        "book", "Foo", authors=["Alice"], description="About widgets"
+    )
+    original_search = work.search_text
+    svc = _audited_service(session)
+    svc.update_work(work.id, title="Bar")
+    assert "Bar" in work.search_text
+    assert work.search_text != original_search
+
+
+def test_update_work_description_rebuilds_search_text(session):
+    work, _ = _audited_service(session).add_manual("book", "Foo")
+    svc = _audited_service(session)
+    svc.update_work(work.id, description="A new description worth indexing")
+    assert "indexing" in (work.search_text or "")
+
+
+def test_update_work_non_searchable_field_skips_rebuild(session):
+    work, _ = _audited_service(session).add_manual("book", "Foo", authors=["Alice"])
+    original_search = work.search_text
+    svc = _audited_service(session)
+    svc.update_work(work.id, publisher="New House")
+    assert work.search_text == original_search
+
+
+def test_update_work_empty_title_rejected(session):
+    work, _ = _audited_service(session).add_manual("book", "Keep Me")
+    svc = _audited_service(session)
+    with pytest.raises(ValidationError):
+        svc.update_work(work.id, title="   ")
+    assert work.title == "Keep Me"
+
+
+def test_update_work_empty_string_clears_optional_field(session):
+    work, _ = _audited_service(session).add_manual(
+        "book", "Foo", publisher="Old House"
+    )
+    svc = _audited_service(session)
+    updated = svc.update_work(work.id, publisher="")
+    assert updated.publisher is None
+
+
+def test_update_work_records_audit(session):
+    work, _ = _audited_service(session).add_manual("book", "Foo")
+    svc = _audited_service(session)
+    svc.update_work(work.id, publisher="House A", publication_year=2020)
+    entries = SqlAuditLogRepository(session).list(
+        entity_type=AuditEntityType.WORK, entity_id=work.id
+    )
+    update_entries = [e for e in entries if e.action == "update"]
+    assert len(update_entries) == 1
+    assert update_entries[0].details["changes"] == {
+        "publisher": "House A",
+        "publication_year": 2020,
+    }
+
+
+def test_update_work_no_changes_skips_audit(session):
+    work, _ = _audited_service(session).add_manual(
+        "book", "Foo", publisher="House A"
+    )
+    svc = _audited_service(session)
+    svc.update_work(work.id, publisher="House A")
+    entries = SqlAuditLogRepository(session).list(
+        entity_type=AuditEntityType.WORK, entity_id=work.id
+    )
+    assert not any(e.action == "update" for e in entries)
+
+
+def test_update_work_unknown_id_raises(session):
+    svc = _audited_service(session)
+    with pytest.raises(NotFoundError):
+        svc.update_work(99999, title="X")

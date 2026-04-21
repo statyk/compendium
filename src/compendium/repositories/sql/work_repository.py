@@ -18,6 +18,10 @@ class SqlWorkRepository:
     def get(self, id: int) -> Work | None:
         return self._s.get(Work, id)
 
+    def update(self, work: Work) -> Work:
+        self._s.flush()
+        return work
+
     def get_by_isbn(self, isbn: str) -> Work | None:
         return self._s.query(Work).filter_by(isbn=isbn).first()
 

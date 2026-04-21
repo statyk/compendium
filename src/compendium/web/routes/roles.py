@@ -23,7 +23,7 @@ router = APIRouter()
 _PERM = "role.manage"
 
 PERMISSION_GROUPS = [
-    ("Catalog", ["work.view", "item.view", "item.create", "item.edit", "item.delete"]),
+    ("Catalog", ["work.view", "work.edit", "item.view", "item.create", "item.edit", "item.delete"]),
     ("Loans", ["loan.checkout", "loan.checkin", "loan.renew.any", "loan.renew.self", "loan.view.self"]),
     ("Holds", ["hold.place.self", "hold.place.any", "hold.view.self"]),
     ("Administration", ["patron.manage", "user.manage", "role.manage", "policy.edit", "branch.edit"]),

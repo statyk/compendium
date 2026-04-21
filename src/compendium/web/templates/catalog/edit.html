@@ -1,0 +1,76 @@
+{% extends "base.html" %}
+{% block title %}Edit {{ work.title }} — Compendium{% endblock %}
+{% block content %}
+<nav aria-label="breadcrumb">
+  <ul>
+    <li><a href="/ui/catalog">Catalog</a></li>
+    <li><a href="/ui/catalog/{{ work.id }}">{{ work.title }}</a></li>
+    <li>Edit</li>
+  </ul>
+</nav>
+
+<hgroup>
+  <h2>Edit work</h2>
+  <p>{{ work.title }}</p>
+</hgroup>
+
+{% if error %}<p class="error-banner">{{ error }}</p>{% endif %}
+
+<form method="post" action="/ui/catalog/{{ work.id }}/edit">
+  <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+
+  <label for="title">Title <small>(required)</small></label>
+  <input type="text" id="title" name="title" value="{{ work.title }}" required>
+
+  <label for="subtitle">Subtitle</label>
+  <input type="text" id="subtitle" name="subtitle" value="{{ work.subtitle or '' }}">
+
+  <div class="grid">
+    <div>
+      <label for="publisher">Publisher</label>
+      <input type="text" id="publisher" name="publisher" value="{{ work.publisher or '' }}">
+    </div>
+    <div>
+      <label for="publication_year">Year</label>
+      <input type="number" id="publication_year" name="publication_year" value="{{ work.publication_year or '' }}" min="1" max="9999">
+    </div>
+  </div>
+
+  <div class="grid">
+    <div>
+      <label for="edition">Edition</label>
+      <input type="text" id="edition" name="edition" value="{{ work.edition or '' }}">
+    </div>
+    <div>
+      <label for="language">Language <small>(2-letter code)</small></label>
+      <input type="text" id="language" name="language" value="{{ work.language or '' }}" maxlength="8">
+    </div>
+  </div>
+
+  <label for="description">Description</label>
+  <textarea id="description" name="description" rows="4">{{ work.description or '' }}</textarea>
+
+  <div class="grid">
+    <div>
+      <label for="classification_scheme">Classification scheme <small>(e.g. lcc, ddc)</small></label>
+      <input type="text" id="classification_scheme" name="classification_scheme" value="{{ work.classification_scheme or '' }}">
+    </div>
+    <div>
+      <label for="classification_code">Classification code</label>
+      <input type="text" id="classification_code" name="classification_code" value="{{ work.classification_code or '' }}">
+    </div>
+  </div>
+
+  <label for="cover_image_url">Cover image URL</label>
+  <input type="url" id="cover_image_url" name="cover_image_url" value="{{ work.cover_image_url or '' }}">
+
+  <p><small>
+    ISBN, UPC, media type, creators, and raw external metadata are not editable
+    from this form. Fixing those typically requires a merge/split flow that
+    Compendium doesn't offer yet.
+  </small></p>
+
+  <button type="submit">Save</button>
+  <a href="/ui/catalog/{{ work.id }}" role="button" class="outline secondary">Cancel</a>
+</form>
+{% endblock %}

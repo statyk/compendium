@@ -186,6 +186,105 @@ class CatalogService:
         )
         return work, item
 
+    def update_work(
+        self,
+        work_id: int,
+        *,
+        title: str = _MISSING,  # type: ignore[assignment]
+        subtitle: str | None = _MISSING,  # type: ignore[assignment]
+        publisher: str | None = _MISSING,  # type: ignore[assignment]
+        publication_year: int | None = _MISSING,  # type: ignore[assignment]
+        edition: str | None = _MISSING,  # type: ignore[assignment]
+        language: str | None = _MISSING,  # type: ignore[assignment]
+        description: str | None = _MISSING,  # type: ignore[assignment]
+        classification_scheme: str | None = _MISSING,  # type: ignore[assignment]
+        classification_code: str | None = _MISSING,  # type: ignore[assignment]
+        cover_image_url: str | None = _MISSING,  # type: ignore[assignment]
+    ) -> Work:
+        """Update editable fields on a Work. ISBN, UPC, media_type, creators,
+        external_ids, and extra_metadata are intentionally NOT editable here."""
+        work = self._works.get(work_id)
+        if work is None:
+            raise NotFoundError(f"No Work with id={work_id}")
+
+        def _norm(v):
+            if isinstance(v, str):
+                s = v.strip()
+                return s if s else None
+            return v
+
+        changes: dict[str, object | None] = {}
+        search_text_dirty = False
+
+        if title is not _MISSING:
+            new = _norm(title)
+            if not new:
+                raise ValidationError("Title is required.")
+            if new != work.title:
+                work.title = new
+                changes["title"] = new
+                search_text_dirty = True
+        if subtitle is not _MISSING:
+            new = _norm(subtitle)
+            if new != work.subtitle:
+                work.subtitle = new
+                changes["subtitle"] = new
+                search_text_dirty = True
+        if publisher is not _MISSING:
+            new = _norm(publisher)
+            if new != work.publisher:
+                work.publisher = new
+                changes["publisher"] = new
+        if publication_year is not _MISSING:
+            new = publication_year
+            if new != work.publication_year:
+                work.publication_year = new
+                changes["publication_year"] = new
+        if edition is not _MISSING:
+            new = _norm(edition)
+            if new != work.edition:
+                work.edition = new
+                changes["edition"] = new
+        if language is not _MISSING:
+            new = _norm(language)
+            if new != work.language:
+                work.language = new
+                changes["language"] = new
+        if description is not _MISSING:
+            new = _norm(description)
+            if new != work.description:
+                work.description = new
+                changes["description"] = new
+                search_text_dirty = True
+        if classification_scheme is not _MISSING:
+            new = _norm(classification_scheme)
+            if new != work.classification_scheme:
+                work.classification_scheme = new
+                changes["classification_scheme"] = new
+        if classification_code is not _MISSING:
+            new = _norm(classification_code)
+            if new != work.classification_code:
+                work.classification_code = new
+                changes["classification_code"] = new
+        if cover_image_url is not _MISSING:
+            new = _norm(cover_image_url)
+            if new != work.cover_image_url:
+                work.cover_image_url = new
+                changes["cover_image_url"] = new
+
+        if not changes:
+            return work
+
+        if search_text_dirty:
+            self._rebuild_search_text(work)
+
+        result = self._works.update(work)
+        self._record(
+            AuditEntityType.WORK, work.id, AuditAction.UPDATE,
+            {"title": work.title, "changes": changes},
+        )
+        return result
+
     def update_item(
         self,
         barcode: str,

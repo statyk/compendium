@@ -476,6 +476,81 @@ def test_item_detail_404(web_client, librarian):
     assert resp.status_code == 404
 
 
+def test_work_edit_form_renders_for_librarian(web_client, librarian, work):
+    w, _ = work
+    cookies = _login(web_client, "lib01")
+    resp = web_client.get(f"/ui/catalog/{w.id}/edit", cookies=cookies)
+    assert resp.status_code == 200
+    assert b"Edit work" in resp.content
+    assert w.title.encode() in resp.content
+
+
+def test_work_edit_form_denied_for_patron(web_client, patron_user, work):
+    w, _ = work
+    cookies = _login(web_client, "patron01")
+    resp = web_client.get(f"/ui/catalog/{w.id}/edit", cookies=cookies)
+    assert resp.status_code == 403
+
+
+def test_work_edit_submit_updates_fields(web_client, librarian, work, web_session):
+    w, _ = work
+    auth_cookies = _login(web_client, "lib01")
+    raw, signed = _make_csrf_pair()
+    resp = web_client.post(
+        f"/ui/catalog/{w.id}/edit",
+        data={
+            "title": "Dune (Corrected)",
+            "publisher": "Chilton",
+            "publication_year": "1965",
+            "description": "A spice-fuelled space epic.",
+            "csrf_token": raw,
+        },
+        cookies={**auth_cookies, CSRF_COOKIE: signed},
+    )
+    assert resp.status_code == 303
+    assert f"/ui/catalog/{w.id}" in resp.headers["location"]
+    assert "message=" in resp.headers["location"]
+
+    refreshed = SqlWorkRepository(web_session).get(w.id)
+    assert refreshed.title == "Dune (Corrected)"
+    assert refreshed.publisher == "Chilton"
+    assert refreshed.description == "A spice-fuelled space epic."
+
+
+def test_work_edit_submit_empty_title_shows_error(web_client, librarian, work):
+    w, _ = work
+    auth_cookies = _login(web_client, "lib01")
+    raw, signed = _make_csrf_pair()
+    resp = web_client.post(
+        f"/ui/catalog/{w.id}/edit",
+        data={"title": "   ", "csrf_token": raw},
+        cookies={**auth_cookies, CSRF_COOKIE: signed},
+    )
+    assert resp.status_code == 200
+    assert b"Title is required" in resp.content
+
+
+def test_work_edit_submit_bad_year_shows_error(web_client, librarian, work):
+    w, _ = work
+    auth_cookies = _login(web_client, "lib01")
+    raw, signed = _make_csrf_pair()
+    resp = web_client.post(
+        f"/ui/catalog/{w.id}/edit",
+        data={"title": w.title, "publication_year": "not-a-year", "csrf_token": raw},
+        cookies={**auth_cookies, CSRF_COOKIE: signed},
+    )
+    assert resp.status_code == 200
+    assert b"must be a number" in resp.content
+
+
+def test_work_detail_shows_edit_button_for_librarian(web_client, librarian, work):
+    w, _ = work
+    cookies = _login(web_client, "lib01")
+    resp = web_client.get(f"/ui/catalog/{w.id}", cookies=cookies)
+    assert resp.status_code == 200
+    assert f"/ui/catalog/{w.id}/edit".encode() in resp.content
+
+
 def test_item_edit_form_renders_for_librarian(web_client, librarian, work):
     _, item = work
     cookies = _login(web_client, "lib01")

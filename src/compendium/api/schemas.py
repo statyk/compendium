@@ -37,6 +37,40 @@ class ItemDetail(BaseModel):
     condition: str | None
 
 
+class WorkDetail(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    id: int
+    title: str
+    subtitle: str | None
+    publisher: str | None
+    publication_year: int | None
+    edition: str | None
+    language: str | None
+    description: str | None
+    isbn: str | None
+    upc: str | None
+    classification_scheme: str | None
+    classification_code: str | None
+    cover_image_url: str | None
+
+
+class WorkUpdate(BaseModel):
+    # None means "clear this field"; an omitted field means "leave it".
+    # ISBN, UPC, media type, creators, and raw external metadata are not
+    # editable here — those need a merge/split flow that v1 doesn't ship.
+    title: str | None = None
+    subtitle: str | None = None
+    publisher: str | None = None
+    publication_year: int | None = None
+    edition: str | None = None
+    language: str | None = None
+    description: str | None = None
+    classification_scheme: str | None = None
+    classification_code: str | None = None
+    cover_image_url: str | None = None
+
+
 class ItemUpdate(BaseModel):
     # None means "clear this field"; an omitted field means "leave it".
     # Fields outside this set (barcode, accession, status, work_id, branch_id)
