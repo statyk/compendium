@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from datetime import datetime
+
 from sqlalchemy.orm import Session
 
 from compendium.domain.models import AuditLog
@@ -28,3 +30,19 @@ class SqlAuditLogRepository:
         if user_id is not None:
             q = q.filter(AuditLog.user_id == user_id)
         return q.limit(limit).all()
+
+    def count_older_than(self, cutoff: datetime) -> int:
+        return (
+            self._s.query(AuditLog)
+            .filter(AuditLog.occurred_at < cutoff)
+            .count()
+        )
+
+    def delete_older_than(self, cutoff: datetime) -> int:
+        deleted = (
+            self._s.query(AuditLog)
+            .filter(AuditLog.occurred_at < cutoff)
+            .delete(synchronize_session=False)
+        )
+        self._s.flush()
+        return int(deleted)
