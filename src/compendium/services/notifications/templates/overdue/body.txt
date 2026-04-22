@@ -1,0 +1,18 @@
+Dear {{ patron_name }},
+
+Our records show the following item is overdue:
+
+  {{ work_title }} ({{ item_barcode }})
+  Due: {{ due_at.strftime("%Y-%m-%d") }}
+  Days late: {{ days_late }}
+
+{% if tier >= 3 -%}
+Please return or contact us as soon as possible. If the item is not returned, lost-item fees may apply.
+{%- elif tier >= 2 -%}
+Please return or renew this item at your earliest convenience.
+{%- else -%}
+Please return or renew when you're able.
+{%- endif %}
+
+Thanks,
+{{ library_name }}

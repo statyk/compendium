@@ -58,3 +58,16 @@ class FineStatus(StrEnum):
     OUTSTANDING = "outstanding"
     PAID = "paid"
     WAIVED = "waived"
+
+
+class NotificationStatus(StrEnum):
+    PENDING = "pending"
+    SENT = "sent"
+    FAILED = "failed"
+    CANCELLED = "cancelled"
+
+
+class NotificationTemplate(StrEnum):
+    HOLD_READY = "hold_ready"
+    DUE_SOON = "due_soon"
+    OVERDUE = "overdue"

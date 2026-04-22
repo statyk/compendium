@@ -20,6 +20,7 @@ from compendium.repositories.base import (
 )
 from compendium.services.audit import AuditAction, AuditEntityType, AuditService
 from compendium.services.fines import CheckoutStatus, FineService
+from compendium.services.notifications import NotificationService
 
 _DEFAULT_LOAN_DAYS = 14
 _DEFAULT_MAX_RENEWALS = 2
@@ -36,6 +37,7 @@ class CirculationService:
         policy_repo: LoanPolicyRepository,
         hold_pickup_days: int = 3,
         fine_svc: FineService | None = None,
+        notification_svc: NotificationService | None = None,
         audit_svc: AuditService | None = None,
         actor: AppUser | None = None,
         actor_label: str | None = None,
@@ -49,6 +51,7 @@ class CirculationService:
         self._policies = policy_repo
         self._pickup_days = hold_pickup_days
         self._fines = fine_svc
+        self._notifications = notification_svc
         self._audit = audit_svc
         self._actor = actor
         self._actor_label = actor_label
@@ -91,6 +94,8 @@ class CirculationService:
             hold.notified_at = now
             self._holds.update(hold)
             item.status = ItemStatus.ON_HOLD
+            if self._notifications is not None:
+                self._notifications.queue_hold_ready(hold)
         else:
             item.status = ItemStatus.AVAILABLE
 

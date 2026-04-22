@@ -1,0 +1,11 @@
+Dear {{ patron_name }},
+
+A quick reminder that the following item is due in {{ days_before }} day{% if days_before != 1 %}s{% endif %}:
+
+  {{ work_title }} ({{ item_barcode }})
+  Due: {{ due_at.strftime("%Y-%m-%d") }}
+
+Please return or renew it before the due date to avoid late fees.
+
+Thanks,
+{{ library_name }}

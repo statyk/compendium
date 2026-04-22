@@ -174,6 +174,7 @@ Borrower record. `user_id` is nullable — card-only patrons (children, guests) 
 | address | JSON | |
 | notes | text | |
 | is_active | boolean | |
+| receive_notifications | boolean | Default true; patron self-service opt-out |
 | created_at | timestamptz | |
 | updated_at | timestamptz | |
 
@@ -233,6 +234,37 @@ Work-level reservation. Any available copy satisfies the hold; copy-level holds 
 | placed_at | timestamptz | |
 | expires_at | timestamptz | Set when status → `available`; maintenance job expires waiting holds |
 | notified_at | timestamptz | Set when status → `available` (for future notification feature) |
+
+---
+
+### `notification`
+
+Outbox row for a queued or sent notification. Each row stores subject + body pre-rendered at queue time, so later data edits don't retroactively rewrite pending messages.
+
+| Column | Type | Notes |
+|--------|------|-------|
+| id | integer PK | |
+| recipient_patron_id | integer FK → patron NULLABLE | |
+| recipient_email | varchar(256) | Snapshot of patron email at queue time |
+| template_key | varchar(32) | `hold_ready`, `due_soon`, `overdue` |
+| context | JSON | Render context (for debugging) |
+| subject | text | Pre-rendered |
+| body | text | Pre-rendered (plain text) |
+| status | varchar(16) | `pending`, `sent`, `failed`, `cancelled` |
+| attempts | integer | Sends attempted |
+| last_error | text | Last failure reason |
+| loan_id | integer FK → loan NULLABLE | Dedup anchor for due_soon/overdue |
+| hold_id | integer FK → hold NULLABLE | Dedup anchor for hold_ready |
+| discriminator | integer | Renewal count (due_soon) or tier (overdue); 0 for hold_ready |
+| scheduled_for | timestamptz | Earliest delivery time |
+| sent_at | timestamptz | Set on success |
+| created_at | timestamptz | |
+
+**Indexes:**
+- `ix_notification_status` on `(status)`
+- `ix_notification_scheduled` partial on `(scheduled_for)` WHERE `status='pending'`
+- `ix_notification_loan_dedup` partial unique on `(loan_id, template_key, discriminator)` WHERE `loan_id IS NOT NULL AND status != 'cancelled'`
+- `ix_notification_hold_dedup` partial unique on `(hold_id, template_key, discriminator)` WHERE `hold_id IS NOT NULL AND status != 'cancelled'`
 
 ---
 

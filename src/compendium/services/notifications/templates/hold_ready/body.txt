@@ -1,0 +1,12 @@
+Dear {{ patron_name }},
+
+Good news — your hold is ready for pickup:
+
+  {{ work_title }}
+{% if expires_at %}  Pickup by: {{ expires_at.strftime("%Y-%m-%d") }}{% endif %}
+  Location: {{ branch_name }}
+
+Please visit the library to check it out. If you can't make it before the pickup-by date, your hold may be released to the next patron in line.
+
+Thanks,
+{{ library_name }}

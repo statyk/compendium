@@ -31,3 +31,16 @@ class Settings(BaseSettings):
     fine_block_holds: bool = False
     currency_symbol: str = "$"
     currency_symbol_position: Literal["before", "after"] = "before"
+    smtp_host: str | None = None
+    smtp_port: int = 587
+    smtp_username: str | None = None
+    smtp_password: str | None = None
+    smtp_use_starttls: bool = True
+    smtp_use_ssl: bool = False
+    smtp_from_address: str | None = None
+    smtp_from_name: str = "Compendium"
+    notifications_batch_size: int = 50
+    notifications_max_attempts: int = 5
+    notification_retention_days: int | None = None
+    due_soon_days_before: int = 3
+    overdue_tiers: str = "3,14,30"

@@ -9,3 +9,17 @@
 
 # Expire holds whose pickup window has passed — runs nightly at 02:00.
 0 2 * * * cd /path/to/compendium && uv run compendium maintenance expire-holds >> /var/log/compendium-maintenance.log 2>&1
+
+# Queue notification reminders (daily).
+0 8 * * * cd /path/to/compendium && uv run compendium maintenance queue-due-soon-notices >> /var/log/compendium-maintenance.log 2>&1
+15 8 * * * cd /path/to/compendium && uv run compendium maintenance queue-overdue-notices >> /var/log/compendium-maintenance.log 2>&1
+
+# Drain the notification outbox every 5 minutes.
+*/5 * * * * cd /path/to/compendium && uv run compendium maintenance send-queued-notifications >> /var/log/compendium-maintenance.log 2>&1
+
+# Materialize overdue fines daily (so reports see current state).
+30 2 * * * cd /path/to/compendium && uv run compendium maintenance assess-overdue-fines >> /var/log/compendium-maintenance.log 2>&1
+
+# Optional: monthly retention prune for old audit rows + notifications.
+# 0 3 1 * * cd /path/to/compendium && uv run compendium maintenance prune-audit-log --older-than-days 365 >> /var/log/compendium-maintenance.log 2>&1
+# 30 3 1 * * cd /path/to/compendium && uv run compendium maintenance prune-notifications --older-than-days 180 >> /var/log/compendium-maintenance.log 2>&1

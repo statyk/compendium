@@ -14,6 +14,7 @@ from compendium.domain.models import (
     Loan,
     LoanPolicy,
     MediaType,
+    Notification,
     Patron,
     Role,
     Work,
@@ -151,6 +152,37 @@ class FineRepository(Protocol):
         self, *, patron_id: int | None = None
     ) -> list[Loan]: ...
     def update(self, fine: Fine) -> Fine: ...
+
+
+@runtime_checkable
+class NotificationRepository(Protocol):
+    def add(self, notification: Notification) -> Notification: ...
+    def get(self, notification_id: int) -> Notification | None: ...
+    def list(
+        self,
+        *,
+        status: str | None = None,
+        template_key: str | None = None,
+        limit: int = 50,
+        offset: int = 0,
+    ) -> list[Notification]: ...
+    def list_pending(self, *, limit: int) -> list[Notification]: ...
+    def get_existing(
+        self,
+        *,
+        loan_id: int | None,
+        hold_id: int | None,
+        template_key: str,
+        discriminator: int,
+    ) -> Notification | None: ...
+    def update(self, notification: Notification) -> Notification: ...
+    def prune(
+        self,
+        *,
+        older_than: "datetime | None" = None,
+        status: str | None = None,
+        dry_run: bool = False,
+    ) -> int: ...
 
 
 @runtime_checkable

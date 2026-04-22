@@ -1,0 +1,79 @@
+{% extends "base.html" %}
+{% block title %}Notifications — Compendium{% endblock %}
+{% block content %}
+<h2>Notifications</h2>
+
+{% if message %}<p class="success-banner">{{ message }}</p>{% endif %}
+{% if error %}<p class="error-banner">{{ error }}</p>{% endif %}
+
+<form method="get" action="/ui/admin/notifications" style="display:flex; gap:1rem; flex-wrap:wrap; align-items:flex-end; margin-bottom:1.5rem">
+  <label style="flex:1; min-width:140px">
+    Status
+    <select name="status">
+      <option value="" {% if not selected_status %}selected{% endif %}>All</option>
+      <option value="pending" {% if selected_status == 'pending' %}selected{% endif %}>Pending</option>
+      <option value="sent" {% if selected_status == 'sent' %}selected{% endif %}>Sent</option>
+      <option value="failed" {% if selected_status == 'failed' %}selected{% endif %}>Failed</option>
+      <option value="cancelled" {% if selected_status == 'cancelled' %}selected{% endif %}>Cancelled</option>
+    </select>
+  </label>
+  <label style="flex:1; min-width:140px">
+    Template
+    <select name="template_key">
+      <option value="" {% if not selected_template %}selected{% endif %}>All</option>
+      <option value="hold_ready" {% if selected_template == 'hold_ready' %}selected{% endif %}>Hold ready</option>
+      <option value="due_soon" {% if selected_template == 'due_soon' %}selected{% endif %}>Due soon</option>
+      <option value="overdue" {% if selected_template == 'overdue' %}selected{% endif %}>Overdue</option>
+    </select>
+  </label>
+  <label style="flex:0 0 auto">
+    Limit
+    <input type="number" name="limit" value="{{ limit }}" min="10" max="200" style="width:5rem">
+  </label>
+  <button type="submit" style="margin-bottom:0">Filter</button>
+</form>
+
+{% if rows %}
+<figure>
+<table>
+  <thead>
+    <tr>
+      <th>ID</th>
+      <th>Created</th>
+      <th>Template</th>
+      <th>Recipient</th>
+      <th>Status</th>
+      <th>Attempts</th>
+      <th>Subject</th>
+      <th>Action</th>
+    </tr>
+  </thead>
+  <tbody>
+    {% for row in rows %}
+    <tr>
+      <td>#{{ row.id }}</td>
+      <td style="white-space:nowrap"><code>{{ row.created_at.strftime("%Y-%m-%d %H:%M") }}</code></td>
+      <td>{{ row.template_key }}</td>
+      <td>{{ row.recipient_email or "—" }}</td>
+      <td>{{ row.status }}{% if row.last_error %}<br><small style="color:var(--pico-color-red-500)">{{ row.last_error }}</small>{% endif %}</td>
+      <td>{{ row.attempts }}</td>
+      <td><small>{{ row.subject | truncate(60) }}</small></td>
+      <td>
+        {% if row.status in ('failed', 'pending') %}
+        <form method="post" action="/ui/admin/notifications/{{ row.id }}/retry" style="display:inline">
+          <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+          <button type="submit" class="outline" style="padding:0.2rem 0.6rem">Retry</button>
+        </form>
+        {% else %}
+        —
+        {% endif %}
+      </td>
+    </tr>
+    {% endfor %}
+  </tbody>
+</table>
+</figure>
+{% else %}
+<p><em>No notifications match the current filter.</em></p>
+{% endif %}
+{% endblock %}

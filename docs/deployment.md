@@ -147,13 +147,57 @@ There is no built-in migration tool. For an existing deployment, export data wit
 
 ## Scheduled maintenance
 
-The following command should run periodically. It expires holds whose `expires_at` has passed.
+Several maintenance commands should run periodically:
+
+- `maintenance expire-holds` — expires holds whose pickup window has passed.
+- `maintenance assess-overdue-fines` — materializes outstanding overdue fines (idempotent).
+- `maintenance queue-due-soon-notices` + `queue-overdue-notices` — queue reminder emails.
+- `maintenance send-queued-notifications` — drain the outbox via SMTP.
+- `maintenance prune-notifications` / `prune-audit-log` — retention cleanup.
+
+See [`crontab.sample`](crontab.sample) for a ready-made schedule and [`compendium.service.sample`](compendium.service.sample) for running the daemon under systemd.
+
+---
+
+## Email (SMTP)
+
+Compendium queues notification rows synchronously but only sends when SMTP is configured. Without `COMPENDIUM_SMTP_HOST`, the drainer runs inertly — rows accumulate until configuration lands, then drain on the next cron.
+
+### Production
+
+Any SMTP service works (Google Workspace, Amazon SES, Mailgun, Postfix relay, etc.). Minimum env vars:
 
 ```bash
-compendium maintenance expire-holds
+export COMPENDIUM_SMTP_HOST=smtp.example.com
+export COMPENDIUM_SMTP_PORT=587
+export COMPENDIUM_SMTP_USERNAME=apikey
+export COMPENDIUM_SMTP_PASSWORD=...
+export COMPENDIUM_SMTP_USE_STARTTLS=true
+export COMPENDIUM_SMTP_FROM_ADDRESS=library@example.com
+export COMPENDIUM_SMTP_FROM_NAME="My Library"
 ```
 
-See [`crontab.sample`](crontab.sample) for a ready-made cron entry and [`compendium.service.sample`](compendium.service.sample) for running the daemon under systemd.
+For implicit-TLS (port 465) providers set `COMPENDIUM_SMTP_USE_SSL=true` and `COMPENDIUM_SMTP_USE_STARTTLS=false`.
+
+### Development — mailpit
+
+[Mailpit](https://github.com/axllent/mailpit) is a local SMTP sink with a web inbox. Perfect for verifying templates without sending real email:
+
+```bash
+docker run -d --name mailpit -p 1025:1025 -p 8025:8025 axllent/mailpit
+
+export COMPENDIUM_SMTP_HOST=localhost
+export COMPENDIUM_SMTP_PORT=1025
+export COMPENDIUM_SMTP_USE_STARTTLS=false
+export COMPENDIUM_SMTP_FROM_ADDRESS=noreply@example.test
+
+# Queue something, then drain
+compendium maintenance send-queued-notifications
+
+# View captured email at http://localhost:8025
+```
+
+`python -m aiosmtpd -n -l localhost:1025` also works as a lightweight alternative that prints received mail to the console.
 
 ---
 

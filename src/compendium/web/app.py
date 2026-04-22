@@ -17,6 +17,7 @@ from compendium.web.routes import (
     fines,
     items,
     me,
+    notifications,
     patrons,
     policies,
     roles,
@@ -40,6 +41,7 @@ def create_web_router() -> APIRouter:
     router.include_router(audit.router)
     router.include_router(bulk.router)
     router.include_router(fines.router)
+    router.include_router(notifications.router)
     router.include_router(covers.router)
     return router
 

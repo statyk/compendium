@@ -27,6 +27,7 @@ PERMISSION_GROUPS = [
     ("Loans", ["loan.checkout", "loan.checkin", "loan.renew.any", "loan.renew.self", "loan.view.self"]),
     ("Holds", ["hold.place.self", "hold.place.any", "hold.view.self"]),
     ("Fines", ["fine.manage", "fine.view.self"]),
+    ("Notifications", ["notification.manage"]),
     ("Administration", ["patron.manage", "user.manage", "role.manage", "policy.edit", "branch.edit"]),
 ]
 

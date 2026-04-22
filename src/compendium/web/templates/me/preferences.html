@@ -1,0 +1,27 @@
+{% extends "base.html" %}
+{% block title %}My Preferences — Compendium{% endblock %}
+{% block content %}
+<h2>My Preferences</h2>
+
+{% if message %}<p class="success-banner">{{ message }}</p>{% endif %}
+
+<form method="post" action="/ui/me/preferences">
+  <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+
+  <fieldset>
+    <legend>Notifications</legend>
+    {% if patron.contact_email %}
+    <label>
+      <input type="checkbox" name="receive_notifications" value="on"
+             {% if patron.receive_notifications %}checked{% endif %}>
+      Send me notifications at <strong>{{ patron.contact_email }}</strong>
+      <small>(hold-ready, reminders, overdue notices)</small>
+    </label>
+    {% else %}
+    <p><em>Your account has no email address on file. Contact a librarian to set one up.</em></p>
+    {% endif %}
+  </fieldset>
+
+  <button type="submit">Save</button>
+</form>
+{% endblock %}

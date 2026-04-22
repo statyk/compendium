@@ -13,6 +13,7 @@ class AuditEntityType:
     ROLE = "role"
     CREATOR = "creator"
     FINE = "fine"
+    NOTIFICATION = "notification"
 
 
 class AuditAction:
@@ -31,6 +32,9 @@ class AuditAction:
     MARK_DAMAGED = "mark_damaged"
     CLEAR_DAMAGE = "clear_damage"
     CLEAR_LOST = "clear_lost"
+    SEND_NOTIFICATIONS = "send_notifications"
+    RETRY_NOTIFICATION = "retry_notification"
+    PRUNE_NOTIFICATIONS = "prune_notifications"
 
 
 class AuditService:

@@ -282,3 +282,19 @@ class AssessOverdueResponse(BaseModel):
     created: int
     updated: int
     unchanged: int
+
+
+class NotificationResponse(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    id: int
+    recipient_patron_id: int | None
+    recipient_email: str | None
+    template_key: str
+    status: str
+    attempts: int
+    last_error: str | None
+    subject: str
+    scheduled_for: datetime
+    sent_at: datetime | None
+    created_at: datetime

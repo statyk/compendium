@@ -275,6 +275,109 @@ POST   /items/{barcode}/clear-lost
 
 ---
 
+## Notifications
+
+`services/notifications/` provides an outbox-pattern email notification pipeline. Triggers write `Notification` rows synchronously; a cron-invoked drainer (`compendium maintenance send-queued-notifications`) renders pending rows and delivers them via SMTP (stdlib `smtplib`). No extra runtime deps.
+
+### Model
+
+- `Notification` table — one row per definitive notification, with pre-rendered `subject` + `body` (snapshot-at-queue semantics so later data edits don't retroactively rewrite pending messages).
+- `patron.receive_notifications` bool — default true; patrons without `contact_email` are implicitly opted out.
+
+### Templates
+
+Jinja templates under `services/notifications/templates/<template_key>/{subject.txt, body.txt}`. Three templates ship:
+
+- `hold_ready` — fires synchronously from `CirculationService._promote_hold` when a hold transitions to AVAILABLE.
+- `due_soon` — queued by `maintenance queue-due-soon-notices` (daily cron) for loans due within N days.
+- `overdue` — queued by `maintenance queue-overdue-notices` for overdue loans, at the highest matching tier (default tiers `3,14,30` days late). The body branches on `tier` to escalate tone.
+
+Template render uses StrictUndefined — missing context keys raise at queue time (caller gets `ValidationError`), so template bugs surface loudly rather than silently sending blanks.
+
+### Dedup
+
+Partial unique indexes prevent duplicate queuing:
+
+- `ix_notification_loan_dedup` unique on `(loan_id, template_key, discriminator)` where `loan_id IS NOT NULL AND status != 'cancelled'`.
+- `ix_notification_hold_dedup` unique on `(hold_id, template_key, discriminator)` where `hold_id IS NOT NULL AND status != 'cancelled'`.
+
+The `discriminator` column carries `renewal_count` for `due_soon` (so each renewal cycle gets its own reminder) and `tier` for `overdue` (so each escalation step fires at most once). For `hold_ready` it's always 0 — one notice per hold.
+
+### Drainer behavior
+
+On each run:
+1. Fetch up to `COMPENDIUM_NOTIFICATIONS_BATCH_SIZE` pending rows ordered by `scheduled_for`.
+2. If SMTP not configured (`SMTP_HOST` unset): bail with every row counted as `skipped`, no state changes. The backlog drains when configuration lands.
+3. Per row: missing `recipient_email` → `cancelled` with `last_error=no_email`. Successful send → `sent` + `sent_at`. Exception → `attempts++`, `last_error`; after `COMPENDIUM_NOTIFICATIONS_MAX_ATTEMPTS` → `failed`.
+4. One summary `SEND_NOTIFICATIONS` audit entry per run with counts.
+
+### Failure modes
+
+| Situation | Behavior |
+|---|---|
+| Patron has no email | Row inserted → drainer cancels it |
+| Patron `receive_notifications=false` | Row never inserted |
+| SMTP unconfigured | Rows accumulate; drainer logs "SMTP not configured" |
+| Transient SMTP error | `attempts++`, leave pending; retry next run |
+| Template render error | Raised at queue time; caller sees ValidationError |
+
+### SMTP configuration
+
+```
+COMPENDIUM_SMTP_HOST                   (unset = inert — rows queue but don't send)
+COMPENDIUM_SMTP_PORT                   (default 587)
+COMPENDIUM_SMTP_USERNAME
+COMPENDIUM_SMTP_PASSWORD
+COMPENDIUM_SMTP_USE_STARTTLS           (default true)
+COMPENDIUM_SMTP_USE_SSL                (default false; mutually exclusive with STARTTLS)
+COMPENDIUM_SMTP_FROM_ADDRESS           (required when SMTP_HOST is set)
+COMPENDIUM_SMTP_FROM_NAME              (default "Compendium")
+COMPENDIUM_NOTIFICATIONS_BATCH_SIZE    (default 50)
+COMPENDIUM_NOTIFICATIONS_MAX_ATTEMPTS  (default 5)
+COMPENDIUM_NOTIFICATION_RETENTION_DAYS (optional default for prune)
+COMPENDIUM_DUE_SOON_DAYS_BEFORE        (default 3)
+COMPENDIUM_OVERDUE_TIERS               (default "3,14,30")
+```
+
+### Dev setup
+
+Run [mailpit](https://github.com/axllent/mailpit) locally:
+
+```
+docker run -d -p 1025:1025 -p 8025:8025 axllent/mailpit
+export COMPENDIUM_SMTP_HOST=localhost
+export COMPENDIUM_SMTP_PORT=1025
+export COMPENDIUM_SMTP_USE_STARTTLS=false
+export COMPENDIUM_SMTP_FROM_ADDRESS=noreply@example.test
+compendium maintenance send-queued-notifications
+# view delivered mail at http://localhost:8025
+```
+
+Tests mock the sender; no real SMTP is exercised in the suite.
+
+### Retention / kill switch
+
+`compendium maintenance prune-notifications`:
+- `--older-than-days N` — delete rows older than N days. Without `--status`, deletes only `sent` + `cancelled` (preserves `failed` so a librarian can triage).
+- `--status STATUS` — delete rows in that status. `--status pending` is the queue kill-switch for misfires.
+- `--dry-run` — count without deleting.
+
+Refuses to run with no filter. Audit entry (`PRUNE_NOTIFICATIONS`) records the filter and count.
+
+### Permissions
+
+- `notification.manage` — admin log viewer + manual retry. New "Notifications" group in `PERMISSION_GROUPS`. Librarian covers via `*`.
+- Patron self-service opt-out toggle on `/ui/me/preferences` needs no explicit permission (it edits the authenticated patron's own record).
+
+### API surface
+
+```
+GET    /notifications?status=&template_key=&limit=&offset=
+POST   /notifications/{id}/retry
+```
+
+---
+
 ## Testing strategy
 
 | Level | Location | Scope |

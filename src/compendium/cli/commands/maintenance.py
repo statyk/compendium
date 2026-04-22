@@ -105,6 +105,147 @@ def assess_overdue_fines_cmd() -> None:
     )
 
 
+def _make_notification_svc(session):
+    import getpass
+
+    from compendium.repositories.sql.hold_repository import SqlHoldRepository
+    from compendium.repositories.sql.loan_repository import SqlLoanRepository
+    from compendium.repositories.sql.notification_repository import (
+        SqlNotificationRepository,
+    )
+    from compendium.services.audit import AuditService
+    from compendium.services.notifications import NotificationService
+    from compendium.services.notifications.smtp import SMTPSender
+
+    settings = get_settings()
+    return NotificationService(
+        notification_repo=SqlNotificationRepository(session),
+        loan_repo=SqlLoanRepository(session),
+        hold_repo=SqlHoldRepository(session),
+        patron_repo=SqlPatronRepository(session),
+        settings=settings,
+        sender=SMTPSender(settings),
+        audit_svc=AuditService(SqlAuditLogRepository(session)),
+        actor_label=f"cli:{getpass.getuser()}",
+        source="cli",
+    )
+
+
+@app.command("send-queued-notifications")
+def send_queued_notifications_cmd(
+    batch_size: int | None = typer.Option(
+        None, "--batch-size", help="Overrides COMPENDIUM_NOTIFICATIONS_BATCH_SIZE."
+    ),
+    dry_run: bool = typer.Option(False, "--dry-run"),
+) -> None:
+    """Drain pending notifications via SMTP (cron-friendly, idempotent)."""
+    with session_scope() as session:
+        svc = _make_notification_svc(session)
+        counts = svc.send_pending(batch_size=batch_size, dry_run=dry_run)
+    typer.echo(
+        f"Notifications: sent={counts.sent}, failed={counts.failed}, "
+        f"cancelled={counts.cancelled}, skipped={counts.skipped}"
+        + ("  (dry-run)" if dry_run else "")
+    )
+
+
+@app.command("queue-due-soon-notices")
+def queue_due_soon_notices_cmd(
+    days_before: int | None = typer.Option(
+        None, "--days-before", help="Overrides COMPENDIUM_DUE_SOON_DAYS_BEFORE."
+    ),
+) -> None:
+    """Queue a due-soon reminder for each active loan due within the window."""
+    with session_scope() as session:
+        svc = _make_notification_svc(session)
+        effective = days_before if days_before is not None else get_settings().due_soon_days_before
+        counts = svc.queue_due_soon_batch(days_before=effective)
+    typer.echo(f"Due-soon notices queued: {counts.queued}")
+
+
+@app.command("queue-overdue-notices")
+def queue_overdue_notices_cmd(
+    tiers: str | None = typer.Option(
+        None, "--tiers", help="Comma-separated day offsets. Overrides COMPENDIUM_OVERDUE_TIERS."
+    ),
+) -> None:
+    """Queue an overdue notice per active overdue loan at the highest matching tier."""
+    raw = tiers if tiers is not None else get_settings().overdue_tiers
+    try:
+        tier_list = sorted({int(x.strip()) for x in raw.split(",") if x.strip()})
+    except ValueError as exc:
+        typer.echo(f"Error: tiers must be integers: {exc}", err=True)
+        raise typer.Exit(1) from exc
+    if not tier_list:
+        typer.echo("Error: at least one tier is required.", err=True)
+        raise typer.Exit(1)
+    with session_scope() as session:
+        svc = _make_notification_svc(session)
+        counts = svc.queue_overdue_batch(tiers=tier_list)
+    typer.echo(f"Overdue notices queued: {counts.queued}")
+
+
+@app.command("prune-notifications")
+def prune_notifications_cmd(
+    older_than_days: int | None = typer.Option(
+        None,
+        "--older-than-days",
+        help="Delete rows older than this (default: COMPENDIUM_NOTIFICATION_RETENTION_DAYS).",
+    ),
+    status: str | None = typer.Option(
+        None, "--status", help="pending | sent | failed | cancelled"
+    ),
+    dry_run: bool = typer.Option(False, "--dry-run"),
+) -> None:
+    """Delete notifications. Specify --older-than-days, --status, or both.
+
+    Age-only prune deletes 'sent' + 'cancelled' rows and preserves 'failed'
+    so librarians can triage. Use --status=pending to kill a misfiring queue.
+    """
+    from datetime import datetime, timedelta, timezone
+
+    days = older_than_days
+    if days is None:
+        days = get_settings().notification_retention_days
+    if days is None and status is None:
+        typer.echo(
+            "Error: pass --older-than-days N, set COMPENDIUM_NOTIFICATION_RETENTION_DAYS, "
+            "or pass --status STATUS.",
+            err=True,
+        )
+        raise typer.Exit(1)
+    if days is not None and days < 1:
+        typer.echo("Error: retention window must be at least 1 day.", err=True)
+        raise typer.Exit(1)
+    cutoff = (
+        datetime.now(timezone.utc) - timedelta(days=days) if days is not None else None
+    )
+    if status == "pending" and not dry_run:
+        typer.echo(
+            "WARNING: --status=pending deletes un-sent queued notifications. "
+            "Use --dry-run first to preview.",
+            err=True,
+        )
+    try:
+        with session_scope() as session:
+            svc = _make_notification_svc(session)
+            count = svc.prune(older_than=cutoff, status=status, dry_run=dry_run)
+    except Exception as exc:
+        typer.echo(f"Error: {exc}", err=True)
+        raise typer.Exit(1) from exc
+    verb = "Would delete" if dry_run else "Deleted"
+    filter_desc = (
+        f"older than {days} day(s)"
+        if days is not None
+        else ""
+    ) + (
+        f"{' + ' if days and status else ''}status={status}"
+        if status
+        else ""
+    )
+    typer.echo(f"{verb} {count} notification(s) [{filter_desc or 'all'}].")
+
+
 @app.command("prune-cover-cache")
 def prune_cover_cache(
     max_mb: int = typer.Option(

@@ -160,6 +160,9 @@ class Patron(Base):
     address: Mapped[dict[str, Any] | None] = mapped_column(JSON)
     notes: Mapped[str | None] = mapped_column(Text)
     is_active: Mapped[bool] = mapped_column(Boolean, default=True, server_default="1")
+    receive_notifications: Mapped[bool] = mapped_column(
+        Boolean, default=True, server_default="1"
+    )
     created_at: Mapped[datetime] = mapped_column(UtcDateTime, server_default=func.now())
     updated_at: Mapped[datetime | None] = mapped_column(
         UtcDateTime, onupdate=func.now()
@@ -260,6 +263,62 @@ class Fine(Base):
     loan: Mapped[Loan | None] = relationship()
     item: Mapped[Item | None] = relationship()
     resolved_by: Mapped[AppUser | None] = relationship(foreign_keys=[resolved_by_user_id])
+
+
+class Notification(Base):
+    __tablename__ = "notification"
+    __table_args__ = (
+        Index("ix_notification_status", "status"),
+        Index(
+            "ix_notification_scheduled",
+            "scheduled_for",
+            sqlite_where=text("status = 'pending'"),
+            postgresql_where=text("status = 'pending'"),
+        ),
+        Index(
+            "ix_notification_loan_dedup",
+            "loan_id",
+            "template_key",
+            "discriminator",
+            unique=True,
+            sqlite_where=text("loan_id IS NOT NULL AND status != 'cancelled'"),
+            postgresql_where=text("loan_id IS NOT NULL AND status != 'cancelled'"),
+        ),
+        Index(
+            "ix_notification_hold_dedup",
+            "hold_id",
+            "template_key",
+            "discriminator",
+            unique=True,
+            sqlite_where=text("hold_id IS NOT NULL AND status != 'cancelled'"),
+            postgresql_where=text("hold_id IS NOT NULL AND status != 'cancelled'"),
+        ),
+    )
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    recipient_patron_id: Mapped[int | None] = mapped_column(
+        ForeignKey("patron.id"), nullable=True
+    )
+    recipient_email: Mapped[str | None] = mapped_column(String(256))
+    template_key: Mapped[str] = mapped_column(String(32))
+    context: Mapped[dict[str, Any]] = mapped_column(JSON, default=dict)
+    subject: Mapped[str] = mapped_column(Text)
+    body: Mapped[str] = mapped_column(Text)
+    status: Mapped[str] = mapped_column(String(16))
+    attempts: Mapped[int] = mapped_column(Integer, default=0, server_default="0")
+    last_error: Mapped[str | None] = mapped_column(Text)
+    loan_id: Mapped[int | None] = mapped_column(ForeignKey("loan.id"), nullable=True)
+    hold_id: Mapped[int | None] = mapped_column(ForeignKey("hold.id"), nullable=True)
+    discriminator: Mapped[int] = mapped_column(Integer, default=0, server_default="0")
+    scheduled_for: Mapped[datetime] = mapped_column(
+        UtcDateTime, server_default=func.now()
+    )
+    sent_at: Mapped[datetime | None] = mapped_column(UtcDateTime)
+    created_at: Mapped[datetime] = mapped_column(UtcDateTime, server_default=func.now())
+
+    patron: Mapped[Patron | None] = relationship()
+    loan: Mapped[Loan | None] = relationship()
+    hold: Mapped[Hold | None] = relationship()
 
 
 class AuditLog(Base):
