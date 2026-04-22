@@ -2,7 +2,7 @@ from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session
 
 from compendium.api.deps import require_permission
-from compendium.api.schemas import ItemDetail, ItemUpdate
+from compendium.api.schemas import ItemDetail, ItemUpdate, LoanableUpdate
 from compendium.db.session import get_session
 from compendium.domain.errors import BusinessRuleError, NotFoundError, ValidationError
 from compendium.domain.models import AppUser
@@ -18,6 +18,7 @@ router = APIRouter()
 
 def _catalog(session: Session, actor: AppUser | None = None) -> CatalogService:
     from compendium.repositories.sql.audit_log_repository import SqlAuditLogRepository
+    from compendium.repositories.sql.hold_repository import SqlHoldRepository
     from compendium.services.audit import AuditService
 
     return CatalogService(
@@ -29,6 +30,7 @@ def _catalog(session: Session, actor: AppUser | None = None) -> CatalogService:
         audit_svc=AuditService(SqlAuditLogRepository(session)),
         actor=actor,
         source="api",
+        hold_repo=SqlHoldRepository(session),
     )
 
 
@@ -69,6 +71,27 @@ def update_item(
     kwargs = payload.model_dump(include=payload.model_fields_set)
     try:
         item = _catalog(session, user).update_item(barcode, **kwargs)
+    except NotFoundError as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
+    except (BusinessRuleError, ValidationError) as exc:
+        raise HTTPException(status_code=422, detail=str(exc)) from exc
+    return ItemDetail.model_validate(item)
+
+
+@router.post("/{barcode}/loanable", response_model=ItemDetail)
+def set_loanable(
+    barcode: str,
+    payload: LoanableUpdate,
+    session: Session = Depends(get_session),
+    user: AppUser = Depends(require_permission("item.edit")),
+) -> ItemDetail:
+    try:
+        item = _catalog(session, user).set_loanable(
+            barcode,
+            is_loanable=payload.is_loanable,
+            reason=payload.reason,
+            note=payload.note,
+        )
     except NotFoundError as exc:
         raise HTTPException(status_code=404, detail=str(exc)) from exc
     except (BusinessRuleError, ValidationError) as exc:

@@ -70,6 +70,12 @@ class CirculationService:
         if not patron.is_active:
             raise BusinessRuleError(f"Patron card '{card_number}' is not active")
 
+        if not item.is_loanable:
+            raise BusinessRuleError(
+                f"Item '{barcode}' is not loanable "
+                f"({item.loan_restriction_reason or 'non-circulating'})"
+            )
+
         fulfilled_hold: Hold | None = None
         if item.status == ItemStatus.ON_HOLD:
             hold = self._holds.get_available_for_patron_work(patron.id, item.work_id)

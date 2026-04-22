@@ -17,6 +17,15 @@ class ItemCondition(StrEnum):
     POOR = "poor"
 
 
+class LoanRestrictionReason(StrEnum):
+    REFERENCE = "reference"
+    IN_LIBRARY_USE = "in_library_use"
+    ARCHIVE = "archive"
+    STAFF_ONLY = "staff_only"
+    DISPLAY = "display"
+    OTHER = "other"
+
+
 class HoldStatus(StrEnum):
     WAITING = "waiting"
     AVAILABLE = "available"

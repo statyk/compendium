@@ -29,6 +29,14 @@ class SqlHoldRepository:
             .all()
         )
 
+    def get_active_for_work(self, work_id: int) -> list[Hold]:
+        return (
+            self._s.query(Hold)
+            .filter(Hold.work_id == work_id, Hold.status.not_in(_TERMINAL))
+            .order_by(Hold.placed_at.asc())
+            .all()
+        )
+
     def get_oldest_waiting_for_work(self, work_id: int) -> Hold | None:
         return (
             self._s.query(Hold)

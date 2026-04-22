@@ -138,6 +138,7 @@ def work_detail(
             active = loans.get_active_for_item(it.id)
             if active is not None:
                 item_due[it.id] = active.due_at
+    has_loanable = SqlWorkRepository(session).has_loanable_item(work.id)
     return _render(
         "catalog/detail.html",
         request,
@@ -147,6 +148,7 @@ def work_detail(
             "work": work,
             "patron": patron,
             "item_due": item_due,
+            "has_loanable": has_loanable,
             "message": message,
             "error": error,
         },

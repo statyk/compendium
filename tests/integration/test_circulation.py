@@ -106,3 +106,11 @@ def test_checkout_unknown_barcode_raises(session, patron):
 def test_checkout_unknown_patron_raises(session, item):
     with pytest.raises(NotFoundError):
         _circulation(session).checkout(item.barcode, "NOTREAL")
+
+
+def test_checkout_non_loanable_item_raises(session, item, patron):
+    item.is_loanable = False
+    item.loan_restriction_reason = "reference"
+    session.flush()
+    with pytest.raises(BusinessRuleError, match="not loanable"):
+        _circulation(session).checkout(item.barcode, patron.library_card_number)

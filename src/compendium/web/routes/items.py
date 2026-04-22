@@ -9,6 +9,7 @@ from sqlalchemy.orm import Session
 
 from compendium.db.engine import get_settings
 from compendium.db.session import get_session
+from compendium.domain.enums import LoanRestrictionReason
 from compendium.domain.errors import (
     BusinessRuleError,
     ExternalLookupError,
@@ -19,6 +20,7 @@ from compendium.domain.models import AppUser
 from compendium.repositories.sql.audit_log_repository import SqlAuditLogRepository
 from compendium.repositories.sql.branch_repository import SqlBranchRepository
 from compendium.repositories.sql.creator_repository import SqlCreatorRepository
+from compendium.repositories.sql.hold_repository import SqlHoldRepository
 from compendium.repositories.sql.item_repository import SqlItemRepository
 from compendium.repositories.sql.media_type_repository import SqlMediaTypeRepository
 from compendium.repositories.sql.work_repository import SqlWorkRepository
@@ -43,6 +45,15 @@ _PERM_VIEW = "item.view"
 _PERM_MANAGE = "item.delete"
 _PERM_EDIT = "item.edit"
 
+_REASON_CHOICES = [
+    (LoanRestrictionReason.REFERENCE.value, "Reference"),
+    (LoanRestrictionReason.IN_LIBRARY_USE.value, "In-library use only"),
+    (LoanRestrictionReason.ARCHIVE.value, "Archive / preservation"),
+    (LoanRestrictionReason.STAFF_ONLY.value, "Staff only"),
+    (LoanRestrictionReason.DISPLAY.value, "On display"),
+    (LoanRestrictionReason.OTHER.value, "Other (explain in note)"),
+]
+
 _MBID_RE = re.compile(
     r"^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$", re.I
 )
@@ -60,6 +71,7 @@ def _catalog_svc(session: Session, actor: AppUser) -> CatalogService:
         audit_svc=AuditService(SqlAuditLogRepository(session)),
         actor=actor,
         source="web",
+        hold_repo=SqlHoldRepository(session),
     )
 
 
@@ -410,6 +422,79 @@ def item_edit_submit(
             {"request": request, "user": user, "item": item, "error": str(exc)},
         )
     return RedirectResponse(f"/ui/items/{barcode}?message=Item+updated.", status_code=303)
+
+
+@router.get("/items/{barcode}/loanable")
+def item_loanable_form(
+    barcode: str,
+    request: Request,
+    user: AppUser = Depends(require_web_permission(_PERM_EDIT)),
+    session: Session = Depends(get_session),
+):
+    item = SqlItemRepository(session).get_by_barcode(barcode)
+    if item is None:
+        return _render(
+            "error.html",
+            request,
+            {"request": request, "user": user, "message": f"Item '{barcode}' not found"},
+            status_code=404,
+        )
+    return _render(
+        "items/loanable.html",
+        request,
+        {
+            "request": request,
+            "user": user,
+            "item": item,
+            "REASON_CHOICES": _REASON_CHOICES,
+            "error": None,
+        },
+    )
+
+
+@router.post("/items/{barcode}/loanable")
+def item_loanable_submit(
+    barcode: str,
+    request: Request,
+    is_loanable: str = Form(default="yes"),
+    reason: str = Form(default=""),
+    note: str = Form(default=""),
+    csrf_token: str = Form(default=""),
+    user: AppUser = Depends(require_web_permission(_PERM_EDIT)),
+    session: Session = Depends(get_session),
+):
+    check_csrf_form(request, csrf_token)
+    flag = is_loanable.strip().lower() == "yes"
+    try:
+        _catalog_svc(session, user).set_loanable(
+            barcode,
+            is_loanable=flag,
+            reason=reason.strip() or None,
+            note=note.strip() or None,
+        )
+    except NotFoundError:
+        return _render(
+            "error.html",
+            request,
+            {"request": request, "user": user, "message": f"Item '{barcode}' not found"},
+            status_code=404,
+        )
+    except (BusinessRuleError, ValidationError) as exc:
+        item = SqlItemRepository(session).get_by_barcode(barcode)
+        return _render(
+            "items/loanable.html",
+            request,
+            {
+                "request": request,
+                "user": user,
+                "item": item,
+                "REASON_CHOICES": _REASON_CHOICES,
+                "error": str(exc),
+            },
+        )
+    return RedirectResponse(
+        f"/ui/items/{barcode}?message=Loan+status+updated.", status_code=303
+    )
 
 
 @router.post("/items/{barcode}/withdraw", response_class=HTMLResponse)

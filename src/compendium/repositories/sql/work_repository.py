@@ -3,7 +3,8 @@ from __future__ import annotations
 from sqlalchemy import or_, text
 from sqlalchemy.orm import Session
 
-from compendium.domain.models import Creator, Work, WorkCreator
+from compendium.domain.enums import ItemStatus
+from compendium.domain.models import Creator, Item, Work, WorkCreator
 
 
 class SqlWorkRepository:
@@ -27,6 +28,18 @@ class SqlWorkRepository:
 
     def get_by_upc(self, upc: str) -> Work | None:
         return self._s.query(Work).filter_by(upc=upc).first()
+
+    def has_loanable_item(self, work_id: int) -> bool:
+        return (
+            self._s.query(Item.id)
+            .filter(
+                Item.work_id == work_id,
+                Item.is_loanable.is_(True),
+                Item.status != ItemStatus.WITHDRAWN.value,
+            )
+            .first()
+            is not None
+        )
 
     def list(self, limit: int = 50, offset: int = 0) -> list[Work]:
         return self._s.query(Work).order_by(Work.title).offset(offset).limit(limit).all()

@@ -1,5 +1,5 @@
 {% extends "base.html" %}
-{% from "_macros.html" import status_pill, media_pill, cover_url %}
+{% from "_macros.html" import status_pill, media_pill, cover_url, loan_pill %}
 {% block title %}{{ work.title }} — Compendium{% endblock %}
 {% block content %}
 <nav aria-label="breadcrumb">
@@ -79,6 +79,7 @@
       <td>{{ item.branch.name }}</td>
       <td>
         {{ status_pill(item.status) }}
+        {{ loan_pill(item) }}
         {% if item.status == "checked_out" and item_due.get(item.id) %}
         <br><small style="color:var(--pico-muted-color)">due {{ item_due[item.id].strftime("%Y-%m-%d") }}</small>
         {% endif %}
@@ -96,42 +97,47 @@
 <p><a href="/ui/items/new" role="button" class="outline secondary">+ Add another copy</a></p>
 {% endif %}
 
-{% if patron %}
+{% if not has_loanable %}
 <hr>
-<div id="hold-action">
-  <form
-    hx-post="/ui/catalog/{{ work.id }}/hold"
-    hx-target="#hold-action"
-    hx-swap="innerHTML"
-    hx-include="[name='csrf_token']"
-  >
-    <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
-    <button type="submit">Place Hold</button>
-  </form>
-</div>
-{% elif user %}
-  <p><em>Your account has no patron record — contact a librarian to place holds.</em></p>
+<p><em>No loanable copies of this work are available — holds are disabled.</em></p>
 {% else %}
-  <p><a href="/ui/login?next=/ui/catalog/{{ work.id }}">Log in</a> to place a hold.</p>
-{% endif %}
-
-{% if has_permission(user, 'hold.place.any') %}
-<hr>
-<div id="hold-for-action">
-  <form
-    hx-post="/ui/catalog/{{ work.id }}/hold-for"
-    hx-target="#hold-for-action"
-    hx-swap="innerHTML"
-    hx-include="[name='csrf_token']"
-  >
-    <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
-    <label for="hold-for-card">Place hold for patron</label>
-    <div role="group">
-      <input type="text" id="hold-for-card" name="card_number" placeholder="Library card number" required>
+  {% if patron %}
+  <hr>
+  <div id="hold-action">
+    <form
+      hx-post="/ui/catalog/{{ work.id }}/hold"
+      hx-target="#hold-action"
+      hx-swap="innerHTML"
+      hx-include="[name='csrf_token']"
+    >
+      <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
       <button type="submit">Place Hold</button>
-    </div>
-  </form>
-</div>
+    </form>
+  </div>
+  {% elif user %}
+    <p><em>Your account has no patron record — contact a librarian to place holds.</em></p>
+  {% else %}
+    <p><a href="/ui/login?next=/ui/catalog/{{ work.id }}">Log in</a> to place a hold.</p>
+  {% endif %}
+
+  {% if has_permission(user, 'hold.place.any') %}
+  <hr>
+  <div id="hold-for-action">
+    <form
+      hx-post="/ui/catalog/{{ work.id }}/hold-for"
+      hx-target="#hold-for-action"
+      hx-swap="innerHTML"
+      hx-include="[name='csrf_token']"
+    >
+      <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+      <label for="hold-for-card">Place hold for patron</label>
+      <div role="group">
+        <input type="text" id="hold-for-card" name="card_number" placeholder="Library card number" required>
+        <button type="submit">Place Hold</button>
+      </div>
+    </form>
+  </div>
+  {% endif %}
 {% endif %}
 
 {% if work.external_ids and work.external_ids.get('tmdb') %}

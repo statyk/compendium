@@ -41,6 +41,9 @@ class HoldService:
         if not patron.is_active:
             raise BusinessRuleError(f"Patron card '{card_number}' is not active")
 
+        if not self._works.has_loanable_item(work_id):
+            raise BusinessRuleError("Work has no loanable copies")
+
         existing = self._holds.get_active_for_patron_work(patron.id, work_id)
         if existing is not None:
             raise BusinessRuleError(f"Patron already has an active hold on work {work_id}")

@@ -35,6 +35,9 @@ class ItemDetail(BaseModel):
     status: str
     location: str | None
     condition: str | None
+    is_loanable: bool
+    loan_restriction_reason: str | None
+    loan_restriction_note: str | None
 
 
 class WorkDetail(BaseModel):
@@ -100,6 +103,12 @@ class ItemUpdate(BaseModel):
     call_number: str | None = None
     condition: str | None = None
     notes: str | None = None
+
+
+class LoanableUpdate(BaseModel):
+    is_loanable: bool
+    reason: str | None = None
+    note: str | None = None
 
 
 class CreatePatronRequest(BaseModel):

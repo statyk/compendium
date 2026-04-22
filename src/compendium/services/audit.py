@@ -21,6 +21,7 @@ class AuditAction:
     WITHDRAW = "withdraw"
     DEACTIVATE = "deactivate"
     REACTIVATE = "reactivate"
+    SET_LOANABLE = "set_loanable"
 
 
 class AuditService:

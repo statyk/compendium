@@ -1,4 +1,4 @@
-from compendium.domain.enums import CreatorRole, ItemStatus
+from compendium.domain.enums import CreatorRole, HoldStatus, ItemStatus, LoanRestrictionReason
 from compendium.domain.errors import (
     BusinessRuleError,
     ExternalLookupError,
@@ -9,6 +9,7 @@ from compendium.domain.models import AppUser, Creator, Item, Work, WorkCreator
 from compendium.repositories.base import (
     BranchRepository,
     CreatorRepository,
+    HoldRepository,
     ItemRepository,
     MediaTypeRepository,
     WorkRepository,
@@ -45,6 +46,7 @@ class CatalogService:
         actor: AppUser | None = None,
         actor_label: str | None = None,
         source: str = "system",
+        hold_repo: HoldRepository | None = None,
     ) -> None:
         self._works = work_repo
         self._items = item_repo
@@ -55,6 +57,7 @@ class CatalogService:
         self._actor = actor
         self._actor_label = actor_label
         self._source = source
+        self._holds = hold_repo
 
     # ------------------------------------------------------------------
     # Public API
@@ -426,6 +429,81 @@ class CatalogService:
             {"changes": {"display_name": {"old": old_display, "new": new_display}}},
         )
         return result
+
+    def set_loanable(
+        self,
+        barcode: str,
+        *,
+        is_loanable: bool,
+        reason: str | None = None,
+        note: str | None = None,
+    ) -> Item:
+        """Flip an item's loanable flag. Enforces the enum/note invariants and,
+        when flipping the last loanable copy of a work off, auto-cancels any
+        WAITING holds on that work and drops an ON_HOLD item back to AVAILABLE."""
+        item = self._items.get_by_barcode(barcode)
+        if item is None:
+            raise NotFoundError(f"No item with barcode '{barcode}'")
+
+        if is_loanable:
+            new_reason: str | None = None
+            new_note: str | None = None
+        else:
+            if reason is None:
+                raise ValidationError("A reason is required when marking an item non-loanable.")
+            valid_reasons = {r.value for r in LoanRestrictionReason}
+            if reason not in valid_reasons:
+                raise ValidationError(
+                    f"Unknown reason '{reason}'. Valid: {sorted(valid_reasons)}"
+                )
+            new_reason = reason
+            clean_note = (note or "").strip() or None
+            if reason == LoanRestrictionReason.OTHER.value:
+                if not clean_note:
+                    raise ValidationError("A note is required when reason is 'other'.")
+                new_note = clean_note
+            else:
+                new_note = None
+
+        old = (item.is_loanable, item.loan_restriction_reason, item.loan_restriction_note)
+        new = (is_loanable, new_reason, new_note)
+        if old == new:
+            return item
+
+        item.is_loanable = is_loanable
+        item.loan_restriction_reason = new_reason
+        item.loan_restriction_note = new_note
+        # Flush so has_loanable_item() sees the updated flag (autoflush is off).
+        result = self._items.update(item)
+
+        cancelled_hold_ids: list[int] = []
+        if not is_loanable and self._holds is not None:
+            if not self._works.has_loanable_item(item.work_id):
+                cancelled_hold_ids = self._cancel_work_holds(item.work_id)
+                if item.status == ItemStatus.ON_HOLD.value:
+                    item.status = ItemStatus.AVAILABLE.value
+                    result = self._items.update(item)
+
+        details: dict[str, object] = {
+            "barcode": item.barcode,
+            "is_loanable": is_loanable,
+            "reason": new_reason,
+            "note": new_note,
+        }
+        if cancelled_hold_ids:
+            details["auto_cancelled_hold_ids"] = cancelled_hold_ids
+        self._record(AuditEntityType.ITEM, item.id, AuditAction.SET_LOANABLE, details)
+        return result
+
+    def _cancel_work_holds(self, work_id: int) -> list[int]:
+        """Cancel every non-terminal hold on a work. Returns cancelled hold ids."""
+        assert self._holds is not None
+        cancelled: list[int] = []
+        for hold in self._holds.get_active_for_work(work_id):
+            hold.status = HoldStatus.CANCELLED.value
+            self._holds.update(hold)
+            cancelled.append(hold.id)
+        return cancelled
 
     def withdraw_item(self, barcode: str) -> Item:
         item = self._items.get_by_barcode(barcode)

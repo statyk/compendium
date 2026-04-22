@@ -2,11 +2,14 @@ import typer
 
 from compendium.db.session import session_scope
 from compendium.domain.errors import DomainError, ExternalLookupError
+from compendium.repositories.sql.audit_log_repository import SqlAuditLogRepository
 from compendium.repositories.sql.branch_repository import SqlBranchRepository
 from compendium.repositories.sql.creator_repository import SqlCreatorRepository
+from compendium.repositories.sql.hold_repository import SqlHoldRepository
 from compendium.repositories.sql.item_repository import SqlItemRepository
 from compendium.repositories.sql.media_type_repository import SqlMediaTypeRepository
 from compendium.repositories.sql.work_repository import SqlWorkRepository
+from compendium.services.audit import AuditService
 from compendium.services.catalog import CatalogService
 from compendium.services.metadata import (
     musicbrainz_search_title,
@@ -86,6 +89,9 @@ def _catalog(session):
         creator_repo=SqlCreatorRepository(session),
         branch_repo=SqlBranchRepository(session),
         media_type_repo=SqlMediaTypeRepository(session),
+        audit_svc=AuditService(SqlAuditLogRepository(session)),
+        hold_repo=SqlHoldRepository(session),
+        source="cli",
     )
 
 
@@ -319,6 +325,11 @@ def show_item(
             typer.echo(f"  Barcode   : {item.barcode}")
             typer.echo(f"  Accession : {item.accession_number}")
             typer.echo(f"  Status    : {item.status}")
+            typer.echo(f"  Loanable  : {'yes' if item.is_loanable else 'no'}")
+            if item.loan_restriction_reason:
+                typer.echo(f"  Reason    : {item.loan_restriction_reason}")
+            if item.loan_restriction_note:
+                typer.echo(f"  Note      : {item.loan_restriction_note}")
             typer.echo(f"  Condition : {item.condition or 'not set'}")
             if item.location:
                 typer.echo(f"  Location  : {item.location}")
@@ -338,6 +349,55 @@ def withdraw_item(
             typer.echo(f"\nWithdrawn: {item.work.title}")
             typer.echo(f"  Barcode : {item.barcode}")
             typer.echo(f"  Status  : {item.status}")
+    except DomainError as exc:
+        typer.echo(f"Error: {exc}", err=True)
+        raise typer.Exit(1) from exc
+
+
+@app.command("set-loanable")
+def set_loanable_cmd(
+    barcode: str = typer.Option(..., "--barcode", help="Item barcode"),
+    yes: bool = typer.Option(False, "--yes", help="Mark as loanable (default)"),
+    no: bool = typer.Option(False, "--no", help="Mark as non-loanable (requires --reason)"),
+    reason: str | None = typer.Option(
+        None,
+        "--reason",
+        help="Required with --no. One of: reference, in_library_use, archive, staff_only, display, other.",
+    ),
+    note: str | None = typer.Option(
+        None, "--note", help="Free-form note (required when --reason other)."
+    ),
+) -> None:
+    """Toggle whether an item can be loaned out.
+
+    Examples:
+      compendium item set-loanable --barcode B123 --no --reason reference
+      compendium item set-loanable --barcode B123 --no --reason other --note "donor restriction"
+      compendium item set-loanable --barcode B123 --yes
+    """
+    if yes and no:
+        typer.echo("Error: pass only one of --yes/--no.", err=True)
+        raise typer.Exit(1)
+    if not yes and not no:
+        typer.echo("Error: pass --yes or --no.", err=True)
+        raise typer.Exit(1)
+    is_loanable = bool(yes)
+
+    try:
+        with session_scope() as session:
+            item = _catalog(session).set_loanable(
+                barcode,
+                is_loanable=is_loanable,
+                reason=reason,
+                note=note,
+            )
+            typer.echo(f"\nUpdated: {item.work.title}")
+            typer.echo(f"  Barcode  : {item.barcode}")
+            typer.echo(f"  Loanable : {'yes' if item.is_loanable else 'no'}")
+            if item.loan_restriction_reason:
+                typer.echo(f"  Reason   : {item.loan_restriction_reason}")
+            if item.loan_restriction_note:
+                typer.echo(f"  Note     : {item.loan_restriction_note}")
     except DomainError as exc:
         typer.echo(f"Error: {exc}", err=True)
         raise typer.Exit(1) from exc

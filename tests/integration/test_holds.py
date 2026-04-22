@@ -115,6 +115,26 @@ def test_place_hold_duplicate_raises(session, work_and_item, patron):
         _holds(session).place(work.id, patron.library_card_number)
 
 
+def test_place_hold_no_loanable_copies_raises(session, work_and_item, patron):
+    work, item = work_and_item
+    item.is_loanable = False
+    item.loan_restriction_reason = "reference"
+    session.flush()
+    with pytest.raises(BusinessRuleError, match="no loanable copies"):
+        _holds(session).place(work.id, patron.library_card_number)
+
+
+def test_place_hold_succeeds_with_one_loanable_copy(session, work_and_item, patron):
+    work, item = work_and_item
+    extra = _catalog(session).add_item_to_work(work.id)
+    item.is_loanable = False
+    item.loan_restriction_reason = "reference"
+    session.flush()
+    assert extra.is_loanable is True
+    hold = _holds(session).place(work.id, patron.library_card_number)
+    assert hold.status == HoldStatus.WAITING.value
+
+
 def test_cancel_hold(session, work_and_item, patron):
     work, _ = work_and_item
     hold = _holds(session).place(work.id, patron.library_card_number)

@@ -1,5 +1,5 @@
 {% extends "base.html" %}
-{% from "_macros.html" import status_pill %}
+{% from "_macros.html" import status_pill, loan_pill %}
 {% block title %}Item {{ item.barcode }} — Compendium{% endblock %}
 {% block content %}
 <nav aria-label="breadcrumb">
@@ -35,6 +35,23 @@
         <button type="submit" class="outline contrast" style="padding:0.2rem 0.6rem; margin-left:1rem">Withdraw</button>
       </form>
       {% endif %}
+    {% endif %}
+  </dd>
+  <dt>Loanable</dt>
+  <dd>
+    {% if item.is_loanable %}
+      Yes
+    {% else %}
+      No &nbsp; {{ loan_pill(item) }}
+      {% if item.loan_restriction_note %}
+        <br><small>{{ item.loan_restriction_note }}</small>
+      {% endif %}
+    {% endif %}
+    {% if has_permission(user, 'item.edit') and item.status != "withdrawn" %}
+      <a href="/ui/items/{{ item.barcode }}/loanable" class="outline secondary"
+         role="button" style="padding:0.2rem 0.6rem; margin-left:1rem; font-size:0.85rem">
+        Change
+      </a>
     {% endif %}
   </dd>
   <dt>Barcode</dt><dd><code>{{ item.barcode }}</code></dd>

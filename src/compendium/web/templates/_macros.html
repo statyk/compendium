@@ -9,3 +9,12 @@
 {% macro cover_url(raw) -%}
 /ui/covers?url={{ raw | urlencode }}
 {%- endmacro %}
+
+{% macro loan_pill(item) -%}
+  {% if not item.is_loanable %}
+    <span class="pill pill-{{ item.loan_restriction_reason or 'other' }}"
+          {% if item.loan_restriction_note %}title="{{ item.loan_restriction_note }}"{% endif %}>
+      {{ (item.loan_restriction_reason or 'non-loanable') | replace("_", " ") }}
+    </span>
+  {% endif %}
+{%- endmacro %}
