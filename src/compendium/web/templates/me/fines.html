@@ -1,0 +1,33 @@
+{% extends "base.html" %}
+{% block title %}My Fines — Compendium{% endblock %}
+{% block content %}
+<h2>My Fines</h2>
+<p>Outstanding balance: <strong>{{ outstanding_cents | currency }}</strong></p>
+
+{% if not fines %}
+<p><em>You have no fines on record.</em></p>
+{% else %}
+<table>
+  <thead>
+    <tr><th>Kind</th><th>Amount</th><th>Status</th><th>Assessed</th><th>Note</th></tr>
+  </thead>
+  <tbody>
+    {% for fine in fines %}
+    <tr>
+      <td>{{ fine.kind | replace("_", " ") }}</td>
+      <td>{{ fine.amount_cents | currency }}</td>
+      <td>{{ fine.status }}</td>
+      <td>{{ fine.assessed_at.strftime("%Y-%m-%d") }}</td>
+      <td>{{ fine.note or "—" }}</td>
+    </tr>
+    {% endfor %}
+  </tbody>
+</table>
+{% endif %}
+
+{% if outstanding_cents > 0 %}
+<p style="color:var(--pico-muted-color); margin-top:1rem">
+  <small>Fines can be paid at the circulation desk. Contact a librarian for assistance.</small>
+</p>
+{% endif %}
+{% endblock %}

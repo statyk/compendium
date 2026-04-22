@@ -11,6 +11,7 @@ from compendium.api.routes import (
     auth,
     branches,
     creators,
+    fines,
     holds,
     imports,
     items,
@@ -77,6 +78,10 @@ def create_app() -> FastAPI:
     app.include_router(users.router, prefix="/users", tags=["users"])
     app.include_router(imports.import_router, prefix="/import", tags=["import"])
     app.include_router(imports.export_router, prefix="/export", tags=["export"])
+    app.include_router(fines.fines_router, prefix="/fines", tags=["fines"])
+    app.include_router(fines.patron_fines_router, prefix="/patrons", tags=["fines"])
+    app.include_router(fines.me_fines_router, prefix="/me", tags=["fines"])
+    app.include_router(fines.items_lifecycle_router, prefix="/items", tags=["fines"])
 
     # Web UI routes (HTMX + Jinja2)
     app.mount("/ui/static", StaticFiles(directory=str(_WEB_STATIC)), name="web_static")

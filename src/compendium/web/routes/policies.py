@@ -120,18 +120,44 @@ def policy_update(
     loan_period_days: int = Form(),
     max_renewals: int = Form(),
     is_default: str = Form(default=""),
+    overdue_fine_per_day_cents: str = Form(default=""),
+    overdue_fine_cap_cents: str = Form(default=""),
+    grace_period_days: str = Form(default=""),
+    lost_item_default_cents: str = Form(default=""),
+    lost_item_processing_fee_cents: str = Form(default=""),
     csrf_token: str = Form(default=""),
     user: AppUser = Depends(require_web_permission(_PERM)),
     session: Session = Depends(get_session),
 ):
+    from compendium.services.policies import _MISSING
+
     check_csrf_form(request, csrf_token)
     default_flag: bool | None = True if is_default == "on" else False
+
+    def _int_or_missing(raw: str):
+        s = raw.strip()
+        if not s:
+            return None  # empty → clear
+        try:
+            return int(s)
+        except ValueError:
+            return _MISSING  # skip on parse error
+
+    def _int_or_none(raw: str):
+        # Same as above but returns None for empty (actual clear)
+        return _int_or_missing(raw)
+
     try:
         _policy_svc(session, user).update(
             policy_id,
             loan_period_days=loan_period_days,
             max_renewals=max_renewals,
             is_default=default_flag,
+            overdue_fine_per_day_cents=_int_or_none(overdue_fine_per_day_cents),
+            overdue_fine_cap_cents=_int_or_none(overdue_fine_cap_cents),
+            grace_period_days=int(grace_period_days) if grace_period_days.strip() else None,
+            lost_item_default_cents=_int_or_none(lost_item_default_cents),
+            lost_item_processing_fee_cents=_int_or_none(lost_item_processing_fee_cents),
         )
         return RedirectResponse("/ui/policies?message=Policy+updated.", status_code=303)
     except (BusinessRuleError, NotFoundError) as exc:

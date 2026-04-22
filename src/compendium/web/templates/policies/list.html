@@ -13,46 +13,57 @@
 {% if not policies %}
   <p><em>No loan policies configured.</em></p>
 {% else %}
-<table>
-  <thead>
-    <tr>
-      <th>Name</th>
-      <th>Applies to</th>
-      <th>Loan period</th>
-      <th>Max renewals</th>
-      <th>Default</th>
-      <th></th>
-    </tr>
-  </thead>
-  <tbody>
-    {% for p in policies %}
-    <tr>
-      <td>{{ p.name }}</td>
-      <td>{% if p.media_type %}{{ media_pill(p.media_type) }}{% else %}All media{% endif %}</td>
-      <td>
-        <form method="post" action="/ui/policies/{{ p.id }}/update"
-              style="display:flex; gap:0.4rem; align-items:center; flex-wrap:wrap">
-          <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
-          <input type="number" name="loan_period_days" value="{{ p.loan_period_days }}"
-                 min="1" style="width:5rem; margin:0">
-          days
-      </td>
-      <td>
-          <input type="number" name="max_renewals" value="{{ p.max_renewals }}"
-                 min="0" style="width:4rem; margin:0">
-      </td>
-      <td>
-          <input type="checkbox" name="is_default" value="on"
-                 {% if p.is_default %}checked{% endif %}
-                 {% if p.is_default %}title="To change the default, check another policy and save"{% endif %}>
-      </td>
-      <td>
-          <button type="submit" style="padding:0.2rem 0.6rem; margin:0">Save</button>
-        </form>
-      </td>
-    </tr>
-    {% endfor %}
-  </tbody>
-</table>
+<p style="color:var(--pico-muted-color)">
+  Fine fields are in cents. Leave blank for "no overdue fine / no default replacement cost."
+</p>
+{% for p in policies %}
+<article>
+  <header>
+    <strong>{{ p.name }}</strong>
+    &nbsp;
+    {% if p.media_type %}{{ media_pill(p.media_type) }}{% else %}<small>All media</small>{% endif %}
+    {% if p.is_default %}<span class="pill pill-book" style="font-size:0.8rem">default</span>{% endif %}
+  </header>
+  <form method="post" action="/ui/policies/{{ p.id }}/update"
+        style="display:grid; grid-template-columns: repeat(auto-fit, minmax(140px, 1fr)); gap:0.6rem; align-items:end">
+    <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+    <label>Loan period (days)
+      <input type="number" name="loan_period_days" value="{{ p.loan_period_days }}" min="1">
+    </label>
+    <label>Max renewals
+      <input type="number" name="max_renewals" value="{{ p.max_renewals }}" min="0">
+    </label>
+    <label>Overdue fine per day (¢)
+      <input type="number" name="overdue_fine_per_day_cents"
+             value="{{ p.overdue_fine_per_day_cents if p.overdue_fine_per_day_cents is not none else '' }}"
+             min="0">
+    </label>
+    <label>Overdue fine cap (¢)
+      <input type="number" name="overdue_fine_cap_cents"
+             value="{{ p.overdue_fine_cap_cents if p.overdue_fine_cap_cents is not none else '' }}"
+             min="0">
+    </label>
+    <label>Grace period (days)
+      <input type="number" name="grace_period_days" value="{{ p.grace_period_days }}" min="0">
+    </label>
+    <label>Lost default cost (¢)
+      <input type="number" name="lost_item_default_cents"
+             value="{{ p.lost_item_default_cents if p.lost_item_default_cents is not none else '' }}"
+             min="0">
+    </label>
+    <label>Lost processing fee (¢)
+      <input type="number" name="lost_item_processing_fee_cents"
+             value="{{ p.lost_item_processing_fee_cents if p.lost_item_processing_fee_cents is not none else '' }}"
+             min="0">
+    </label>
+    <label>
+      <input type="checkbox" name="is_default" value="on"
+             {% if p.is_default %}checked{% endif %}>
+      Default
+    </label>
+    <button type="submit" style="align-self:end">Save</button>
+  </form>
+</article>
+{% endfor %}
 {% endif %}
 {% endblock %}

@@ -14,6 +14,7 @@ from compendium.web.routes import (
     circ,
     covers,
     creators,
+    fines,
     items,
     me,
     patrons,
@@ -38,6 +39,7 @@ def create_web_router() -> APIRouter:
     router.include_router(users.router)
     router.include_router(audit.router)
     router.include_router(bulk.router)
+    router.include_router(fines.router)
     router.include_router(covers.router)
     return router
 

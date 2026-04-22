@@ -118,7 +118,7 @@ Physical copy of a work.
 | call_number | varchar(64) | Shelf location call number |
 | location | varchar(256) | Free-text shelf description |
 | condition | varchar(16) | `good`, `fair`, `poor` |
-| status | varchar(16) INDEX | `available`, `checked_out`, `on_hold`, `withdrawn` |
+| status | varchar(16) INDEX | `available`, `checked_out`, `on_hold`, `lost`, `damaged`, `withdrawn` |
 | acquired_at | date | |
 | notes | text | |
 | created_at | timestamptz | |
@@ -181,7 +181,7 @@ Borrower record. `user_id` is nullable — card-only patrons (children, guests) 
 
 ### `loan_policy`
 
-Configures loan duration and renewal limits, optionally scoped to a media type.
+Configures loan duration, renewal limits, and fine rates, optionally scoped to a media type.
 
 | Column | Type | Notes |
 |--------|------|-------|
@@ -191,6 +191,11 @@ Configures loan duration and renewal limits, optionally scoped to a media type.
 | loan_period_days | integer | |
 | max_renewals | integer | |
 | is_default | boolean | At least one policy must be default; swap is atomic at service level |
+| overdue_fine_per_day_cents | integer NULLABLE | Null or 0 = no overdue fine for this policy |
+| overdue_fine_cap_cents | integer NULLABLE | Max overdue fine per loan |
+| grace_period_days | integer | Default 0; days overdue before fines accrue |
+| lost_item_default_cents | integer NULLABLE | Fallback replacement cost |
+| lost_item_processing_fee_cents | integer NULLABLE | Flat fee added on lost declarations |
 
 ---
 
@@ -231,6 +236,32 @@ Work-level reservation. Any available copy satisfies the hold; copy-level holds 
 
 ---
 
+### `fine`
+
+Outstanding or resolved charges owed by a patron. One row per definitive charge; projected overdue amounts for active loans are computed on demand and not materialized until checkin or explicit assessment.
+
+| Column | Type | Notes |
+|--------|------|-------|
+| id | integer PK | |
+| patron_id | integer FK → patron INDEX | |
+| loan_id | integer FK → loan NULLABLE | |
+| item_id | integer FK → item NULLABLE | |
+| kind | varchar(16) | `overdue`, `lost`, `damaged`, `processing`, `other` |
+| amount_cents | integer | Always positive |
+| status | varchar(16) | `outstanding`, `paid`, `waived` |
+| assessed_at | timestamptz | |
+| resolved_at | timestamptz | Set when paid or waived |
+| reason | text | Optional short reason |
+| note | text | Optional free-text note; waive reasons appended here |
+| resolved_by_user_id | integer FK → app_user NULLABLE | User who paid/waived |
+
+**Indexes:**
+- `ix_fine_patron_status` on `(patron_id, status)`
+- `ix_fine_loan` on `(loan_id)`
+- `ix_fine_overdue_uniq` partial unique on `(loan_id)` `WHERE status = 'outstanding' AND kind = 'overdue'` — enforces idempotent overdue materialization
+
+---
+
 ### `audit_log`
 
 Append-only log of Librarian-level mutations. Routine circulation (loans, returns) is not audited — the loan table itself carries that history.
@@ -242,7 +273,7 @@ Append-only log of Librarian-level mutations. Routine circulation (loans, return
 | user_id | integer FK → app_user NULLABLE | Null for system/CLI actions |
 | actor_label | varchar(128) | Username or label at time of action |
 | source | varchar(16) | `web`, `api`, `cli`, `system` |
-| entity_type | varchar(32) | `work`, `item`, `patron`, `policy`, `role` |
+| entity_type | varchar(32) | `work`, `item`, `patron`, `policy`, `role`, `fine`, `creator`, `user` |
 | entity_id | integer NULLABLE | |
 | action | varchar(32) | `create`, `update`, `delete`, `withdraw` |
 | details | JSON | Snapshot of changed fields |

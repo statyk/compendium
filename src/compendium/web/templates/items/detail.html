@@ -69,4 +69,35 @@
 {% if has_permission(user, 'item.edit') %}
 <a href="/ui/items/{{ item.barcode }}/edit" role="button" class="outline">Edit</a>
 {% endif %}
+
+{% if has_permission(user, 'fine.manage') %}
+<hr>
+<h3>Lost / damaged</h3>
+<p style="color:var(--pico-muted-color)">
+  Declaring lost or damaged will close any active loan, cancel pending holds,
+  and assess the appropriate fee.
+</p>
+{% if item.status != "lost" and item.status != "withdrawn" %}
+<a href="/ui/items/{{ item.barcode }}/lost" role="button" class="outline contrast">
+  Declare lost
+</a>
+{% endif %}
+{% if item.status != "damaged" and item.status != "withdrawn" %}
+<a href="/ui/items/{{ item.barcode }}/damaged" role="button" class="outline contrast">
+  Mark damaged
+</a>
+{% endif %}
+{% if item.status == "damaged" %}
+<form method="post" action="/ui/items/{{ item.barcode }}/clear-damage" style="display:inline">
+  <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+  <button type="submit" class="outline">Clear damage</button>
+</form>
+{% endif %}
+{% if item.status == "lost" %}
+<form method="post" action="/ui/items/{{ item.barcode }}/clear-lost" style="display:inline">
+  <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+  <button type="submit" class="outline">Recover (clear lost)</button>
+</form>
+{% endif %}
+{% endif %}
 {% endblock %}

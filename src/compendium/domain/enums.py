@@ -44,3 +44,17 @@ class CreatorRole(StrEnum):
     COMPOSER = "composer"
     PERFORMER = "performer"
     CONTRIBUTOR = "contributor"
+
+
+class FineKind(StrEnum):
+    OVERDUE = "overdue"
+    LOST = "lost"
+    DAMAGED = "damaged"
+    PROCESSING = "processing"
+    OTHER = "other"
+
+
+class FineStatus(StrEnum):
+    OUTSTANDING = "outstanding"
+    PAID = "paid"
+    WAIVED = "waived"

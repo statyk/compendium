@@ -3,7 +3,7 @@ from __future__ import annotations
 from datetime import date, datetime
 from typing import Any
 
-from sqlalchemy import Boolean, Date, ForeignKey, Index, Integer, String, Text, func
+from sqlalchemy import Boolean, Date, ForeignKey, Index, Integer, String, Text, func, text
 from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column, relationship
 from sqlalchemy.types import JSON
 
@@ -197,6 +197,13 @@ class LoanPolicy(Base):
     loan_period_days: Mapped[int] = mapped_column(Integer)
     max_renewals: Mapped[int] = mapped_column(Integer, default=2, server_default="2")
     is_default: Mapped[bool] = mapped_column(Boolean, default=False, server_default="0")
+    overdue_fine_per_day_cents: Mapped[int | None] = mapped_column(Integer)
+    overdue_fine_cap_cents: Mapped[int | None] = mapped_column(Integer)
+    grace_period_days: Mapped[int] = mapped_column(
+        Integer, default=0, server_default="0"
+    )
+    lost_item_default_cents: Mapped[int | None] = mapped_column(Integer)
+    lost_item_processing_fee_cents: Mapped[int | None] = mapped_column(Integer)
 
     media_type: Mapped[MediaType | None] = relationship()
 
@@ -216,6 +223,43 @@ class Hold(Base):
     work: Mapped[Work] = relationship()
     patron: Mapped[Patron] = relationship()
     branch: Mapped[Branch] = relationship()
+
+
+class Fine(Base):
+    __tablename__ = "fine"
+    __table_args__ = (
+        Index("ix_fine_patron_status", "patron_id", "status"),
+        Index("ix_fine_loan", "loan_id"),
+        Index(
+            "ix_fine_overdue_uniq",
+            "loan_id",
+            unique=True,
+            sqlite_where=text("status = 'outstanding' AND kind = 'overdue'"),
+            postgresql_where=text("status = 'outstanding' AND kind = 'overdue'"),
+        ),
+    )
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    patron_id: Mapped[int] = mapped_column(ForeignKey("patron.id"), index=True)
+    loan_id: Mapped[int | None] = mapped_column(ForeignKey("loan.id"), nullable=True)
+    item_id: Mapped[int | None] = mapped_column(ForeignKey("item.id"), nullable=True)
+    kind: Mapped[str] = mapped_column(String(16))
+    amount_cents: Mapped[int] = mapped_column(Integer)
+    status: Mapped[str] = mapped_column(String(16))
+    assessed_at: Mapped[datetime] = mapped_column(
+        UtcDateTime, server_default=func.now()
+    )
+    resolved_at: Mapped[datetime | None] = mapped_column(UtcDateTime)
+    reason: Mapped[str | None] = mapped_column(Text)
+    note: Mapped[str | None] = mapped_column(Text)
+    resolved_by_user_id: Mapped[int | None] = mapped_column(
+        ForeignKey("app_user.id"), nullable=True
+    )
+
+    patron: Mapped[Patron] = relationship()
+    loan: Mapped[Loan | None] = relationship()
+    item: Mapped[Item | None] = relationship()
+    resolved_by: Mapped[AppUser | None] = relationship(foreign_keys=[resolved_by_user_id])
 
 
 class AuditLog(Base):

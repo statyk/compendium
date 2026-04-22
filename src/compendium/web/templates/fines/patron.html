@@ -1,0 +1,95 @@
+{% extends "base.html" %}
+{% block title %}Fines — {{ patron.full_name }}{% endblock %}
+{% block content %}
+<nav aria-label="breadcrumb">
+  <ul>
+    <li><a href="/ui/patrons">Patrons</a></li>
+    <li><a href="/ui/patrons/{{ patron.library_card_number }}">{{ patron.full_name }}</a></li>
+    <li>Fines</li>
+  </ul>
+</nav>
+
+<h2>Fines — {{ patron.full_name }}</h2>
+<p style="color:var(--pico-muted-color)">
+  Card {{ patron.library_card_number }} · Outstanding
+  <strong>{{ outstanding_cents | currency }}</strong>
+</p>
+
+{% if message %}<p class="success-banner">{{ message }}</p>{% endif %}
+{% if error %}<p class="error-banner">{{ error }}</p>{% endif %}
+
+{% if projections %}
+<h3>Pending overdue projections</h3>
+<p style="color:var(--pico-muted-color)">
+  These active loans are currently overdue but haven't been booked as fines yet.
+  Use the button below to materialize them for this patron.
+</p>
+<table>
+  <thead><tr><th>Item</th><th>Due</th><th>Projected</th></tr></thead>
+  <tbody>
+    {% for p in projections %}
+    <tr>
+      <td>{{ p.loan.item.work.title }} <small><code>{{ p.loan.item.barcode }}</code></small></td>
+      <td>{{ p.loan.due_at.strftime("%Y-%m-%d") }}</td>
+      <td><strong>{{ p.amount_cents | currency }}</strong></td>
+    </tr>
+    {% endfor %}
+  </tbody>
+</table>
+<form method="post" action="/ui/patrons/{{ patron.library_card_number }}/fines/assess-overdue" style="margin:1rem 0">
+  <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+  <button type="submit">Book overdue fines</button>
+</form>
+{% endif %}
+
+<h3>All fines</h3>
+{% if fines %}
+<table>
+  <thead>
+    <tr>
+      <th>ID</th>
+      <th>Kind</th>
+      <th>Amount</th>
+      <th>Status</th>
+      <th>Assessed</th>
+      <th>Note</th>
+      <th>Actions</th>
+    </tr>
+  </thead>
+  <tbody>
+    {% for fine in fines %}
+    <tr>
+      <td>#{{ fine.id }}</td>
+      <td>{{ fine.kind | replace("_", " ") }}</td>
+      <td>{{ fine.amount_cents | currency }}</td>
+      <td>{{ fine.status }}</td>
+      <td>{{ fine.assessed_at.strftime("%Y-%m-%d") }}</td>
+      <td>{{ fine.note or "—" }}</td>
+      <td>
+        {% if fine.status == "outstanding" %}
+        <form method="post" action="/ui/fines/{{ fine.id }}/pay" style="display:inline">
+          <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+          <input type="hidden" name="patron_card" value="{{ patron.library_card_number }}">
+          <button type="submit" class="outline">Pay</button>
+        </form>
+        <details style="display:inline-block; margin-left:.5em">
+          <summary class="outline secondary" role="button">Waive</summary>
+          <form method="post" action="/ui/fines/{{ fine.id }}/waive" style="margin-top:.5em">
+            <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+            <input type="hidden" name="patron_card" value="{{ patron.library_card_number }}">
+            <input type="text" name="note" placeholder="Waive reason (required)" required>
+            <button type="submit" class="contrast">Confirm waive</button>
+          </form>
+        </details>
+        {% else %}
+        <span style="color:var(--pico-muted-color)">{{ fine.status }}</span>
+        {% endif %}
+      </td>
+    </tr>
+    {% endfor %}
+  </tbody>
+</table>
+{% else %}
+<p><em>No fines on record.</em></p>
+{% endif %}
+{% endblock %}

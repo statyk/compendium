@@ -1,0 +1,27 @@
+{% extends "base.html" %}
+{% block title %}Mark item damaged — {{ item.barcode }}{% endblock %}
+{% block content %}
+<h2>Mark item damaged</h2>
+<p>
+  Item: <strong>{{ item.work.title }}</strong> · <code>{{ item.barcode }}</code>
+</p>
+
+{% if error %}<p class="error-banner">{{ error }}</p>{% endif %}
+
+<p style="color:var(--pico-muted-color)">
+  This will close any active loan, cancel any pending holds, and assess a damaged-item fee.
+</p>
+
+<form method="post" action="/ui/items/{{ item.barcode }}/damaged">
+  <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+  <label for="amount-cents">Damage fee (cents) <strong>*</strong></label>
+  <input type="number" name="amount_cents" id="amount-cents" min="1" required>
+
+  <label for="note">Note <strong>*</strong></label>
+  <input type="text" name="note" id="note" maxlength="256" required
+         placeholder="e.g. spine torn, water damage">
+
+  <button type="submit">Mark damaged</button>
+  <a href="/ui/items/{{ item.barcode }}" role="button" class="secondary outline">Cancel</a>
+</form>
+{% endblock %}

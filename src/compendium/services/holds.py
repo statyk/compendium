@@ -3,7 +3,7 @@ from __future__ import annotations
 from datetime import datetime, timedelta, timezone
 
 from compendium.domain.enums import HoldStatus
-from compendium.domain.errors import BusinessRuleError, NotFoundError
+from compendium.domain.errors import BlockedByFinesError, BusinessRuleError, NotFoundError
 from compendium.domain.models import Hold
 from compendium.repositories.base import (
     BranchRepository,
@@ -11,6 +11,7 @@ from compendium.repositories.base import (
     PatronRepository,
     WorkRepository,
 )
+from compendium.services.fines import CheckoutStatus, FineService
 
 _TERMINAL = {HoldStatus.FULFILLED.value, HoldStatus.CANCELLED.value, HoldStatus.EXPIRED.value}
 
@@ -23,12 +24,14 @@ class HoldService:
         work_repo: WorkRepository,
         branch_repo: BranchRepository,
         hold_expiry_days: int = 30,
+        fine_svc: FineService | None = None,
     ) -> None:
         self._holds = hold_repo
         self._patrons = patron_repo
         self._works = work_repo
         self._branches = branch_repo
         self._expiry_days = hold_expiry_days
+        self._fines = fine_svc
 
     def place(self, work_id: int, card_number: str) -> Hold:
         work = self._works.get(work_id)
@@ -40,6 +43,15 @@ class HoldService:
             raise NotFoundError(f"No patron with card number '{card_number}'")
         if not patron.is_active:
             raise BusinessRuleError(f"Patron card '{card_number}' is not active")
+
+        if self._fines is not None:
+            status = self._fines.checkout_status(patron)
+            if status == CheckoutStatus.BLOCKED:
+                raise BlockedByFinesError(
+                    patron.library_card_number,
+                    self._fines.outstanding_total(patron.id),
+                    self._fines._settings.fine_block_threshold_cents or 0,
+                )
 
         if not self._works.has_loanable_item(work_id):
             raise BusinessRuleError("Work has no loanable copies")

@@ -3,6 +3,12 @@
 {% block title %}My Holds — Compendium{% endblock %}
 {% block content %}
 <h2>My Holds</h2>
+{% if pay_at_pickup_warning %}
+<p class="warning-banner">
+  ⚠ You have {{ outstanding_cents | currency }} in outstanding fines. You can
+  place holds, but checkout will be blocked at pickup until fines are paid.
+</p>
+{% endif %}
 {% if not holds %}
   <p><em>You have no active holds.</em></p>
 {% else %}

@@ -12,6 +12,7 @@ class AuditEntityType:
     POLICY = "policy"
     ROLE = "role"
     CREATOR = "creator"
+    FINE = "fine"
 
 
 class AuditAction:
@@ -23,6 +24,13 @@ class AuditAction:
     REACTIVATE = "reactivate"
     SET_LOANABLE = "set_loanable"
     BULK_IMPORT = "bulk_import"
+    ASSESS_FINE = "assess_fine"
+    PAY_FINE = "pay_fine"
+    WAIVE_FINE = "waive_fine"
+    DECLARE_LOST = "declare_lost"
+    MARK_DAMAGED = "mark_damaged"
+    CLEAR_DAMAGE = "clear_damage"
+    CLEAR_LOST = "clear_lost"
 
 
 class AuditService:

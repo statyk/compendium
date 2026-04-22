@@ -207,6 +207,74 @@ Only `title` is required on import. `media_type` is required unless `--default-m
 
 ---
 
+## Fines & fees
+
+`services/fines.py` manages the Fine lifecycle (assess → outstanding → paid/waived), and `services/circulation.py` is extended with `declare_lost`, `mark_damaged`, `clear_damage`, `clear_lost` that couple item-status transitions to fee assessment.
+
+### Model
+
+- `Fine` table with FK to `patron` (required), optional `loan_id` / `item_id`, `kind` (enum), `amount_cents`, `status` (enum), timestamps, free-text `reason` and `note`, and `resolved_by_user_id`. Partial unique index ensures at most one outstanding `overdue` fine per loan.
+- `LoanPolicy` gained nullable columns: `overdue_fine_per_day_cents`, `overdue_fine_cap_cents`, `grace_period_days` (default 0), `lost_item_default_cents`, `lost_item_processing_fee_cents`. None/0 on the per-day rate means "no overdue fines for this policy," which preserves pre-slice behavior for un-configured deployments.
+- `ItemStatus` extended with `lost` and `damaged`.
+
+### Assessment model
+
+Hybrid: Fine rows are materialized only at moments of truth — checkin (if late), `declare_lost`, `mark_damaged`, or manual `assess`. For active overdue loans that haven't been booked, the patron fines page and circ desk show a **projected** amount computed on demand. A librarian can materialize pre-return:
+
+- **Per-patron** via the UI (`Book overdue fines` button on patron fines page), API (`POST /patrons/{card}/fines/assess-overdue`), or CLI (`compendium fine assess-overdue --patron CARD`).
+- **Bulk** via CLI only (`compendium maintenance assess-overdue-fines` — cron/systemd-friendly, CLI-only by our parity exception for maintenance commands).
+
+`FineService.assess_overdue_fines(patron_id=None)` is idempotent: creates the outstanding `overdue` Fine if absent, updates its amount if stale, never touches paid/waived fines.
+
+### Days-overdue calculation
+
+Whole elapsed days in UTC: `max(0, (now - due_at).days)`. Sub-day portions don't count, so a patron returning within 24h of `due_at` owes 0 days. This is predictable and avoids a timezone-configuration rabbit hole; a future slice can add library-local-tz rounding if needed.
+
+### Threshold-based blocking
+
+Two env-var settings:
+
+- `COMPENDIUM_FINE_BLOCK_THRESHOLD_CENTS` (int | None; default None = no block).
+- `COMPENDIUM_FINE_BLOCK_HOLDS` (bool; default false).
+
+When threshold is set and outstanding total exceeds it:
+- Checkouts always raise `BlockedByFinesError`.
+- Holds raise only if `FINE_BLOCK_HOLDS=true`. Default-off means the "place hold now, pay at pickup" flow works out of the box.
+- Patron-facing hold UI (`/ui/me/holds`, future catalog hold forms) show a "pay at pickup" warning banner when the patron is in this state.
+
+### Currency display
+
+`services/formatting.format_currency(cents, settings=None)` reads `COMPENDIUM_CURRENCY_SYMBOL` (default `$`) and `COMPENDIUM_CURRENCY_SYMBOL_POSITION` (`before` | `after`, default `before`). Registered as a Jinja filter `| currency` for templates; CLI imports the helper directly. **API responses always use `amount_cents: int`**; clients format client-side. Decimal separator is hardcoded `.` — full locale-aware number formatting is out of v1 scope.
+
+### Lost vs damaged semantics
+
+- **`declare_lost`** closes any active loan, cancels pending holds on the work, assesses a lost-cost Fine (from `replacement_cost_cents` or the policy default), plus a processing Fine if configured. Item status becomes `lost`.
+- **`mark_damaged`** same side effects on loan/holds, plus a damaged Fine; item status becomes `damaged` (item retained in catalog, non-loanable).
+- **`clear_damage` / `clear_lost`** return item to `available`. Associated Fine rows are **not** modified — the librarian waives or keeps them as a separate decision.
+
+### Permissions
+
+- `fine.manage` (new) — assess / pay / waive fines; declare lost; mark damaged; clear damage/lost. Gated on all librarian-facing fine UI and actions.
+- `fine.view.self` (new) — patron self-service view of their own fines. Added to the Patron preset role.
+- Librarian preset covers `fine.manage` via its `*` wildcard.
+
+### API surface (summary)
+
+```
+GET    /patrons/{card}/fines
+POST   /patrons/{card}/fines/assess-overdue
+GET    /me/fines
+POST   /fines                                 (manual assess)
+POST   /fines/{id}/pay
+POST   /fines/{id}/waive                      body: {note}
+POST   /items/{barcode}/lost                  body: {replacement_cost_cents?, note?}
+POST   /items/{barcode}/damaged               body: {amount_cents, note}
+POST   /items/{barcode}/clear-damage
+POST   /items/{barcode}/clear-lost
+```
+
+---
+
 ## Testing strategy
 
 | Level | Location | Scope |

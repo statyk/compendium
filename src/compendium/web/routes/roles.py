@@ -26,6 +26,7 @@ PERMISSION_GROUPS = [
     ("Catalog", ["work.view", "work.edit", "item.view", "item.create", "item.edit", "item.delete", "catalog.import"]),
     ("Loans", ["loan.checkout", "loan.checkin", "loan.renew.any", "loan.renew.self", "loan.view.self"]),
     ("Holds", ["hold.place.self", "hold.place.any", "hold.view.self"]),
+    ("Fines", ["fine.manage", "fine.view.self"]),
     ("Administration", ["patron.manage", "user.manage", "role.manage", "policy.edit", "branch.edit"]),
 ]
 

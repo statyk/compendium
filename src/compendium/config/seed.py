@@ -26,6 +26,7 @@ _PRESET_ROLES = [
             "loan.renew.self",
             "hold.place.self",
             "hold.view.self",
+            "fine.view.self",
         ],
         True,
     ),

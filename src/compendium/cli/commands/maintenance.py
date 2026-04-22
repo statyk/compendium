@@ -68,6 +68,43 @@ def prune_audit_log(
         typer.echo(f"Pruned {count} audit row(s) older than {days} day(s).")
 
 
+@app.command("assess-overdue-fines")
+def assess_overdue_fines_cmd() -> None:
+    """Materialize outstanding overdue fines for every currently-overdue loan.
+
+    Idempotent: creates a Fine row per (loan, overdue) or updates the existing
+    row's amount. Paid/waived fines are never touched. Safe to run from cron."""
+    import getpass
+
+    from compendium.repositories.sql.fine_repository import SqlFineRepository
+    from compendium.repositories.sql.item_repository import SqlItemRepository
+    from compendium.repositories.sql.loan_policy_repository import SqlLoanPolicyRepository
+    from compendium.repositories.sql.loan_repository import SqlLoanRepository
+    from compendium.services.audit import AuditService
+    from compendium.services.fines import FineService
+
+    with session_scope() as session:
+        settings = get_settings()
+        audit = AuditService(SqlAuditLogRepository(session))
+        fine_svc = FineService(
+            fine_repo=SqlFineRepository(session),
+            patron_repo=SqlPatronRepository(session),
+            loan_repo=SqlLoanRepository(session),
+            item_repo=SqlItemRepository(session),
+            policy_repo=SqlLoanPolicyRepository(session),
+            settings=settings,
+            audit_svc=audit,
+            actor_label=f"cli:{getpass.getuser()}",
+            source="cli",
+        )
+        counts = fine_svc.assess_overdue_fines()
+    typer.echo(
+        f"Overdue fines assessed: "
+        f"created={counts['created']}, updated={counts['updated']}, "
+        f"unchanged={counts['unchanged']}."
+    )
+
+
 @app.command("prune-cover-cache")
 def prune_cover_cache(
     max_mb: int = typer.Option(

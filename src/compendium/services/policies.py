@@ -5,6 +5,8 @@ from compendium.domain.models import AppUser, LoanPolicy
 from compendium.repositories.base import LoanPolicyRepository
 from compendium.services.audit import AuditAction, AuditEntityType, AuditService
 
+_MISSING = object()
+
 
 class PolicyService:
     def __init__(
@@ -56,6 +58,12 @@ class PolicyService:
         loan_period_days: int | None = None,
         max_renewals: int | None = None,
         is_default: bool | None = None,
+        *,
+        overdue_fine_per_day_cents: int | None | object = _MISSING,
+        overdue_fine_cap_cents: int | None | object = _MISSING,
+        grace_period_days: int | None = None,
+        lost_item_default_cents: int | None | object = _MISSING,
+        lost_item_processing_fee_cents: int | None | object = _MISSING,
     ) -> LoanPolicy:
         policy = self._policies.get(policy_id)
         if policy is None:
@@ -64,6 +72,11 @@ class PolicyService:
             "loan_period_days": policy.loan_period_days,
             "max_renewals": policy.max_renewals,
             "is_default": policy.is_default,
+            "overdue_fine_per_day_cents": policy.overdue_fine_per_day_cents,
+            "overdue_fine_cap_cents": policy.overdue_fine_cap_cents,
+            "grace_period_days": policy.grace_period_days,
+            "lost_item_default_cents": policy.lost_item_default_cents,
+            "lost_item_processing_fee_cents": policy.lost_item_processing_fee_cents,
         }
         if loan_period_days is not None:
             policy.loan_period_days = loan_period_days
@@ -79,11 +92,28 @@ class PolicyService:
                     "Set another policy as default first."
                 )
             policy.is_default = False
+        if overdue_fine_per_day_cents is not _MISSING:
+            policy.overdue_fine_per_day_cents = overdue_fine_per_day_cents
+        if overdue_fine_cap_cents is not _MISSING:
+            policy.overdue_fine_cap_cents = overdue_fine_cap_cents
+        if grace_period_days is not None:
+            if grace_period_days < 0:
+                raise BusinessRuleError("grace_period_days must be >= 0")
+            policy.grace_period_days = grace_period_days
+        if lost_item_default_cents is not _MISSING:
+            policy.lost_item_default_cents = lost_item_default_cents
+        if lost_item_processing_fee_cents is not _MISSING:
+            policy.lost_item_processing_fee_cents = lost_item_processing_fee_cents
         self._policies.update(policy)
         after = {
             "loan_period_days": policy.loan_period_days,
             "max_renewals": policy.max_renewals,
             "is_default": policy.is_default,
+            "overdue_fine_per_day_cents": policy.overdue_fine_per_day_cents,
+            "overdue_fine_cap_cents": policy.overdue_fine_cap_cents,
+            "grace_period_days": policy.grace_period_days,
+            "lost_item_default_cents": policy.lost_item_default_cents,
+            "lost_item_processing_fee_cents": policy.lost_item_processing_fee_cents,
         }
         self._record(
             AuditEntityType.POLICY,

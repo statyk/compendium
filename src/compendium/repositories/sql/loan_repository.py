@@ -27,6 +27,15 @@ class SqlLoanRepository:
             .all()
         )
 
+    def get_most_recent_for_item(self, item_id: int) -> Loan | None:
+        """Return the most recently-started loan for this item, active or returned."""
+        return (
+            self._s.query(Loan)
+            .filter(Loan.item_id == item_id)
+            .order_by(Loan.checked_out_at.desc())
+            .first()
+        )
+
     def update(self, loan: Loan) -> Loan:
         self._s.flush()
         return loan

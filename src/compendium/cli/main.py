@@ -8,6 +8,7 @@ from compendium.cli.commands import (
     bulk_ops,
     creator,
     db,
+    fine,
     hold,
     item,
     loan,
@@ -40,6 +41,7 @@ app.add_typer(work.app, name="work")
 app.add_typer(creator.app, name="creator")
 app.add_typer(bulk_ops.import_app, name="import")
 app.add_typer(bulk_ops.export_app, name="export")
+app.add_typer(fine.app, name="fine")
 
 
 @app.command("serve")

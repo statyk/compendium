@@ -69,6 +69,14 @@
   </dd>
 </dl>
 
+{% if has_permission(user, 'fine.manage') %}
+<p>
+  <a href="/ui/patrons/{{ patron.library_card_number }}/fines" role="button" class="outline">
+    View fines
+  </a>
+</p>
+{% endif %}
+
 <h3>Active Loans <small><a href="/ui/patrons/{{ patron.library_card_number }}/loans">(view all)</a></small></h3>
 {% if loans %}
 <table>

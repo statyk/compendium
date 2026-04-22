@@ -3,8 +3,13 @@ from __future__ import annotations
 from datetime import datetime, timedelta, timezone
 
 from compendium.domain.enums import HoldStatus, ItemStatus
-from compendium.domain.errors import BusinessRuleError, NotFoundError
-from compendium.domain.models import Hold, Item, Loan
+from compendium.domain.errors import (
+    BlockedByFinesError,
+    BusinessRuleError,
+    NotFoundError,
+    ValidationError,
+)
+from compendium.domain.models import AppUser, Hold, Item, Loan
 from compendium.repositories.base import (
     BranchRepository,
     HoldRepository,
@@ -13,6 +18,8 @@ from compendium.repositories.base import (
     LoanRepository,
     PatronRepository,
 )
+from compendium.services.audit import AuditAction, AuditEntityType, AuditService
+from compendium.services.fines import CheckoutStatus, FineService
 
 _DEFAULT_LOAN_DAYS = 14
 _DEFAULT_MAX_RENEWALS = 2
@@ -28,6 +35,11 @@ class CirculationService:
         hold_repo: HoldRepository,
         policy_repo: LoanPolicyRepository,
         hold_pickup_days: int = 3,
+        fine_svc: FineService | None = None,
+        audit_svc: AuditService | None = None,
+        actor: AppUser | None = None,
+        actor_label: str | None = None,
+        source: str = "system",
     ) -> None:
         self._items = item_repo
         self._loans = loan_repo
@@ -36,6 +48,29 @@ class CirculationService:
         self._holds = hold_repo
         self._policies = policy_repo
         self._pickup_days = hold_pickup_days
+        self._fines = fine_svc
+        self._audit = audit_svc
+        self._actor = actor
+        self._actor_label = actor_label
+        self._source = source
+
+    def _record(
+        self,
+        entity_type: str,
+        entity_id: int | None,
+        action: str,
+        details: dict | None = None,
+    ) -> None:
+        if self._audit is not None:
+            self._audit.record(
+                actor=self._actor,
+                actor_label=self._actor_label,
+                source=self._source,
+                entity_type=entity_type,
+                entity_id=entity_id,
+                action=action,
+                details=details,
+            )
 
     def _get_policy(self, item: Item) -> tuple[int, int]:
         """Return (loan_period_days, max_renewals) for the item's media type."""
@@ -69,6 +104,15 @@ class CirculationService:
             raise NotFoundError(f"No patron with card number '{card_number}'")
         if not patron.is_active:
             raise BusinessRuleError(f"Patron card '{card_number}' is not active")
+
+        if self._fines is not None:
+            status = self._fines.checkout_status(patron)
+            if status != CheckoutStatus.OK:
+                raise BlockedByFinesError(
+                    patron.library_card_number,
+                    self._fines.outstanding_total(patron.id),
+                    self._fines._settings.fine_block_threshold_cents or 0,
+                )
 
         if not item.is_loanable:
             raise BusinessRuleError(
@@ -119,6 +163,9 @@ class CirculationService:
         loan.returned_at = datetime.now(timezone.utc)
         self._loans.update(loan)
 
+        if self._fines is not None:
+            self._fines.assess_overdue(loan)
+
         self._promote_hold(item)
         self._items.update(item)
         return loan
@@ -136,6 +183,9 @@ class CirculationService:
 
         loan.returned_at = datetime.now(timezone.utc)
         self._loans.update(loan)
+
+        if self._fines is not None:
+            self._fines.assess_overdue(loan)
 
         self._promote_hold(item)
         self._items.update(item)
@@ -188,3 +238,135 @@ class CirculationService:
         loan.renewal_count += 1
         self._loans.update(loan)
         return loan
+
+    # ------------------------------------------------------------------
+    # Lost / damaged / recovery transitions
+    # ------------------------------------------------------------------
+
+    def _close_active_loan(self, item: Item) -> None:
+        loan = self._loans.get_active_for_item(item.id)
+        if loan is not None:
+            loan.returned_at = datetime.now(timezone.utc)
+            self._loans.update(loan)
+
+    def _cancel_pending_holds(self, work_id: int) -> list[int]:
+        cancelled: list[int] = []
+        for hold in self._holds.get_active_for_work(work_id):
+            hold.status = HoldStatus.CANCELLED.value
+            self._holds.update(hold)
+            cancelled.append(hold.id)
+        return cancelled
+
+    def declare_lost(
+        self,
+        barcode: str,
+        *,
+        replacement_cost_cents: int | None = None,
+        note: str | None = None,
+    ) -> Item:
+        item = self._items.get_by_barcode(barcode)
+        if item is None:
+            raise NotFoundError(f"No item with barcode '{barcode}'")
+        if item.status == ItemStatus.WITHDRAWN.value:
+            raise BusinessRuleError(f"Item '{barcode}' is withdrawn; cannot declare lost.")
+        if item.status == ItemStatus.LOST.value:
+            raise BusinessRuleError(f"Item '{barcode}' is already declared lost.")
+
+        self._close_active_loan(item)
+        cancelled = self._cancel_pending_holds(item.work_id)
+
+        fine_ids: list[int] = []
+        if self._fines is not None:
+            fines = self._fines.assess_lost(
+                item, replacement_cost_cents=replacement_cost_cents, note=note
+            )
+            fine_ids = [f.id for f in fines]
+
+        item.status = ItemStatus.LOST.value
+        self._items.update(item)
+        self._record(
+            AuditEntityType.ITEM,
+            item.id,
+            AuditAction.DECLARE_LOST,
+            {
+                "barcode": item.barcode,
+                "replacement_cost_cents": replacement_cost_cents,
+                "fine_ids": fine_ids,
+                "cancelled_hold_ids": cancelled,
+                "note": note,
+            },
+        )
+        return item
+
+    def mark_damaged(
+        self, barcode: str, *, amount_cents: int, note: str
+    ) -> Item:
+        if not note or not note.strip():
+            raise ValidationError("A note is required when marking damaged.")
+        item = self._items.get_by_barcode(barcode)
+        if item is None:
+            raise NotFoundError(f"No item with barcode '{barcode}'")
+        if item.status == ItemStatus.WITHDRAWN.value:
+            raise BusinessRuleError(f"Item '{barcode}' is withdrawn; cannot mark damaged.")
+        if item.status == ItemStatus.DAMAGED.value:
+            raise BusinessRuleError(f"Item '{barcode}' is already marked damaged.")
+
+        self._close_active_loan(item)
+        cancelled = self._cancel_pending_holds(item.work_id)
+
+        fine_id: int | None = None
+        if self._fines is not None:
+            fine = self._fines.assess_damaged(item, amount_cents=amount_cents, note=note)
+            fine_id = fine.id
+
+        item.status = ItemStatus.DAMAGED.value
+        self._items.update(item)
+        self._record(
+            AuditEntityType.ITEM,
+            item.id,
+            AuditAction.MARK_DAMAGED,
+            {
+                "barcode": item.barcode,
+                "amount_cents": amount_cents,
+                "fine_id": fine_id,
+                "cancelled_hold_ids": cancelled,
+                "note": note,
+            },
+        )
+        return item
+
+    def clear_damage(self, barcode: str) -> Item:
+        item = self._items.get_by_barcode(barcode)
+        if item is None:
+            raise NotFoundError(f"No item with barcode '{barcode}'")
+        if item.status != ItemStatus.DAMAGED.value:
+            raise BusinessRuleError(
+                f"Item '{barcode}' is not in damaged status (current: {item.status})."
+            )
+        item.status = ItemStatus.AVAILABLE.value
+        self._items.update(item)
+        self._record(
+            AuditEntityType.ITEM,
+            item.id,
+            AuditAction.CLEAR_DAMAGE,
+            {"barcode": item.barcode},
+        )
+        return item
+
+    def clear_lost(self, barcode: str) -> Item:
+        item = self._items.get_by_barcode(barcode)
+        if item is None:
+            raise NotFoundError(f"No item with barcode '{barcode}'")
+        if item.status != ItemStatus.LOST.value:
+            raise BusinessRuleError(
+                f"Item '{barcode}' is not in lost status (current: {item.status})."
+            )
+        item.status = ItemStatus.AVAILABLE.value
+        self._items.update(item)
+        self._record(
+            AuditEntityType.ITEM,
+            item.id,
+            AuditAction.CLEAR_LOST,
+            {"barcode": item.barcode},
+        )
+        return item

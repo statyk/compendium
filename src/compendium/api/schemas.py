@@ -236,3 +236,49 @@ class ImportReportResponse(BaseModel):
     skipped_duplicates: int
     errors: list[ImportRowErrorResponse]
     dry_run: bool
+
+
+class FineResponse(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    id: int
+    patron_id: int
+    loan_id: int | None
+    item_id: int | None
+    kind: str
+    amount_cents: int
+    status: str
+    assessed_at: datetime
+    resolved_at: datetime | None
+    reason: str | None
+    note: str | None
+
+
+class AssessManualFineRequest(BaseModel):
+    patron_card: str
+    kind: str
+    amount_cents: int
+    note: str | None = None
+    reason: str | None = None
+    loan_id: int | None = None
+    item_id: int | None = None
+
+
+class WaiveFineRequest(BaseModel):
+    note: str
+
+
+class DeclareLostRequest(BaseModel):
+    replacement_cost_cents: int | None = None
+    note: str | None = None
+
+
+class MarkDamagedRequest(BaseModel):
+    amount_cents: int
+    note: str
+
+
+class AssessOverdueResponse(BaseModel):
+    created: int
+    updated: int
+    unchanged: int

@@ -24,6 +24,7 @@
     nav .brand-logo { width: 2em; height: 2em; flex-shrink: 0; display: block; }
     .error-banner { color: var(--pico-color-red-500); }
     .success-banner { color: var(--pico-color-green-500); }
+    .warning-banner { color: #92400e; background: #fef3c7; padding: 0.75em 1em; border-radius: 0.5em; }
     /* Pico v2 sets nav details.dropdown to display:inline, which Firefox
        treats as zero-width when sizing the absolutely-positioned menu,
        causing the menu to stretch the full page width. inline-block gives
@@ -112,6 +113,8 @@
     .pill-staff_only     { background: #fecaca; color: #991b1b; }
     .pill-display        { background: #fbcfe8; color: #9d174d; }
     .pill-other          { background: #e5e7eb; color: #374151; }
+    .pill-lost           { background: #fecaca; color: #991b1b; }
+    .pill-damaged        { background: #fed7aa; color: #9a3412; }
   </style>
 </head>
 <body>
@@ -176,6 +179,7 @@
               <ul>
                 <li><a href="/ui/me/loans">My Loans</a></li>
                 <li><a href="/ui/me/holds">My Holds</a></li>
+                {% if has_permission(user, 'fine.view.self') %}<li><a href="/ui/me/fines">My Fines</a></li>{% endif %}
                 <li><a href="/ui/me/password">Change Password</a></li>
                 <li>
                   <form method="post" action="/ui/logout" class="dropdown-form">

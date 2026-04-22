@@ -27,3 +27,7 @@ class Settings(BaseSettings):
     secure_cookies: bool = False
     audit_retention_days: int | None = None
     default_theme: Literal["light", "dark", "auto"] = "light"
+    fine_block_threshold_cents: int | None = None
+    fine_block_holds: bool = False
+    currency_symbol: str = "$"
+    currency_symbol_position: Literal["before", "after"] = "before"

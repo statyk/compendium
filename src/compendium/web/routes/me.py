@@ -108,11 +108,31 @@ def my_holds(
     patron: Patron = Depends(get_web_patron),
     session: Session = Depends(get_session),
 ):
+    from compendium.repositories.sql.fine_repository import SqlFineRepository
+    from compendium.services.fines import CheckoutStatus, FineService
+
     holds = SqlHoldRepository(session).get_active_for_patron(patron.id)
+    fine_svc = FineService(
+        fine_repo=SqlFineRepository(session),
+        patron_repo=SqlPatronRepository(session),
+        loan_repo=SqlLoanRepository(session),
+        item_repo=SqlItemRepository(session),
+        policy_repo=SqlLoanPolicyRepository(session),
+        settings=get_settings(),
+    )
+    status = fine_svc.checkout_status(patron)
+    outstanding = fine_svc.outstanding_total(patron.id)
     return _render(
         "me/holds.html",
         request,
-        {"request": request, "user": user, "patron": patron, "holds": holds},
+        {
+            "request": request,
+            "user": user,
+            "patron": patron,
+            "holds": holds,
+            "pay_at_pickup_warning": status == CheckoutStatus.BLOCKED_AT_PICKUP,
+            "outstanding_cents": outstanding,
+        },
     )
 
 
