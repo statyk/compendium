@@ -1,0 +1,106 @@
+{% extends "base.html" %}
+{% block title %}Bulk import — Compendium{% endblock %}
+{% block content %}
+<h2>Bulk import</h2>
+
+<p style="color:var(--pico-muted-color)">
+  Upload a CSV or MARC file to add works and items in bulk. Use <strong>Dry run</strong>
+  to validate without writing. Non-loanable columns in CSV are respected; MARC
+  imports are standards-compliant and do not carry item-level state.
+</p>
+
+{% if error %}<p class="error-banner">{{ error }}</p>{% endif %}
+
+<form method="post" action="/ui/admin/import" enctype="multipart/form-data">
+  <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+
+  <label for="format">Format</label>
+  <select name="format" id="format" required>
+    <option value="csv">CSV</option>
+    <option value="marc">MARC21 (.mrc binary)</option>
+    <option value="marcxml">MARCXML (.xml)</option>
+  </select>
+
+  <label for="file">File</label>
+  <input type="file" name="file" id="file" required>
+
+  <label for="mode">Duplicate handling</label>
+  <select name="mode" id="mode">
+    {% for m in mode_choices %}
+    <option value="{{ m }}">{{ m }}</option>
+    {% endfor %}
+  </select>
+
+  <label for="default-media-type">Default media type <small>(for rows/records with none)</small></label>
+  <select name="default_media_type" id="default-media-type">
+    <option value="">(none)</option>
+    {% for mt in media_types %}
+    <option value="{{ mt.code }}">{{ mt.display_name }} ({{ mt.code }})</option>
+    {% endfor %}
+  </select>
+
+  <label for="default-branch">Default branch</label>
+  <select name="default_branch" id="default-branch">
+    <option value="">(none)</option>
+    {% for b in branches %}
+    <option value="{{ b.code }}">{{ b.name }} ({{ b.code }})</option>
+    {% endfor %}
+  </select>
+
+  <label for="barcode-prefix">Barcode prefix <small>(optional — tags auto-generated barcodes in this batch)</small></label>
+  <input type="text" name="barcode_prefix" id="barcode-prefix" maxlength="16" placeholder="e.g. IMP-">
+
+  <label>
+    <input type="checkbox" name="dry_run" value="1" checked> Dry run (preview only, nothing written)
+  </label>
+
+  <button type="submit">Upload</button>
+</form>
+
+{% if report %}
+<hr>
+<h3>Import report</h3>
+{% if report.dry_run %}
+<p class="success-banner">
+  Dry-run complete — no changes were written. Uncheck <em>Dry run</em> and re-upload to apply.
+</p>
+{% else %}
+<p class="success-banner">
+  Import applied.
+  {% if report.created_works or report.added_copies %}
+  <a href="/ui/catalog" role="button" class="outline" style="margin-left:.75rem">Browse catalog</a>
+  {% endif %}
+</p>
+{% endif %}
+
+<dl>
+  <dt>Source</dt><dd>{{ report.source }}{% if report.filename %} ({{ report.filename }}){% endif %}</dd>
+  <dt>Total rows/records</dt><dd>{{ report.total_rows }}</dd>
+  <dt>Works created</dt><dd>{{ report.created_works }}</dd>
+  <dt>Added copies (existing work)</dt><dd>{{ report.added_copies }}</dd>
+  <dt>Skipped duplicates</dt><dd>{{ report.skipped_duplicates }}</dd>
+  <dt>Errors</dt><dd>{{ report.errors | length }}</dd>
+</dl>
+
+{% if report.errors %}
+<h4>Errors</h4>
+<figure>
+<table>
+  <thead><tr><th>Row</th><th>Identifier</th><th>Message</th></tr></thead>
+  <tbody>
+    {% for err in report.errors[:200] %}
+    <tr>
+      <td>{{ err.row_number }}</td>
+      <td><code>{{ err.identifier }}</code></td>
+      <td>{{ err.message }}</td>
+    </tr>
+    {% endfor %}
+  </tbody>
+</table>
+{% if report.errors | length > 200 %}
+<figcaption>(Showing first 200 of {{ report.errors | length }} errors)</figcaption>
+{% endif %}
+</figure>
+{% endif %}
+{% endif %}
+{% endblock %}

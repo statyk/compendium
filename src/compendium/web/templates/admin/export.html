@@ -1,0 +1,45 @@
+{% extends "base.html" %}
+{% block title %}Bulk export — Compendium{% endblock %}
+{% block content %}
+<h2>Bulk export</h2>
+
+<p style="color:var(--pico-muted-color)">
+  Download the catalog as CSV (round-trippable into Compendium) or MARC21 / MARCXML
+  (standards-compliant bibliographic records — item-level fields like barcode and
+  loanable state are not included in MARC output).
+</p>
+
+{% if error %}<p class="error-banner">{{ error }}</p>{% endif %}
+
+<form method="post" action="/ui/admin/export">
+  <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+
+  <label for="format">Format</label>
+  <select name="format" id="format" required>
+    <option value="csv">CSV</option>
+    <option value="marc">MARC21 (.mrc binary)</option>
+    <option value="marcxml">MARCXML (.xml)</option>
+  </select>
+
+  <label for="media-type">Media type filter</label>
+  <select name="media_type" id="media-type">
+    <option value="">(all)</option>
+    {% for mt in media_types %}
+    <option value="{{ mt.code }}">{{ mt.display_name }}</option>
+    {% endfor %}
+  </select>
+
+  <label for="branch">Branch filter</label>
+  <select name="branch" id="branch">
+    <option value="">(all)</option>
+    {% for b in branches %}
+    <option value="{{ b.code }}">{{ b.name }}</option>
+    {% endfor %}
+  </select>
+
+  <label for="since">Since <small>(ISO date — works created on or after)</small></label>
+  <input type="date" name="since" id="since">
+
+  <button type="submit">Download</button>
+</form>
+{% endblock %}

@@ -6,7 +6,21 @@ from fastapi.responses import HTMLResponse, RedirectResponse
 from fastapi.staticfiles import StaticFiles
 from starlette.middleware.base import BaseHTTPMiddleware
 
-from compendium.api.routes import audit, auth, branches, creators, holds, items, loans, me, patrons, policies, users, works
+from compendium.api.routes import (
+    audit,
+    auth,
+    branches,
+    creators,
+    holds,
+    imports,
+    items,
+    loans,
+    me,
+    patrons,
+    policies,
+    users,
+    works,
+)
 from compendium.config.settings import INSECURE_JWT_DEFAULT
 from compendium.db.engine import get_settings
 from compendium.web.app import NoPatronAccountException, RequiresLoginException, create_web_router
@@ -61,6 +75,8 @@ def create_app() -> FastAPI:
     app.include_router(policies.router, prefix="/policies", tags=["policies"])
     app.include_router(me.router, prefix="/me", tags=["me"])
     app.include_router(users.router, prefix="/users", tags=["users"])
+    app.include_router(imports.import_router, prefix="/import", tags=["import"])
+    app.include_router(imports.export_router, prefix="/export", tags=["export"])
 
     # Web UI routes (HTMX + Jinja2)
     app.mount("/ui/static", StaticFiles(directory=str(_WEB_STATIC)), name="web_static")

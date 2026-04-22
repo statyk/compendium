@@ -51,3 +51,4 @@ docker/certs/*
 
 # Local-only project notes (not published)
 CLAUDE.md
+ils_parity.txt

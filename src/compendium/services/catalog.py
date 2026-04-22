@@ -532,6 +532,70 @@ class CatalogService:
         )
         return item
 
+    def add_from_import(
+        self,
+        *,
+        media_type_code: str,
+        meta: dict,
+        conflict_mode: str = "append",
+        barcode: str | None = None,
+        accession_number: str | None = None,
+        barcode_prefix: str | None = None,
+        call_number: str | None = None,
+        condition: str | None = None,
+        location: str | None = None,
+        branch_code: str | None = None,
+        is_loanable: bool = True,
+        loan_restriction_reason: str | None = None,
+        loan_restriction_note: str | None = None,
+    ) -> tuple[Work | None, Item | None, str]:
+        """Import-dedicated entry point. Dedups by ISBN/UPC, honours conflict_mode
+        ('append' | 'skip-duplicates' | 'error-on-conflict'), and propagates
+        import-specific item fields (pre-set barcode, prefix, loanable state).
+        Does NOT emit per-row audits — the caller records a summary BULK_IMPORT
+        entry. Returns (work, item, outcome) where outcome is one of:
+        'created_work', 'added_copy', 'skipped_duplicate', 'errored_on_conflict'."""
+        title = (meta.get("title") or "").strip()
+        if not title:
+            raise ValidationError("Title is required.")
+        meta = {**meta, "title": title}
+
+        branch = None
+        if branch_code:
+            branch = self._branches.get_by_code(branch_code)
+            if branch is None:
+                raise ValidationError(f"Unknown branch code '{branch_code}'")
+
+        existing: Work | None = None
+        if meta.get("isbn"):
+            existing = self._works.get_by_isbn(meta["isbn"])
+        if existing is None and meta.get("upc"):
+            existing = self._works.get_by_upc(meta["upc"])
+
+        item_kwargs = {
+            "barcode": barcode,
+            "accession_number": accession_number,
+            "barcode_prefix": barcode_prefix,
+            "call_number": call_number,
+            "condition": condition,
+            "location": location,
+            "is_loanable": is_loanable,
+            "loan_restriction_reason": loan_restriction_reason,
+            "loan_restriction_note": loan_restriction_note,
+        }
+
+        if existing is not None:
+            if conflict_mode == "skip-duplicates":
+                return existing, None, "skipped_duplicate"
+            if conflict_mode == "error-on-conflict":
+                return existing, None, "errored_on_conflict"
+            item = self._create_item(existing, branch=branch, **item_kwargs)
+            return existing, item, "added_copy"
+
+        work = self._create_work(meta, media_type_code, branch=branch)
+        item = self._create_item(work, branch=branch, **item_kwargs)
+        return work, item, "created_work"
+
     # ------------------------------------------------------------------
     # Internals
     # ------------------------------------------------------------------
@@ -545,14 +609,16 @@ class CatalogService:
 
     def _create_work(self, meta: dict, media_type_code: str, branch=None) -> Work:
         mt = self._media_types.get_by_code(media_type_code)
+        if mt is None:
+            raise ValidationError(f"Unknown media_type '{media_type_code}'")
 
         work = Work(
             title=meta["title"],
             subtitle=meta.get("subtitle"),
-            media_type_id=mt.id,  # type: ignore[union-attr]
+            media_type_id=mt.id,
             publisher=meta.get("publisher"),
             publication_year=meta.get("publication_year"),
-            language="en",
+            language=meta.get("language") or "en",
             description=meta.get("description"),
             isbn=meta.get("isbn"),
             upc=meta.get("upc"),
@@ -561,12 +627,17 @@ class CatalogService:
             extra_metadata=meta.get("extra_metadata", {}),
         )
 
-        scheme = (branch.default_classification_scheme if branch else None) or "none"
-        if scheme != "none":
-            code = pick_classification_code(scheme, meta)
-            if code:
-                work.classification_scheme = scheme
-                work.classification_code = code
+        # Explicit classification (e.g., from CSV/MARC import) wins over branch defaults.
+        if meta.get("classification_scheme") and meta.get("classification_code"):
+            work.classification_scheme = meta["classification_scheme"]
+            work.classification_code = meta["classification_code"]
+        else:
+            scheme = (branch.default_classification_scheme if branch else None) or "none"
+            if scheme != "none":
+                code = pick_classification_code(scheme, meta)
+                if code:
+                    work.classification_scheme = scheme
+                    work.classification_code = code
         self._works.add(work)
 
         # "creators" key carries [(name, role), ...] for multi-role media (film).
@@ -608,16 +679,40 @@ class CatalogService:
             self._creators.add(creator)
         return creator
 
-    def _create_item(self, work: Work, location: str | None = None, branch=None) -> Item:
+    def _create_item(
+        self,
+        work: Work,
+        location: str | None = None,
+        branch=None,
+        *,
+        barcode: str | None = None,
+        accession_number: str | None = None,
+        barcode_prefix: str | None = None,
+        call_number: str | None = None,
+        condition: str | None = None,
+        is_loanable: bool = True,
+        loan_restriction_reason: str | None = None,
+        loan_restriction_note: str | None = None,
+    ) -> Item:
         if branch is None:
             branch = self._branches.get_default()
-        accession = self._next_accession()
+        if accession_number is None:
+            accession_number = self._next_accession()
+        if barcode is None:
+            barcode = (
+                f"{barcode_prefix}{accession_number}" if barcode_prefix else accession_number
+            )
         item = Item(
             work_id=work.id,
             branch_id=branch.id,  # type: ignore[union-attr]
-            barcode=accession,
-            accession_number=accession,
+            barcode=barcode,
+            accession_number=accession_number,
             location=location,
+            call_number=call_number,
+            condition=condition,
+            is_loanable=is_loanable,
+            loan_restriction_reason=loan_restriction_reason,
+            loan_restriction_note=loan_restriction_note,
         )
         return self._items.add(item)
 

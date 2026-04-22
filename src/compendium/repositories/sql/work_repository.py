@@ -1,10 +1,12 @@
 from __future__ import annotations
 
+from datetime import datetime
+
 from sqlalchemy import or_, text
 from sqlalchemy.orm import Session
 
 from compendium.domain.enums import ItemStatus
-from compendium.domain.models import Creator, Item, Work, WorkCreator
+from compendium.domain.models import Branch, Creator, Item, MediaType, Work, WorkCreator
 
 
 class SqlWorkRepository:
@@ -43,6 +45,27 @@ class SqlWorkRepository:
 
     def list(self, limit: int = 50, offset: int = 0) -> list[Work]:
         return self._s.query(Work).order_by(Work.title).offset(offset).limit(limit).all()
+
+    def iter_for_export(
+        self,
+        *,
+        media_type_code: str | None = None,
+        branch_code: str | None = None,
+        since: datetime | None = None,
+    ) -> list[Work]:
+        q = self._s.query(Work)
+        if media_type_code:
+            q = q.join(Work.media_type).filter(MediaType.code == media_type_code)
+        if branch_code:
+            q = (
+                q.join(Work.items)
+                .join(Item.branch)
+                .filter(Branch.code == branch_code)
+                .distinct()
+            )
+        if since is not None:
+            q = q.filter(Work.created_at >= since)
+        return q.order_by(Work.id).all()
 
     def search(self, q: str, field: str = "all", limit: int = 20) -> list[Work]:
         if field == "all" and q.strip():

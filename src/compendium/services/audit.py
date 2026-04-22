@@ -22,6 +22,7 @@ class AuditAction:
     DEACTIVATE = "deactivate"
     REACTIVATE = "reactivate"
     SET_LOANABLE = "set_loanable"
+    BULK_IMPORT = "bulk_import"
 
 
 class AuditService:

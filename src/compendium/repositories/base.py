@@ -35,6 +35,13 @@ class WorkRepository(Protocol):
     def search(self, q: str, limit: int = 20) -> list[Work]: ...
     def update(self, work: Work) -> Work: ...
     def has_loanable_item(self, work_id: int) -> bool: ...
+    def iter_for_export(
+        self,
+        *,
+        media_type_code: str | None = None,
+        branch_code: str | None = None,
+        since: "datetime | None" = None,
+    ) -> list[Work]: ...
 
 
 @runtime_checkable

@@ -166,6 +166,47 @@ Note: TMDb does not index physical-disc UPCs, so film items are added via a titl
 
 ---
 
+## Bulk import & export
+
+`services/import_export.py` provides bulk ingest and extract for CSV, MARC21 binary (`.mrc`), and MARCXML. Surfaced on all three interfaces:
+
+- CLI: `compendium import {csv|marc} <file>` and `compendium export {csv|marc} <out>` (with `--xml` for MARCXML on export).
+- API: `POST /import/{csv,marc}` (multipart) and `GET /export/{csv,marc}?xml=…` (streaming). Import requires the `catalog.import` permission; export is gated on `item.view`.
+- Web: `/ui/admin/import` (upload with dry-run preview + apply) and `/ui/admin/export` (filter form → download).
+
+**Semantics:**
+
+- **Dedup** by ISBN/UPC only; no fuzzy title matching. Conflict modes: `append` (add a copy to the existing work — default), `skip-duplicates`, `error-on-conflict`.
+- **Barcode generation** uses the same sequential `_next_accession()` as regular adds; an optional `--barcode-prefix` tags auto-generated barcodes for a batch (prefix applies only to barcode, not accession_number).
+- **Transaction ownership**: the importer flushes but never commits — the caller's session scope (or test fixture) controls commit/rollback. Dry-run rolls back. Per-row errors are collected into an `ImportReport`; barcode/accession uniqueness is pre-validated at the application layer to avoid IntegrityError rollbacks mid-batch.
+- **Audit**: one summary `BULK_IMPORT` AuditLog entry per run (not per row), carrying counts and filename.
+
+### CSV schema (item-centric)
+
+One row per physical copy. Work metadata repeats across copies. Authors are `;`-delimited; a `:role` suffix per name overrides the default role for the media type (e.g. `Ridley Scott:director`). Columns:
+
+```
+media_type, title, subtitle, authors, publisher, publication_year,
+isbn, upc, classification_scheme, classification_code, description, language,
+barcode, accession_number, branch, call_number, condition, location,
+is_loanable, loan_restriction_reason, loan_restriction_note
+```
+
+Only `title` is required on import. `media_type` is required unless `--default-media-type` is supplied. Unknown columns on import are ignored (so CSVs from other tools work); unknown-but-expected fields default to empty on export.
+
+### MARC mapping
+
+- `245$a/b` ↔ title / subtitle (ISBD punctuation stripped on read, re-added on write).
+- `020$a` ↔ ISBN; `024$a` (ind1=1) ↔ UPC.
+- `050$a` ↔ LCC classification; `082$a` ↔ DDC classification. Import prefers 050 over 082 when both present.
+- `100/110/111` → main creator (default role `author`); `700/710/711` → added entries (default role `contributor`); `$e` subfield overrides the role.
+- Leader position 6 + field 007 → `media_type`: `a/t`→book, `j` + 007 disambiguation→cd/vinyl, `g` + 007 disambiguation→dvd/bluray/vhs. Unmappable records fall back to `--default-media-type` or are reported as errors.
+- `001/003` round-trip through `work.external_ids["marc_control"]` and `marc_agency`.
+
+**MARC export is standards-compliant**: item-level fields (barcode, branch, loanable state, notes) are **not** written to MARC records. Round-tripping through MARC discards those fields by design; use CSV for lossless round-trip.
+
+---
+
 ## Testing strategy
 
 | Level | Location | Scope |

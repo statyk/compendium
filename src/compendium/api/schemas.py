@@ -219,3 +219,20 @@ class AuditLogResponse(BaseModel):
     entity_id: int | None
     action: str
     details: dict | None
+
+
+class ImportRowErrorResponse(BaseModel):
+    row_number: int
+    identifier: str
+    message: str
+
+
+class ImportReportResponse(BaseModel):
+    source: str
+    filename: str | None
+    total_rows: int
+    created_works: int
+    added_copies: int
+    skipped_duplicates: int
+    errors: list[ImportRowErrorResponse]
+    dry_run: bool
