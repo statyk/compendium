@@ -77,7 +77,12 @@
     <tr>
       <td><a href="/ui/items/{{ item.barcode }}"><code>{{ item.barcode }}</code></a></td>
       <td>{{ item.branch.name }}</td>
-      <td>{{ status_pill(item.status) }}</td>
+      <td>
+        {{ status_pill(item.status) }}
+        {% if item.status == "checked_out" and item_due.get(item.id) %}
+        <br><small style="color:var(--pico-muted-color)">due {{ item_due[item.id].strftime("%Y-%m-%d") }}</small>
+        {% endif %}
+      </td>
       <td>{{ item.call_number or "—" }}</td>
     </tr>
     {% endfor %}

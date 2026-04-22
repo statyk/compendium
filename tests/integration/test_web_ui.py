@@ -220,6 +220,27 @@ def test_catalog_detail_renders(web_client, work):
     assert b"Dune" in resp.content
 
 
+def test_catalog_detail_shows_due_date_when_checked_out(web_client, work, web_session):
+    from datetime import datetime, timezone
+
+    from compendium.domain.enums import ItemStatus
+    from compendium.domain.models import Loan, Patron
+
+    w, item = work
+    item.status = ItemStatus.CHECKED_OUT.value
+    patron = Patron(library_card_number="DUE0001", full_name="Borrower")
+    web_session.add(patron)
+    web_session.flush()
+    due = datetime(2099, 12, 31, tzinfo=timezone.utc)
+    web_session.add(Loan(item_id=item.id, patron_id=patron.id, branch_id=item.branch_id, due_at=due))
+    web_session.flush()
+
+    resp = web_client.get(f"/ui/catalog/{w.id}")
+
+    assert resp.status_code == 200
+    assert b"due 2099-12-31" in resp.content
+
+
 def test_catalog_detail_404(web_client):
     resp = web_client.get("/ui/catalog/99999")
     assert resp.status_code == 404

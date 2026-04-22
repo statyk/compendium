@@ -12,13 +12,14 @@ from compendium.domain.errors import (
     NotFoundError,
     ValidationError,
 )
-from compendium.domain.enums import CreatorRole
+from compendium.domain.enums import CreatorRole, ItemStatus
 from compendium.domain.models import AppUser
 from compendium.repositories.sql.audit_log_repository import SqlAuditLogRepository
 from compendium.repositories.sql.branch_repository import SqlBranchRepository
 from compendium.repositories.sql.creator_repository import SqlCreatorRepository
 from compendium.repositories.sql.hold_repository import SqlHoldRepository
 from compendium.repositories.sql.item_repository import SqlItemRepository
+from compendium.repositories.sql.loan_repository import SqlLoanRepository
 from compendium.repositories.sql.media_type_repository import SqlMediaTypeRepository
 from compendium.repositories.sql.patron_repository import SqlPatronRepository
 from compendium.repositories.sql.work_repository import SqlWorkRepository
@@ -130,6 +131,13 @@ def work_detail(
     patron = None
     if user is not None:
         patron = SqlPatronRepository(session).get_by_user_id(user.id)
+    loans = SqlLoanRepository(session)
+    item_due: dict[int, object] = {}
+    for it in work.items:
+        if it.status == ItemStatus.CHECKED_OUT.value:
+            active = loans.get_active_for_item(it.id)
+            if active is not None:
+                item_due[it.id] = active.due_at
     return _render(
         "catalog/detail.html",
         request,
@@ -138,6 +146,7 @@ def work_detail(
             "user": user,
             "work": work,
             "patron": patron,
+            "item_due": item_due,
             "message": message,
             "error": error,
         },
