@@ -431,3 +431,75 @@ def clear_lost(
             f"/ui/items/{barcode}?error={quote(str(exc))}",
             status_code=303,
         )
+
+
+# ── Claims-returned resolutions ─────────────────────────────────────────────
+
+
+@router.post("/items/{barcode}/verify-returned")
+def verify_returned(
+    barcode: str,
+    request: Request,
+    csrf_token: str = Form(...),
+    user: AppUser = Depends(require_web_permission("loan.checkin")),
+    session: Session = Depends(get_session),
+):
+    check_csrf_form(request, csrf_token)
+    try:
+        _circulation(session, user).verify_returned(barcode)
+        return RedirectResponse(
+            f"/ui/items/{barcode}?message={quote('Verified returned; loan closed.')}",
+            status_code=303,
+        )
+    except (BusinessRuleError, NotFoundError) as exc:
+        return RedirectResponse(
+            f"/ui/items/{barcode}?error={quote(str(exc))}",
+            status_code=303,
+        )
+
+
+@router.get("/items/{barcode}/write-off-claim")
+def write_off_claim_form(
+    barcode: str,
+    request: Request,
+    user: AppUser = Depends(require_web_permission("loan.checkin")),
+    session: Session = Depends(get_session),
+):
+    from compendium.repositories.sql.item_repository import SqlItemRepository
+
+    item = SqlItemRepository(session).get_by_barcode(barcode)
+    if item is None:
+        return _render(
+            "error.html",
+            request,
+            {"request": request, "user": user, "message": f"Item '{barcode}' not found"},
+            status_code=404,
+        )
+    return _render(
+        "fines/write_off_claim.html",
+        request,
+        {"request": request, "user": user, "item": item},
+    )
+
+
+@router.post("/items/{barcode}/write-off-claim")
+def write_off_claim(
+    barcode: str,
+    request: Request,
+    note: str = Form(""),
+    csrf_token: str = Form(...),
+    user: AppUser = Depends(require_web_permission("loan.checkin")),
+    session: Session = Depends(get_session),
+):
+    check_csrf_form(request, csrf_token)
+    try:
+        _circulation(session, user).write_off_claim(barcode, note=note)
+        return RedirectResponse(
+            f"/ui/items/{barcode}?message={quote('Claim written off; loan closed.')}",
+            status_code=303,
+        )
+    except (BusinessRuleError, ValidationError, NotFoundError) as exc:
+        return RedirectResponse(
+            f"/ui/items/{barcode}?error={quote(str(exc))}",
+            status_code=303,
+        )

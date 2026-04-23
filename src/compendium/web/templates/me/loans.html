@@ -15,16 +15,30 @@
       <td><code>{{ loan.item.barcode }}</code></td>
       <td><a href="/ui/catalog/{{ loan.item.work_id }}">{{ loan.item.work.title }}</a></td>
       <td>{{ loan.due_at.strftime("%Y-%m-%d") if loan.due_at else "—" }}</td>
-      <td>
+      <td style="display:flex; gap:0.5rem; flex-wrap:wrap">
         <form
           hx-post="/ui/me/loans/{{ loan.id }}/renew"
           hx-target="#loan-{{ loan.id }}"
           hx-swap="innerHTML"
           hx-include="[name='csrf_token']"
+          style="margin:0"
         >
           <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
-          <button type="submit" class="outline">Renew</button>
+          <button type="submit" class="outline" style="padding:0.2rem 0.6rem">Renew</button>
         </form>
+        {% if has_permission(user, 'loan.claim.self') %}
+        <form
+          hx-post="/ui/me/loans/{{ loan.id }}/claim-returned"
+          hx-target="#loan-{{ loan.id }}"
+          hx-swap="innerHTML"
+          hx-include="[name='csrf_token']"
+          hx-confirm="Tell the library you returned this item? A librarian will investigate and confirm."
+          style="margin:0"
+        >
+          <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+          <button type="submit" class="outline contrast" style="padding:0.2rem 0.6rem">I returned this</button>
+        </form>
+        {% endif %}
       </td>
     </tr>
     {% endfor %}

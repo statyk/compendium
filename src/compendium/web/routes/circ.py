@@ -117,6 +117,34 @@ def checkin(
         return HTMLResponse(f"<p class='error-banner'>{escape(str(exc))}</p>")
 
 
+@router.get("/admin/claims")
+def admin_claims(
+    request: Request,
+    user: AppUser = Depends(require_web_permission("loan.checkin")),
+    session: Session = Depends(get_session),
+):
+    from compendium.domain.enums import ItemStatus
+    from compendium.domain.models import Item, Loan, Patron, Work
+
+    rows = (
+        session.query(Loan, Item, Work, Patron)
+        .join(Item, Loan.item_id == Item.id)
+        .join(Work, Item.work_id == Work.id)
+        .join(Patron, Loan.patron_id == Patron.id)
+        .filter(
+            Loan.returned_at.is_(None),
+            Item.status == ItemStatus.CLAIMS_RETURNED.value,
+        )
+        .order_by(Loan.id)
+        .all()
+    )
+    return _render(
+        "admin/claims.html",
+        request,
+        {"request": request, "user": user, "rows": rows},
+    )
+
+
 @router.post("/circ/renew", response_class=HTMLResponse)
 def renew(
     request: Request,

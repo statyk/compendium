@@ -1,0 +1,28 @@
+{% extends "base.html" %}
+{% block title %}Claims-returned — Compendium{% endblock %}
+{% block content %}
+<h2>Claims-returned — pending investigation</h2>
+<p><small>Items a patron has claimed to have returned, but which haven't been located. Resolve each by verifying (found on shelf), writing off (trust the patron), or declaring lost.</small></p>
+
+{% if rows %}
+<table>
+  <thead>
+    <tr><th>Loan #</th><th>Barcode</th><th>Title</th><th>Patron</th><th>Card</th><th></th></tr>
+  </thead>
+  <tbody>
+    {% for loan, item, work, patron in rows %}
+    <tr>
+      <td>{{ loan.id }}</td>
+      <td><a href="/ui/items/{{ item.barcode }}"><code>{{ item.barcode }}</code></a></td>
+      <td><a href="/ui/catalog/{{ work.id }}">{{ work.title }}</a></td>
+      <td>{{ patron.full_name }}</td>
+      <td><a href="/ui/patrons/{{ patron.library_card_number }}"><code>{{ patron.library_card_number }}</code></a></td>
+      <td><a href="/ui/items/{{ item.barcode }}" role="button" class="outline" style="padding:0.2rem 0.6rem">Resolve</a></td>
+    </tr>
+    {% endfor %}
+  </tbody>
+</table>
+{% else %}
+<p><em>No outstanding claims.</em></p>
+{% endif %}
+{% endblock %}

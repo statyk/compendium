@@ -415,3 +415,119 @@ class CirculationService:
             {"barcode": item.barcode},
         )
         return item
+
+    # ------------------------------------------------------------------
+    # Claims-returned: patron says they returned it, library can't find it
+    # ------------------------------------------------------------------
+
+    def claim_returned(self, barcode: str, *, note: str | None = None) -> Item:
+        """Mark an actively checked-out item as 'claims-returned'.
+
+        The loan stays open (returned_at unchanged) — overdue fines continue
+        to accrue until a librarian resolves the claim. Callable by a patron
+        against their own loan (UI enforces ownership) or by a librarian.
+        """
+        item = self._items.get_by_barcode(barcode)
+        if item is None:
+            raise NotFoundError(f"No item with barcode '{barcode}'")
+        if item.status == ItemStatus.CLAIMS_RETURNED.value:
+            raise BusinessRuleError(
+                f"Item '{barcode}' is already marked claims-returned."
+            )
+        if item.status != ItemStatus.CHECKED_OUT.value:
+            raise BusinessRuleError(
+                f"Item '{barcode}' is not currently checked out "
+                f"(current status: {item.status})."
+            )
+        loan = self._loans.get_active_for_item(item.id)
+        if loan is None:
+            # Should be unreachable given CHECKED_OUT invariant, but guard
+            # defensively — a desynced item.status shouldn't 500.
+            raise BusinessRuleError(
+                f"Item '{barcode}' has no active loan to claim."
+            )
+
+        item.status = ItemStatus.CLAIMS_RETURNED.value
+        self._items.update(item)
+        self._record(
+            AuditEntityType.ITEM,
+            item.id,
+            AuditAction.CLAIM_RETURNED,
+            {
+                "barcode": item.barcode,
+                "loan_id": loan.id,
+                "patron_card": loan.patron.library_card_number if loan.patron else None,
+                "note": note,
+            },
+        )
+        return item
+
+    def verify_returned(self, barcode: str) -> Loan:
+        """Librarian resolution: the item was returned after all. Close the
+        loan as if normally checked in; audit distinguishes this from a
+        routine check-in."""
+        item = self._items.get_by_barcode(barcode)
+        if item is None:
+            raise NotFoundError(f"No item with barcode '{barcode}'")
+        if item.status != ItemStatus.CLAIMS_RETURNED.value:
+            raise BusinessRuleError(
+                f"Item '{barcode}' is not in claims-returned status "
+                f"(current: {item.status})."
+            )
+        loan = self._loans.get_active_for_item(item.id)
+        if loan is None:
+            raise BusinessRuleError(
+                f"Item '{barcode}' has no active loan to resolve."
+            )
+        loan.returned_at = datetime.now(timezone.utc)
+        self._loans.update(loan)
+        if self._fines is not None:
+            self._fines.assess_overdue(loan)
+        self._promote_hold(item)
+        self._items.update(item)
+        self._record(
+            AuditEntityType.ITEM,
+            item.id,
+            AuditAction.CLAIM_VERIFIED,
+            {
+                "barcode": item.barcode,
+                "loan_id": loan.id,
+            },
+        )
+        return loan
+
+    def write_off_claim(self, barcode: str, *, note: str) -> Loan:
+        """Librarian resolution: trust the patron; close the loan without
+        declaring lost. Does NOT auto-waive existing fines — librarian handles
+        those via the usual waive flow."""
+        if not note or not note.strip():
+            raise ValidationError("A note is required when writing off a claim.")
+        item = self._items.get_by_barcode(barcode)
+        if item is None:
+            raise NotFoundError(f"No item with barcode '{barcode}'")
+        if item.status != ItemStatus.CLAIMS_RETURNED.value:
+            raise BusinessRuleError(
+                f"Item '{barcode}' is not in claims-returned status "
+                f"(current: {item.status})."
+            )
+        loan = self._loans.get_active_for_item(item.id)
+        if loan is None:
+            raise BusinessRuleError(
+                f"Item '{barcode}' has no active loan to resolve."
+            )
+        loan.returned_at = datetime.now(timezone.utc)
+        self._loans.update(loan)
+        # No fine assessment — caller accepts the patron's assertion.
+        self._promote_hold(item)
+        self._items.update(item)
+        self._record(
+            AuditEntityType.ITEM,
+            item.id,
+            AuditAction.CLAIM_WRITE_OFF,
+            {
+                "barcode": item.barcode,
+                "loan_id": loan.id,
+                "note": note,
+            },
+        )
+        return loan

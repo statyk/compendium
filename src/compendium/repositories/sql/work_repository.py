@@ -35,10 +35,12 @@ class SqlWorkRepository:
         # Whitelist statuses where the copy will realistically circulate again.
         # LOST / DAMAGED / WITHDRAWN copies shouldn't count, so a hold placed
         # on a work with only such copies would otherwise wait forever.
+        # CLAIMS_RETURNED is included as "recoverable" — the copy might turn up.
         recoverable_statuses = [
             ItemStatus.AVAILABLE.value,
             ItemStatus.CHECKED_OUT.value,
             ItemStatus.ON_HOLD.value,
+            ItemStatus.CLAIMS_RETURNED.value,
         ]
         return (
             self._s.query(Item.id)

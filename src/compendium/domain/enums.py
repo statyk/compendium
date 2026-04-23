@@ -7,6 +7,7 @@ class ItemStatus(StrEnum):
     ON_HOLD = "on_hold"
     LOST = "lost"
     DAMAGED = "damaged"
+    CLAIMS_RETURNED = "claims_returned"
     WITHDRAWN = "withdrawn"
 
 

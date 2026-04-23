@@ -30,7 +30,9 @@ from compendium.web.jinja import templates
 router = APIRouter()
 
 
-def _circ(session: Session) -> CirculationService:
+def _circ(
+    session: Session, actor: AppUser | None = None
+) -> CirculationService:
     settings = get_settings()
     return CirculationService(
         item_repo=SqlItemRepository(session),
@@ -40,6 +42,9 @@ def _circ(session: Session) -> CirculationService:
         hold_repo=SqlHoldRepository(session),
         policy_repo=SqlLoanPolicyRepository(session),
         hold_pickup_days=settings.hold_pickup_days,
+        audit_svc=AuditService(SqlAuditLogRepository(session)),
+        actor=actor,
+        source="web",
     )
 
 
@@ -99,6 +104,40 @@ def renew_loan(
             f"<td>{escape(loan.item.work.title)}</td>"
             f"<td>{escape(due)} <small>(renewal {int(loan.renewal_count)})</small></td>"
             f"<td><em>Renewed</em></td>"
+        )
+    except (BusinessRuleError, NotFoundError) as exc:
+        return HTMLResponse(f"<td colspan='4' class='error-banner'>{escape(str(exc))}</td>")
+
+
+@router.post("/me/loans/{loan_id:int}/claim-returned", response_class=HTMLResponse)
+def claim_loan_returned(
+    loan_id: int,
+    request: Request,
+    csrf_token: str = Form(default=""),
+    user: AppUser = Depends(require_web_user),
+    patron: Patron = Depends(get_web_patron),
+    session: Session = Depends(get_session),
+):
+    check_csrf_form(request, csrf_token)
+    loan = SqlLoanRepository(session).get(loan_id)
+    if loan is None or loan.patron_id != patron.id:
+        return HTMLResponse(
+            "<td colspan='4' class='error-banner'>Loan not found or not yours.</td>"
+        )
+    from compendium.repositories.sql.item_repository import SqlItemRepository
+
+    item = SqlItemRepository(session).get(loan.item_id)
+    if item is None:
+        return HTMLResponse(
+            "<td colspan='4' class='error-banner'>Item not found.</td>"
+        )
+    try:
+        _circ(session, actor=user).claim_returned(item.barcode)
+        return HTMLResponse(
+            f"<td>{escape(item.barcode)}</td>"
+            f"<td>{escape(item.work.title)}</td>"
+            f"<td>—</td>"
+            f"<td><em>Claim submitted — library will investigate.</em></td>"
         )
     except (BusinessRuleError, NotFoundError) as exc:
         return HTMLResponse(f"<td colspan='4' class='error-banner'>{escape(str(exc))}</td>")

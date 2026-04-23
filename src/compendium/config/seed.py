@@ -31,6 +31,7 @@ _PRESET_ROLES = [
             "work.view",
             "loan.view.self",
             "loan.renew.self",
+            "loan.claim.self",
             "hold.place.self",
             "hold.view.self",
             "fine.view.self",

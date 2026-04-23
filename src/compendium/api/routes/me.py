@@ -109,3 +109,25 @@ def renew_loan(
     except (NotFoundError, BusinessRuleError) as exc:
         raise HTTPException(status_code=422, detail=str(exc)) from exc
     return LoanResponse.model_validate(loan)
+
+
+@router.post("/loans/{loan_id}/claim-returned", response_model=LoanResponse)
+def claim_loan_returned(
+    loan_id: int = Path(),
+    session: Session = Depends(get_session),
+    _user: AppUser = Depends(require_permission("loan.claim.self")),
+    patron: Patron = Depends(get_current_patron),
+) -> LoanResponse:
+    loan = SqlLoanRepository(session).get(loan_id)
+    if loan is None:
+        raise HTTPException(status_code=404, detail=f"No loan with id={loan_id}")
+    if loan.patron_id != patron.id:
+        raise HTTPException(status_code=403, detail="This loan is not yours.")
+    item = SqlItemRepository(session).get(loan.item_id)
+    if item is None:
+        raise HTTPException(status_code=404, detail="Loan's item not found")
+    try:
+        _circulation(session).claim_returned(item.barcode)
+    except (NotFoundError, BusinessRuleError) as exc:
+        raise HTTPException(status_code=422, detail=str(exc)) from exc
+    return LoanResponse.model_validate(SqlLoanRepository(session).get(loan_id))

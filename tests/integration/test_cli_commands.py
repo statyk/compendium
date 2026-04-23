@@ -1151,6 +1151,77 @@ class TestReportsCli:
 
 
 # ──────────────────────────────────────────────────────────────────────────────
+# claims-returned
+# ──────────────────────────────────────────────────────────────────────────────
+
+
+class TestClaimsReturnedCli:
+    def test_full_claim_flow(self, session):
+        # Seed work + patron + loan
+        work, item = _seed_work(session)
+        from compendium.domain.models import Patron as _Patron
+        p = _Patron(library_card_number="CLICLA01", full_name="Alice")
+        session.add(p)
+        session.flush()
+        # Checkout (CLI)
+        r = _invoke(
+            session,
+            ["loan", "checkout", "--barcode", item.barcode, "--card", p.library_card_number],
+            "compendium.cli.commands.loan",
+        )
+        assert r.exit_code == 0, r.output
+        # Claim returned
+        r = _invoke(
+            session,
+            ["loan", "claim-returned", "--barcode", item.barcode, "--note", "last tuesday"],
+            "compendium.cli.commands.loan",
+        )
+        assert r.exit_code == 0, r.output
+        assert "claims-returned" in r.output
+        # List claims
+        r = _invoke(
+            session,
+            ["loan", "list-claims"],
+            "compendium.cli.commands.loan",
+        )
+        assert r.exit_code == 0, r.output
+        assert item.barcode in r.output
+        # Verify returned
+        r = _invoke(
+            session,
+            ["loan", "verify-returned", "--barcode", item.barcode],
+            "compendium.cli.commands.loan",
+        )
+        assert r.exit_code == 0, r.output
+
+    def test_write_off_requires_note(self, session):
+        r = _invoke(
+            session,
+            ["loan", "write-off-claim", "--barcode", "NOSUCH"],
+            "compendium.cli.commands.loan",
+        )
+        assert r.exit_code != 0  # typer rejects missing required --note
+
+    def test_verify_rejects_non_claims_item(self, session):
+        _, item = _seed_work(session)
+        r = _invoke(
+            session,
+            ["loan", "verify-returned", "--barcode", item.barcode],
+            "compendium.cli.commands.loan",
+        )
+        assert r.exit_code == 1
+
+    def test_empty_claims_list(self, session):
+        r = _invoke(
+            session,
+            ["loan", "list-claims"],
+            "compendium.cli.commands.loan",
+        )
+        assert r.exit_code == 0
+        assert "No active claims-returned" in r.output
+
+
+# ──────────────────────────────────────────────────────────────────────────────
 # labels
 # ──────────────────────────────────────────────────────────────────────────────
 
