@@ -32,12 +32,20 @@ class SqlWorkRepository:
         return self._s.query(Work).filter_by(upc=upc).first()
 
     def has_loanable_item(self, work_id: int) -> bool:
+        # Whitelist statuses where the copy will realistically circulate again.
+        # LOST / DAMAGED / WITHDRAWN copies shouldn't count, so a hold placed
+        # on a work with only such copies would otherwise wait forever.
+        recoverable_statuses = [
+            ItemStatus.AVAILABLE.value,
+            ItemStatus.CHECKED_OUT.value,
+            ItemStatus.ON_HOLD.value,
+        ]
         return (
             self._s.query(Item.id)
             .filter(
                 Item.work_id == work_id,
                 Item.is_loanable.is_(True),
-                Item.status != ItemStatus.WITHDRAWN.value,
+                Item.status.in_(recoverable_statuses),
             )
             .first()
             is not None

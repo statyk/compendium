@@ -104,8 +104,9 @@ def patron_fines(
     # Show projected overdue totals for active overdue loans that haven't
     # been materialized yet.
     from compendium.repositories.sql.fine_repository import SqlFineRepository as _FR
+    from compendium.repositories.sql.loan_repository import SqlLoanRepository as _LR
     projections: list[dict] = []
-    for loan in _FR(session).list_active_overdue_loans(patron_id=patron.id):
+    for loan in _LR(session).list_active_overdue(patron_id=patron.id):
         existing = _FR(session).get_outstanding_overdue_for_loan(loan.id)
         amount = fines_svc.projected_overdue_fine(loan)
         if existing is None and amount > 0:

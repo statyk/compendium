@@ -67,6 +67,8 @@ COMPENDIUM_HOLD_PICKUP_DAYS=3
 
 **`JWT_SECRET_KEY` must be set to a strong random value in any non-development deployment.** The built-in default is intentionally weak and will produce a startup warning in a future release.
 
+**Settings are loaded once per process.** `get_settings()` is `@lru_cache`-wrapped, so changes to env vars or `.env` (SMTP credentials, fine thresholds, currency symbol, search flags, etc.) don't take effect until you restart `compendium serve`. CLI invocations re-read on each run. When the planned `site_setting` table lands, runtime-editable knobs will move there.
+
 ---
 
 ## Database backends

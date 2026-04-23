@@ -1,3 +1,5 @@
+from datetime import datetime, timedelta, timezone
+
 from sqlalchemy.orm import Session
 
 from compendium.domain.models import Loan
@@ -34,6 +36,31 @@ class SqlLoanRepository:
             .filter(Loan.item_id == item_id)
             .order_by(Loan.checked_out_at.desc())
             .first()
+        )
+
+    def list_active_overdue(self, *, patron_id: int | None = None) -> list[Loan]:
+        """Active loans (returned_at IS NULL) whose due_at has passed."""
+        now = datetime.now(tz=timezone.utc)
+        q = self._s.query(Loan).filter(
+            Loan.returned_at.is_(None),
+            Loan.due_at < now,
+        )
+        if patron_id is not None:
+            q = q.filter(Loan.patron_id == patron_id)
+        return q.order_by(Loan.due_at).all()
+
+    def list_due_within(self, *, days: int) -> list[Loan]:
+        """Active loans whose due_at is in the future but within `days` days."""
+        now = datetime.now(tz=timezone.utc)
+        return (
+            self._s.query(Loan)
+            .filter(
+                Loan.returned_at.is_(None),
+                Loan.due_at > now,
+                Loan.due_at <= now + timedelta(days=days),
+            )
+            .order_by(Loan.due_at)
+            .all()
         )
 
     def update(self, loan: Loan) -> Loan:

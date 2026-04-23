@@ -4,7 +4,7 @@ from sqlalchemy import func
 from sqlalchemy.orm import Session
 
 from compendium.domain.enums import FineKind, FineStatus
-from compendium.domain.models import Fine, Loan
+from compendium.domain.models import Fine
 
 
 class SqlFineRepository:
@@ -54,21 +54,6 @@ class SqlFineRepository:
             .scalar()
         )
         return int(total or 0)
-
-    def list_active_overdue_loans(
-        self, *, patron_id: int | None = None
-    ) -> list[Loan]:
-        """Return active loans (returned_at IS NULL) whose due_at has passed."""
-        from datetime import datetime, timezone
-
-        now = datetime.now(tz=timezone.utc)
-        q = self._s.query(Loan).filter(
-            Loan.returned_at.is_(None),
-            Loan.due_at < now,
-        )
-        if patron_id is not None:
-            q = q.filter(Loan.patron_id == patron_id)
-        return q.order_by(Loan.due_at).all()
 
     def update(self, fine: Fine) -> Fine:
         self._s.flush()

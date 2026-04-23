@@ -213,6 +213,22 @@ def test_has_loanable_item_excludes_withdrawn(session, work_and_item):
     assert repo.has_loanable_item(work.id) is False
 
 
+def test_has_loanable_item_excludes_lost(session, work_and_item):
+    work, item = work_and_item
+    repo = SqlWorkRepository(session)
+    item.status = ItemStatus.LOST.value
+    session.flush()
+    assert repo.has_loanable_item(work.id) is False
+
+
+def test_has_loanable_item_excludes_damaged(session, work_and_item):
+    work, item = work_and_item
+    repo = SqlWorkRepository(session)
+    item.status = ItemStatus.DAMAGED.value
+    session.flush()
+    assert repo.has_loanable_item(work.id) is False
+
+
 def test_has_loanable_item_excludes_non_loanable(session, work_and_item):
     work, item = work_and_item
     item.is_loanable = False

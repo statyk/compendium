@@ -199,25 +199,7 @@ class NotificationService:
 
     def queue_due_soon_batch(self, days_before: int) -> NotificationCounts:
         counts = NotificationCounts()
-        now = datetime.now(tz=timezone.utc)
-        window_end_days = days_before
-        from datetime import timedelta
-
-        from compendium.domain.models import Loan
-
-        session = getattr(self._notifications, "_s", None)
-        if session is None:
-            return counts
-        loans = (
-            session.query(Loan)
-            .filter(
-                Loan.returned_at.is_(None),
-                Loan.due_at > now,
-                Loan.due_at <= now + timedelta(days=window_end_days),
-            )
-            .all()
-        )
-        for loan in loans:
+        for loan in self._loans.list_due_within(days=days_before):
             if self.queue_due_soon(loan) is not None:
                 counts.queued += 1
         return counts
@@ -225,20 +207,10 @@ class NotificationService:
     def queue_overdue_batch(self, tiers: list[int]) -> NotificationCounts:
         counts = NotificationCounts()
         now = datetime.now(tz=timezone.utc)
-        from compendium.domain.models import Loan
-
-        session = getattr(self._notifications, "_s", None)
-        if session is None:
-            return counts
-        loans = (
-            session.query(Loan)
-            .filter(Loan.returned_at.is_(None), Loan.due_at < now)
-            .all()
-        )
         # Send the highest tier the patron qualifies for; we don't want to
         # fire both "tier 1" and "tier 3" on a loan that's 30+ days late.
         tiers_desc = sorted(tiers, reverse=True)
-        for loan in loans:
+        for loan in self._loans.list_active_overdue():
             days_late = (now - loan.due_at).days
             for tier in tiers_desc:
                 if days_late >= tier:

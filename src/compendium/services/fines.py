@@ -151,7 +151,7 @@ class FineService:
         Returns counts: {'created', 'updated', 'unchanged'}.
         """
         created = updated = unchanged = 0
-        loans = self._fines.list_active_overdue_loans(patron_id=patron_id)
+        loans = self._loans.list_active_overdue(patron_id=patron_id)
         for loan in loans:
             existing = self._fines.get_outstanding_overdue_for_loan(loan.id)
             fine = self.assess_overdue(loan)
