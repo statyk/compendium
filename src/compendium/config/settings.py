@@ -44,3 +44,4 @@ class Settings(BaseSettings):
     notification_retention_days: int | None = None
     due_soon_days_before: int = 3
     overdue_tiers: str = "3,14,30"
+    kiosk_idle_timeout_seconds: int = 60

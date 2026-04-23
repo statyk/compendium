@@ -146,6 +146,7 @@
         </li>
         {% if user %}
           {% if has_permission(user, 'loan.checkout') %}<li><a href="/ui/circ">Circ Desk</a></li>{% endif %}
+          {% if has_permission(user, 'loan.checkout') %}<li><a href="/ui/kiosk">Kiosk</a></li>{% endif %}
           {% if has_permission(user, 'item.create') %}<li><a href="/ui/items/new">Add Item</a></li>{% endif %}
           {% if has_permission(user, 'patron.manage') %}<li><a href="/ui/patrons">Patrons</a></li>{% endif %}
           {% set show_admin = has_permission(user, 'user.manage')

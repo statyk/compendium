@@ -1,0 +1,47 @@
+{% extends "kiosk_base.html" %}
+{% block title %}Self-Checkout — {{ patron.full_name }}{% endblock %}
+{% block content %}
+<h1 class="kiosk-title">Welcome, {{ patron.full_name }}</h1>
+<p class="kiosk-sub">Scan each item to check out. Tap <strong>Done</strong> when finished.</p>
+
+<form id="checkout-form"
+      hx-post="/ui/kiosk/session/{{ patron.library_card_number }}/checkout"
+      hx-target="#kiosk-status"
+      hx-swap="innerHTML"
+      hx-on::after-request="this.reset(); this.querySelector('input[name=barcode]').focus();">
+  <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+  <label for="barcode-input">Item barcode</label>
+  <input type="text" id="barcode-input" name="barcode" class="kiosk-scanner-input"
+         placeholder="Scan or type" autocomplete="off" autofocus required>
+  <button type="submit" class="kiosk-big-button">Check Out</button>
+</form>
+
+<div id="kiosk-status" aria-live="polite" style="min-height:2rem; margin-top:1rem"></div>
+
+<ul id="checkout-list" class="checkout-list"></ul>
+
+<div class="kiosk-footer">
+  <a href="/ui/kiosk" role="button" class="outline kiosk-big-button">Done</a>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+  (function () {
+    // Idle timeout: after N seconds with no activity, return to the kiosk
+    // landing page so one patron's session can't be used by the next.
+    var idleMs = {{ idle_timeout_seconds }} * 1000;
+    var timer = null;
+    function reset() {
+      if (timer) clearTimeout(timer);
+      timer = setTimeout(function () {
+        window.location.href = '/ui/kiosk';
+      }, idleMs);
+    }
+    ['keydown', 'mousemove', 'touchstart', 'htmx:afterRequest'].forEach(function (ev) {
+      document.addEventListener(ev, reset, { passive: true });
+    });
+    reset();
+  })();
+</script>
+{% endblock %}

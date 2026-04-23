@@ -1,0 +1,18 @@
+{% extends "kiosk_base.html" %}
+{% block title %}Self-Checkout — Compendium{% endblock %}
+{% block content %}
+<h1 class="kiosk-title">Self-Checkout</h1>
+<p class="kiosk-sub">Please scan or enter your library card number to begin.</p>
+
+{% if error %}<p class="error-banner" role="alert">{{ error }}</p>{% endif %}
+
+<form method="post" action="/ui/kiosk/start">
+  <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+  <label for="card-input">Library card number</label>
+  <input type="text" id="card-input" name="card_number" class="kiosk-card-input"
+         autocomplete="off" autofocus required>
+  <button type="submit" class="kiosk-big-button">Begin</button>
+</form>
+
+<p class="kiosk-footer"><small>Need help? Please see a librarian at the desk.</small></p>
+{% endblock %}
