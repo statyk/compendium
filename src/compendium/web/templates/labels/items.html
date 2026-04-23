@@ -1,0 +1,65 @@
+{% extends "base.html" %}
+{% block title %}Item labels — Compendium{% endblock %}
+{% block content %}
+<nav aria-label="breadcrumb">
+  <ul><li><a href="/ui/labels">Labels</a></li><li>Item labels</li></ul>
+</nav>
+<h2>Item labels</h2>
+
+{% if error %}<p class="error-banner">{{ error }}</p>{% endif %}
+
+<form method="post" action="/ui/labels/items">
+  <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+
+  <label>Template
+    <select name="template">
+      {% for t in templates %}
+      <option value="{{ t.key }}"{% if t.key == "avery-5160" %} selected{% endif %}>{{ t.display }}</option>
+      {% endfor %}
+    </select>
+  </label>
+
+  <label>Format
+    <select name="format">
+      <option value="">Auto (small → spine, larger → pocket)</option>
+      <option value="spine">Spine (call number + author indicator + year)</option>
+      <option value="pocket">Pocket (adds title + barcode)</option>
+    </select>
+  </label>
+
+  <label>
+    <input type="checkbox" name="use_isbn_barcode">
+    Use EAN-13 barcode for items with an ISBN (falls back to Code 128 for others)
+  </label>
+
+  <details>
+    <summary>Filter which items to print</summary>
+    {% if branches|length > 1 %}
+    <label>Branch
+      <select name="branch">
+        <option value="">All branches</option>
+        {% for b in branches %}<option value="{{ b.code }}">{{ b.name }}</option>{% endfor %}
+      </select>
+    </label>
+    {% endif %}
+    <label>Media type
+      <select name="media_type">
+        <option value="">All media</option>
+        {% for mt in media_types %}<option value="{{ mt.code }}">{{ mt.display_name }}</option>{% endfor %}
+      </select>
+    </label>
+    <label>Items added since <small>(YYYY-MM-DD, optional)</small>
+      <input type="date" name="since">
+    </label>
+    <label>Or, exact barcodes <small>(comma-separated — overrides other filters)</small>
+      <textarea name="barcodes" rows="3" placeholder="BC000001, BC000002, ..."></textarea>
+    </label>
+  </details>
+
+  <label>Start at label # <small>(skip this many positions on the first sheet — use for partial sheets)</small>
+    <input type="number" name="start_label" min="0" value="0" style="max-width:6rem">
+  </label>
+
+  <button type="submit">Generate PDF</button>
+</form>
+{% endblock %}

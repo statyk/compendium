@@ -17,6 +17,7 @@ from compendium.web.routes import (
     fines,
     items,
     kiosk,
+    labels,
     me,
     notifications,
     patron_categories,
@@ -49,6 +50,7 @@ def create_web_router() -> APIRouter:
     router.include_router(covers.router)
     router.include_router(reports.router)
     router.include_router(kiosk.router)
+    router.include_router(labels.router)
     return router
 
 

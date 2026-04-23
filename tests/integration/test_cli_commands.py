@@ -1151,6 +1151,88 @@ class TestReportsCli:
 
 
 # ──────────────────────────────────────────────────────────────────────────────
+# labels
+# ──────────────────────────────────────────────────────────────────────────────
+
+
+class TestLabelsCli:
+    def test_templates_lists_all(self, session):
+        r = _invoke(
+            session,
+            ["labels", "templates"],
+            "compendium.cli.commands.labels",
+        )
+        assert r.exit_code == 0
+        for key in ("avery-5160", "avery-5167", "avery-5871", "avery-5390"):
+            assert key in r.output
+
+    def test_items_produces_pdf(self, session, tmp_path):
+        _seed_work(session)
+        out = tmp_path / "items.pdf"
+        r = _invoke(
+            session,
+            ["labels", "items", "--output", str(out), "--template", "avery-5160"],
+            "compendium.cli.commands.labels",
+        )
+        assert r.exit_code == 0, r.output
+        assert out.exists()
+        assert out.read_bytes().startswith(b"%PDF-")
+
+    def test_items_unknown_template_fails(self, session, tmp_path):
+        out = tmp_path / "items.pdf"
+        r = _invoke(
+            session,
+            ["labels", "items", "--output", str(out), "--template", "nope"],
+            "compendium.cli.commands.labels",
+        )
+        assert r.exit_code == 1
+        assert not out.exists()
+
+    def test_items_no_match_fails(self, session, tmp_path):
+        out = tmp_path / "items.pdf"
+        r = _invoke(
+            session,
+            [
+                "labels", "items", "--output", str(out),
+                "--barcodes", "DOESNOTEXIST",
+            ],
+            "compendium.cli.commands.labels",
+        )
+        assert r.exit_code == 1
+
+    def test_patrons_produces_pdf(self, session, tmp_path):
+        # Seed a patron
+        from compendium.domain.models import Patron as _Patron
+        p = _Patron(library_card_number="LABCLI01", full_name="CLI Label")
+        session.add(p)
+        session.flush()
+        out = tmp_path / "patrons.pdf"
+        r = _invoke(
+            session,
+            ["labels", "patrons", "--output", str(out), "--template", "avery-5871",
+             "--format", "full"],
+            "compendium.cli.commands.labels",
+        )
+        assert r.exit_code == 0, r.output
+        assert out.read_bytes().startswith(b"%PDF-")
+
+    def test_patrons_sticker_format(self, session, tmp_path):
+        from compendium.domain.models import Patron as _Patron
+        p = _Patron(library_card_number="LABCLI02", full_name="Sticker")
+        session.add(p)
+        session.flush()
+        out = tmp_path / "stickers.pdf"
+        r = _invoke(
+            session,
+            ["labels", "patrons", "--output", str(out), "--template", "avery-5167",
+             "--format", "sticker"],
+            "compendium.cli.commands.labels",
+        )
+        assert r.exit_code == 0, r.output
+        assert out.read_bytes().startswith(b"%PDF-")
+
+
+# ──────────────────────────────────────────────────────────────────────────────
 # db init — exercises migration + seed path on a fresh SQLite file
 # ──────────────────────────────────────────────────────────────────────────────
 

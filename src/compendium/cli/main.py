@@ -11,6 +11,7 @@ from compendium.cli.commands import (
     fine,
     hold,
     item,
+    labels,
     loan,
     maintenance,
     patron,
@@ -46,6 +47,7 @@ app.add_typer(bulk_ops.import_app, name="import")
 app.add_typer(bulk_ops.export_app, name="export")
 app.add_typer(fine.app, name="fine")
 app.add_typer(reports.app, name="reports")
+app.add_typer(labels.app, name="labels")
 
 
 @app.command("serve")

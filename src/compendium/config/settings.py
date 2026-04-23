@@ -45,3 +45,7 @@ class Settings(BaseSettings):
     due_soon_days_before: int = 3
     overdue_tiers: str = "3,14,30"
     kiosk_idle_timeout_seconds: int = 60
+    # Library name — printed on patron cards, shown in emails, and (future)
+    # in the nav brand. First of several Settings that should migrate to a
+    # DB-backed site_setting table when that slice lands; see CLAUDE.md.
+    library_name: str = "Compendium"
