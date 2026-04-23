@@ -976,6 +976,63 @@ class TestPolicyCli:
 
 
 # ──────────────────────────────────────────────────────────────────────────────
+# reports
+# ──────────────────────────────────────────────────────────────────────────────
+
+
+class TestReportsCli:
+    def test_checkouts_table(self, session):
+        r = _invoke(
+            session,
+            ["reports", "checkouts", "--months", "3"],
+            "compendium.cli.commands.reports",
+        )
+        assert r.exit_code == 0, r.output
+        assert "Month" in r.output and "Count" in r.output
+
+    def test_checkouts_csv(self, session):
+        r = _invoke(
+            session,
+            ["reports", "checkouts", "--months", "2", "--format", "csv"],
+            "compendium.cli.commands.reports",
+        )
+        assert r.exit_code == 0, r.output
+        assert r.output.splitlines()[0] == "month,count"
+
+    def test_popular_requires_from(self, session):
+        r = _invoke(
+            session,
+            ["reports", "popular"],
+            "compendium.cli.commands.reports",
+        )
+        assert r.exit_code != 0
+
+    def test_popular_with_window(self, session):
+        r = _invoke(
+            session,
+            ["reports", "popular", "--from", "2026-01-01", "--limit", "5"],
+            "compendium.cli.commands.reports",
+        )
+        assert r.exit_code == 0, r.output
+
+    def test_dormant(self, session):
+        r = _invoke(
+            session,
+            ["reports", "dormant", "--not-since", "2025-01-01"],
+            "compendium.cli.commands.reports",
+        )
+        assert r.exit_code == 0, r.output
+
+    def test_overdues(self, session):
+        r = _invoke(
+            session,
+            ["reports", "overdues"],
+            "compendium.cli.commands.reports",
+        )
+        assert r.exit_code == 0, r.output
+
+
+# ──────────────────────────────────────────────────────────────────────────────
 # db init — exercises migration + seed path on a fresh SQLite file
 # ──────────────────────────────────────────────────────────────────────────────
 

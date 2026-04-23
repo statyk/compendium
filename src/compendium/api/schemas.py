@@ -286,6 +286,38 @@ class AssessOverdueResponse(BaseModel):
     unchanged: int
 
 
+class MonthlyCheckoutsResponse(BaseModel):
+    month: str
+    count: int
+
+
+class PopularWorkResponse(BaseModel):
+    work_id: int
+    title: str
+    subtitle: str | None
+    media_type_code: str
+    checkout_count: int
+
+
+class DormantItemResponse(BaseModel):
+    item_id: int
+    barcode: str
+    title: str
+    media_type_code: str
+    branch_code: str
+    last_checkout_at: datetime | None
+
+
+class OverdueLoanResponse(BaseModel):
+    loan_id: int
+    patron_card: str
+    patron_name: str
+    item_barcode: str
+    title: str
+    due_at: datetime
+    days_overdue: int
+
+
 class NotificationResponse(BaseModel):
     model_config = ConfigDict(from_attributes=True)
 

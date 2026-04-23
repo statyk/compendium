@@ -1,0 +1,29 @@
+{% extends "base.html" %}
+{% block title %}Reports — Compendium{% endblock %}
+{% block content %}
+<h2>Reports</h2>
+<p>Circulation activity and weeding candidates. All reports accept a branch filter and offer CSV download.</p>
+
+<div class="grid">
+  <article>
+    <header><strong>Checkouts per month</strong></header>
+    <p>Loan activity trend, grouped by month.</p>
+    <a href="/ui/reports/checkouts" role="button" class="outline">Open</a>
+  </article>
+  <article>
+    <header><strong>Popular works</strong></header>
+    <p>Top-N most checked out titles in a date window.</p>
+    <a href="/ui/reports/popular" role="button" class="outline">Open</a>
+  </article>
+  <article>
+    <header><strong>Dormant items</strong></header>
+    <p>Items not checked out since a cutoff — weeding list.</p>
+    <a href="/ui/reports/dormant" role="button" class="outline">Open</a>
+  </article>
+  <article>
+    <header><strong>Current overdues</strong></header>
+    <p>Active loans past their due date.</p>
+    <a href="/ui/reports/overdues" role="button" class="outline">Open</a>
+  </article>
+</div>
+{% endblock %}

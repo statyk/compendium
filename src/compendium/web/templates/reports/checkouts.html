@@ -1,0 +1,71 @@
+{% extends "base.html" %}
+{% block title %}Checkouts per month — Compendium{% endblock %}
+{% block content %}
+<nav aria-label="breadcrumb">
+  <ul><li><a href="/ui/reports">Reports</a></li><li>Checkouts per month</li></ul>
+</nav>
+<h2>Checkouts per month</h2>
+
+<form method="get" action="/ui/reports/checkouts" style="display:flex; gap:1rem; flex-wrap:wrap; align-items:flex-end; margin-bottom:1.5rem">
+  <label style="flex:0 0 auto">
+    Months
+    <input type="number" name="months" value="{{ months }}" min="1" max="60" style="width:5rem">
+  </label>
+  {% if branches|length > 1 %}
+  <label style="flex:0 0 auto">
+    Branch
+    <select name="branch">
+      <option value="">All branches</option>
+      {% for b in branches %}
+      <option value="{{ b.code }}"{% if selected_branch == b.code %} selected{% endif %}>{{ b.name }}</option>
+      {% endfor %}
+    </select>
+  </label>
+  {% endif %}
+  <button type="submit" style="margin-bottom:0">Apply</button>
+  <a href="/ui/reports/checkouts?months={{ months }}{% if selected_branch %}&branch={{ selected_branch }}{% endif %}&format=csv" role="button" class="outline" style="margin-bottom:0">Download CSV</a>
+</form>
+
+{% if rows %}
+<canvas id="checkouts-chart" style="max-height:320px; margin-bottom:2rem"></canvas>
+
+<figure>
+  <table>
+    <thead>
+      <tr><th>Month</th><th style="text-align:right">Checkouts</th></tr>
+    </thead>
+    <tbody>
+      {% for r in rows %}
+      <tr><td><code>{{ r.month }}</code></td><td style="text-align:right">{{ r.count }}</td></tr>
+      {% endfor %}
+    </tbody>
+  </table>
+</figure>
+{% else %}
+<p><em>No checkouts in the selected window.</em></p>
+{% endif %}
+{% endblock %}
+
+{% block scripts %}
+<script src="/ui/static/chart.min.js"></script>
+<script>
+  (function () {
+    var el = document.getElementById('checkouts-chart');
+    if (!el || typeof Chart === 'undefined') return;
+    var labels = {{ chart_labels | safe }};
+    var values = {{ chart_values | safe }};
+    var stroke = getComputedStyle(document.documentElement).getPropertyValue('--pico-color') || '#333';
+    var primary = getComputedStyle(document.documentElement).getPropertyValue('--pico-primary') || '#1095c1';
+    new Chart(el.getContext('2d'), {
+      type: 'bar',
+      data: { labels: labels, datasets: [{ label: 'Checkouts', data: values, backgroundColor: primary.trim() || '#1095c1' }] },
+      options: {
+        responsive: true,
+        maintainAspectRatio: false,
+        scales: { y: { beginAtZero: true, ticks: { precision: 0 } } },
+        plugins: { legend: { display: false } }
+      }
+    });
+  })();
+</script>
+{% endblock %}

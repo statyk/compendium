@@ -1,0 +1,56 @@
+{% extends "base.html" %}
+{% block title %}Dormant items — Compendium{% endblock %}
+{% block content %}
+<nav aria-label="breadcrumb">
+  <ul><li><a href="/ui/reports">Reports</a></li><li>Dormant items</li></ul>
+</nav>
+<h2>Dormant items</h2>
+<p><small>Items not checked out since the cutoff date. Items never loaned appear at the top. Withdrawn items are excluded.</small></p>
+
+<form method="get" action="/ui/reports/dormant" style="display:flex; gap:1rem; flex-wrap:wrap; align-items:flex-end; margin-bottom:1.5rem">
+  <label style="flex:0 0 auto">
+    Not since
+    <input type="date" name="not_since" value="{{ not_since }}">
+  </label>
+  <label style="flex:0 0 auto">
+    Limit
+    <input type="number" name="limit" value="{{ limit }}" min="1" max="500" style="width:6rem">
+  </label>
+  {% if branches|length > 1 %}
+  <label style="flex:0 0 auto">
+    Branch
+    <select name="branch">
+      <option value="">All branches</option>
+      {% for b in branches %}
+      <option value="{{ b.code }}"{% if selected_branch == b.code %} selected{% endif %}>{{ b.name }}</option>
+      {% endfor %}
+    </select>
+  </label>
+  {% endif %}
+  <button type="submit" style="margin-bottom:0">Apply</button>
+  <a href="/ui/reports/dormant?not_since={{ not_since }}&limit={{ limit }}{% if selected_branch %}&branch={{ selected_branch }}{% endif %}&format=csv" role="button" class="outline" style="margin-bottom:0">Download CSV</a>
+</form>
+
+{% if rows %}
+<figure>
+  <table>
+    <thead>
+      <tr><th>Barcode</th><th>Title</th><th>Media</th><th>Branch</th><th>Last checkout</th></tr>
+    </thead>
+    <tbody>
+      {% for r in rows %}
+      <tr>
+        <td><a href="/ui/items/{{ r.barcode }}"><code>{{ r.barcode }}</code></a></td>
+        <td>{{ r.title }}</td>
+        <td>{{ r.media_type_code }}</td>
+        <td>{{ r.branch_code }}</td>
+        <td>{% if r.last_checkout_at %}{{ r.last_checkout_at.strftime("%Y-%m-%d") }}{% else %}<em>never</em>{% endif %}</td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+</figure>
+{% else %}
+<p><em>No dormant items match the current filter.</em></p>
+{% endif %}
+{% endblock %}

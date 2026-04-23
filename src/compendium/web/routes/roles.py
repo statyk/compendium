@@ -28,6 +28,7 @@ PERMISSION_GROUPS = [
     ("Holds", ["hold.place.self", "hold.place.any", "hold.view.self"]),
     ("Fines", ["fine.manage", "fine.view.self"]),
     ("Notifications", ["notification.manage"]),
+    ("Reports", ["report.view"]),
     ("Administration", ["patron.manage", "user.manage", "role.manage", "policy.edit", "branch.edit"]),
 ]
 

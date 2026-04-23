@@ -15,6 +15,7 @@ from compendium.cli.commands import (
     maintenance,
     patron,
     policy,
+    reports,
     role,
     user,
     work,
@@ -42,6 +43,7 @@ app.add_typer(creator.app, name="creator")
 app.add_typer(bulk_ops.import_app, name="import")
 app.add_typer(bulk_ops.export_app, name="export")
 app.add_typer(fine.app, name="fine")
+app.add_typer(reports.app, name="reports")
 
 
 @app.command("serve")

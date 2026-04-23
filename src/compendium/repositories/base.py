@@ -54,6 +54,13 @@ class ItemRepository(Protocol):
     def get_by_barcode(self, barcode: str) -> Item | None: ...
     def update(self, item: Item) -> Item: ...
     def count_all(self) -> int: ...
+    def list_dormant(
+        self,
+        *,
+        not_since: datetime,
+        limit: int,
+        branch_id: int | None = None,
+    ) -> list[tuple[Item, Work, datetime | None]]: ...
 
 
 @runtime_checkable
@@ -94,6 +101,20 @@ class LoanRepository(Protocol):
     def list_active_overdue(self, *, patron_id: int | None = None) -> list[Loan]: ...
     def list_due_within(self, *, days: int) -> list[Loan]: ...
     def update(self, loan: Loan) -> Loan: ...
+    def count_checkouts_by_month(
+        self, *, since: datetime, branch_id: int | None = None
+    ) -> list[tuple[int, int, int]]: ...
+    def popular_works(
+        self,
+        *,
+        since: datetime,
+        until: datetime,
+        limit: int,
+        branch_id: int | None = None,
+    ) -> list[tuple[int, int]]: ...
+    def list_active_overdue_joined(
+        self, *, branch_id: int | None = None
+    ) -> list[tuple[Loan, Patron, Item, Work]]: ...
 
 
 @runtime_checkable

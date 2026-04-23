@@ -1,6 +1,10 @@
+from datetime import datetime
+
+from sqlalchemy import func, nulls_first, or_
 from sqlalchemy.orm import Session
 
-from compendium.domain.models import Item
+from compendium.domain.enums import ItemStatus
+from compendium.domain.models import Item, Loan, Work
 
 
 class SqlItemRepository:
@@ -24,3 +28,33 @@ class SqlItemRepository:
 
     def count_all(self) -> int:
         return self._s.query(Item).count()
+
+    def list_dormant(
+        self,
+        *,
+        not_since: datetime,
+        limit: int,
+        branch_id: int | None = None,
+    ) -> list[tuple[Item, Work, datetime | None]]:
+        """Items whose most recent checkout is older than `not_since`, plus
+        items never checked out. Excludes withdrawn items. Nulls (never-loaned)
+        sort first so the neediest weeding candidates land at the top."""
+        last_checkout = (
+            self._s.query(
+                Loan.item_id.label("item_id"),
+                func.max(Loan.checked_out_at).label("last"),
+            )
+            .group_by(Loan.item_id)
+            .subquery()
+        )
+        q = (
+            self._s.query(Item, Work, last_checkout.c.last)
+            .join(Work, Item.work_id == Work.id)
+            .outerjoin(last_checkout, last_checkout.c.item_id == Item.id)
+            .filter(Item.status != ItemStatus.WITHDRAWN.value)
+            .filter(or_(last_checkout.c.last.is_(None), last_checkout.c.last < not_since))
+        )
+        if branch_id is not None:
+            q = q.filter(Item.branch_id == branch_id)
+        q = q.order_by(nulls_first(last_checkout.c.last.asc()), Item.id).limit(limit)
+        return q.all()

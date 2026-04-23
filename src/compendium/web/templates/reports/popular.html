@@ -1,0 +1,83 @@
+{% extends "base.html" %}
+{% block title %}Popular works — Compendium{% endblock %}
+{% block content %}
+<nav aria-label="breadcrumb">
+  <ul><li><a href="/ui/reports">Reports</a></li><li>Popular works</li></ul>
+</nav>
+<h2>Popular works</h2>
+
+<form method="get" action="/ui/reports/popular" style="display:flex; gap:1rem; flex-wrap:wrap; align-items:flex-end; margin-bottom:1.5rem">
+  <label style="flex:0 0 auto">
+    From
+    <input type="date" name="since" value="{{ since }}">
+  </label>
+  <label style="flex:0 0 auto">
+    To
+    <input type="date" name="until" value="{{ until }}" placeholder="(today)">
+  </label>
+  <label style="flex:0 0 auto">
+    Limit
+    <input type="number" name="limit" value="{{ limit }}" min="1" max="200" style="width:5rem">
+  </label>
+  {% if branches|length > 1 %}
+  <label style="flex:0 0 auto">
+    Branch
+    <select name="branch">
+      <option value="">All branches</option>
+      {% for b in branches %}
+      <option value="{{ b.code }}"{% if selected_branch == b.code %} selected{% endif %}>{{ b.name }}</option>
+      {% endfor %}
+    </select>
+  </label>
+  {% endif %}
+  <button type="submit" style="margin-bottom:0">Apply</button>
+  <a href="/ui/reports/popular?since={{ since }}&until={{ until }}&limit={{ limit }}{% if selected_branch %}&branch={{ selected_branch }}{% endif %}&format=csv" role="button" class="outline" style="margin-bottom:0">Download CSV</a>
+</form>
+
+{% if rows %}
+<canvas id="popular-chart" style="max-height:{{ rows|length * 28 + 40 }}px; margin-bottom:2rem"></canvas>
+
+<figure>
+  <table>
+    <thead>
+      <tr><th style="text-align:right">Checkouts</th><th>Title</th><th>Media</th></tr>
+    </thead>
+    <tbody>
+      {% for r in rows %}
+      <tr>
+        <td style="text-align:right">{{ r.checkout_count }}</td>
+        <td><a href="/ui/works/{{ r.work_id }}">{{ r.title }}</a>{% if r.subtitle %}<br><small>{{ r.subtitle }}</small>{% endif %}</td>
+        <td>{{ r.media_type_code }}</td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+</figure>
+{% else %}
+<p><em>No checkouts in the selected window.</em></p>
+{% endif %}
+{% endblock %}
+
+{% block scripts %}
+<script src="/ui/static/chart.min.js"></script>
+<script>
+  (function () {
+    var el = document.getElementById('popular-chart');
+    if (!el || typeof Chart === 'undefined') return;
+    var labels = {{ chart_labels | safe }};
+    var values = {{ chart_values | safe }};
+    var primary = getComputedStyle(document.documentElement).getPropertyValue('--pico-primary') || '#1095c1';
+    new Chart(el.getContext('2d'), {
+      type: 'bar',
+      data: { labels: labels, datasets: [{ label: 'Checkouts', data: values, backgroundColor: primary.trim() || '#1095c1' }] },
+      options: {
+        indexAxis: 'y',
+        responsive: true,
+        maintainAspectRatio: false,
+        scales: { x: { beginAtZero: true, ticks: { precision: 0 } } },
+        plugins: { legend: { display: false } }
+      }
+    });
+  })();
+</script>
+{% endblock %}

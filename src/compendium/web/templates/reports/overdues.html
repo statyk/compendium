@@ -1,0 +1,49 @@
+{% extends "base.html" %}
+{% block title %}Current overdues — Compendium{% endblock %}
+{% block content %}
+<nav aria-label="breadcrumb">
+  <ul><li><a href="/ui/reports">Reports</a></li><li>Current overdues</li></ul>
+</nav>
+<h2>Current overdues</h2>
+
+<form method="get" action="/ui/reports/overdues" style="display:flex; gap:1rem; flex-wrap:wrap; align-items:flex-end; margin-bottom:1.5rem">
+  {% if branches|length > 1 %}
+  <label style="flex:0 0 auto">
+    Branch
+    <select name="branch">
+      <option value="">All branches</option>
+      {% for b in branches %}
+      <option value="{{ b.code }}"{% if selected_branch == b.code %} selected{% endif %}>{{ b.name }}</option>
+      {% endfor %}
+    </select>
+  </label>
+  <button type="submit" style="margin-bottom:0">Apply</button>
+  {% endif %}
+  <a href="/ui/reports/overdues?{% if selected_branch %}branch={{ selected_branch }}&{% endif %}format=csv" role="button" class="outline" style="margin-bottom:0">Download CSV</a>
+</form>
+
+{% if rows %}
+<p><small><strong>{{ rows|length }}</strong> overdue loan{{ 's' if rows|length != 1 else '' }}.</small></p>
+<figure>
+  <table>
+    <thead>
+      <tr><th style="text-align:right">Days</th><th>Due</th><th>Patron</th><th>Card</th><th>Item</th><th>Title</th></tr>
+    </thead>
+    <tbody>
+      {% for r in rows %}
+      <tr>
+        <td style="text-align:right"><strong>{{ r.days_overdue }}</strong></td>
+        <td><code>{{ r.due_at.strftime("%Y-%m-%d") }}</code></td>
+        <td>{{ r.patron_name }}</td>
+        <td><a href="/ui/patrons/{{ r.patron_card }}"><code>{{ r.patron_card }}</code></a></td>
+        <td><a href="/ui/items/{{ r.item_barcode }}"><code>{{ r.item_barcode }}</code></a></td>
+        <td>{{ r.title }}</td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+</figure>
+{% else %}
+<p><em>No loans are currently overdue.</em></p>
+{% endif %}
+{% endblock %}
