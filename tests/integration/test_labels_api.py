@@ -230,3 +230,13 @@ class TestPatronCards:
             headers={"Authorization": f"Bearer {token}"},
         )
         assert resp.status_code == 404
+
+    def test_full_on_small_template_rejected(self, lab_client, lab_session):
+        token = _librarian_token(lab_session)
+        _seed_patron(lab_session)
+        resp = lab_client.get(
+            "/labels/patrons?template=avery-5167&format=full",
+            headers={"Authorization": f"Bearer {token}"},
+        )
+        assert resp.status_code == 422
+        assert "too small" in resp.json()["detail"]

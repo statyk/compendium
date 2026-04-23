@@ -110,7 +110,7 @@ def _csv(s: str | None) -> list[str] | None:
 @router.get("/items")
 def item_labels(
     template: str = Query("avery-5160"),
-    format: str | None = Query(None, pattern="^(spine|pocket)$"),
+    format: str | None = Query(None, pattern="^(spine|pocket|barcode-only)$"),
     use_isbn_barcode: bool = False,
     branch: str | None = None,
     media_type: str | None = None,
@@ -162,11 +162,14 @@ def patron_cards(
     )
     if not rows:
         raise HTTPException(status_code=404, detail="No patrons matched the filter")
-    pdf = generate_patron_cards(
-        rows,
-        template_key=template,
-        format=format,
-        library_name=get_settings().library_name,
-        start_label=start_label,
-    )
+    try:
+        pdf = generate_patron_cards(
+            rows,
+            template_key=template,
+            format=format,
+            library_name=get_settings().library_name,
+            start_label=start_label,
+        )
+    except ValueError as exc:
+        raise HTTPException(status_code=422, detail=str(exc)) from exc
     return _pdf_response(pdf, "patron-cards.pdf")

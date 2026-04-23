@@ -23,8 +23,13 @@ from reportlab.pdfgen import canvas
 from reportlab.pdfbase.pdfmetrics import stringWidth
 
 
-ItemFormat = Literal["spine", "pocket"]
+ItemFormat = Literal["spine", "pocket", "barcode-only"]
 PatronFormat = Literal["full", "sticker"]
+
+# Minimum label height (inches) that can meaningfully fit a "full" patron card
+# (library name + subtitle + name + barcode + expiry). Smaller than this and
+# content overlaps — the caller should pick "sticker" format instead.
+_FULL_CARD_MIN_HEIGHT = 1.5
 
 
 @dataclass
@@ -47,6 +52,11 @@ class LabelTemplate:
     @property
     def per_sheet(self) -> int:
         return self.cols * self.rows
+
+    @property
+    def supports_full_card(self) -> bool:
+        """Large enough to render a 'full' patron card without content overlap."""
+        return self.label_height >= _FULL_CARD_MIN_HEIGHT
 
 
 # Generic pre-cut label sheet geometries. Template keys reference the common
@@ -251,16 +261,19 @@ def generate_item_labels(
 ) -> bytes:
     """Render item labels to PDF bytes.
 
-    ``format`` defaults based on template size: small templates → 'spine'
-    (call number + cutter + year, no barcode), larger templates → 'pocket'
-    (adds title and barcode). Caller may override.
+    ``format`` defaults based on template size:
+      - narrow templates (≤2") → 'barcode-only' (just a scannable Code128 +
+        human-readable number; good for small stickers affixed to spines/pockets)
+      - larger templates → 'pocket' (title + call number + cutter/year + barcode)
+    Caller may override. 'spine' format is text-only (no barcode), matching
+    traditional shelving-label convention.
 
     ``use_isbn_barcode`` makes the generator draw an EAN-13 for rows that
     carry a valid ISBN; falls back to Code128 over the internal barcode.
     """
     template = TEMPLATES[template_key]
     if format is None:
-        format = "spine" if template.label_width <= 2.0 else "pocket"
+        format = "barcode-only" if template.label_width <= 2.0 else "pocket"
 
     buf = BytesIO()
     c = canvas.Canvas(buf, pagesize=(template.page_width * inch, template.page_height * inch))
@@ -296,53 +309,83 @@ def _draw_item_label(
     font = "Helvetica-Bold"
     body_font = "Helvetica"
 
-    # Always: stacked call number at the top, left-aligned
     cn_lines = wrap_call_number(row.call_number or "", max_chars=10)
     cutter_str = cutter(row.author_display)
     year = str(row.publication_year) if row.publication_year else ""
 
-    # Build the stack
-    stack = list(cn_lines)
-    if cutter_str:
-        stack.append(cutter_str)
-    if year:
-        stack.append(year)
-
-    if fmt == "spine":
-        # Spine: just the stacked text, no barcode, no title.
-        # Size the font so the stack fits vertically.
-        cn_font_size = 9 if len(stack) <= 4 else 7
-        line_h = cn_font_size + 1
-        cursor_y = y + lh - pad - cn_font_size
-        for line in stack:
-            text = _truncate(line, inner_w, font, cn_font_size)
-            c.setFont(font, cn_font_size)
-            c.drawString(x + pad, cursor_y, text)
-            cursor_y -= line_h
-            if cursor_y < y + pad:
-                break
+    if fmt == "barcode-only":
+        # Barcode fills most of the label; human-readable digits sit beneath.
+        bc_h = max(8.0, lh - 2 * pad - 2)
+        if use_isbn and row.isbn:
+            _draw_barcode_ean13(c, x + pad, y + pad, row.isbn, inner_w, bc_h)
+        else:
+            _draw_barcode_code128(c, x + pad, y + pad, row.barcode, inner_w, bc_h)
         return
 
-    # pocket format: call number top-left, title small, barcode+number below.
-    cn_font_size = 9
-    line_h = cn_font_size + 1
-    cursor_y = y + lh - pad - cn_font_size
-    for line in stack:
-        if cursor_y < y + pad + 22:  # leave room for barcode
-            break
-        text = _truncate(line, inner_w * 0.55, font, cn_font_size)
+    if fmt == "spine":
+        # Fixed geometry so a missing call number doesn't shift the cutter/year
+        # up (caller complaint: inconsistent placement across a batch).
+        # Reserve space for: up to 4 call-number lines, cutter line, year line.
+        cn_font_size = 9
+        cutter_font_size = 10
+        year_font_size = 9
+        line_h_cn = cn_font_size + 1
+        # Call number block: top of label, up to 4 lines.
+        top = y + lh - pad
+        max_cn_lines = 4
+        cn_slots = min(len(cn_lines), max_cn_lines)
+        # Walk down from the top: always reserve 4 line-heights so missing
+        # lines leave blank space rather than letting cutter/year float up.
+        cursor = top - cn_font_size
         c.setFont(font, cn_font_size)
-        c.drawString(x + pad, cursor_y, text)
-        cursor_y -= line_h
+        for i in range(max_cn_lines):
+            if i < cn_slots:
+                c.drawString(x + pad, cursor, _truncate(cn_lines[i], inner_w, font, cn_font_size))
+            cursor -= line_h_cn
+        # Cutter (bold) + year (regular) on their own lines below the block.
+        if cutter_str:
+            c.setFont(font, cutter_font_size)
+            c.drawString(x + pad, cursor - 2, cutter_str)
+        cursor -= cutter_font_size + 2
+        if year:
+            c.setFont(body_font, year_font_size)
+            c.drawString(x + pad, cursor - 2, year)
+        return
 
-    # Title on the right of the call number block
+    # pocket format — rework for better space use:
+    #   top row:  title (full width), small
+    #   middle:   call number joined with slashes + cutter + year (one line)
+    #   bottom:   barcode (full width), digits underneath
+    # Reserve space for the middle line even when call number is empty, so
+    # labels in a batch keep consistent geometry.
+    title_size = 8
+    info_size = 9
+    top_y = y + lh - pad - title_size
+    mid_y = top_y - title_size - 4
+
+    # Title (top, full inner width)
     if row.title:
-        title = _truncate(row.title, inner_w * 0.55, body_font, 7)
-        c.setFont(body_font, 7)
-        c.drawString(x + pad + inner_w * 0.45, y + lh - pad - 7, title)
+        c.setFont(body_font, title_size)
+        title_text = row.title
+        if row.author_display:
+            title_text = f"{row.title} — {row.author_display}"
+        c.drawString(x + pad, top_y, _truncate(title_text, inner_w, body_font, title_size))
 
-    # Barcode + number at the bottom
-    bc_h = 18
+    # Call-number line: "PS3551 / .E76 / D8 / 1965 · HER" style
+    parts: list[str] = []
+    if cn_lines:
+        parts.append(" ".join(cn_lines))  # e.g. "PS3551 .E76 D8 1965"
+    if cutter_str:
+        parts.append(cutter_str)
+    if year and not cn_lines:
+        # If the year wasn't already in the call number, append it.
+        parts.append(year)
+    info_text = "  ·  ".join(parts) if parts else ""
+    c.setFont(font, info_size)
+    c.drawString(x + pad, mid_y, _truncate(info_text, inner_w, font, info_size))
+
+    # Barcode at the bottom
+    bc_h = 20
     bc_y = y + pad
     if use_isbn and row.isbn:
         _draw_barcode_ean13(c, x + pad, bc_y, row.isbn, inner_w, bc_h)
@@ -369,8 +412,18 @@ def generate_patron_cards(
     card number + barcode + expiry.
     ``sticker`` mode (for 5160/5167 small labels): card number + barcode only,
     intended to be affixed to a pre-made card the library ordered separately.
+
+    Raises ``ValueError`` if ``full`` is requested on a template too small to
+    render it without content overlap — use ``sticker`` instead.
     """
     template = TEMPLATES[template_key]
+    if format == "full" and not template.supports_full_card:
+        raise ValueError(
+            f"Template '{template_key}' is too small for 'full' format "
+            f"(label height {template.label_height}\" < {_FULL_CARD_MIN_HEIGHT}\"). "
+            f"Use 'sticker' format on this template, or pick a larger template "
+            f"such as 'avery-5871' or 'avery-5390'."
+        )
     buf = BytesIO()
     c = canvas.Canvas(buf, pagesize=(template.page_width * inch, template.page_height * inch))
     patrons_list = list(patrons)

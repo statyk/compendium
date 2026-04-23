@@ -21,9 +21,10 @@
 
   <label>Format
     <select name="format">
-      <option value="">Auto (small → spine, larger → pocket)</option>
-      <option value="spine">Spine (call number + author indicator + year)</option>
-      <option value="pocket">Pocket (adds title + barcode)</option>
+      <option value="">Auto (small → barcode-only, larger → pocket)</option>
+      <option value="spine">Spine — text only (call number + author indicator + year, no barcode)</option>
+      <option value="pocket">Pocket — title + call number + barcode (best for 1"×2⅝")</option>
+      <option value="barcode-only">Barcode-only — scannable barcode + digits (best for small ½"×1¾" stickers)</option>
     </select>
   </label>
 

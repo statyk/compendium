@@ -294,11 +294,24 @@ def patron_cards_post(
                 "error": "No patrons matched the filter.",
             },
         )
-    pdf = generate_patron_cards(
-        rows,
-        template_key=template,
-        format=format,
-        library_name=get_settings().library_name,
-        start_label=max(0, int(start_label or 0)),
-    )
+    try:
+        pdf = generate_patron_cards(
+            rows,
+            template_key=template,
+            format=format,
+            library_name=get_settings().library_name,
+            start_label=max(0, int(start_label or 0)),
+        )
+    except ValueError as exc:
+        return _render(
+            "labels/patrons.html",
+            request,
+            {
+                "request": request,
+                "user": user,
+                "templates": list(TEMPLATES.values()),
+                "categories": _categories(session),
+                "error": str(exc),
+            },
+        )
     return _pdf_response(pdf, "patron-cards.pdf")

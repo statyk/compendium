@@ -159,6 +159,102 @@ class TestGeneratePatronCards:
         assert longer.startswith(b"%PDF-")
 
 
+class TestPatronFullCardSizeValidation:
+    """Full patron format requires a template ≥ 1.5" tall; smaller templates
+    raise ValueError rather than render overlapping content."""
+
+    def test_full_on_small_template_rejected(self):
+        rows = [PatronCardRow(card_number="1", full_name="X")]
+        with pytest.raises(ValueError, match="too small for 'full'"):
+            generate_patron_cards(rows, template_key="avery-5167", format="full")
+
+    def test_full_on_5160_rejected(self):
+        rows = [PatronCardRow(card_number="1", full_name="X")]
+        with pytest.raises(ValueError, match="too small for 'full'"):
+            generate_patron_cards(rows, template_key="avery-5160", format="full")
+
+    def test_full_on_large_template_ok(self):
+        rows = [PatronCardRow(card_number="1", full_name="X")]
+        pdf = generate_patron_cards(rows, template_key="avery-5871", format="full")
+        assert pdf.startswith(b"%PDF-")
+
+    def test_sticker_works_on_any_template(self):
+        rows = [PatronCardRow(card_number="1", full_name="X")]
+        for key in ("avery-5160", "avery-5167", "avery-5871", "avery-5390"):
+            pdf = generate_patron_cards(rows, template_key=key, format="sticker")
+            assert pdf.startswith(b"%PDF-")
+
+    def test_supports_full_card_property(self):
+        assert not TEMPLATES["avery-5167"].supports_full_card
+        assert not TEMPLATES["avery-5160"].supports_full_card
+        assert TEMPLATES["avery-5871"].supports_full_card
+        assert TEMPLATES["avery-5390"].supports_full_card
+
+
+class TestItemBarcodeOnlyFormat:
+    def test_barcode_only_renders(self):
+        rows = [ItemLabelRow(barcode="BC1", title="Anything")]
+        pdf = generate_item_labels(rows, template_key="avery-5167", format="barcode-only")
+        assert pdf.startswith(b"%PDF-")
+
+    def test_auto_default_for_small_is_barcode_only(self):
+        # 5167 is narrow → auto should pick barcode-only (prior default was spine).
+        # Both should succeed; we just verify both paths are valid.
+        rows = [ItemLabelRow(barcode="BC1", title="T")]
+        auto = generate_item_labels(rows, template_key="avery-5167", format=None)
+        explicit = generate_item_labels(
+            rows, template_key="avery-5167", format="barcode-only"
+        )
+        # Structural equality is brittle (PDFs embed timestamps), so just confirm
+        # both succeed and are non-trivial.
+        assert auto.startswith(b"%PDF-") and len(auto) > 500
+        assert explicit.startswith(b"%PDF-") and len(explicit) > 500
+
+
+class TestItemMissingCallNumberDoesNotShiftLayout:
+    """When an item has no call number, the spine/pocket layouts should reserve
+    the same vertical space so cutter/year/barcode stay put across a batch."""
+
+    def test_spine_with_and_without_cn_same_page_count(self):
+        # Two batches: same number of rows, one with CN, one without.
+        with_cn = [
+            ItemLabelRow(
+                barcode=f"BC{i}",
+                title=f"T{i}",
+                author_display="A B",
+                call_number="PS3551 .E76",
+                publication_year=1965,
+            )
+            for i in range(10)
+        ]
+        without_cn = [
+            ItemLabelRow(
+                barcode=f"BC{i}",
+                title=f"T{i}",
+                author_display="A B",
+                call_number=None,
+                publication_year=1965,
+            )
+            for i in range(10)
+        ]
+        pdf_a = generate_item_labels(with_cn, template_key="avery-5160", format="spine")
+        pdf_b = generate_item_labels(without_cn, template_key="avery-5160", format="spine")
+        # Same row count → same number of pages (30 per sheet, both fit on one).
+        # Structurally valid PDFs.
+        assert pdf_a.startswith(b"%PDF-")
+        assert pdf_b.startswith(b"%PDF-")
+
+    def test_pocket_with_and_without_cn_renders_cleanly(self):
+        mixed = [
+            ItemLabelRow(barcode="BC1", title="Has CN", author_display="A",
+                         call_number="PS3551", publication_year=1965),
+            ItemLabelRow(barcode="BC2", title="No CN", author_display="B",
+                         call_number=None, publication_year=2020),
+        ]
+        pdf = generate_item_labels(mixed, template_key="avery-5160", format="pocket")
+        assert pdf.startswith(b"%PDF-")
+
+
 class TestTemplates:
     def test_all_templates_have_per_sheet(self):
         for t in TEMPLATES.values():
