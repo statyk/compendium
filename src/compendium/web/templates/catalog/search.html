@@ -12,7 +12,12 @@
     <option value="publisher" {% if field == "publisher" %}selected{% endif %}>Publisher</option>
     <option value="isbn" {% if field == "isbn" %}selected{% endif %}>ISBN</option>
   </select>
-  <input type="search" name="q" placeholder="Search…" value="{{ q }}" autofocus style="flex:1; min-width:12rem; margin-bottom:0">
+  <input type="search" name="q" placeholder="Search…" value="{{ q }}" autofocus
+         hx-get="/ui/catalog/search-results"
+         hx-trigger="input changed delay:300ms, search"
+         hx-target="#results"
+         hx-include="closest form"
+         style="flex:1; min-width:12rem; margin-bottom:0">
   <input type="hidden" name="media" value="{{ media|join(',') }}">
   <input type="hidden" name="decade" value="{{ decade if decade is not none else '' }}">
   <input type="hidden" name="avail" value="{% if avail %}1{% else %}{% endif %}">
@@ -133,6 +138,15 @@
   .catalog-main { flex:1; min-width:0; }
   .facet-list { list-style:none; padding:0; margin:0.25rem 0 0.75rem 0; }
   .facet-list li { padding:0.1rem 0; }
+  .facet-list label {
+    display:flex; align-items:baseline; gap:0.4rem;
+    cursor:pointer;
+  }
+  .facet-list label input[type="checkbox"],
+  .facet-list label input[type="radio"] { flex:0 0 auto; margin:0; }
+  .facet-list label small {
+    margin-left:auto; color:var(--pico-muted-color); white-space:nowrap;
+  }
   @media (max-width: 720px) {
     .catalog-layout { flex-direction:column; }
     .catalog-facets { flex:0 0 auto; }
@@ -156,6 +170,30 @@
   (function () {
     var form = document.getElementById('catalog-form');
     if (!form) return;
+
+    // Re-sync facet inputs from the URL on every pageshow. Browsers restore
+    // pre-navigation form state from bfcache on Back/Forward, which can leave
+    // a checkbox "checked" on a page whose URL has no matching filter.
+    function syncFromUrl() {
+      var params = new URLSearchParams(location.search);
+      var media = (params.get('media') || '').split(',').filter(Boolean);
+      document.querySelectorAll('input[data-facet="media"]').forEach(function (cb) {
+        cb.checked = media.indexOf(cb.value) !== -1;
+      });
+      form.elements.media.value = media.join(',');
+      var decade = params.get('decade') || '';
+      document.querySelectorAll('input[data-facet="decade"]').forEach(function (rb) {
+        rb.checked = rb.value === decade;
+      });
+      form.elements.decade.value = decade;
+      var avail = params.get('avail') === '1';
+      document.querySelectorAll('input[data-facet="avail"]').forEach(function (cb) {
+        cb.checked = avail;
+      });
+      form.elements.avail.value = avail ? '1' : '';
+    }
+    window.addEventListener('pageshow', syncFromUrl);
+
     var media = (form.elements.media.value || '').split(',').filter(Boolean);
     var setMediaInput = function () {
       form.elements.media.value = media.join(',');
