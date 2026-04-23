@@ -34,7 +34,52 @@ class WorkRepository(Protocol):
     def get_by_isbn(self, isbn: str) -> Work | None: ...
     def get_by_upc(self, upc: str) -> Work | None: ...
     def list(self, limit: int = 50, offset: int = 0) -> list[Work]: ...
-    def search(self, q: str, limit: int = 20) -> list[Work]: ...
+    def search(
+        self,
+        q: str,
+        field: str = "all",
+        *,
+        limit: int = 20,
+        offset: int = 0,
+        media_type_codes: list[str] | None = None,
+        decade: int | None = None,
+        available_only: bool = False,
+    ) -> list[Work]: ...
+    def count_search(
+        self,
+        q: str,
+        field: str = "all",
+        *,
+        media_type_codes: list[str] | None = None,
+        decade: int | None = None,
+        available_only: bool = False,
+    ) -> int: ...
+    def facet_media_counts(
+        self,
+        q: str,
+        field: str,
+        *,
+        decade: int | None = None,
+        available_only: bool = False,
+    ) -> list[tuple[str, str, int]]: ...
+    def facet_decade_counts(
+        self,
+        q: str,
+        field: str,
+        *,
+        media_type_codes: list[str] | None = None,
+        available_only: bool = False,
+    ) -> list[tuple[int, int]]: ...
+    def facet_available_count(
+        self,
+        q: str,
+        field: str,
+        *,
+        media_type_codes: list[str] | None = None,
+        decade: int | None = None,
+    ) -> int: ...
+    def list_recent(self, *, days: int, limit: int) -> list[Work]: ...
+    def list_recently_returned(self, *, days: int, limit: int) -> list[Work]: ...
     def update(self, work: Work) -> Work: ...
     def has_loanable_item(self, work_id: int) -> bool: ...
     def first_available_loanable_copy(self, work_id: int) -> Item | None: ...

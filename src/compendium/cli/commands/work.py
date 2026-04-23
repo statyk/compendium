@@ -24,6 +24,14 @@ def _catalog(session):
     )
 
 
+def _print_works(works) -> None:
+    for w in works:
+        creators = ", ".join(wc.creator.display_name for wc in w.creators)
+        year = f" ({w.publication_year})" if w.publication_year else ""
+        media = f" [{w.media_type.code}]" if w.media_type else ""
+        typer.echo(f"  [{w.id}] {w.title}{media}" + (f" — {creators}" if creators else "") + year)
+
+
 @app.command("search")
 def search_works(
     query: str = typer.Argument(..., help="Search query"),
@@ -31,19 +39,60 @@ def search_works(
         "all", "--field", help="Field: all, title, author, publisher, isbn"
     ),
     limit: int = typer.Option(20, "--limit"),
+    media_type: list[str] = typer.Option(
+        [],
+        "--media-type",
+        help="Filter by media type code (book, dvd, vinyl, …). Repeatable.",
+    ),
+    decade: int | None = typer.Option(
+        None, "--decade", help="Filter by decade start year (e.g. 2010)"
+    ),
+    available: bool = typer.Option(
+        False, "--available/--all", help="Only show works with at least one available copy"
+    ),
 ) -> None:
     """Search the catalog by title, author, publisher, or ISBN."""
     with session_scope() as session:
-        works = SqlWorkRepository(session).search(query, field=field, limit=limit)
+        works = SqlWorkRepository(session).search(
+            query,
+            field=field,
+            limit=limit,
+            media_type_codes=media_type or None,
+            decade=decade,
+            available_only=available,
+        )
         if not works:
             typer.echo(f"No results for '{query}'.")
             return
-        for w in works:
-            creators = ", ".join(wc.creator.display_name for wc in w.creators)
-            year = f" ({w.publication_year})" if w.publication_year else ""
-            typer.echo(
-                f"  [{w.id}] {w.title}" + (f" — {creators}" if creators else "") + year
-            )
+        _print_works(works)
+
+
+@app.command("new-arrivals")
+def new_arrivals(
+    days: int = typer.Option(60, "--days", help="Look back this many days"),
+    limit: int = typer.Option(20, "--limit"),
+) -> None:
+    """List works added to the catalog recently."""
+    with session_scope() as session:
+        works = SqlWorkRepository(session).list_recent(days=days, limit=limit)
+        if not works:
+            typer.echo(f"No works added in the last {days} days.")
+            return
+        _print_works(works)
+
+
+@app.command("recently-returned")
+def recently_returned(
+    days: int = typer.Option(30, "--days", help="Look back this many days"),
+    limit: int = typer.Option(20, "--limit"),
+) -> None:
+    """List works whose most recent return was in the last N days."""
+    with session_scope() as session:
+        works = SqlWorkRepository(session).list_recently_returned(days=days, limit=limit)
+        if not works:
+            typer.echo(f"No works returned in the last {days} days.")
+            return
+        _print_works(works)
 
 
 @app.command("edit")

@@ -2,11 +2,11 @@ from __future__ import annotations
 
 from datetime import datetime
 
-from sqlalchemy import or_, text
+from sqlalchemy import exists, func, or_, text
 from sqlalchemy.orm import Session
 
 from compendium.domain.enums import ItemStatus
-from compendium.domain.models import Branch, Creator, Item, MediaType, Work, WorkCreator
+from compendium.domain.models import Branch, Creator, Item, Loan, MediaType, Work, WorkCreator
 
 
 class SqlWorkRepository:
@@ -88,17 +88,47 @@ class SqlWorkRepository:
             q = q.filter(Work.created_at >= since)
         return q.order_by(Work.id).all()
 
-    def search(self, q: str, field: str = "all", limit: int = 20) -> list[Work]:
+    def search(
+        self,
+        q: str,
+        field: str = "all",
+        *,
+        limit: int = 20,
+        offset: int = 0,
+        media_type_codes: list[str] | None = None,
+        decade: int | None = None,
+        available_only: bool = False,
+    ) -> list[Work]:
+        # FTS gives us a candidate id-list (already ranked); filters then narrow.
         if field == "all" and q.strip():
-            results = self._fts_search(q.strip(), limit)
-            if results is not None:
-                return results
+            ids = self._fts_ids(q.strip(), limit=10_000)
+            if ids is not None:
+                return self._post_filter(
+                    ids,
+                    limit=limit,
+                    offset=offset,
+                    media_type_codes=media_type_codes,
+                    decade=decade,
+                    available_only=available_only,
+                )
+
+        base = self._base_filtered(
+            media_type_codes=media_type_codes,
+            decade=decade,
+            available_only=available_only,
+        )
+        if not q:
+            return base.order_by(Work.title).offset(offset).limit(limit).all()
 
         pattern = f"%{q}%"
-        base = self._s.query(Work)
-
         if field == "title":
-            return base.filter(Work.title.ilike(pattern)).order_by(Work.title).limit(limit).all()
+            return (
+                base.filter(Work.title.ilike(pattern))
+                .order_by(Work.title)
+                .offset(offset)
+                .limit(limit)
+                .all()
+            )
         if field == "author":
             return (
                 base.join(Work.creators)
@@ -106,17 +136,27 @@ class SqlWorkRepository:
                 .filter(Creator.display_name.ilike(pattern))
                 .order_by(Work.title)
                 .distinct()
+                .offset(offset)
                 .limit(limit)
                 .all()
             )
         if field == "publisher":
             return (
-                base.filter(Work.publisher.ilike(pattern)).order_by(Work.title).limit(limit).all()
+                base.filter(Work.publisher.ilike(pattern))
+                .order_by(Work.title)
+                .offset(offset)
+                .limit(limit)
+                .all()
             )
         if field == "isbn":
-            return base.filter(Work.isbn.ilike(pattern)).order_by(Work.title).limit(limit).all()
+            return (
+                base.filter(Work.isbn.ilike(pattern))
+                .order_by(Work.title)
+                .offset(offset)
+                .limit(limit)
+                .all()
+            )
 
-        # default all-fields LIKE fallback
         return (
             base.outerjoin(Work.creators)
             .outerjoin(WorkCreator.creator)
@@ -130,52 +170,328 @@ class SqlWorkRepository:
             )
             .order_by(Work.title)
             .distinct()
+            .offset(offset)
             .limit(limit)
             .all()
         )
 
-    def _fts_search(self, q: str, limit: int) -> list[Work] | None:
+    def count_search(
+        self,
+        q: str,
+        field: str = "all",
+        *,
+        media_type_codes: list[str] | None = None,
+        decade: int | None = None,
+        available_only: bool = False,
+    ) -> int:
+        if field == "all" and q.strip():
+            ids = self._fts_ids(q.strip(), limit=10_000)
+            if ids is not None:
+                return self._count_post_filter(
+                    ids,
+                    media_type_codes=media_type_codes,
+                    decade=decade,
+                    available_only=available_only,
+                )
+        # Fall back to the full filter query but counted.
+        base = self._base_filtered(
+            media_type_codes=media_type_codes,
+            decade=decade,
+            available_only=available_only,
+        )
+        if not q:
+            return base.count()
+        pattern = f"%{q}%"
+        if field == "title":
+            return base.filter(Work.title.ilike(pattern)).count()
+        if field == "author":
+            return (
+                base.join(Work.creators)
+                .join(WorkCreator.creator)
+                .filter(Creator.display_name.ilike(pattern))
+                .distinct()
+                .count()
+            )
+        if field == "publisher":
+            return base.filter(Work.publisher.ilike(pattern)).count()
+        if field == "isbn":
+            return base.filter(Work.isbn.ilike(pattern)).count()
+        return (
+            base.outerjoin(Work.creators)
+            .outerjoin(WorkCreator.creator)
+            .filter(
+                or_(
+                    Work.title.ilike(pattern),
+                    Work.publisher.ilike(pattern),
+                    Work.isbn.ilike(pattern),
+                    Creator.display_name.ilike(pattern),
+                )
+            )
+            .distinct()
+            .count()
+        )
+
+    def _base_filtered(
+        self,
+        *,
+        media_type_codes: list[str] | None,
+        decade: int | None,
+        available_only: bool,
+    ):
+        q = self._s.query(Work)
+        if media_type_codes:
+            q = q.join(Work.media_type).filter(MediaType.code.in_(media_type_codes))
+        if decade is not None:
+            q = q.filter(
+                Work.publication_year >= decade,
+                Work.publication_year < decade + 10,
+            )
+        if available_only:
+            q = q.filter(
+                exists().where(
+                    (Item.work_id == Work.id)
+                    & Item.is_loanable.is_(True)
+                    & (Item.status == ItemStatus.AVAILABLE.value)
+                )
+            )
+        return q
+
+    def _post_filter(
+        self,
+        ids: list[int],
+        *,
+        limit: int,
+        offset: int,
+        media_type_codes: list[str] | None,
+        decade: int | None,
+        available_only: bool,
+    ) -> list[Work]:
+        if not ids:
+            return []
+        q = self._base_filtered(
+            media_type_codes=media_type_codes,
+            decade=decade,
+            available_only=available_only,
+        ).filter(Work.id.in_(ids))
+        works = {w.id: w for w in q.all()}
+        # Preserve FTS rank order, then paginate.
+        ordered = [works[i] for i in ids if i in works]
+        return ordered[offset : offset + limit]
+
+    def _count_post_filter(
+        self,
+        ids: list[int],
+        *,
+        media_type_codes: list[str] | None,
+        decade: int | None,
+        available_only: bool,
+    ) -> int:
+        if not ids:
+            return 0
+        return (
+            self._base_filtered(
+                media_type_codes=media_type_codes,
+                decade=decade,
+                available_only=available_only,
+            )
+            .filter(Work.id.in_(ids))
+            .count()
+        )
+
+    def facet_media_counts(
+        self,
+        q: str,
+        field: str,
+        *,
+        decade: int | None = None,
+        available_only: bool = False,
+    ) -> list[tuple[str, str, int]]:
+        """Counts grouped by media type for the current search, ignoring any
+        media-type selection (so the user can browse alternatives in the group).
+        Returns (code, display_name, count)."""
+        ids = self._candidate_ids(q, field)
+        base = (
+            self._s.query(MediaType.code, MediaType.display_name, func.count(Work.id))
+            .join(Work, Work.media_type_id == MediaType.id)
+        )
+        if ids is not None:
+            if not ids:
+                return []
+            base = base.filter(Work.id.in_(ids))
+        if decade is not None:
+            base = base.filter(
+                Work.publication_year >= decade,
+                Work.publication_year < decade + 10,
+            )
+        if available_only:
+            base = base.filter(
+                exists().where(
+                    (Item.work_id == Work.id)
+                    & Item.is_loanable.is_(True)
+                    & (Item.status == ItemStatus.AVAILABLE.value)
+                )
+            )
+        rows = (
+            base.group_by(MediaType.code, MediaType.display_name)
+            .order_by(MediaType.display_name)
+            .all()
+        )
+        return [(c, n, int(cnt)) for c, n, cnt in rows]
+
+    def facet_decade_counts(
+        self,
+        q: str,
+        field: str,
+        *,
+        media_type_codes: list[str] | None = None,
+        available_only: bool = False,
+    ) -> list[tuple[int, int]]:
+        """Decade buckets with counts (e.g. (2010, 87)). Sorted descending so
+        recent years lead. Computed Python-side to avoid sqlite/postgres divides
+        differently."""
+        ids = self._candidate_ids(q, field)
+        base = self._s.query(Work.publication_year).filter(Work.publication_year.isnot(None))
+        if ids is not None:
+            if not ids:
+                return []
+            base = base.filter(Work.id.in_(ids))
+        if media_type_codes:
+            base = base.join(Work.media_type).filter(MediaType.code.in_(media_type_codes))
+        if available_only:
+            base = base.filter(
+                exists().where(
+                    (Item.work_id == Work.id)
+                    & Item.is_loanable.is_(True)
+                    & (Item.status == ItemStatus.AVAILABLE.value)
+                )
+            )
+        buckets: dict[int, int] = {}
+        for (year,) in base.all():
+            buckets[(year // 10) * 10] = buckets.get((year // 10) * 10, 0) + 1
+        return sorted(buckets.items(), key=lambda x: x[0], reverse=True)
+
+    def facet_available_count(
+        self,
+        q: str,
+        field: str,
+        *,
+        media_type_codes: list[str] | None = None,
+        decade: int | None = None,
+    ) -> int:
+        ids = self._candidate_ids(q, field)
+        base = self._base_filtered(
+            media_type_codes=media_type_codes,
+            decade=decade,
+            available_only=True,
+        )
+        if ids is not None:
+            if not ids:
+                return 0
+            base = base.filter(Work.id.in_(ids))
+        return base.count()
+
+    def _candidate_ids(self, q: str, field: str) -> list[int] | None:
+        """Resolve the search q+field to a candidate id list. Returns None when
+        no narrowing is needed (empty query or non-FTS fields handled by joins)."""
+        if not q or not q.strip():
+            return None
+        if field == "all":
+            return self._fts_ids(q.strip(), limit=10_000) or []
+        pattern = f"%{q}%"
+        base = self._s.query(Work.id)
+        if field == "title":
+            rows = base.filter(Work.title.ilike(pattern)).all()
+        elif field == "author":
+            rows = (
+                base.join(Work.creators)
+                .join(WorkCreator.creator)
+                .filter(Creator.display_name.ilike(pattern))
+                .distinct()
+                .all()
+            )
+        elif field == "publisher":
+            rows = base.filter(Work.publisher.ilike(pattern)).all()
+        elif field == "isbn":
+            rows = base.filter(Work.isbn.ilike(pattern)).all()
+        else:
+            rows = (
+                base.outerjoin(Work.creators)
+                .outerjoin(WorkCreator.creator)
+                .filter(
+                    or_(
+                        Work.title.ilike(pattern),
+                        Work.publisher.ilike(pattern),
+                        Work.isbn.ilike(pattern),
+                        Creator.display_name.ilike(pattern),
+                    )
+                )
+                .distinct()
+                .all()
+            )
+        return [r[0] for r in rows]
+
+    def list_recent(self, *, days: int, limit: int) -> list[Work]:
+        from datetime import timedelta, timezone
+
+        cutoff = datetime.now(tz=timezone.utc) - timedelta(days=days)
+        return (
+            self._s.query(Work)
+            .filter(Work.created_at >= cutoff)
+            .order_by(Work.created_at.desc())
+            .limit(limit)
+            .all()
+        )
+
+    def list_recently_returned(self, *, days: int, limit: int) -> list[Work]:
+        from datetime import timedelta, timezone
+
+        cutoff = datetime.now(tz=timezone.utc) - timedelta(days=days)
+        # Window: works whose most recent loan was returned in the last `days`.
+        sub = (
+            self._s.query(Item.work_id, func.max(Loan.returned_at).label("last"))
+            .join(Loan, Loan.item_id == Item.id)
+            .filter(Loan.returned_at.isnot(None))
+            .group_by(Item.work_id)
+            .subquery()
+        )
+        rows = (
+            self._s.query(Work, sub.c.last)
+            .join(sub, sub.c.work_id == Work.id)
+            .filter(sub.c.last >= cutoff)
+            .order_by(sub.c.last.desc())
+            .limit(limit)
+            .all()
+        )
+        return [w for w, _last in rows]
+
+    def _fts_ids(self, q: str, *, limit: int) -> list[int] | None:
+        """Return ranked work IDs matching `q` via FTS, or None on unsupported backend."""
         dialect = self._s.connection().dialect.name
         if dialect == "sqlite":
-            return self._fts_sqlite(q, limit)
+            fts_query = '"' + q.replace('"', '""') + '"'
+            rows = self._s.execute(
+                text(
+                    "SELECT rowid FROM work_fts WHERE work_fts MATCH :q ORDER BY rank LIMIT :lim"
+                ),
+                {"q": fts_query, "lim": limit},
+            ).fetchall()
+            return [r[0] for r in rows]
         if dialect == "postgresql":
-            return self._fts_postgres(q, limit)
+            rows = self._s.execute(
+                text(
+                    """
+                    SELECT id
+                    FROM work
+                    WHERE to_tsvector('english', COALESCE(search_text, ''))
+                          @@ plainto_tsquery('english', :q)
+                    ORDER BY ts_rank(
+                        to_tsvector('english', COALESCE(search_text, '')),
+                        plainto_tsquery('english', :q)
+                    ) DESC
+                    LIMIT :lim
+                    """
+                ),
+                {"q": q, "lim": limit},
+            ).fetchall()
+            return [r[0] for r in rows]
         return None
-
-    def _fts_sqlite(self, q: str, limit: int) -> list[Work]:
-        # Wrap in FTS5 phrase quotes so special chars (., -, *, etc.) are literals.
-        fts_query = '"' + q.replace('"', '""') + '"'
-        rows = self._s.execute(
-            text(
-                "SELECT rowid FROM work_fts WHERE work_fts MATCH :q ORDER BY rank LIMIT :lim"
-            ),
-            {"q": fts_query, "lim": limit},
-        ).fetchall()
-        ids = [r[0] for r in rows]
-        if not ids:
-            return []
-        works = {w.id: w for w in self._s.query(Work).filter(Work.id.in_(ids)).all()}
-        return [works[i] for i in ids if i in works]
-
-    def _fts_postgres(self, q: str, limit: int) -> list[Work]:
-        rows = self._s.execute(
-            text(
-                """
-                SELECT id
-                FROM work
-                WHERE to_tsvector('english', COALESCE(search_text, ''))
-                      @@ plainto_tsquery('english', :q)
-                ORDER BY ts_rank(
-                    to_tsvector('english', COALESCE(search_text, '')),
-                    plainto_tsquery('english', :q)
-                ) DESC
-                LIMIT :lim
-                """
-            ),
-            {"q": q, "lim": limit},
-        ).fetchall()
-        ids = [r[0] for r in rows]
-        if not ids:
-            return []
-        works = {w.id: w for w in self._s.query(Work).filter(Work.id.in_(ids)).all()}
-        return [works[i] for i in ids if i in works]

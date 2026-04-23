@@ -25,6 +25,7 @@ from compendium.repositories.sql.patron_repository import SqlPatronRepository
 from compendium.repositories.sql.work_repository import SqlWorkRepository
 from compendium.services.audit import AuditService
 from compendium.services.catalog import CatalogService
+from compendium.services.discovery import DiscoveryService
 from compendium.services.holds import HoldService
 from compendium.web.csrf import check_csrf_form, ensure_csrf, set_csrf_cookie
 from compendium.web.deps import get_web_user, require_web_permission, require_web_user
@@ -70,25 +71,107 @@ def _render(name: str, request: Request, ctx: dict, status_code: int = 200):
     return resp
 
 
+def _discovery(session: Session) -> DiscoveryService:
+    return DiscoveryService(work_repo=SqlWorkRepository(session))
+
+
+def _parse_csv(s: str) -> list[str]:
+    return [tok.strip() for tok in s.split(",") if tok.strip()]
+
+
+def _parse_int(s: str) -> int | None:
+    s = s.strip()
+    if not s:
+        return None
+    try:
+        return int(s)
+    except ValueError:
+        return None
+
+
+def _filters_qs(*, q: str, field: str, media: list[str], decade: int | None, avail: bool) -> str:
+    from urllib.parse import urlencode
+
+    params = [("q", q), ("field", field)]
+    if media:
+        params.append(("media", ",".join(media)))
+    if decade is not None:
+        params.append(("decade", str(decade)))
+    if avail:
+        params.append(("avail", "1"))
+    return urlencode(params)
+
+
 @router.get("/catalog")
 def catalog_search(
     request: Request,
     q: str = "",
     field: str = "all",
+    media: str = "",
+    decade: str = "",
+    avail: str = "",
+    page: int = 1,
     user=Depends(get_web_user),
     session: Session = Depends(get_session),
 ):
     settings = get_settings()
-    works = []
-    if settings.guest_search_enabled or user is not None:
-        if q:
-            works = SqlWorkRepository(session).search(q, field=field)
-        else:
-            works = SqlWorkRepository(session).list(limit=50)
+    if not (settings.guest_search_enabled or user is not None):
+        return _render(
+            "catalog/search.html",
+            request,
+            {
+                "request": request,
+                "user": user,
+                "page": None,
+                "q": q,
+                "field": field,
+                "media": [],
+                "decade": None,
+                "avail": False,
+                "new_arrivals": [],
+                "recently_returned": [],
+                "show_landing": False,
+            },
+        )
+
+    media_codes = _parse_csv(media)
+    decade_int = _parse_int(decade)
+    available_only = avail in ("1", "true", "on", "yes")
+    has_filters = bool(q or media_codes or decade_int is not None or available_only)
+
+    svc = _discovery(session)
+    page_obj = svc.search(
+        q,
+        field=field,
+        page=page,
+        page_size=25,
+        media_type_codes=media_codes,
+        decade=decade_int,
+        available_only=available_only,
+    )
+    new_arrivals: list = []
+    recently_returned: list = []
+    if not has_filters:
+        new_arrivals = svc.new_arrivals()
+        recently_returned = svc.recently_returned()
+    qs = _filters_qs(q=q, field=field, media=media_codes, decade=decade_int, avail=available_only)
     return _render(
         "catalog/search.html",
         request,
-        {"request": request, "user": user, "works": works, "q": q, "field": field},
+        {
+            "request": request,
+            "user": user,
+            "page": page_obj,
+            "q": q,
+            "field": field,
+            "media": media_codes,
+            "decade": decade_int,
+            "avail": available_only,
+            "filters_qs": qs,
+            "new_arrivals": new_arrivals,
+            "recently_returned": recently_returned,
+            "show_landing": not has_filters,
+        },
     )
 
 
@@ -97,20 +180,35 @@ def catalog_search_results(
     request: Request,
     q: str = "",
     field: str = "all",
+    media: str = "",
+    decade: str = "",
+    avail: str = "",
+    page: int = 1,
     user=Depends(get_web_user),
     session: Session = Depends(get_session),
 ):
     settings = get_settings()
-    works = []
-    if settings.guest_search_enabled or user is not None:
-        if q:
-            works = SqlWorkRepository(session).search(q, field=field)
-        else:
-            works = SqlWorkRepository(session).list(limit=50)
+    if not (settings.guest_search_enabled or user is not None):
+        return templates.TemplateResponse(
+            request, "_partials/work_list.html", {"page": None, "q": q}
+        )
+    media_codes = _parse_csv(media)
+    decade_int = _parse_int(decade)
+    available_only = avail in ("1", "true", "on", "yes")
+    page_obj = _discovery(session).search(
+        q,
+        field=field,
+        page=page,
+        page_size=25,
+        media_type_codes=media_codes,
+        decade=decade_int,
+        available_only=available_only,
+    )
+    qs = _filters_qs(q=q, field=field, media=media_codes, decade=decade_int, avail=available_only)
     return templates.TemplateResponse(
         request,
         "_partials/work_list.html",
-        {"works": works, "q": q},
+        {"page": page_obj, "q": q, "filters_qs": qs},
     )
 
 

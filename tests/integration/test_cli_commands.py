@@ -409,6 +409,46 @@ class TestWorkCli:
         assert r.exit_code == 0
         assert "Dune" in r.output
 
+    def test_search_with_media_filter(self, session):
+        _seed_work(session)  # Dune is a book
+        r = _invoke(
+            session,
+            ["work", "search", "Dune", "--media-type", "dvd"],
+            "compendium.cli.commands.work",
+        )
+        assert r.exit_code == 0
+        assert "No results" in r.output
+
+    def test_search_with_decade_filter(self, session):
+        _seed_work(session)  # Dune is 1965 → 1960s
+        r = _invoke(
+            session,
+            ["work", "search", "Dune", "--decade", "2010"],
+            "compendium.cli.commands.work",
+        )
+        assert r.exit_code == 0
+        assert "No results" in r.output
+
+    def test_new_arrivals(self, session):
+        _seed_work(session)
+        r = _invoke(
+            session,
+            ["work", "new-arrivals", "--days", "30", "--limit", "10"],
+            "compendium.cli.commands.work",
+        )
+        assert r.exit_code == 0
+        # Either the seeded work appears, or the empty message — both valid.
+        assert "Dune" in r.output or "No works added" in r.output
+
+    def test_recently_returned_empty(self, session):
+        r = _invoke(
+            session,
+            ["work", "recently-returned"],
+            "compendium.cli.commands.work",
+        )
+        assert r.exit_code == 0
+        assert "No works returned" in r.output
+
     def test_show_unknown_fails(self, session):
         r = _invoke(session, ["work", "show", "999999"], "compendium.cli.commands.work")
         assert r.exit_code == 1

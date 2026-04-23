@@ -1,36 +1,194 @@
 {% extends "base.html" %}
+{% from "_macros.html" import cover_url %}
 {% block title %}Catalog — Compendium{% endblock %}
 {% block content %}
-<h2>Catalog Search</h2>
-<div role="group">
-  <select
-    name="field"
-    id="search-field"
-    hx-get="/ui/catalog/search-results"
-    hx-trigger="change"
-    hx-target="#results"
-    hx-include="[name='q'], [name='field']"
-    style="max-width: 10rem; flex-shrink: 0"
-  >
+<h2>Catalog</h2>
+
+<form method="get" action="/ui/catalog" id="catalog-form" style="display:flex; gap:0.5rem; flex-wrap:wrap; align-items:flex-end; margin-bottom:1rem">
+  <select name="field" style="max-width:10rem; flex-shrink:0; margin-bottom:0">
     <option value="all" {% if field == "all" %}selected{% endif %}>All fields</option>
     <option value="title" {% if field == "title" %}selected{% endif %}>Title</option>
     <option value="author" {% if field == "author" %}selected{% endif %}>Author</option>
     <option value="publisher" {% if field == "publisher" %}selected{% endif %}>Publisher</option>
     <option value="isbn" {% if field == "isbn" %}selected{% endif %}>ISBN</option>
   </select>
-  <input
-    type="search"
-    name="q"
-    placeholder="Search…"
-    autofocus
-    hx-get="/ui/catalog/search-results"
-    hx-trigger="input changed delay:300ms, search"
-    hx-target="#results"
-    hx-include="[name='q'], [name='field']"
-    value="{{ q }}"
-  >
+  <input type="search" name="q" placeholder="Search…" value="{{ q }}" autofocus style="flex:1; min-width:12rem; margin-bottom:0">
+  <input type="hidden" name="media" value="{{ media|join(',') }}">
+  <input type="hidden" name="decade" value="{{ decade if decade is not none else '' }}">
+  <input type="hidden" name="avail" value="{% if avail %}1{% else %}{% endif %}">
+  <button type="submit" style="margin-bottom:0">Search</button>
+</form>
+
+<div class="catalog-layout">
+  <aside class="catalog-facets">
+    {% if page %}
+    <h4 style="margin-top:0">Filter</h4>
+    {% if page.facets.media_type %}
+    <details open>
+      <summary><strong>Media type</strong></summary>
+      <ul class="facet-list">
+        {% for code, name, count in page.facets.media_type %}
+        <li>
+          <label>
+            <input type="checkbox" data-facet="media" value="{{ code }}"
+                   {% if code in media %}checked{% endif %}>
+            {{ name }} <small>({{ count }})</small>
+          </label>
+        </li>
+        {% endfor %}
+      </ul>
+    </details>
+    {% endif %}
+    {% if page.facets.decade %}
+    <details open>
+      <summary><strong>Decade</strong></summary>
+      <ul class="facet-list">
+        {% for d, count in page.facets.decade %}
+        <li>
+          <label>
+            <input type="radio" name="facet-decade" data-facet="decade" value="{{ d }}"
+                   {% if decade == d %}checked{% endif %}>
+            {{ d }}s <small>({{ count }})</small>
+          </label>
+        </li>
+        {% endfor %}
+        {% if decade is not none %}
+        <li><a href="#" data-clear="decade"><small>Clear</small></a></li>
+        {% endif %}
+      </ul>
+    </details>
+    {% endif %}
+    <details open>
+      <summary><strong>Availability</strong></summary>
+      <ul class="facet-list">
+        <li>
+          <label>
+            <input type="checkbox" data-facet="avail" value="1"
+                   {% if avail %}checked{% endif %}>
+            Available now <small>({{ page.facets.available_now }})</small>
+          </label>
+        </li>
+      </ul>
+    </details>
+    {% if media or decade is not none or avail %}
+    <p><a href="/ui/catalog?q={{ q }}&field={{ field }}"><small>Clear all filters</small></a></p>
+    {% endif %}
+    {% endif %}
+  </aside>
+
+  <section class="catalog-main">
+    {% if show_landing %}
+      {% if new_arrivals or recently_returned %}
+      <div class="discovery-shelves">
+        {% if new_arrivals %}
+        <h3>New arrivals</h3>
+        <ul class="cover-shelf">
+          {% for w in new_arrivals %}
+          <li>
+            <a href="/ui/catalog/{{ w.id }}" title="{{ w.title }}">
+              <div class="cover-thumb cover-thumb-shelf" aria-hidden="true">
+                {% if w.cover_image_url %}
+                <img src="{{ cover_url(w.cover_image_url) }}" alt="" loading="lazy">
+                {% endif %}
+              </div>
+              <small class="shelf-title">{{ w.title }}</small>
+            </a>
+          </li>
+          {% endfor %}
+        </ul>
+        {% endif %}
+        {% if recently_returned %}
+        <h3>Recently returned</h3>
+        <ul class="cover-shelf">
+          {% for w in recently_returned %}
+          <li>
+            <a href="/ui/catalog/{{ w.id }}" title="{{ w.title }}">
+              <div class="cover-thumb cover-thumb-shelf" aria-hidden="true">
+                {% if w.cover_image_url %}
+                <img src="{{ cover_url(w.cover_image_url) }}" alt="" loading="lazy">
+                {% endif %}
+              </div>
+              <small class="shelf-title">{{ w.title }}</small>
+            </a>
+          </li>
+          {% endfor %}
+        </ul>
+        {% endif %}
+      </div>
+      <hr>
+      <h3>All works</h3>
+      {% endif %}
+    {% endif %}
+    <div id="results">
+      {% include "_partials/work_list.html" %}
+    </div>
+  </section>
 </div>
-<div id="results">
-  {% include "_partials/work_list.html" %}
-</div>
+{% endblock %}
+
+{% block scripts %}
+<style>
+  .catalog-layout { display:flex; gap:1.5rem; align-items:flex-start; }
+  .catalog-facets { flex:0 0 14rem; }
+  .catalog-main { flex:1; min-width:0; }
+  .facet-list { list-style:none; padding:0; margin:0.25rem 0 0.75rem 0; }
+  .facet-list li { padding:0.1rem 0; }
+  @media (max-width: 720px) {
+    .catalog-layout { flex-direction:column; }
+    .catalog-facets { flex:0 0 auto; }
+  }
+  .discovery-shelves h3 { margin-bottom:0.5rem; }
+  .cover-shelf {
+    list-style:none; padding:0; margin:0 0 1.5rem 0;
+    display:flex; gap:0.75rem; overflow-x:auto;
+  }
+  .cover-shelf li { flex:0 0 auto; max-width:6rem; }
+  .cover-shelf a { color:inherit; text-decoration:none; display:block; }
+  .cover-thumb-shelf { width:6rem; }
+  .shelf-title {
+    display:block; margin-top:0.25rem;
+    overflow:hidden; text-overflow:ellipsis;
+    display:-webkit-box; -webkit-line-clamp:2; -webkit-box-orient:vertical;
+  }
+  .pagination { display:flex; gap:0.5rem; justify-content:center; margin-top:1rem; }
+</style>
+<script>
+  (function () {
+    var form = document.getElementById('catalog-form');
+    if (!form) return;
+    var media = (form.elements.media.value || '').split(',').filter(Boolean);
+    var setMediaInput = function () {
+      form.elements.media.value = media.join(',');
+    };
+    document.querySelectorAll('input[data-facet="media"]').forEach(function (cb) {
+      cb.addEventListener('change', function () {
+        var v = cb.value;
+        var i = media.indexOf(v);
+        if (cb.checked && i === -1) media.push(v);
+        if (!cb.checked && i !== -1) media.splice(i, 1);
+        setMediaInput();
+        form.submit();
+      });
+    });
+    document.querySelectorAll('input[data-facet="decade"]').forEach(function (rb) {
+      rb.addEventListener('change', function () {
+        form.elements.decade.value = rb.value;
+        form.submit();
+      });
+    });
+    document.querySelectorAll('[data-clear="decade"]').forEach(function (a) {
+      a.addEventListener('click', function (e) {
+        e.preventDefault();
+        form.elements.decade.value = '';
+        form.submit();
+      });
+    });
+    document.querySelectorAll('input[data-facet="avail"]').forEach(function (cb) {
+      cb.addEventListener('change', function () {
+        form.elements.avail.value = cb.checked ? '1' : '';
+        form.submit();
+      });
+    });
+  })();
+</script>
 {% endblock %}

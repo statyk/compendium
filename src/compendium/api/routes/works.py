@@ -24,6 +24,7 @@ from compendium.repositories.sql.media_type_repository import SqlMediaTypeReposi
 from compendium.repositories.sql.work_repository import SqlWorkRepository
 from compendium.services.audit import AuditService
 from compendium.services.catalog import CatalogService
+from compendium.services.discovery import DiscoveryService
 
 router = APIRouter()
 
@@ -41,16 +42,62 @@ def _catalog(session: Session, actor: AppUser | None = None) -> CatalogService:
     )
 
 
+def _discovery(session: Session) -> DiscoveryService:
+    return DiscoveryService(work_repo=SqlWorkRepository(session))
+
+
+def _gate_search(user: AppUser | None) -> None:
+    if not get_settings().guest_search_enabled and user is None:
+        raise HTTPException(status_code=401, detail="Authentication required to search")
+
+
 @router.get("/search", response_model=list[WorkSummary])
 def search_works(
-    q: str = Query(min_length=1),
+    q: str = "",
+    field: str = "all",
+    media: str = "",
+    decade: int | None = None,
+    available_only: bool = False,
+    page: int = Query(1, ge=1),
+    page_size: int = Query(25, ge=1, le=200),
     session: Session = Depends(get_session),
     user: AppUser | None = Depends(get_optional_user),
 ) -> list[WorkSummary]:
-    settings = get_settings()
-    if not settings.guest_search_enabled and user is None:
-        raise HTTPException(status_code=401, detail="Authentication required to search")
-    works = SqlWorkRepository(session).search(q)
+    _gate_search(user)
+    media_codes = [c.strip() for c in media.split(",") if c.strip()]
+    page_obj = _discovery(session).search(
+        q,
+        field=field,
+        page=page,
+        page_size=page_size,
+        media_type_codes=media_codes,
+        decade=decade,
+        available_only=available_only,
+    )
+    return [WorkSummary.model_validate(w) for w in page_obj.works]
+
+
+@router.get("/new-arrivals", response_model=list[WorkSummary])
+def new_arrivals(
+    days: int = Query(60, ge=1, le=365),
+    limit: int = Query(20, ge=1, le=100),
+    session: Session = Depends(get_session),
+    user: AppUser | None = Depends(get_optional_user),
+) -> list[WorkSummary]:
+    _gate_search(user)
+    works = _discovery(session).new_arrivals(days=days, limit=limit)
+    return [WorkSummary.model_validate(w) for w in works]
+
+
+@router.get("/recently-returned", response_model=list[WorkSummary])
+def recently_returned(
+    days: int = Query(30, ge=1, le=365),
+    limit: int = Query(20, ge=1, le=100),
+    session: Session = Depends(get_session),
+    user: AppUser | None = Depends(get_optional_user),
+) -> list[WorkSummary]:
+    _gate_search(user)
+    works = _discovery(session).recently_returned(days=days, limit=limit)
     return [WorkSummary.model_validate(w) for w in works]
 
 
