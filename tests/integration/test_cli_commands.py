@@ -1,0 +1,1012 @@
+"""Smoke tests for CLI subcommands.
+
+Goal: exercise every command's argument wiring and service call at least once
+so broken flags / refactor drift fail loudly in CI. Business-logic correctness
+lives in the service-layer tests — this file verifies the CLI surface itself.
+
+Pattern: patch ``session_scope`` in the command module under test to yield the
+shared test session from ``conftest``. The CLI then runs against the same
+SQLite-in-memory DB every other integration test uses.
+"""
+
+from __future__ import annotations
+
+from contextlib import contextmanager
+from unittest.mock import patch
+
+import pytest
+from typer.testing import CliRunner
+
+from compendium.cli.main import app
+from compendium.domain.models import Patron
+from compendium.repositories.sql.patron_repository import SqlPatronRepository
+
+
+def _invoke(session, args: list[str], module_path: str, input: str | None = None):
+    """Run a CLI command with ``session_scope`` patched in the given module."""
+
+    @contextmanager
+    def _scope():
+        yield session
+
+    runner = CliRunner()
+    with patch(f"{module_path}.session_scope", _scope):
+        return runner.invoke(app, args, input=input)
+
+
+# ──────────────────────────────────────────────────────────────────────────────
+# db
+# ──────────────────────────────────────────────────────────────────────────────
+
+
+class TestDbCli:
+    def test_history_lists_migrations(self, session):
+        # history() is a simple alembic pass-through; just verify it doesn't crash.
+        r = _invoke(session, ["db", "history"], "compendium.cli.commands.db")
+        assert r.exit_code == 0
+
+
+# ──────────────────────────────────────────────────────────────────────────────
+# user
+# ──────────────────────────────────────────────────────────────────────────────
+
+
+class TestUserCli:
+    def test_add_librarian(self, session):
+        r = _invoke(
+            session,
+            ["user", "add", "--username", "alice", "--password", "secret1234", "--role", "Librarian"],
+            "compendium.cli.commands.user",
+        )
+        assert r.exit_code == 0, r.output
+        assert "alice" in r.output
+
+    def test_add_unknown_role_fails(self, session):
+        r = _invoke(
+            session,
+            ["user", "add", "--username", "bob", "--password", "s", "--role", "NoSuchRole"],
+            "compendium.cli.commands.user",
+        )
+        assert r.exit_code == 1
+
+    def test_list_empty(self, session):
+        r = _invoke(session, ["user", "list"], "compendium.cli.commands.user")
+        assert r.exit_code == 0
+        assert "No users" in r.output or "alice" not in r.output
+
+    def test_set_role_and_list(self, session):
+        _invoke(
+            session,
+            ["user", "add", "--username", "charlie", "--password", "s", "--role", "Patron"],
+            "compendium.cli.commands.user",
+        )
+        r = _invoke(
+            session,
+            ["user", "set-role", "--username", "charlie", "--role", "Librarian"],
+            "compendium.cli.commands.user",
+        )
+        assert r.exit_code == 0, r.output
+        r = _invoke(session, ["user", "list"], "compendium.cli.commands.user")
+        assert "charlie" in r.output
+        assert "Librarian" in r.output
+
+    def test_set_password(self, session):
+        _invoke(
+            session,
+            ["user", "add", "--username", "dave", "--password", "old12345", "--role", "Patron"],
+            "compendium.cli.commands.user",
+        )
+        r = _invoke(
+            session,
+            ["user", "set-password", "--username", "dave", "--password", "new12345"],
+            "compendium.cli.commands.user",
+        )
+        assert r.exit_code == 0, r.output
+
+    def test_deactivate_then_list_shows_inactive(self, session):
+        _invoke(
+            session,
+            ["user", "add", "--username", "eve", "--password", "s", "--role", "Patron"],
+            "compendium.cli.commands.user",
+        )
+        r = _invoke(
+            session,
+            ["user", "deactivate", "--username", "eve"],
+            "compendium.cli.commands.user",
+        )
+        assert r.exit_code == 0
+        r = _invoke(session, ["user", "list"], "compendium.cli.commands.user")
+        assert "inactive" in r.output
+
+
+# ──────────────────────────────────────────────────────────────────────────────
+# patron
+# ──────────────────────────────────────────────────────────────────────────────
+
+
+class TestPatronCli:
+    def test_add(self, session):
+        r = _invoke(
+            session,
+            ["patron", "add", "--name", "Ada Lovelace", "--email", "ada@example.com"],
+            "compendium.cli.commands.patron",
+        )
+        assert r.exit_code == 0, r.output
+        assert "Ada Lovelace" in r.output
+        assert "Card number" in r.output
+
+    def test_list_shows_patron(self, session):
+        _invoke(
+            session,
+            ["patron", "add", "--name", "Ada Lovelace"],
+            "compendium.cli.commands.patron",
+        )
+        r = _invoke(session, ["patron", "list"], "compendium.cli.commands.patron")
+        assert r.exit_code == 0
+        assert "Ada Lovelace" in r.output
+
+    def test_add_with_unknown_link_user_fails(self, session):
+        r = _invoke(
+            session,
+            ["patron", "add", "--name", "Bob", "--link-user", "nonexistent"],
+            "compendium.cli.commands.patron",
+        )
+        assert r.exit_code == 1
+        assert "No user" in r.output
+
+    def test_deactivate(self, session):
+        r = _invoke(
+            session,
+            ["patron", "add", "--name", "Carol"],
+            "compendium.cli.commands.patron",
+        )
+        assert r.exit_code == 0
+        # extract card number
+        card = next(
+            line.split(":")[1].strip() for line in r.output.splitlines()
+            if "Card number" in line
+        )
+        r = _invoke(
+            session,
+            ["patron", "deactivate", "--card", card],
+            "compendium.cli.commands.patron",
+        )
+        assert r.exit_code == 0
+        assert "Deactivated" in r.output
+
+    def test_link_and_unlink_user(self, session):
+        _invoke(
+            session,
+            ["user", "add", "--username", "dan", "--password", "s", "--role", "Patron"],
+            "compendium.cli.commands.user",
+        )
+        r = _invoke(
+            session,
+            ["patron", "add", "--name", "Dan"],
+            "compendium.cli.commands.patron",
+        )
+        card = next(
+            line.split(":")[1].strip() for line in r.output.splitlines()
+            if "Card number" in line
+        )
+        r = _invoke(
+            session,
+            ["patron", "link-user", "--card", card, "--username", "dan"],
+            "compendium.cli.commands.patron",
+        )
+        assert r.exit_code == 0
+        assert "Linked" in r.output
+        r = _invoke(
+            session,
+            ["patron", "unlink-user", "--card", card],
+            "compendium.cli.commands.patron",
+        )
+        assert r.exit_code == 0
+        assert "Unlinked" in r.output
+
+    def test_deactivate_unknown_card_fails(self, session):
+        r = _invoke(
+            session,
+            ["patron", "deactivate", "--card", "NOPE"],
+            "compendium.cli.commands.patron",
+        )
+        assert r.exit_code == 1
+
+
+# ──────────────────────────────────────────────────────────────────────────────
+# role
+# ──────────────────────────────────────────────────────────────────────────────
+
+
+class TestRoleCli:
+    def test_list_preset_roles(self, session):
+        r = _invoke(session, ["role", "list"], "compendium.cli.commands.role")
+        assert r.exit_code == 0
+        assert "Librarian" in r.output
+        assert "Patron" in r.output
+
+    def test_create_and_update_and_clone(self, session):
+        r = _invoke(
+            session,
+            ["role", "create", "--name", "Curator", "--permissions", "item.view,item.edit"],
+            "compendium.cli.commands.role",
+        )
+        assert r.exit_code == 0, r.output
+        r = _invoke(session, ["role", "list"], "compendium.cli.commands.role")
+        assert "Curator" in r.output
+        # extract role id — format "  #<id>  Curator"
+        curator_id = next(
+            line.strip().split()[0].lstrip("#")
+            for line in r.output.splitlines()
+            if "Curator" in line and line.strip().startswith("#")
+        )
+        r = _invoke(
+            session,
+            ["role", "update", "--id", curator_id, "--full-access"],
+            "compendium.cli.commands.role",
+        )
+        assert r.exit_code == 0, r.output
+        r = _invoke(
+            session,
+            ["role", "clone", "--id", curator_id, "--name", "Curator2"],
+            "compendium.cli.commands.role",
+        )
+        assert r.exit_code == 0, r.output
+
+    def test_update_requires_some_change(self, session):
+        # No name / permissions / full-access flag → fails.
+        r = _invoke(
+            session,
+            ["role", "update", "--id", "1"],
+            "compendium.cli.commands.role",
+        )
+        assert r.exit_code == 1
+
+    def test_update_preset_rejected(self, session):
+        # Librarian is a preset role (seeded), id 1 typically.
+        r = _invoke(session, ["role", "list"], "compendium.cli.commands.role")
+        librarian_id = next(
+            line.strip().split()[0].lstrip("#")
+            for line in r.output.splitlines()
+            if "Librarian" in line and line.strip().startswith("#")
+        )
+        r = _invoke(
+            session,
+            ["role", "update", "--id", librarian_id, "--name", "Boss"],
+            "compendium.cli.commands.role",
+        )
+        assert r.exit_code == 1
+
+
+# ──────────────────────────────────────────────────────────────────────────────
+# branch
+# ──────────────────────────────────────────────────────────────────────────────
+
+
+class TestBranchCli:
+    def test_list_shows_default_branch(self, session):
+        r = _invoke(session, ["branch", "list"], "compendium.cli.commands.branch")
+        assert r.exit_code == 0
+        assert "[default]" in r.output
+
+    def test_set_classification_scheme(self, session):
+        r = _invoke(session, ["branch", "list"], "compendium.cli.commands.branch")
+        # Pick any branch code from first matching line.
+        code = next(
+            line.strip().split()[0].rstrip(":")
+            for line in r.output.splitlines()
+            if "[default]" in line
+        )
+        r = _invoke(
+            session,
+            ["branch", "set", "--code", code, "--classification", "ddc"],
+            "compendium.cli.commands.branch",
+        )
+        assert r.exit_code == 0
+        assert "DDC" in r.output
+
+    def test_set_invalid_scheme_rejected(self, session):
+        r = _invoke(
+            session,
+            ["branch", "set", "--code", "MAIN", "--classification", "bogus"],
+            "compendium.cli.commands.branch",
+        )
+        assert r.exit_code == 1
+        assert "invalid scheme" in r.output
+
+    def test_set_unknown_branch_fails(self, session):
+        r = _invoke(
+            session,
+            ["branch", "set", "--code", "NOPE", "--classification", "lcc"],
+            "compendium.cli.commands.branch",
+        )
+        assert r.exit_code == 1
+
+
+# ──────────────────────────────────────────────────────────────────────────────
+# audit
+# ──────────────────────────────────────────────────────────────────────────────
+
+
+class TestAuditCli:
+    def test_list_empty(self, session):
+        r = _invoke(session, ["audit", "list"], "compendium.cli.commands.audit")
+        assert r.exit_code == 0
+        assert "No audit" in r.output
+
+    def test_list_with_filter_runs(self, session):
+        # Trigger an auditable action first.
+        _invoke(
+            session,
+            ["user", "add", "--username", "frank", "--password", "s", "--role", "Patron"],
+            "compendium.cli.commands.user",
+        )
+        r = _invoke(
+            session,
+            ["audit", "list", "--entity", "user", "--limit", "5"],
+            "compendium.cli.commands.audit",
+        )
+        assert r.exit_code == 0
+        # Either header shows or "No audit" — both fine, we just want no crash.
+
+
+# ──────────────────────────────────────────────────────────────────────────────
+# work + creator (needs seeded work with one item)
+# ──────────────────────────────────────────────────────────────────────────────
+
+
+def _seed_work(session):
+    """Add a sample work via the catalog service directly (avoids HTTP stub)."""
+    from unittest.mock import patch as _p
+
+    from compendium.repositories.sql.branch_repository import SqlBranchRepository
+    from compendium.repositories.sql.creator_repository import SqlCreatorRepository
+    from compendium.repositories.sql.item_repository import SqlItemRepository
+    from compendium.repositories.sql.media_type_repository import SqlMediaTypeRepository
+    from compendium.repositories.sql.work_repository import SqlWorkRepository
+    from compendium.services.catalog import CatalogService
+
+    with _p(
+        "compendium.services.metadata.lookup_isbn",
+        return_value={
+            "title": "Dune",
+            "authors": [{"name": "Frank Herbert"}],
+            "publishers": [{"name": "Chilton"}],
+            "publish_date": "1965",
+            "cover": {},
+            "identifiers": {},
+        },
+    ):
+        catalog = CatalogService(
+            work_repo=SqlWorkRepository(session),
+            item_repo=SqlItemRepository(session),
+            creator_repo=SqlCreatorRepository(session),
+            branch_repo=SqlBranchRepository(session),
+            media_type_repo=SqlMediaTypeRepository(session),
+        )
+        work, item = catalog.add_from_isbn("9780441013593")
+    session.flush()
+    return work, item
+
+
+class TestWorkCli:
+    def test_search_no_results(self, session):
+        r = _invoke(
+            session,
+            ["work", "search", "zzzzz-no-match"],
+            "compendium.cli.commands.work",
+        )
+        assert r.exit_code == 0
+        assert "No results" in r.output
+
+    def test_show_and_search_find_seeded_work(self, session):
+        work, _ = _seed_work(session)
+        r = _invoke(session, ["work", "show", str(work.id)], "compendium.cli.commands.work")
+        assert r.exit_code == 0
+        assert "Dune" in r.output
+        assert "Frank Herbert" in r.output
+        r = _invoke(session, ["work", "search", "Dune"], "compendium.cli.commands.work")
+        assert r.exit_code == 0
+        assert "Dune" in r.output
+
+    def test_show_unknown_fails(self, session):
+        r = _invoke(session, ["work", "show", "999999"], "compendium.cli.commands.work")
+        assert r.exit_code == 1
+
+    def test_edit_requires_exactly_one_id(self, session):
+        r = _invoke(
+            session,
+            ["work", "edit", "--title", "X"],
+            "compendium.cli.commands.work",
+        )
+        assert r.exit_code == 1
+
+    def test_edit_work_updates_fields(self, session):
+        work, _ = _seed_work(session)
+        r = _invoke(
+            session,
+            ["work", "edit", "--work-id", str(work.id), "--subtitle", "The Sci-Fi Classic", "--year", "1965"],
+            "compendium.cli.commands.work",
+        )
+        assert r.exit_code == 0
+        assert "The Sci-Fi Classic" in r.output
+
+    def test_edit_without_field_flags_fails(self, session):
+        work, _ = _seed_work(session)
+        r = _invoke(
+            session,
+            ["work", "edit", "--work-id", str(work.id)],
+            "compendium.cli.commands.work",
+        )
+        assert r.exit_code == 1
+
+    def test_edit_unknown_work_fails(self, session):
+        r = _invoke(
+            session,
+            ["work", "edit", "--work-id", "999999", "--title", "X"],
+            "compendium.cli.commands.work",
+        )
+        assert r.exit_code == 1
+
+    def test_creator_add_remove_set_order(self, session):
+        work, _ = _seed_work(session)
+        r = _invoke(
+            session,
+            ["work", "creator", "add", "--work-id", str(work.id), "--name", "Brian Herbert", "--role", "author"],
+            "compendium.cli.commands.work",
+        )
+        assert r.exit_code == 0, r.output
+        assert "Brian Herbert" in r.output
+        r = _invoke(
+            session,
+            ["work", "creator", "set-order", "--work-id", str(work.id),
+             "--name", "Brian Herbert", "--role", "author", "--position", "0"],
+            "compendium.cli.commands.work",
+        )
+        assert r.exit_code == 0
+        r = _invoke(
+            session,
+            ["work", "creator", "remove", "--work-id", str(work.id),
+             "--name", "Brian Herbert", "--role", "author"],
+            "compendium.cli.commands.work",
+        )
+        assert r.exit_code == 0
+        assert "Removed" in r.output
+
+
+# ──────────────────────────────────────────────────────────────────────────────
+# creator rename
+# ──────────────────────────────────────────────────────────────────────────────
+
+
+class TestCreatorCli:
+    def test_rename_unknown_fails(self, session):
+        r = _invoke(
+            session,
+            ["creator", "rename", "--id", "999999", "--name", "Anyone"],
+            "compendium.cli.commands.creator",
+        )
+        assert r.exit_code == 1
+
+    def test_rename_seeded_creator(self, session):
+        _seed_work(session)  # creates creator "Frank Herbert"
+        from compendium.repositories.sql.creator_repository import SqlCreatorRepository
+        creator = SqlCreatorRepository(session).get_by_sort_name("Herbert, Frank")
+        assert creator is not None
+        r = _invoke(
+            session,
+            ["creator", "rename", "--id", str(creator.id), "--name", "F. Herbert"],
+            "compendium.cli.commands.creator",
+        )
+        assert r.exit_code == 0
+        assert "F. Herbert" in r.output
+
+
+# ──────────────────────────────────────────────────────────────────────────────
+# hold
+# ──────────────────────────────────────────────────────────────────────────────
+
+
+class TestHoldCli:
+    def test_place_list_cancel(self, session):
+        work, _ = _seed_work(session)
+        patron = Patron(library_card_number="CLIH001", full_name="Hold Patron")
+        SqlPatronRepository(session).add(patron)
+        session.flush()
+
+        r = _invoke(
+            session,
+            ["hold", "place", "--work-id", str(work.id), "--card", "CLIH001"],
+            "compendium.cli.commands.hold",
+        )
+        assert r.exit_code == 0, r.output
+        assert "Hold placed" in r.output
+        # With immediate-promote in place, status is "available" since the
+        # seeded work has an AVAILABLE copy.
+        assert "available" in r.output
+
+        r = _invoke(
+            session,
+            ["hold", "list", "--card", "CLIH001"],
+            "compendium.cli.commands.hold",
+        )
+        assert r.exit_code == 0
+        assert "Active holds" in r.output
+
+        # Extract hold id (format "  #<id>  Work ...")
+        hold_id = next(
+            line.strip().split()[0].lstrip("#")
+            for line in r.output.splitlines()
+            if line.strip().startswith("#")
+        )
+        r = _invoke(
+            session,
+            ["hold", "cancel", "--id", hold_id, "--card", "CLIH001"],
+            "compendium.cli.commands.hold",
+        )
+        assert r.exit_code == 0
+        assert "cancelled" in r.output
+
+    def test_list_unknown_patron_fails(self, session):
+        r = _invoke(
+            session,
+            ["hold", "list", "--card", "NOCARD"],
+            "compendium.cli.commands.hold",
+        )
+        assert r.exit_code == 1
+
+    def test_list_no_holds(self, session):
+        patron = Patron(library_card_number="CLIH002", full_name="Empty")
+        SqlPatronRepository(session).add(patron)
+        session.flush()
+        r = _invoke(
+            session,
+            ["hold", "list", "--card", "CLIH002"],
+            "compendium.cli.commands.hold",
+        )
+        assert r.exit_code == 0
+        assert "no active holds" in r.output
+
+    def test_cancel_unknown_patron_fails(self, session):
+        r = _invoke(
+            session,
+            ["hold", "cancel", "--id", "9999", "--card", "NOCARD"],
+            "compendium.cli.commands.hold",
+        )
+        assert r.exit_code == 1
+
+
+# ──────────────────────────────────────────────────────────────────────────────
+# CLI root / serve — lightweight surface checks
+# ──────────────────────────────────────────────────────────────────────────────
+
+
+class TestMainCli:
+    def test_root_help_lists_subcommands(self):
+        r = CliRunner().invoke(app, ["--help"])
+        assert r.exit_code == 0
+        for sub in ("item", "patron", "loan", "hold", "user", "role", "work"):
+            assert sub in r.output
+
+    def test_serve_help(self):
+        r = CliRunner().invoke(app, ["serve", "--help"])
+        assert r.exit_code == 0
+        assert "host" in r.output.lower()
+
+
+# ──────────────────────────────────────────────────────────────────────────────
+# item — extends 14% baseline
+# ──────────────────────────────────────────────────────────────────────────────
+
+
+class TestItemCli:
+    def test_list_empty(self, session):
+        r = _invoke(session, ["item", "list"], "compendium.cli.commands.item")
+        assert r.exit_code == 0
+        assert "No items" in r.output
+
+    def test_list_shows_seeded_work(self, session):
+        _seed_work(session)
+        r = _invoke(session, ["item", "list"], "compendium.cli.commands.item")
+        assert r.exit_code == 0
+        assert "Dune" in r.output
+
+    def test_show_by_barcode(self, session):
+        _, item = _seed_work(session)
+        r = _invoke(
+            session,
+            ["item", "show", item.barcode],
+            "compendium.cli.commands.item",
+        )
+        assert r.exit_code == 0
+        assert "Dune" in r.output
+        assert item.barcode in r.output
+
+    def test_show_unknown_fails(self, session):
+        r = _invoke(
+            session,
+            ["item", "show", "NOPE"],
+            "compendium.cli.commands.item",
+        )
+        assert r.exit_code == 1
+
+    def test_add_manual_book(self, session):
+        r = _invoke(
+            session,
+            [
+                "item", "add-manual",
+                "--title", "Hand-Entered Book",
+                "--author", "Anon",
+                "--media-type", "book",
+                "--year", "2024",
+                "--isbn", "0000000000001",
+                "--call-number", "CAL.123",
+            ],
+            "compendium.cli.commands.item",
+        )
+        assert r.exit_code == 0, r.output
+        assert "Hand-Entered Book" in r.output
+        assert "CAL.123" in r.output
+
+    def test_add_requires_identifier(self, session):
+        r = _invoke(
+            session,
+            ["item", "add"],
+            "compendium.cli.commands.item",
+        )
+        assert r.exit_code == 1
+        assert "provide" in r.output.lower()
+
+    def test_add_upc_requires_media_type(self, session):
+        r = _invoke(
+            session,
+            ["item", "add", "--upc", "012345678905"],
+            "compendium.cli.commands.item",
+        )
+        assert r.exit_code == 1
+        assert "media-type is required" in r.output
+
+    def test_add_tmdb_requires_media_type(self, session):
+        r = _invoke(
+            session,
+            ["item", "add", "--tmdb-id", "12345"],
+            "compendium.cli.commands.item",
+        )
+        assert r.exit_code == 1
+
+    def test_add_title_requires_media_type(self, session):
+        r = _invoke(
+            session,
+            ["item", "add", "--title", "Something"],
+            "compendium.cli.commands.item",
+        )
+        assert r.exit_code == 1
+
+    def test_add_title_rejects_unsupported_media_type(self, session):
+        # Pass a made-up media_type that's not in _TITLE_SEARCH_SOURCES.
+        r = _invoke(
+            session,
+            ["item", "add", "--title", "X", "--media-type", "laserdisc"],
+            "compendium.cli.commands.item",
+        )
+        assert r.exit_code == 1
+        assert "not supported" in r.output
+
+    def test_add_isbn_with_mocked_lookup(self, session):
+        with patch(
+            "compendium.services.metadata.lookup_isbn",
+            return_value={
+                "title": "The Two Towers",
+                "authors": [{"name": "J.R.R. Tolkien"}],
+                "publishers": [{"name": "Houghton Mifflin"}],
+                "publish_date": "1954",
+                "cover": {},
+                "identifiers": {},
+            },
+        ):
+            r = _invoke(
+                session,
+                ["item", "add", "--isbn", "9780618346257"],
+                "compendium.cli.commands.item",
+            )
+        assert r.exit_code == 0, r.output
+        assert "The Two Towers" in r.output
+        assert "Tolkien" in r.output
+
+    def test_edit_requires_a_field(self, session):
+        _, item = _seed_work(session)
+        r = _invoke(
+            session,
+            ["item", "edit", "--barcode", item.barcode],
+            "compendium.cli.commands.item",
+        )
+        assert r.exit_code == 1
+
+    def test_edit_updates_fields(self, session):
+        _, item = _seed_work(session)
+        r = _invoke(
+            session,
+            [
+                "item", "edit",
+                "--barcode", item.barcode,
+                "--location", "Shelf A1",
+                "--call-number", "FIC HER",
+                "--condition", "good",
+                "--notes", "gift from J.",
+            ],
+            "compendium.cli.commands.item",
+        )
+        assert r.exit_code == 0, r.output
+        assert "Shelf A1" in r.output
+        assert "FIC HER" in r.output
+
+    def test_withdraw(self, session):
+        _, item = _seed_work(session)
+        r = _invoke(
+            session,
+            ["item", "withdraw", "--barcode", item.barcode],
+            "compendium.cli.commands.item",
+        )
+        assert r.exit_code == 0
+        assert "Withdrawn" in r.output
+
+    def test_withdraw_unknown_fails(self, session):
+        r = _invoke(
+            session,
+            ["item", "withdraw", "--barcode", "NOPE"],
+            "compendium.cli.commands.item",
+        )
+        assert r.exit_code == 1
+
+    def test_set_loanable_yes_and_no(self, session):
+        _, item = _seed_work(session)
+        r = _invoke(
+            session,
+            ["item", "set-loanable", "--barcode", item.barcode, "--no", "--reason", "reference"],
+            "compendium.cli.commands.item",
+        )
+        assert r.exit_code == 0, r.output
+        assert "no" in r.output.lower()
+        r = _invoke(
+            session,
+            ["item", "set-loanable", "--barcode", item.barcode, "--yes"],
+            "compendium.cli.commands.item",
+        )
+        assert r.exit_code == 0
+
+    def test_set_loanable_conflicting_flags_fails(self, session):
+        _, item = _seed_work(session)
+        r = _invoke(
+            session,
+            ["item", "set-loanable", "--barcode", item.barcode, "--yes", "--no"],
+            "compendium.cli.commands.item",
+        )
+        assert r.exit_code == 1
+
+    def test_set_loanable_requires_a_flag(self, session):
+        _, item = _seed_work(session)
+        r = _invoke(
+            session,
+            ["item", "set-loanable", "--barcode", item.barcode],
+            "compendium.cli.commands.item",
+        )
+        assert r.exit_code == 1
+
+
+# ──────────────────────────────────────────────────────────────────────────────
+# loan — extends 44% baseline (queue-override already covered in test_holds.py)
+# ──────────────────────────────────────────────────────────────────────────────
+
+
+class TestLoanCli:
+    def test_checkout_checkin_lifecycle(self, session):
+        _, item = _seed_work(session)
+        patron = Patron(library_card_number="CLIL001", full_name="Loan Patron")
+        SqlPatronRepository(session).add(patron)
+        session.flush()
+
+        r = _invoke(
+            session,
+            ["loan", "checkout", "--barcode", item.barcode, "--card", "CLIL001"],
+            "compendium.cli.commands.loan",
+        )
+        assert r.exit_code == 0, r.output
+        assert "Checked out" in r.output
+
+        r = _invoke(
+            session,
+            ["loan", "active", "--card", "CLIL001"],
+            "compendium.cli.commands.loan",
+        )
+        assert r.exit_code == 0
+        assert "Active loans" in r.output
+
+        r = _invoke(
+            session,
+            ["loan", "renew", "--barcode", item.barcode, "--card", "CLIL001"],
+            "compendium.cli.commands.loan",
+        )
+        assert r.exit_code == 0
+        assert "Renewed" in r.output
+
+        r = _invoke(
+            session,
+            ["loan", "checkin", "--barcode", item.barcode],
+            "compendium.cli.commands.loan",
+        )
+        assert r.exit_code == 0
+        assert "Checked in" in r.output
+
+    def test_checkout_unknown_item_fails(self, session):
+        patron = Patron(library_card_number="CLIL002", full_name="X")
+        SqlPatronRepository(session).add(patron)
+        session.flush()
+        r = _invoke(
+            session,
+            ["loan", "checkout", "--barcode", "NOPE", "--card", "CLIL002"],
+            "compendium.cli.commands.loan",
+        )
+        assert r.exit_code == 1
+
+    def test_active_unknown_patron_fails(self, session):
+        r = _invoke(
+            session,
+            ["loan", "active", "--card", "NOPE"],
+            "compendium.cli.commands.loan",
+        )
+        assert r.exit_code == 1
+
+    def test_active_no_loans(self, session):
+        patron = Patron(library_card_number="CLIL003", full_name="Idle")
+        SqlPatronRepository(session).add(patron)
+        session.flush()
+        r = _invoke(
+            session,
+            ["loan", "active", "--card", "CLIL003"],
+            "compendium.cli.commands.loan",
+        )
+        assert r.exit_code == 0
+        assert "no active loans" in r.output
+
+    def test_declare_lost_then_clear(self, session):
+        _, item = _seed_work(session)
+        patron = Patron(library_card_number="CLIL004", full_name="LostPatron")
+        SqlPatronRepository(session).add(patron)
+        session.flush()
+        # Must have been checked out to declare lost.
+        _invoke(
+            session,
+            ["loan", "checkout", "--barcode", item.barcode, "--card", "CLIL004"],
+            "compendium.cli.commands.loan",
+        )
+        r = _invoke(
+            session,
+            ["loan", "declare-lost", "--barcode", item.barcode, "--replacement-cost-cents", "2500"],
+            "compendium.cli.commands.loan",
+        )
+        assert r.exit_code == 0, r.output
+        assert "declared lost" in r.output
+        r = _invoke(
+            session,
+            ["loan", "clear-lost", "--barcode", item.barcode],
+            "compendium.cli.commands.loan",
+        )
+        assert r.exit_code == 0
+        assert "recovered" in r.output
+
+    def test_mark_damaged_then_clear(self, session):
+        _, item = _seed_work(session)
+        patron = Patron(library_card_number="CLIL005", full_name="DamagePatron")
+        SqlPatronRepository(session).add(patron)
+        session.flush()
+        _invoke(
+            session,
+            ["loan", "checkout", "--barcode", item.barcode, "--card", "CLIL005"],
+            "compendium.cli.commands.loan",
+        )
+        r = _invoke(
+            session,
+            [
+                "loan", "mark-damaged",
+                "--barcode", item.barcode,
+                "--amount-cents", "500",
+                "--note", "cover torn",
+            ],
+            "compendium.cli.commands.loan",
+        )
+        assert r.exit_code == 0, r.output
+        assert "damaged" in r.output
+        r = _invoke(
+            session,
+            ["loan", "clear-damage", "--barcode", item.barcode],
+            "compendium.cli.commands.loan",
+        )
+        assert r.exit_code == 0
+
+
+# ──────────────────────────────────────────────────────────────────────────────
+# policy — extends 52% baseline
+# ──────────────────────────────────────────────────────────────────────────────
+
+
+class TestPolicyCli:
+    def test_list_default_policy_seeded(self, session):
+        r = _invoke(session, ["policy", "list"], "compendium.cli.commands.policy")
+        assert r.exit_code == 0
+        assert "[DEFAULT]" in r.output
+
+    def test_create_and_set_fields(self, session):
+        r = _invoke(
+            session,
+            ["policy", "create", "--name", "Fast", "--loan-days", "7", "--max-renewals", "0"],
+            "compendium.cli.commands.policy",
+        )
+        assert r.exit_code == 0, r.output
+        assert "Fast" in r.output
+        # Grab id from list
+        r = _invoke(session, ["policy", "list"], "compendium.cli.commands.policy")
+        fast_id = next(
+            line.strip().split()[0].lstrip("#")
+            for line in r.output.splitlines()
+            if "Fast" in line
+        )
+        r = _invoke(
+            session,
+            [
+                "policy", "set",
+                "--id", fast_id,
+                "--loan-days", "10",
+                "--max-renewals", "1",
+                "--overdue-per-day-cents", "25",
+                "--grace-days", "2",
+                "--lost-default-cents", "1500",
+                "--lost-processing-cents", "200",
+            ],
+            "compendium.cli.commands.policy",
+        )
+        assert r.exit_code == 0, r.output
+
+    def test_set_requires_a_flag(self, session):
+        r = _invoke(
+            session,
+            ["policy", "set", "--id", "1"],
+            "compendium.cli.commands.policy",
+        )
+        assert r.exit_code == 1
+
+
+# ──────────────────────────────────────────────────────────────────────────────
+# db init — exercises migration + seed path on a fresh SQLite file
+# ──────────────────────────────────────────────────────────────────────────────
+
+
+class TestDbInitCli:
+    def test_db_init_on_fresh_file(self, tmp_path, monkeypatch):
+        # Point at a fresh file DB so Alembic's upgrade runs end-to-end.
+        db_file = tmp_path / "cli_init.db"
+        monkeypatch.setenv("COMPENDIUM_DATABASE_URL", f"sqlite:///{db_file}")
+        monkeypatch.setenv("COMPENDIUM_JWT_SECRET_KEY", "a" * 48)
+        from compendium.db import engine as _engine
+        _engine.get_settings.cache_clear()
+        try:
+            r = CliRunner().invoke(app, ["db", "init"])
+            assert r.exit_code == 0, r.output
+            assert db_file.exists()
+            # Re-running should be idempotent.
+            r = CliRunner().invoke(app, ["db", "init"])
+            assert r.exit_code == 0
+        finally:
+            _engine.get_settings.cache_clear()
+
+    def test_db_upgrade(self, tmp_path, monkeypatch):
+        db_file = tmp_path / "cli_upgrade.db"
+        monkeypatch.setenv("COMPENDIUM_DATABASE_URL", f"sqlite:///{db_file}")
+        monkeypatch.setenv("COMPENDIUM_JWT_SECRET_KEY", "a" * 48)
+        from compendium.db import engine as _engine
+        _engine.get_settings.cache_clear()
+        try:
+            r = CliRunner().invoke(app, ["db", "upgrade"])
+            assert r.exit_code == 0
+            assert "Migrations applied" in r.output
+        finally:
+            _engine.get_settings.cache_clear()
