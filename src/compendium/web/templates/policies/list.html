@@ -22,6 +22,8 @@
     <strong>{{ p.name }}</strong>
     &nbsp;
     {% if p.media_type %}{{ media_pill(p.media_type) }}{% else %}<small>All media</small>{% endif %}
+    &middot;
+    {% if p.patron_category %}<small>{{ p.patron_category.display_name }}</small>{% else %}<small>All patrons</small>{% endif %}
     {% if p.is_default %}<span class="pill pill-book" style="font-size:0.8rem">default</span>{% endif %}
   </header>
   <form method="post" action="/ui/policies/{{ p.id }}/update"
@@ -55,6 +57,14 @@
       <input type="number" name="lost_item_processing_fee_cents"
              value="{{ p.lost_item_processing_fee_cents if p.lost_item_processing_fee_cents is not none else '' }}"
              min="0">
+    </label>
+    <label>Patron category
+      <select name="patron_category_id">
+        <option value="">All patrons</option>
+        {% for c in categories %}
+        <option value="{{ c.id }}"{% if p.patron_category_id == c.id %} selected{% endif %}>{{ c.display_name }}</option>
+        {% endfor %}
+      </select>
     </label>
     <label>
       <input type="checkbox" name="is_default" value="on"

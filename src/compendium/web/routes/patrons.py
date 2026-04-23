@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from datetime import datetime
+
 from fastapi import APIRouter, Depends, Form, Query, Request
 from fastapi.responses import HTMLResponse, RedirectResponse
 from markupsafe import escape
@@ -7,19 +9,22 @@ from sqlalchemy.orm import Session
 
 from compendium.db.engine import get_settings
 from compendium.db.session import get_session
-from compendium.domain.errors import BusinessRuleError, NotFoundError
+from compendium.domain.errors import BusinessRuleError, NotFoundError, ValidationError
 from compendium.domain.models import AppUser, Patron
 from compendium.repositories.sql.audit_log_repository import SqlAuditLogRepository
 from compendium.repositories.sql.hold_repository import SqlHoldRepository
 from compendium.repositories.sql.item_repository import SqlItemRepository
 from compendium.repositories.sql.loan_repository import SqlLoanRepository
+from compendium.repositories.sql.patron_category_repository import (
+    SqlPatronCategoryRepository,
+)
 from compendium.repositories.sql.patron_repository import SqlPatronRepository
 from compendium.repositories.sql.user_repository import SqlUserRepository
 from compendium.repositories.sql.branch_repository import SqlBranchRepository
 from compendium.repositories.sql.work_repository import SqlWorkRepository
 from compendium.services.audit import AuditService
 from compendium.services.holds import HoldService
-from compendium.services.patrons import PatronService
+from compendium.services.patrons import PatronService, _MISSING
 from compendium.web.csrf import check_csrf_form, ensure_csrf, set_csrf_cookie
 from compendium.web.deps import require_web_permission
 from compendium.web.jinja import templates
@@ -73,6 +78,20 @@ def patron_list(
     )
 
 
+def _categories(session: Session):
+    return SqlPatronCategoryRepository(session).list()
+
+
+def _parse_date_or_none(s: str):
+    s = s.strip()
+    if not s:
+        return None
+    try:
+        return datetime.strptime(s, "%Y-%m-%d").date()
+    except ValueError:
+        raise ValidationError("Date must be YYYY-MM-DD")
+
+
 @router.get("/patrons/new")
 def patron_new_form(
     request: Request,
@@ -87,6 +106,7 @@ def patron_new_form(
             "user": user,
             "error": None,
             "unlinked_users": _unlinked_users(session),
+            "categories": _categories(session),
         },
     )
 
@@ -98,20 +118,26 @@ def patron_create(
     contact_email: str = Form(default=""),
     contact_phone: str = Form(default=""),
     user_id: str = Form(default=""),
+    category_id: str = Form(default=""),
+    expires_at: str = Form(default=""),
     csrf_token: str = Form(default=""),
     user: AppUser = Depends(require_web_permission(_PERM)),
     session: Session = Depends(get_session),
 ):
     check_csrf_form(request, csrf_token)
     linked_user_id: int | None = int(user_id) if user_id.strip() else None
+    cat_id: int | None = int(category_id) if category_id.strip() else None
     try:
+        exp_at = _parse_date_or_none(expires_at)
         patron = _patron_svc(session, user).create(
             full_name=full_name.strip(),
             contact_email=contact_email.strip() or None,
             contact_phone=contact_phone.strip() or None,
             user_id=linked_user_id,
+            category_id=cat_id,
+            expires_at=exp_at,
         )
-    except BusinessRuleError as exc:
+    except (BusinessRuleError, ValidationError) as exc:
         return _render(
             "patrons/new.html",
             request,
@@ -120,9 +146,36 @@ def patron_create(
                 "user": user,
                 "error": str(exc),
                 "unlinked_users": _unlinked_users(session),
+                "categories": _categories(session),
             },
         )
     return RedirectResponse(f"/ui/patrons/{patron.library_card_number}", status_code=303)
+
+
+@router.post("/patrons/{card_number}/edit")
+def patron_edit(
+    card_number: str,
+    request: Request,
+    category_id: str = Form(default=""),
+    expires_at: str = Form(default=""),
+    csrf_token: str = Form(default=""),
+    user: AppUser = Depends(require_web_permission(_PERM)),
+    session: Session = Depends(get_session),
+):
+    check_csrf_form(request, csrf_token)
+    try:
+        exp_at = _parse_date_or_none(expires_at) if expires_at.strip() else None
+        cat_arg: object = int(category_id) if category_id.strip() else None
+        _patron_svc(session, user).update(
+            card_number, category_id=cat_arg, expires_at=exp_at
+        )
+    except (BusinessRuleError, NotFoundError, ValidationError) as exc:
+        return RedirectResponse(
+            f"/ui/patrons/{card_number}?error={exc}", status_code=303
+        )
+    return RedirectResponse(
+        f"/ui/patrons/{card_number}?message=Patron+updated.", status_code=303
+    )
 
 
 @router.get("/patrons/{card_number}")
@@ -157,6 +210,7 @@ def patron_detail(
             "holds": holds,
             "linked_user": linked_user,
             "unlinked_users": avail_users,
+            "categories": _categories(session),
             "message": message,
             "error": error,
         },

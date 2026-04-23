@@ -148,11 +148,24 @@ class AppUser(Base):
     role: Mapped[Role] = relationship(back_populates="users")
 
 
+class PatronCategory(Base):
+    __tablename__ = "patron_category"
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    code: Mapped[str] = mapped_column(String(32), unique=True)
+    display_name: Mapped[str] = mapped_column(String(64))
+    is_default: Mapped[bool] = mapped_column(Boolean, default=False, server_default="0")
+    created_at: Mapped[datetime] = mapped_column(UtcDateTime, server_default=func.now())
+
+
 class Patron(Base):
     __tablename__ = "patron"
 
     id: Mapped[int] = mapped_column(primary_key=True)
     user_id: Mapped[int | None] = mapped_column(ForeignKey("app_user.id"), nullable=True)
+    category_id: Mapped[int | None] = mapped_column(
+        ForeignKey("patron_category.id"), nullable=True, index=True
+    )
     library_card_number: Mapped[str] = mapped_column(String(64), unique=True)
     full_name: Mapped[str] = mapped_column(String(256))
     contact_email: Mapped[str | None] = mapped_column(String(256))
@@ -160,6 +173,7 @@ class Patron(Base):
     address: Mapped[dict[str, Any] | None] = mapped_column(JSON)
     notes: Mapped[str | None] = mapped_column(Text)
     is_active: Mapped[bool] = mapped_column(Boolean, default=True, server_default="1")
+    expires_at: Mapped[date | None] = mapped_column(Date)
     receive_notifications: Mapped[bool] = mapped_column(
         Boolean, default=True, server_default="1"
     )
@@ -169,6 +183,7 @@ class Patron(Base):
     )
 
     user: Mapped[AppUser | None] = relationship(foreign_keys=[user_id])
+    category: Mapped[PatronCategory | None] = relationship(foreign_keys=[category_id])
 
 
 class Loan(Base):
@@ -197,6 +212,9 @@ class LoanPolicy(Base):
     id: Mapped[int] = mapped_column(primary_key=True)
     name: Mapped[str] = mapped_column(String(128))
     media_type_id: Mapped[int | None] = mapped_column(ForeignKey("media_type.id"), nullable=True)
+    patron_category_id: Mapped[int | None] = mapped_column(
+        ForeignKey("patron_category.id"), nullable=True, index=True
+    )
     loan_period_days: Mapped[int] = mapped_column(Integer)
     max_renewals: Mapped[int] = mapped_column(Integer, default=2, server_default="2")
     is_default: Mapped[bool] = mapped_column(Boolean, default=False, server_default="0")
@@ -209,6 +227,7 @@ class LoanPolicy(Base):
     lost_item_processing_fee_cents: Mapped[int | None] = mapped_column(Integer)
 
     media_type: Mapped[MediaType | None] = relationship()
+    patron_category: Mapped[PatronCategory | None] = relationship()
 
 
 class Hold(Base):

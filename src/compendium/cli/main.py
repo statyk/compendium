@@ -14,6 +14,7 @@ from compendium.cli.commands import (
     loan,
     maintenance,
     patron,
+    patron_category,
     policy,
     reports,
     role,
@@ -32,6 +33,7 @@ app.add_typer(branch.app, name="branch")
 app.add_typer(db.app, name="db")
 app.add_typer(item.app, name="item")
 app.add_typer(patron.app, name="patron")
+app.add_typer(patron_category.app, name="patron-category")
 app.add_typer(loan.app, name="loan")
 app.add_typer(hold.app, name="hold")
 app.add_typer(policy.app, name="policy")

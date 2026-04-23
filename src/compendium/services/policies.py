@@ -32,6 +32,7 @@ class PolicyService:
         loan_period_days: int,
         max_renewals: int = 2,
         media_type_id: int | None = None,
+        patron_category_id: int | None = None,
         is_default: bool = False,
     ) -> LoanPolicy:
         if is_default:
@@ -39,6 +40,7 @@ class PolicyService:
         policy = LoanPolicy(
             name=name,
             media_type_id=media_type_id,
+            patron_category_id=patron_category_id,
             loan_period_days=loan_period_days,
             max_renewals=max_renewals,
             is_default=is_default,
@@ -48,7 +50,13 @@ class PolicyService:
             AuditEntityType.POLICY,
             policy.id,
             AuditAction.CREATE,
-            {"snapshot": {"name": name, "loan_period_days": loan_period_days, "max_renewals": max_renewals}},
+            {"snapshot": {
+                "name": name,
+                "loan_period_days": loan_period_days,
+                "max_renewals": max_renewals,
+                "media_type_id": media_type_id,
+                "patron_category_id": patron_category_id,
+            }},
         )
         return policy
 
@@ -59,6 +67,7 @@ class PolicyService:
         max_renewals: int | None = None,
         is_default: bool | None = None,
         *,
+        patron_category_id: int | None | object = _MISSING,
         overdue_fine_per_day_cents: int | None | object = _MISSING,
         overdue_fine_cap_cents: int | None | object = _MISSING,
         grace_period_days: int | None = None,
@@ -72,6 +81,7 @@ class PolicyService:
             "loan_period_days": policy.loan_period_days,
             "max_renewals": policy.max_renewals,
             "is_default": policy.is_default,
+            "patron_category_id": policy.patron_category_id,
             "overdue_fine_per_day_cents": policy.overdue_fine_per_day_cents,
             "overdue_fine_cap_cents": policy.overdue_fine_cap_cents,
             "grace_period_days": policy.grace_period_days,
@@ -92,6 +102,8 @@ class PolicyService:
                     "Set another policy as default first."
                 )
             policy.is_default = False
+        if patron_category_id is not _MISSING:
+            policy.patron_category_id = patron_category_id  # type: ignore[assignment]
         if overdue_fine_per_day_cents is not _MISSING:
             policy.overdue_fine_per_day_cents = overdue_fine_per_day_cents
         if overdue_fine_cap_cents is not _MISSING:
@@ -109,6 +121,7 @@ class PolicyService:
             "loan_period_days": policy.loan_period_days,
             "max_renewals": policy.max_renewals,
             "is_default": policy.is_default,
+            "patron_category_id": policy.patron_category_id,
             "overdue_fine_per_day_cents": policy.overdue_fine_per_day_cents,
             "overdue_fine_cap_cents": policy.overdue_fine_cap_cents,
             "grace_period_days": policy.grace_period_days,

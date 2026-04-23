@@ -1,3 +1,4 @@
+import getpass
 from datetime import datetime, timedelta, timezone
 
 import typer
@@ -8,11 +9,42 @@ from compendium.repositories.sql.audit_log_repository import SqlAuditLogReposito
 from compendium.repositories.sql.branch_repository import SqlBranchRepository
 from compendium.repositories.sql.hold_repository import SqlHoldRepository
 from compendium.repositories.sql.item_repository import SqlItemRepository
+from compendium.repositories.sql.loan_repository import SqlLoanRepository
 from compendium.repositories.sql.patron_repository import SqlPatronRepository
 from compendium.repositories.sql.work_repository import SqlWorkRepository
+from compendium.services.audit import AuditService
 from compendium.services.holds import HoldService
+from compendium.services.patrons import PatronService
 
 app = typer.Typer(help="Maintenance commands (intended for cron/systemd).")
+
+
+@app.command("deactivate-expired-patrons")
+def deactivate_expired_patrons(
+    dry_run: bool = typer.Option(
+        False, "--dry-run", help="Report what would be deactivated without changing data."
+    ),
+) -> None:
+    """Deactivate active patrons whose card expiry date has passed."""
+    with session_scope() as session:
+        svc = PatronService(
+            patron_repo=SqlPatronRepository(session),
+            loan_repo=SqlLoanRepository(session),
+            hold_repo=SqlHoldRepository(session),
+            audit_svc=AuditService(SqlAuditLogRepository(session)),
+            actor_label=f"cli:{getpass.getuser()}",
+            source="cli",
+        )
+        matches = svc.deactivate_expired(dry_run=dry_run)
+        if not matches:
+            typer.echo("No expired patrons to deactivate.")
+            return
+        verb = "Would deactivate" if dry_run else "Deactivated"
+        typer.echo(f"{verb} {len(matches)} patron(s):")
+        for p in matches:
+            typer.echo(
+                f"  {p.library_card_number}  {p.full_name}  expired {p.expires_at.isoformat()}"
+            )
 
 
 @app.command("expire-holds")

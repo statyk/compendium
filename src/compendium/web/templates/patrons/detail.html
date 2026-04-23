@@ -39,6 +39,30 @@
   </dd>
   {% if patron.contact_email %}<dt>Email</dt><dd>{{ patron.contact_email }}</dd>{% endif %}
   {% if patron.contact_phone %}<dt>Phone</dt><dd>{{ patron.contact_phone }}</dd>{% endif %}
+  <dt>Category &amp; expiry</dt>
+  <dd>
+    {% set today = none %}{# rendered server-side; templates can't compare dates without filters #}
+    <form method="post" action="/ui/patrons/{{ patron.library_card_number }}/edit"
+          style="display:flex; gap:0.5rem; align-items:center; flex-wrap:wrap; margin:0">
+      <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+      <select name="category_id" style="margin:0; width:auto">
+        <option value="">— none —</option>
+        {% for c in categories %}
+        <option value="{{ c.id }}"{% if patron.category_id == c.id %} selected{% endif %}>{{ c.display_name }}</option>
+        {% endfor %}
+      </select>
+      <input type="date" name="expires_at" style="margin:0; width:auto"
+             value="{{ patron.expires_at.isoformat() if patron.expires_at else '' }}">
+      <button type="submit" style="padding:0.2rem 0.6rem; margin:0">Save</button>
+      {% if patron.expires_at %}
+        {% if patron.expires_at.isoformat() < today_iso() %}
+        <small class="error-banner">Expired {{ patron.expires_at.isoformat() }}</small>
+        {% else %}
+        <small>Expires {{ patron.expires_at.isoformat() }}</small>
+        {% endif %}
+      {% endif %}
+    </form>
+  </dd>
   <dt>User account</dt>
   <dd>
     {% if linked_user %}

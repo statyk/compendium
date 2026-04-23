@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from datetime import datetime
+from datetime import date, datetime
 
 from pydantic import BaseModel, ConfigDict
 
@@ -115,6 +115,14 @@ class CreatePatronRequest(BaseModel):
     full_name: str
     contact_email: str | None = None
     contact_phone: str | None = None
+    category_code: str | None = None
+    expires_at: date | None = None
+
+
+class UpdatePatronRequest(BaseModel):
+    # None means "clear"; omitted means "leave it" (handled by model_fields_set).
+    category_code: str | None = None
+    expires_at: date | None = None
 
 
 class PatronResponse(BaseModel):
@@ -126,6 +134,28 @@ class PatronResponse(BaseModel):
     contact_email: str | None
     contact_phone: str | None
     is_active: bool
+    category_id: int | None = None
+    expires_at: date | None = None
+
+
+class PatronCategoryResponse(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    id: int
+    code: str
+    display_name: str
+    is_default: bool
+
+
+class CreatePatronCategoryRequest(BaseModel):
+    code: str
+    display_name: str
+    is_default: bool = False
+
+
+class UpdatePatronCategoryRequest(BaseModel):
+    display_name: str | None = None
+    is_default: bool | None = None
 
 
 class CheckoutRequest(BaseModel):
@@ -170,6 +200,7 @@ class HoldResponse(BaseModel):
 class CreatePolicyRequest(BaseModel):
     name: str
     media_type_id: int | None = None
+    patron_category_id: int | None = None
     loan_period_days: int
     max_renewals: int = 2
     is_default: bool = False
@@ -190,6 +221,7 @@ class LoanPolicyResponse(BaseModel):
     id: int
     name: str
     media_type_id: int | None
+    patron_category_id: int | None = None
     loan_period_days: int
     max_renewals: int
     is_default: bool

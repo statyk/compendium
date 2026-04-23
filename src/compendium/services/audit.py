@@ -8,6 +8,7 @@ class AuditEntityType:
     WORK = "work"
     ITEM = "item"
     PATRON = "patron"
+    PATRON_CATEGORY = "patron_category"
     USER = "user"
     POLICY = "policy"
     ROLE = "role"

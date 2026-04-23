@@ -27,6 +27,15 @@
     <option value="{{ u.id }}">{{ u.username }}{% if u.email %} ({{ u.email }}){% endif %} — {{ u.role.name }}</option>
     {% endfor %}
   </select>
+  <label for="category_id">Category <small>(optional)</small></label>
+  <select id="category_id" name="category_id">
+    <option value="">— none —</option>
+    {% for c in categories %}
+    <option value="{{ c.id }}"{% if c.is_default %} selected{% endif %}>{{ c.display_name }}</option>
+    {% endfor %}
+  </select>
+  <label for="expires_at">Card expires <small>(optional, YYYY-MM-DD)</small></label>
+  <input type="date" id="expires_at" name="expires_at">
   <small>A library card number will be assigned automatically.</small>
   <div style="margin-top:1rem; display:flex; gap:0.5rem">
     <button type="submit">Add Patron</button>

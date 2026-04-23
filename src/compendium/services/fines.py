@@ -176,18 +176,19 @@ class FineService:
         """Create a lost-kind Fine for replacement cost (+ optional processing fee).
         ``replacement_cost_cents`` overrides policy default if given. Returns the
         Fines created (primary first, processing second if any)."""
-        policy = self._resolve_policy_for_item(item)
+        patron_id = self._last_borrower_patron_id(item)
+        if patron_id is None:
+            raise ValidationError(
+                "Cannot assess lost fee: item has no loan history or current borrower."
+            )
+        patron = self._patrons.get(patron_id)
+        policy = self._resolve_policy_for_item(item, patron)
         cost = replacement_cost_cents
         if cost is None:
             cost = policy.lost_item_default_cents if policy else None
         if cost is None or cost <= 0:
             raise ValidationError(
                 "Replacement cost is required (no policy default is configured)."
-            )
-        patron_id = self._last_borrower_patron_id(item)
-        if patron_id is None:
-            raise ValidationError(
-                "Cannot assess lost fee: item has no loan history or current borrower."
             )
         fines: list[Fine] = []
         primary = Fine(
@@ -363,7 +364,11 @@ class FineService:
 
     def _compute_overdue_amount(self, loan: Loan) -> int:
         """Calculate overdue fine for a loan given its policy + due_at vs now."""
-        policy = self._resolve_policy_for_item(loan.item) if loan.item else None
+        policy = (
+            self._resolve_policy_for_item(loan.item, loan.patron)
+            if loan.item is not None
+            else None
+        )
         rate = policy.overdue_fine_per_day_cents if policy else None
         if not rate or rate <= 0:
             return 0
@@ -384,11 +389,9 @@ class FineService:
             amount = cap
         return amount
 
-    def _resolve_policy_for_item(self, item: Item):
-        policy = self._policies.get_for_media_type(item.work.media_type_id)
-        if policy is None:
-            policy = self._policies.get_default()
-        return policy
+    def _resolve_policy_for_item(self, item: Item, patron: Patron | None = None):
+        category_id = patron.category_id if patron is not None else None
+        return self._policies.resolve(item.work.media_type_id, category_id)
 
     def _last_borrower_patron_id(self, item: Item) -> int | None:
         """Who owes for this item? The patron on the most recent loan

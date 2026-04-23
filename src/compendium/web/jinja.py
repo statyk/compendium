@@ -1,3 +1,4 @@
+from datetime import date
 from pathlib import Path
 
 from fastapi.templating import Jinja2Templates
@@ -19,6 +20,11 @@ def _jinja_default_theme() -> str:
     return Settings().default_theme
 
 
+def _jinja_today_iso() -> str:
+    return date.today().isoformat()
+
+
 templates.env.globals["has_permission"] = _jinja_has_permission
 templates.env.globals["default_theme"] = _jinja_default_theme
+templates.env.globals["today_iso"] = _jinja_today_iso
 templates.env.filters["currency"] = _format_currency

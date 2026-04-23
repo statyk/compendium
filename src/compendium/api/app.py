@@ -18,6 +18,7 @@ from compendium.api.routes import (
     loans,
     me,
     notifications as api_notifications,
+    patron_categories,
     patrons,
     policies,
     reports,
@@ -73,6 +74,9 @@ def create_app() -> FastAPI:
     app.include_router(creators.router, prefix="/creators", tags=["creators"])
     app.include_router(items.router, prefix="/items", tags=["items"])
     app.include_router(patrons.router, prefix="/patrons", tags=["patrons"])
+    app.include_router(
+        patron_categories.router, prefix="/patron-categories", tags=["patron-categories"]
+    )
     app.include_router(loans.router, prefix="/loans", tags=["loans"])
     app.include_router(holds.router, prefix="/holds", tags=["holds"])
     app.include_router(policies.router, prefix="/policies", tags=["policies"])

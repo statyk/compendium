@@ -1016,6 +1016,84 @@ class TestPolicyCli:
 
 
 # ──────────────────────────────────────────────────────────────────────────────
+# patron-category
+# ──────────────────────────────────────────────────────────────────────────────
+
+
+class TestPatronCategoryCli:
+    def test_list_shows_seeded(self, session):
+        r = _invoke(
+            session,
+            ["patron-category", "list"],
+            "compendium.cli.commands.patron_category",
+        )
+        assert r.exit_code == 0
+        assert "adult" in r.output and "child" in r.output
+
+    def test_create_and_delete(self, session):
+        r = _invoke(
+            session,
+            ["patron-category", "create", "--code", "vipcli", "--name", "VIP"],
+            "compendium.cli.commands.patron_category",
+        )
+        assert r.exit_code == 0
+        r = _invoke(
+            session,
+            ["patron-category", "delete", "--code", "vipcli"],
+            "compendium.cli.commands.patron_category",
+        )
+        assert r.exit_code == 0
+
+    def test_cannot_delete_default(self, session):
+        r = _invoke(
+            session,
+            ["patron-category", "delete", "--code", "adult"],
+            "compendium.cli.commands.patron_category",
+        )
+        assert r.exit_code == 1
+
+
+class TestPatronCategoryFlagOnPatron:
+    def test_patron_add_with_category_and_expires(self, session):
+        r = _invoke(
+            session,
+            [
+                "patron",
+                "add",
+                "--name",
+                "CliCat",
+                "--category",
+                "child",
+                "--expires",
+                "2027-12-31",
+            ],
+            "compendium.cli.commands.patron",
+        )
+        assert r.exit_code == 0
+        assert "child" in r.output
+        assert "2027-12-31" in r.output
+
+    def test_patron_add_unknown_category_fails(self, session):
+        r = _invoke(
+            session,
+            ["patron", "add", "--name", "X", "--category", "no-such"],
+            "compendium.cli.commands.patron",
+        )
+        assert r.exit_code != 0
+
+
+class TestMaintenanceDeactivateExpired:
+    def test_no_expired_patrons_message(self, session):
+        r = _invoke(
+            session,
+            ["maintenance", "deactivate-expired-patrons"],
+            "compendium.cli.commands.maintenance",
+        )
+        assert r.exit_code == 0
+        assert "No expired" in r.output
+
+
+# ──────────────────────────────────────────────────────────────────────────────
 # reports
 # ──────────────────────────────────────────────────────────────────────────────
 

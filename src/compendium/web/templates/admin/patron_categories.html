@@ -1,0 +1,67 @@
+{% extends "base.html" %}
+{% block title %}Patron Categories — Compendium{% endblock %}
+{% block content %}
+<h2>Patron Categories</h2>
+<p><small>Used as a second axis for loan policies (alongside media type) and for school-year flows.</small></p>
+
+{% if message %}<p class="success-banner">{{ message }}</p>{% endif %}
+{% if error %}<p class="error-banner">{{ error }}</p>{% endif %}
+
+{% if categories %}
+<table>
+  <thead>
+    <tr><th>Code</th><th>Display name</th><th>Default</th><th>Patrons</th><th>Policies</th><th></th></tr>
+  </thead>
+  <tbody>
+    {% for c in categories %}
+    <tr>
+      <td><code>{{ c.code }}</code></td>
+      <td>
+        <form method="post" action="/ui/admin/patron-categories/{{ c.id }}/update"
+              style="display:flex; gap:0.5rem; align-items:center; margin:0">
+          <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+          <input type="text" name="display_name" value="{{ c.display_name }}" style="margin:0">
+          <label style="margin:0">
+            <input type="checkbox" name="is_default" value="on"{% if c.is_default %} checked{% endif %}>
+            Default
+          </label>
+          <button type="submit" style="padding:0.2rem 0.6rem; margin:0">Save</button>
+        </form>
+      </td>
+      <td>{% if c.is_default %}✓{% endif %}</td>
+      <td>{{ counts.get(c.id, 0) }}</td>
+      <td>{{ policy_counts.get(c.id, 0) }}</td>
+      <td>
+        {% if not c.is_default and counts.get(c.id, 0) == 0 and policy_counts.get(c.id, 0) == 0 %}
+        <form method="post" action="/ui/admin/patron-categories/{{ c.id }}/delete" style="margin:0">
+          <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+          <button type="submit" class="outline contrast" style="padding:0.2rem 0.6rem; margin:0"
+                  onclick="return confirm('Delete category {{ c.code }}?')">Delete</button>
+        </form>
+        {% endif %}
+      </td>
+    </tr>
+    {% endfor %}
+  </tbody>
+</table>
+{% else %}
+<p><em>No patron categories defined.</em></p>
+{% endif %}
+
+<h3>Add category</h3>
+<form method="post" action="/ui/admin/patron-categories/new"
+      style="display:flex; gap:0.5rem; align-items:flex-end; flex-wrap:wrap">
+  <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+  <label>Code <small>(short id, e.g. "senior")</small>
+    <input type="text" name="code" required pattern="[a-z0-9_-]+" maxlength="32" style="width:12rem">
+  </label>
+  <label>Display name
+    <input type="text" name="display_name" required maxlength="64" style="width:14rem">
+  </label>
+  <label style="margin-bottom:0.5rem">
+    <input type="checkbox" name="is_default" value="on">
+    Default
+  </label>
+  <button type="submit" style="margin-bottom:0.5rem">Add</button>
+</form>
+{% endblock %}

@@ -12,6 +12,9 @@ from compendium.domain.errors import BusinessRuleError, NotFoundError
 from compendium.domain.models import AppUser, MediaType
 from compendium.repositories.sql.audit_log_repository import SqlAuditLogRepository
 from compendium.repositories.sql.loan_policy_repository import SqlLoanPolicyRepository
+from compendium.repositories.sql.patron_category_repository import (
+    SqlPatronCategoryRepository,
+)
 from compendium.services.audit import AuditService
 from compendium.services.policies import PolicyService
 from compendium.web.csrf import check_csrf_form, ensure_csrf, set_csrf_cookie
@@ -52,6 +55,7 @@ def policy_list(
 ):
     policies = _policy_svc(session, user).list()
     media_types = session.query(MediaType).order_by(MediaType.display_name).all()
+    categories = SqlPatronCategoryRepository(session).list()
     return _render(
         "policies/list.html",
         request,
@@ -60,6 +64,7 @@ def policy_list(
             "user": user,
             "policies": policies,
             "media_types": media_types,
+            "categories": categories,
             "message": message,
             "error": error,
         },
@@ -73,10 +78,17 @@ def policy_new_form(
     session: Session = Depends(get_session),
 ):
     media_types = session.query(MediaType).order_by(MediaType.display_name).all()
+    categories = SqlPatronCategoryRepository(session).list()
     return _render(
         "policies/new.html",
         request,
-        {"request": request, "user": user, "media_types": media_types, "error": None},
+        {
+            "request": request,
+            "user": user,
+            "media_types": media_types,
+            "categories": categories,
+            "error": None,
+        },
     )
 
 
@@ -87,6 +99,7 @@ def policy_create(
     loan_period_days: int = Form(),
     max_renewals: int = Form(default=2),
     media_type_id: str = Form(default=""),
+    patron_category_id: str = Form(default=""),
     is_default: str = Form(default=""),
     csrf_token: str = Form(default=""),
     user: AppUser = Depends(require_web_permission(_PERM)),
@@ -94,6 +107,7 @@ def policy_create(
 ):
     check_csrf_form(request, csrf_token)
     mt_id = int(media_type_id) if media_type_id.strip().isdigit() else None
+    cat_id = int(patron_category_id) if patron_category_id.strip().isdigit() else None
     default_flag = is_default == "on"
     try:
         _policy_svc(session, user).create(
@@ -101,14 +115,22 @@ def policy_create(
             loan_period_days=loan_period_days,
             max_renewals=max_renewals,
             media_type_id=mt_id,
+            patron_category_id=cat_id,
             is_default=default_flag,
         )
     except (BusinessRuleError, NotFoundError) as exc:
         media_types = session.query(MediaType).order_by(MediaType.display_name).all()
+        categories = SqlPatronCategoryRepository(session).list()
         return _render(
             "policies/new.html",
             request,
-            {"request": request, "user": user, "media_types": media_types, "error": str(exc)},
+            {
+                "request": request,
+                "user": user,
+                "media_types": media_types,
+                "categories": categories,
+                "error": str(exc),
+            },
         )
     return RedirectResponse("/ui/policies?message=Policy+created.", status_code=303)
 
@@ -120,6 +142,7 @@ def policy_update(
     loan_period_days: int = Form(),
     max_renewals: int = Form(),
     is_default: str = Form(default=""),
+    patron_category_id: str = Form(default=""),
     overdue_fine_per_day_cents: str = Form(default=""),
     overdue_fine_cap_cents: str = Form(default=""),
     grace_period_days: str = Form(default=""),
@@ -133,6 +156,9 @@ def policy_update(
 
     check_csrf_form(request, csrf_token)
     default_flag: bool | None = True if is_default == "on" else False
+    cat_arg: object = (
+        int(patron_category_id) if patron_category_id.strip().isdigit() else None
+    )
 
     def _int_or_missing(raw: str):
         s = raw.strip()
@@ -153,6 +179,7 @@ def policy_update(
             loan_period_days=loan_period_days,
             max_renewals=max_renewals,
             is_default=default_flag,
+            patron_category_id=cat_arg,
             overdue_fine_per_day_cents=_int_or_none(overdue_fine_per_day_cents),
             overdue_fine_cap_cents=_int_or_none(overdue_fine_cap_cents),
             grace_period_days=int(grace_period_days) if grace_period_days.strip() else None,

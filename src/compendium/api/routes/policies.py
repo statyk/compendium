@@ -44,6 +44,7 @@ def create_policy(
             loan_period_days=body.loan_period_days,
             max_renewals=body.max_renewals,
             media_type_id=body.media_type_id,
+            patron_category_id=body.patron_category_id,
             is_default=body.is_default,
         )
     except BusinessRuleError as exc:

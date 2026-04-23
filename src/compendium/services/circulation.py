@@ -10,7 +10,7 @@ from compendium.domain.errors import (
     NotFoundError,
     ValidationError,
 )
-from compendium.domain.models import AppUser, Hold, Item, Loan
+from compendium.domain.models import AppUser, Hold, Item, Loan, Patron
 from compendium.repositories.base import (
     BranchRepository,
     HoldRepository,
@@ -76,11 +76,10 @@ class CirculationService:
                 details=details,
             )
 
-    def _get_policy(self, item: Item) -> tuple[int, int]:
-        """Return (loan_period_days, max_renewals) for the item's media type."""
-        policy = self._policies.get_for_media_type(item.work.media_type_id)
-        if policy is None:
-            policy = self._policies.get_default()
+    def _get_policy(self, item: Item, patron: Patron | None = None) -> tuple[int, int]:
+        """Resolve (loan_period_days, max_renewals) for an item ± patron category."""
+        category_id = patron.category_id if patron is not None else None
+        policy = self._policies.resolve(item.work.media_type_id, category_id)
         if policy is None:
             return _DEFAULT_LOAN_DAYS, _DEFAULT_MAX_RENEWALS
         return policy.loan_period_days, policy.max_renewals
@@ -117,6 +116,13 @@ class CirculationService:
             raise NotFoundError(f"No patron with card number '{card_number}'")
         if not patron.is_active:
             raise BusinessRuleError(f"Patron card '{card_number}' is not active")
+        if patron.expires_at is not None:
+            from datetime import date as _date
+
+            if patron.expires_at < _date.today():
+                raise BusinessRuleError(
+                    f"Patron card '{card_number}' expired on {patron.expires_at.isoformat()}"
+                )
 
         if self._fines is not None:
             status = self._fines.checkout_status(patron)
@@ -167,7 +173,7 @@ class CirculationService:
                     },
                 )
 
-        loan_period_days, _ = self._get_policy(item)
+        loan_period_days, _ = self._get_policy(item, patron)
         branch = self._branches.get_default()
         now = datetime.now(timezone.utc)
         loan = Loan(
@@ -241,7 +247,7 @@ class CirculationService:
         if patron is None or loan.patron_id != patron.id:
             raise BusinessRuleError(f"Loan does not belong to patron with card '{card_number}'")
 
-        loan_period_days, max_renewals = self._get_policy(item)
+        loan_period_days, max_renewals = self._get_policy(item, patron)
         if loan.renewal_count >= max_renewals:
             raise BusinessRuleError(
                 f"Item '{barcode}' has reached the renewal limit ({max_renewals})"
@@ -265,7 +271,9 @@ class CirculationService:
         if item is None:
             raise NotFoundError(f"No item with id={loan.item_id}")
 
-        loan_period_days, max_renewals = self._get_policy(item)
+        # Use the loan's patron for category-aware resolution.
+        patron = self._patrons.get(loan.patron_id)
+        loan_period_days, max_renewals = self._get_policy(item, patron)
         if loan.renewal_count >= max_renewals:
             raise BusinessRuleError(
                 f"Loan {loan_id} has reached the renewal limit ({max_renewals})"

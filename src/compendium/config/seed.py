@@ -1,6 +1,6 @@
 from sqlalchemy.orm import Session
 
-from compendium.domain.models import Branch, LoanPolicy, MediaType, Role
+from compendium.domain.models import Branch, LoanPolicy, MediaType, PatronCategory, Role
 
 _MEDIA_TYPES = [
     ("book", "Book"),
@@ -9,6 +9,13 @@ _MEDIA_TYPES = [
     ("dvd", "DVD"),
     ("bluray", "Blu-ray"),
     ("vhs", "VHS"),
+]
+
+_PATRON_CATEGORIES = [
+    ("adult", "Adult", True),
+    ("child", "Child", False),
+    ("staff", "Staff", False),
+    ("teacher", "Teacher", False),
 ]
 
 _PRESET_ROLES = [
@@ -47,6 +54,15 @@ def seed_defaults(session: Session) -> None:
     for code, display_name in _MEDIA_TYPES:
         if code not in existing_codes:
             session.add(MediaType(code=code, display_name=display_name))
+
+    existing_categories = {pc.code for pc in session.query(PatronCategory).all()}
+    for code, display_name, is_default in _PATRON_CATEGORIES:
+        if code not in existing_categories:
+            session.add(
+                PatronCategory(
+                    code=code, display_name=display_name, is_default=is_default
+                )
+            )
 
     existing_roles = {r.name for r in session.query(Role).all()}
     for name, permissions, is_system in _PRESET_ROLES:
