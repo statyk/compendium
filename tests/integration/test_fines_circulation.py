@@ -100,6 +100,7 @@ def _build(session, settings=None):
         patron_repo=SqlPatronRepository(session),
         work_repo=SqlWorkRepository(session),
         branch_repo=SqlBranchRepository(session),
+        item_repo=SqlItemRepository(session),
         fine_svc=fine_svc,
     )
     return circ, holds, fine_svc
@@ -175,9 +176,9 @@ def test_hold_allowed_when_only_checkout_blocked(session):
     circ, holds, fines = _build(session, settings=settings)
     fines.assess_manual(patron, kind=FineKind.OTHER.value, amount_cents=500, note="x")
 
-    # Holds allowed
+    # Holds allowed (AVAILABLE copy → immediate promote)
     hold = holds.place(work.id, "CIRC0005")
-    assert hold.status == HoldStatus.WAITING.value
+    assert hold.status == HoldStatus.AVAILABLE.value
     # But checkout blocked
     with pytest.raises(BlockedByFinesError):
         circ.checkout(item.barcode, "CIRC0005")

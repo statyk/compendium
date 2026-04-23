@@ -50,6 +50,7 @@ def _holds(session) -> HoldService:
         patron_repo=SqlPatronRepository(session),
         work_repo=SqlWorkRepository(session),
         branch_repo=SqlBranchRepository(session),
+        item_repo=SqlItemRepository(session),
     )
 
 
@@ -130,11 +131,12 @@ def test_flip_on_wipes_reason_and_note(session, work_and_item):
     assert item.loan_restriction_note is None
 
 
-def test_flip_off_last_copy_cancels_waiting_holds(session, work_and_item, patron, patron2):
+def test_flip_off_last_copy_cancels_holds(session, work_and_item, patron, patron2):
     work, item = work_and_item
+    # First place promotes immediately onto the AVAILABLE copy; second stays WAITING.
     h1 = _holds(session).place(work.id, patron.library_card_number)
     h2 = _holds(session).place(work.id, patron2.library_card_number)
-    assert h1.status == HoldStatus.WAITING.value
+    assert h1.status == HoldStatus.AVAILABLE.value
     assert h2.status == HoldStatus.WAITING.value
 
     _catalog(session).set_loanable(
@@ -152,15 +154,21 @@ def test_flip_off_when_another_copy_still_loanable_keeps_holds(
     work, item = work_and_item
     extra = _catalog(session).add_item_to_work(work.id)
     session.flush()
+    # First place promotes onto the lowest-accession copy (the original `item`).
     h = _holds(session).place(work.id, patron.library_card_number)
+    assert h.status == HoldStatus.AVAILABLE.value
+    assert h.held_item_id == item.id
 
     _catalog(session).set_loanable(
         item.barcode, is_loanable=False, reason="reference"
     )
     session.flush()
 
+    # `extra` is still loanable, so the hold is preserved but demoted back
+    # to WAITING and unpinned (normal promotion will reassign a copy).
     assert extra.is_loanable is True
     assert h.status == HoldStatus.WAITING.value
+    assert h.held_item_id is None
 
 
 def test_flip_off_on_hold_item_drops_to_available(session, work_and_item, patron):
@@ -189,10 +197,26 @@ def test_audit_records_set_loanable(session, work_and_item):
     assert entry.details["reason"] == "reference"
 
 
-def test_audit_records_auto_cancelled_hold_ids(session, work_and_item, patron):
+def test_audit_records_auto_cancelled_hold_ids(session, work_and_item, patron, patron2):
+    """When flip-off cancels a WAITING hold, the audit entry lists the hold id."""
+    from compendium.repositories.sql.loan_policy_repository import SqlLoanPolicyRepository
+    from compendium.repositories.sql.loan_repository import SqlLoanRepository
+    from compendium.services.circulation import CirculationService
+
     work, item = work_and_item
     audit = AuditService(SqlAuditLogRepository(session))
-    hold = _holds(session).place(work.id, patron.library_card_number)
+    # Check out first so the subsequent hold stays WAITING (not promoted).
+    circ = CirculationService(
+        item_repo=SqlItemRepository(session),
+        loan_repo=SqlLoanRepository(session),
+        patron_repo=SqlPatronRepository(session),
+        branch_repo=SqlBranchRepository(session),
+        hold_repo=SqlHoldRepository(session),
+        policy_repo=SqlLoanPolicyRepository(session),
+    )
+    circ.checkout(item.barcode, patron.library_card_number)
+    hold = _holds(session).place(work.id, patron2.library_card_number)
+    assert hold.status == HoldStatus.WAITING.value
     _catalog(session, audit_svc=audit).set_loanable(
         item.barcode, is_loanable=False, reason="reference"
     )

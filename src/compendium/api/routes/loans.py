@@ -7,18 +7,20 @@ from compendium.db.engine import get_settings
 from compendium.db.session import get_session
 from compendium.domain.errors import BusinessRuleError, NotFoundError
 from compendium.domain.models import AppUser
+from compendium.repositories.sql.audit_log_repository import SqlAuditLogRepository
 from compendium.repositories.sql.branch_repository import SqlBranchRepository
 from compendium.repositories.sql.hold_repository import SqlHoldRepository
 from compendium.repositories.sql.item_repository import SqlItemRepository
 from compendium.repositories.sql.loan_policy_repository import SqlLoanPolicyRepository
 from compendium.repositories.sql.loan_repository import SqlLoanRepository
 from compendium.repositories.sql.patron_repository import SqlPatronRepository
+from compendium.services.audit import AuditService
 from compendium.services.circulation import CirculationService
 
 router = APIRouter()
 
 
-def _circulation(session: Session) -> CirculationService:
+def _circulation(session: Session, actor: AppUser | None = None) -> CirculationService:
     settings = get_settings()
     return CirculationService(
         item_repo=SqlItemRepository(session),
@@ -28,6 +30,9 @@ def _circulation(session: Session) -> CirculationService:
         hold_repo=SqlHoldRepository(session),
         policy_repo=SqlLoanPolicyRepository(session),
         hold_pickup_days=settings.hold_pickup_days,
+        audit_svc=AuditService(SqlAuditLogRepository(session)),
+        actor=actor,
+        source="api",
     )
 
 
@@ -35,10 +40,12 @@ def _circulation(session: Session) -> CirculationService:
 def checkout(
     body: CheckoutRequest,
     session: Session = Depends(get_session),
-    _user: AppUser = Depends(require_permission("loan.checkout")),
+    user: AppUser = Depends(require_permission("loan.checkout")),
 ) -> LoanResponse:
     try:
-        loan = _circulation(session).checkout(body.barcode, body.card_number)
+        loan = _circulation(session, actor=user).checkout(
+            body.barcode, body.card_number, override_holds=body.override_holds
+        )
     except (NotFoundError, BusinessRuleError) as exc:
         raise HTTPException(status_code=422, detail=str(exc)) from exc
     return LoanResponse.model_validate(loan)

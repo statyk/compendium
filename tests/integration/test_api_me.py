@@ -172,7 +172,8 @@ class TestMeHolds:
         assert resp.status_code == 201
         data = resp.json()
         assert data["work_id"] == work.id
-        assert data["status"] == "waiting"
+        # AVAILABLE copy → immediate promote.
+        assert data["status"] == "available"
 
     def test_place_duplicate_hold_returns_422(self, me_client, me_session):
         _, _, token = _make_patron_user(me_session, "patron_holds2")

@@ -6,6 +6,7 @@ from compendium.domain.enums import HoldStatus, ItemStatus
 from compendium.domain.errors import (
     BlockedByFinesError,
     BusinessRuleError,
+    HoldQueueBlockError,
     NotFoundError,
     ValidationError,
 )
@@ -92,6 +93,7 @@ class CirculationService:
             hold.status = HoldStatus.AVAILABLE.value
             hold.expires_at = now + timedelta(days=self._pickup_days)
             hold.notified_at = now
+            hold.held_item_id = item.id
             self._holds.update(hold)
             item.status = ItemStatus.ON_HOLD
             if self._notifications is not None:
@@ -99,7 +101,13 @@ class CirculationService:
         else:
             item.status = ItemStatus.AVAILABLE
 
-    def checkout(self, barcode: str, card_number: str) -> Loan:
+    def checkout(
+        self,
+        barcode: str,
+        card_number: str,
+        *,
+        override_holds: bool = False,
+    ) -> Loan:
         item = self._items.get_by_barcode(barcode)
         if item is None:
             raise NotFoundError(f"No item with barcode '{barcode}'")
@@ -135,6 +143,29 @@ class CirculationService:
             raise BusinessRuleError(
                 f"Item '{barcode}' is not available (current status: {item.status})"
             )
+        else:
+            # AVAILABLE-path: make sure no one's waiting in the hold queue.
+            # With immediate-promote in place, reaching this branch with a
+            # queued hold implies a race — guard defensively.
+            waiting = self._holds.get_oldest_waiting_for_work(item.work_id)
+            if waiting is not None and waiting.patron_id != patron.id:
+                if not override_holds:
+                    raise HoldQueueBlockError(
+                        barcode=barcode,
+                        waiting_hold_id=waiting.id,
+                        waiting_patron_card=waiting.patron.library_card_number,
+                    )
+                self._record(
+                    AuditEntityType.ITEM,
+                    item.id,
+                    AuditAction.CHECKOUT_OVERRIDE_HOLDS,
+                    {
+                        "barcode": barcode,
+                        "borrower_card": patron.library_card_number,
+                        "skipped_hold_id": waiting.id,
+                        "skipped_patron_card": waiting.patron.library_card_number,
+                    },
+                )
 
         loan_period_days, _ = self._get_policy(item)
         branch = self._branches.get_default()
@@ -150,6 +181,7 @@ class CirculationService:
 
         if fulfilled_hold is not None:
             fulfilled_hold.status = HoldStatus.FULFILLED.value
+            fulfilled_hold.held_item_id = None
             self._holds.update(fulfilled_hold)
 
         item.status = ItemStatus.CHECKED_OUT

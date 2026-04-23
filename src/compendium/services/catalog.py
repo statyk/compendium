@@ -477,10 +477,20 @@ class CatalogService:
         result = self._items.update(item)
 
         cancelled_hold_ids: list[int] = []
+        demoted_hold_ids: list[int] = []
         if not is_loanable and self._holds is not None:
             if not self._works.has_loanable_item(item.work_id):
                 cancelled_hold_ids = self._cancel_work_holds(item.work_id)
                 if item.status == ItemStatus.ON_HOLD.value:
+                    item.status = ItemStatus.AVAILABLE.value
+                    result = self._items.update(item)
+            else:
+                # Other loanable copies exist — keep the queue alive. But if
+                # this specific copy was reserved for an AVAILABLE hold, that
+                # hold is now pinned to a non-loanable item; demote it back
+                # to WAITING so normal promotion picks a better copy later.
+                demoted_hold_ids = self._demote_holds_pinned_to(item)
+                if demoted_hold_ids and item.status == ItemStatus.ON_HOLD.value:
                     item.status = ItemStatus.AVAILABLE.value
                     result = self._items.update(item)
 
@@ -492,8 +502,24 @@ class CatalogService:
         }
         if cancelled_hold_ids:
             details["auto_cancelled_hold_ids"] = cancelled_hold_ids
+        if demoted_hold_ids:
+            details["demoted_hold_ids"] = demoted_hold_ids
         self._record(AuditEntityType.ITEM, item.id, AuditAction.SET_LOANABLE, details)
         return result
+
+    def _demote_holds_pinned_to(self, item: Item) -> list[int]:
+        """If any AVAILABLE hold was pinned to ``item`` (via ``held_item_id``),
+        demote it back to WAITING and unpin. Returns affected hold IDs."""
+        assert self._holds is not None
+        demoted: list[int] = []
+        for hold in self._holds.get_active_for_work(item.work_id):
+            if hold.held_item_id == item.id and hold.status == HoldStatus.AVAILABLE.value:
+                hold.status = HoldStatus.WAITING.value
+                hold.held_item_id = None
+                hold.notified_at = None
+                self._holds.update(hold)
+                demoted.append(hold.id)
+        return demoted
 
     def _cancel_work_holds(self, work_id: int) -> list[int]:
         """Cancel every non-terminal hold on a work. Returns cancelled hold ids."""

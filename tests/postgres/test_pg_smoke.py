@@ -61,6 +61,7 @@ def _holds(session) -> HoldService:
         patron_repo=SqlPatronRepository(session),
         work_repo=SqlWorkRepository(session),
         branch_repo=SqlBranchRepository(session),
+        item_repo=SqlItemRepository(session),
     )
 
 
@@ -125,7 +126,8 @@ def test_pg_place_and_cancel_hold(_, session):
 
     svc = _holds(session)
     hold = svc.place(work.id, patron.library_card_number)
-    assert hold.status == "waiting"
+    # Work has an AVAILABLE loanable copy, so place() promotes immediately.
+    assert hold.status == "available"
     assert hold.placed_at.tzinfo is not None
 
     cancelled = svc.cancel(hold.id, patron.id)

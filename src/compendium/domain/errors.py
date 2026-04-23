@@ -31,6 +31,23 @@ class BlockedByFinesError(BusinessRuleError):
         )
 
 
+class HoldQueueBlockError(BusinessRuleError):
+    """Checkout refused because another patron has a waiting hold on this work.
+
+    Librarians can bypass by calling ``checkout(..., override_holds=True)``;
+    the override is audited.
+    """
+
+    def __init__(self, barcode: str, waiting_hold_id: int, waiting_patron_card: str):
+        self.barcode = barcode
+        self.waiting_hold_id = waiting_hold_id
+        self.waiting_patron_card = waiting_patron_card
+        super().__init__(
+            f"Item '{barcode}' is reserved for hold queue — patron "
+            f"'{waiting_patron_card}' is first in line (hold #{waiting_hold_id})."
+        )
+
+
 class ExternalLookupError(DomainError):
     """An external metadata source failed or returned nothing usable."""
 

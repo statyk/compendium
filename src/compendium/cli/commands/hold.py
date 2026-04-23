@@ -5,6 +5,7 @@ from compendium.db.session import session_scope
 from compendium.domain.errors import DomainError
 from compendium.repositories.sql.branch_repository import SqlBranchRepository
 from compendium.repositories.sql.hold_repository import SqlHoldRepository
+from compendium.repositories.sql.item_repository import SqlItemRepository
 from compendium.repositories.sql.patron_repository import SqlPatronRepository
 from compendium.repositories.sql.work_repository import SqlWorkRepository
 from compendium.services.holds import HoldService
@@ -13,12 +14,15 @@ app = typer.Typer(help="Hold (reservation) commands.")
 
 
 def _holds(session) -> HoldService:
+    settings = get_settings()
     return HoldService(
         hold_repo=SqlHoldRepository(session),
         patron_repo=SqlPatronRepository(session),
         work_repo=SqlWorkRepository(session),
         branch_repo=SqlBranchRepository(session),
-        hold_expiry_days=get_settings().hold_expiry_days,
+        item_repo=SqlItemRepository(session),
+        hold_expiry_days=settings.hold_expiry_days,
+        hold_pickup_days=settings.hold_pickup_days,
     )
 
 

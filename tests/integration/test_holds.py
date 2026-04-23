@@ -6,7 +6,7 @@ from unittest.mock import patch
 import pytest
 
 from compendium.domain.enums import HoldStatus, ItemStatus
-from compendium.domain.errors import BusinessRuleError
+from compendium.domain.errors import BusinessRuleError, HoldQueueBlockError
 from compendium.domain.models import LoanPolicy, Patron
 from compendium.repositories.sql.branch_repository import SqlBranchRepository
 from compendium.repositories.sql.creator_repository import SqlCreatorRepository
@@ -60,7 +60,9 @@ def _holds(session) -> HoldService:
         patron_repo=SqlPatronRepository(session),
         work_repo=SqlWorkRepository(session),
         branch_repo=SqlBranchRepository(session),
+        item_repo=SqlItemRepository(session),
         hold_expiry_days=30,
+        hold_pickup_days=3,
     )
 
 
@@ -99,13 +101,27 @@ def default_policy(session):
 # ── Hold placement ────────────────────────────────────────────────────────────
 
 
-def test_place_hold_creates_waiting(session, work_and_item, patron):
-    work, _ = work_and_item
+def test_place_hold_with_available_copy_promotes_immediately(session, work_and_item, patron):
+    """When the work has an AVAILABLE loanable copy, the hold goes straight
+    to AVAILABLE status and the copy flips to ON_HOLD."""
+    work, item = work_and_item
     hold = _holds(session).place(work.id, patron.library_card_number)
+    assert hold.status == HoldStatus.AVAILABLE.value
+    assert hold.held_item_id == item.id
+    assert hold.notified_at is not None
+    session.refresh(item)
+    assert item.status == ItemStatus.ON_HOLD
+
+
+def test_place_hold_queues_when_all_copies_checked_out(
+    session, work_and_item, patron, patron2, default_policy
+):
+    """No AVAILABLE copy → hold stays WAITING (existing pre-slice behavior)."""
+    work, item = work_and_item
+    _circulation(session).checkout(item.barcode, patron.library_card_number)
+    hold = _holds(session).place(work.id, patron2.library_card_number)
     assert hold.status == HoldStatus.WAITING.value
-    assert hold.work_id == work.id
-    assert hold.patron_id == patron.id
-    assert hold.expires_at is not None
+    assert hold.held_item_id is None
 
 
 def test_place_hold_duplicate_raises(session, work_and_item, patron):
@@ -131,14 +147,34 @@ def test_place_hold_succeeds_with_one_loanable_copy(session, work_and_item, patr
     item.loan_restriction_reason = "reference"
     session.flush()
     assert extra.is_loanable is True
+    # The remaining loanable copy is AVAILABLE → immediate promote.
     hold = _holds(session).place(work.id, patron.library_card_number)
-    assert hold.status == HoldStatus.WAITING.value
+    assert hold.status == HoldStatus.AVAILABLE.value
+    assert hold.held_item_id == extra.id
 
 
-def test_cancel_hold(session, work_and_item, patron):
-    work, _ = work_and_item
+def test_cancel_available_hold_frees_item(session, work_and_item, patron):
+    """Cancelling an AVAILABLE hold should return the item to AVAILABLE."""
+    work, item = work_and_item
     hold = _holds(session).place(work.id, patron.library_card_number)
+    assert hold.status == HoldStatus.AVAILABLE.value
+    session.refresh(item)
+    assert item.status == ItemStatus.ON_HOLD
+
     result = _holds(session).cancel(hold.id, patron.id)
+    assert result.status == HoldStatus.CANCELLED.value
+    assert result.held_item_id is None
+    session.refresh(item)
+    assert item.status == ItemStatus.AVAILABLE
+
+
+def test_cancel_waiting_hold(session, work_and_item, patron, patron2, default_policy):
+    """Cancelling a WAITING hold works as before — no item state to release."""
+    work, item = work_and_item
+    _circulation(session).checkout(item.barcode, patron.library_card_number)
+    hold = _holds(session).place(work.id, patron2.library_card_number)
+    assert hold.status == HoldStatus.WAITING.value
+    result = _holds(session).cancel(hold.id, patron2.id)
     assert result.status == HoldStatus.CANCELLED.value
 
 
@@ -240,10 +276,12 @@ def test_renew_wrong_patron_raises(session, work_and_item, patron, patron2, defa
 # ── Expire holds ──────────────────────────────────────────────────────────────
 
 
-def test_expire_holds_marks_expired(session, work_and_item, patron):
-    work, _ = work_and_item
-    hold = _holds(session).place(work.id, patron.library_card_number)
-    # backdate the expiry
+def test_expire_holds_marks_expired(session, work_and_item, patron, patron2, default_policy):
+    """WAITING holds past their queue-expiry get EXPIRED."""
+    work, item = work_and_item
+    _circulation(session).checkout(item.barcode, patron.library_card_number)
+    hold = _holds(session).place(work.id, patron2.library_card_number)
+    assert hold.status == HoldStatus.WAITING.value
     hold.expires_at = datetime.utcnow() - timedelta(days=1)
     session.flush()
 
@@ -253,7 +291,97 @@ def test_expire_holds_marks_expired(session, work_and_item, patron):
     assert hold.status == HoldStatus.EXPIRED.value
 
 
+def test_expire_available_hold_frees_item(session, work_and_item, patron):
+    """AVAILABLE holds past their pickup window also get expired — and their
+    reserved item returns to AVAILABLE."""
+    work, item = work_and_item
+    hold = _holds(session).place(work.id, patron.library_card_number)
+    assert hold.status == HoldStatus.AVAILABLE.value
+    hold.expires_at = datetime.utcnow() - timedelta(days=1)
+    session.flush()
+
+    count = _holds(session).expire_holds()
+    assert count == 1
+    session.refresh(hold)
+    session.refresh(item)
+    assert hold.status == HoldStatus.EXPIRED.value
+    assert hold.held_item_id is None
+    assert item.status == ItemStatus.AVAILABLE
+
+
 # ── Loan policy ───────────────────────────────────────────────────────────────
+
+
+# ── Checkout queue guard ──────────────────────────────────────────────────────
+
+
+def test_checkout_refuses_when_waiting_hold_for_other_patron(
+    session, work_and_item, patron, patron2, default_policy
+):
+    """Walk-in checkout must not jump over a queued hold."""
+    work, item = work_and_item
+    # Give patron1 the item, patron2 queues a WAITING hold, patron1 returns.
+    # After checkin, item is ON_HOLD for patron2. Reset to AVAILABLE + leave
+    # patron2's hold WAITING to reproduce the concurrency race.
+    _circulation(session).checkout(item.barcode, patron.library_card_number)
+    hold = _holds(session).place(work.id, patron2.library_card_number)
+    assert hold.status == HoldStatus.WAITING.value
+    _circulation(session).checkin(item.barcode)
+    # checkin promoted patron2's hold. Force the race: revert item to
+    # AVAILABLE and leave the hold as if it had just been placed.
+    session.refresh(item)
+    item.status = ItemStatus.AVAILABLE.value
+    hold.status = HoldStatus.WAITING.value
+    hold.held_item_id = None
+    session.flush()
+
+    # A third patron walking up is refused.
+    patron3 = Patron(library_card_number="PC003", full_name="Carol")
+    SqlPatronRepository(session).add(patron3)
+    session.flush()
+    with pytest.raises(HoldQueueBlockError, match="reserved for hold queue"):
+        _circulation(session).checkout(item.barcode, "PC003")
+
+
+def test_checkout_override_holds_succeeds_and_audits(
+    session, work_and_item, patron, patron2, default_policy
+):
+    """override_holds=True bypasses the guard and records an audit entry."""
+    from compendium.repositories.sql.audit_log_repository import SqlAuditLogRepository
+    from compendium.services.audit import AuditAction, AuditService
+
+    work, item = work_and_item
+    _circulation(session).checkout(item.barcode, patron.library_card_number)
+    hold = _holds(session).place(work.id, patron2.library_card_number)
+    _circulation(session).checkin(item.barcode)
+    # Force the same race as the previous test.
+    session.refresh(item)
+    item.status = ItemStatus.AVAILABLE.value
+    hold.status = HoldStatus.WAITING.value
+    hold.held_item_id = None
+    session.flush()
+
+    audit = AuditService(SqlAuditLogRepository(session))
+    circ = CirculationService(
+        item_repo=SqlItemRepository(session),
+        loan_repo=SqlLoanRepository(session),
+        patron_repo=SqlPatronRepository(session),
+        branch_repo=SqlBranchRepository(session),
+        hold_repo=SqlHoldRepository(session),
+        policy_repo=SqlLoanPolicyRepository(session),
+        hold_pickup_days=3,
+        audit_svc=audit,
+        actor_label="test",
+        source="test",
+    )
+    patron3 = Patron(library_card_number="PC004", full_name="Dave")
+    SqlPatronRepository(session).add(patron3)
+    session.flush()
+    loan = circ.checkout(item.barcode, "PC004", override_holds=True)
+    assert loan.patron_id == patron3.id
+
+    entries = audit.list(entity_type="item", entity_id=item.id)
+    assert any(e.action == AuditAction.CHECKOUT_OVERRIDE_HOLDS for e in entries)
 
 
 def test_checkout_uses_policy_loan_period(session, work_and_item, patron):

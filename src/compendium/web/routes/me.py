@@ -44,12 +44,15 @@ def _circ(session: Session) -> CirculationService:
 
 
 def _holds_svc(session: Session) -> HoldService:
+    settings = get_settings()
     return HoldService(
         hold_repo=SqlHoldRepository(session),
         patron_repo=SqlPatronRepository(session),
         work_repo=SqlWorkRepository(session),
         branch_repo=SqlBranchRepository(session),
-        hold_expiry_days=get_settings().hold_expiry_days,
+        item_repo=SqlItemRepository(session),
+        hold_expiry_days=settings.hold_expiry_days,
+        hold_pickup_days=settings.hold_pickup_days,
     )
 
 

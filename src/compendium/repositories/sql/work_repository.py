@@ -51,6 +51,19 @@ class SqlWorkRepository:
             is not None
         )
 
+    def first_available_loanable_copy(self, work_id: int) -> Item | None:
+        """Pick the earliest-accessioned AVAILABLE loanable copy, if any."""
+        return (
+            self._s.query(Item)
+            .filter(
+                Item.work_id == work_id,
+                Item.is_loanable.is_(True),
+                Item.status == ItemStatus.AVAILABLE.value,
+            )
+            .order_by(Item.accession_number)
+            .first()
+        )
+
     def list(self, limit: int = 50, offset: int = 0) -> list[Work]:
         return self._s.query(Work).order_by(Work.title).offset(offset).limit(limit).all()
 

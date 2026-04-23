@@ -68,10 +68,12 @@ class SqlHoldRepository:
         )
 
     def get_expired_waiting(self, before: datetime) -> list[Hold]:
+        """Return holds past their expires_at — covers both WAITING queue
+        expiry and AVAILABLE pickup-window expiry."""
         return (
             self._s.query(Hold)
             .filter(
-                Hold.status == HoldStatus.WAITING.value,
+                Hold.status.in_([HoldStatus.WAITING.value, HoldStatus.AVAILABLE.value]),
                 Hold.expires_at.is_not(None),
                 Hold.expires_at < before,
             )

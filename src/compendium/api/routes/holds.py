@@ -9,6 +9,7 @@ from compendium.domain.errors import BusinessRuleError, NotFoundError
 from compendium.domain.models import AppUser
 from compendium.repositories.sql.branch_repository import SqlBranchRepository
 from compendium.repositories.sql.hold_repository import SqlHoldRepository
+from compendium.repositories.sql.item_repository import SqlItemRepository
 from compendium.repositories.sql.patron_repository import SqlPatronRepository
 from compendium.repositories.sql.work_repository import SqlWorkRepository
 from compendium.services.auth import has_permission
@@ -18,12 +19,15 @@ router = APIRouter()
 
 
 def _holds(session: Session) -> HoldService:
+    settings = get_settings()
     return HoldService(
         hold_repo=SqlHoldRepository(session),
         patron_repo=SqlPatronRepository(session),
         work_repo=SqlWorkRepository(session),
         branch_repo=SqlBranchRepository(session),
-        hold_expiry_days=get_settings().hold_expiry_days,
+        item_repo=SqlItemRepository(session),
+        hold_expiry_days=settings.hold_expiry_days,
+        hold_pickup_days=settings.hold_pickup_days,
     )
 
 

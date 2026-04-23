@@ -35,6 +35,7 @@ class AuditAction:
     SEND_NOTIFICATIONS = "send_notifications"
     RETRY_NOTIFICATION = "retry_notification"
     PRUNE_NOTIFICATIONS = "prune_notifications"
+    CHECKOUT_OVERRIDE_HOLDS = "checkout_override_holds"
 
 
 class AuditService:

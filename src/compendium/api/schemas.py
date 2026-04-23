@@ -131,6 +131,7 @@ class PatronResponse(BaseModel):
 class CheckoutRequest(BaseModel):
     barcode: str
     card_number: str
+    override_holds: bool = False
 
 
 class LoanResponse(BaseModel):
@@ -163,6 +164,7 @@ class HoldResponse(BaseModel):
     status: str
     placed_at: datetime
     expires_at: datetime | None
+    held_item_id: int | None = None
 
 
 class CreatePolicyRequest(BaseModel):

@@ -54,11 +54,19 @@ def _circulation(session) -> CirculationService:
 def checkout(
     barcode: str = typer.Option(..., "--barcode", help="Item barcode"),
     card: str = typer.Option(..., "--card", help="Patron library card number"),
+    override_holds: bool = typer.Option(
+        False,
+        "--override-holds",
+        help="Bypass the hold queue guard (audited). Use when deliberately "
+        "jumping a waiting hold on behalf of this patron.",
+    ),
 ) -> None:
     """Check an item out to a patron."""
     try:
         with session_scope() as session:
-            loan = _circulation(session).checkout(barcode, card)
+            loan = _circulation(session).checkout(
+                barcode, card, override_holds=override_holds
+            )
             typer.echo(f"\nChecked out: {loan.item.work.title}")
             typer.echo(f"  Barcode : {loan.item.barcode}")
             typer.echo(f"  Patron  : {loan.patron.full_name} ({loan.patron.library_card_number})")

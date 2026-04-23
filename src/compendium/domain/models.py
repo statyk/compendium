@@ -222,10 +222,14 @@ class Hold(Base):
     placed_at: Mapped[datetime] = mapped_column(UtcDateTime, server_default=func.now())
     expires_at: Mapped[datetime | None] = mapped_column(UtcDateTime)
     notified_at: Mapped[datetime | None] = mapped_column(UtcDateTime)
+    held_item_id: Mapped[int | None] = mapped_column(
+        ForeignKey("item.id", ondelete="SET NULL"), nullable=True, index=True
+    )
 
     work: Mapped[Work] = relationship()
     patron: Mapped[Patron] = relationship()
     branch: Mapped[Branch] = relationship()
+    held_item: Mapped[Item | None] = relationship(foreign_keys=[held_item_id])
 
 
 class Fine(Base):

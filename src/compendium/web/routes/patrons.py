@@ -11,6 +11,7 @@ from compendium.domain.errors import BusinessRuleError, NotFoundError
 from compendium.domain.models import AppUser, Patron
 from compendium.repositories.sql.audit_log_repository import SqlAuditLogRepository
 from compendium.repositories.sql.hold_repository import SqlHoldRepository
+from compendium.repositories.sql.item_repository import SqlItemRepository
 from compendium.repositories.sql.loan_repository import SqlLoanRepository
 from compendium.repositories.sql.patron_repository import SqlPatronRepository
 from compendium.repositories.sql.user_repository import SqlUserRepository
@@ -243,12 +244,15 @@ def patron_cancel_hold(
     patron = SqlPatronRepository(session).get_by_card_number(card_number)
     if patron is None or hold.patron_id != patron.id:
         return HTMLResponse("<span class='error-banner'>Hold does not belong to this patron.</span>")
+    settings = get_settings()
     holds_svc = HoldService(
         hold_repo=hold_repo,
         patron_repo=SqlPatronRepository(session),
         work_repo=SqlWorkRepository(session),
         branch_repo=SqlBranchRepository(session),
-        hold_expiry_days=get_settings().hold_expiry_days,
+        item_repo=SqlItemRepository(session),
+        hold_expiry_days=settings.hold_expiry_days,
+        hold_pickup_days=settings.hold_pickup_days,
     )
     try:
         holds_svc.cancel(hold_id, hold.patron_id)
