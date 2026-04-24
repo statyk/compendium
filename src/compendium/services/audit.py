@@ -36,6 +36,8 @@ class AuditAction:
     CLAIM_RETURNED = "claim_returned"
     CLAIM_VERIFIED = "claim_verified"
     CLAIM_WRITE_OFF = "claim_write_off"
+    HOLD_SUSPEND = "hold_suspend"
+    HOLD_RESUME = "hold_resume"
     SEND_NOTIFICATIONS = "send_notifications"
     RETRY_NOTIFICATION = "retry_notification"
     PRUNE_NOTIFICATIONS = "prune_notifications"

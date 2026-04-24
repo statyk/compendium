@@ -1,13 +1,16 @@
 """Patron self-service endpoints — identity comes from the JWT, no card number needed."""
 
+from datetime import date
+
 from fastapi import APIRouter, Depends, HTTPException, Path
+from pydantic import BaseModel
 from sqlalchemy.orm import Session
 
 from compendium.api.deps import get_current_patron, require_permission
 from compendium.api.schemas import HoldResponse, LoanResponse, SelfHoldRequest
 from compendium.db.engine import get_settings
 from compendium.db.session import get_session
-from compendium.domain.errors import BusinessRuleError, NotFoundError
+from compendium.domain.errors import BusinessRuleError, NotFoundError, ValidationError
 from compendium.domain.models import AppUser, Patron
 from compendium.repositories.sql.branch_repository import SqlBranchRepository
 from compendium.repositories.sql.hold_repository import SqlHoldRepository
@@ -109,6 +112,42 @@ def renew_loan(
     except (NotFoundError, BusinessRuleError) as exc:
         raise HTTPException(status_code=422, detail=str(exc)) from exc
     return LoanResponse.model_validate(loan)
+
+
+class SelfSuspendHoldRequest(BaseModel):
+    until: date
+    reason: str | None = None
+
+
+@router.post("/holds/{hold_id}/suspend", response_model=HoldResponse)
+def suspend_my_hold(
+    body: SelfSuspendHoldRequest,
+    hold_id: int = Path(),
+    session: Session = Depends(get_session),
+    _user: AppUser = Depends(require_permission("hold.place.self")),
+    patron: Patron = Depends(get_current_patron),
+) -> HoldResponse:
+    try:
+        hold = _holds(session).suspend(
+            hold_id, until=body.until, patron_id=patron.id, reason=body.reason
+        )
+    except (NotFoundError, BusinessRuleError, ValidationError) as exc:
+        raise HTTPException(status_code=422, detail=str(exc)) from exc
+    return HoldResponse.model_validate(hold)
+
+
+@router.post("/holds/{hold_id}/resume", response_model=HoldResponse)
+def resume_my_hold(
+    hold_id: int = Path(),
+    session: Session = Depends(get_session),
+    _user: AppUser = Depends(require_permission("hold.place.self")),
+    patron: Patron = Depends(get_current_patron),
+) -> HoldResponse:
+    try:
+        hold = _holds(session).resume(hold_id, patron_id=patron.id)
+    except (NotFoundError, BusinessRuleError) as exc:
+        raise HTTPException(status_code=422, detail=str(exc)) from exc
+    return HoldResponse.model_validate(hold)
 
 
 @router.post("/loans/{loan_id}/claim-returned", response_model=LoanResponse)

@@ -49,6 +49,20 @@ def _catalog_svc(session: Session, actor: AppUser) -> CatalogService:
 
 def _holds_svc(session: Session) -> HoldService:
     settings = get_settings()
+    # Wire notification_svc so the immediate-promote path (and _release_held_item
+    # reassignments) queues a hold_ready email when a hold becomes AVAILABLE.
+    from compendium.repositories.sql.notification_repository import (
+        SqlNotificationRepository,
+    )
+    from compendium.services.notifications import NotificationService
+
+    notifs = NotificationService(
+        notification_repo=SqlNotificationRepository(session),
+        loan_repo=SqlLoanRepository(session),
+        hold_repo=SqlHoldRepository(session),
+        patron_repo=SqlPatronRepository(session),
+        settings=settings,
+    )
     return HoldService(
         hold_repo=SqlHoldRepository(session),
         patron_repo=SqlPatronRepository(session),
@@ -57,6 +71,7 @@ def _holds_svc(session: Session) -> HoldService:
         item_repo=SqlItemRepository(session),
         hold_expiry_days=settings.hold_expiry_days,
         hold_pickup_days=settings.hold_pickup_days,
+        notification_svc=notifs,
     )
 
 

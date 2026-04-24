@@ -1,11 +1,16 @@
 from __future__ import annotations
 
-from datetime import datetime, timedelta, timezone
+from datetime import date, datetime, timedelta, timezone
 from typing import TYPE_CHECKING
 
 from compendium.domain.enums import HoldStatus, ItemStatus
-from compendium.domain.errors import BlockedByFinesError, BusinessRuleError, NotFoundError
-from compendium.domain.models import Hold, Item
+from compendium.domain.errors import (
+    BlockedByFinesError,
+    BusinessRuleError,
+    NotFoundError,
+    ValidationError,
+)
+from compendium.domain.models import AppUser, Hold, Item
 from compendium.repositories.base import (
     BranchRepository,
     HoldRepository,
@@ -13,6 +18,7 @@ from compendium.repositories.base import (
     PatronRepository,
     WorkRepository,
 )
+from compendium.services.audit import AuditAction, AuditEntityType, AuditService
 from compendium.services.fines import CheckoutStatus, FineService
 
 if TYPE_CHECKING:
@@ -33,6 +39,10 @@ class HoldService:
         hold_pickup_days: int = 3,
         fine_svc: FineService | None = None,
         notification_svc: "NotificationService | None" = None,
+        audit_svc: AuditService | None = None,
+        actor: AppUser | None = None,
+        actor_label: str | None = None,
+        source: str = "system",
     ) -> None:
         self._holds = hold_repo
         self._patrons = patron_repo
@@ -43,6 +53,28 @@ class HoldService:
         self._pickup_days = hold_pickup_days
         self._fines = fine_svc
         self._notifications = notification_svc
+        self._audit = audit_svc
+        self._actor = actor
+        self._actor_label = actor_label
+        self._source = source
+
+    def _record(
+        self,
+        entity_type: str,
+        entity_id: int | None,
+        action: str,
+        details: dict | None = None,
+    ) -> None:
+        if self._audit is not None:
+            self._audit.record(
+                actor=self._actor,
+                actor_label=self._actor_label,
+                source=self._source,
+                entity_type=entity_type,
+                entity_id=entity_id,
+                action=action,
+                details=details,
+            )
 
     def place(self, work_id: int, card_number: str) -> Hold:
         work = self._works.get(work_id)
@@ -116,6 +148,143 @@ class HoldService:
         hold.status = HoldStatus.CANCELLED.value
         hold.held_item_id = None
         return self._holds.update(hold)
+
+    # ------------------------------------------------------------------
+    # Suspend / resume: patron parks a WAITING hold (vacation etc.)
+    # ------------------------------------------------------------------
+
+    def suspend(
+        self,
+        hold_id: int,
+        *,
+        until: date,
+        patron_id: int | None = None,
+        reason: str | None = None,
+    ) -> Hold:
+        """Suspend a WAITING hold until the given date. The queue will skip
+        this hold when promoting; auto-resumes on/after ``until``.
+
+        If ``patron_id`` is given, enforce that the hold belongs to that
+        patron (used by /me self-service routes)."""
+        hold = self._holds.get(hold_id)
+        if hold is None:
+            raise NotFoundError(f"No hold with id={hold_id}")
+        if patron_id is not None and hold.patron_id != patron_id:
+            raise BusinessRuleError("Hold does not belong to this patron")
+        if hold.status != HoldStatus.WAITING.value:
+            raise BusinessRuleError(
+                f"Only waiting holds can be suspended (current status: {hold.status})."
+            )
+        if until <= date.today():
+            raise ValidationError("Suspension end date must be in the future.")
+        reason_clean = (reason or "").strip() or None
+        if reason_clean and len(reason_clean) > 256:
+            raise ValidationError("Reason must be 256 characters or fewer.")
+        hold.suspended_until = until
+        hold.suspended_reason = reason_clean
+        updated = self._holds.update(hold)
+        self._record(
+            AuditEntityType.PATRON,
+            hold.patron_id,
+            AuditAction.HOLD_SUSPEND,
+            {
+                "hold_id": hold.id,
+                "work_id": hold.work_id,
+                "suspended_until": until.isoformat(),
+                "reason": reason_clean,
+            },
+        )
+        return updated
+
+    def resume(self, hold_id: int, *, patron_id: int | None = None) -> Hold:
+        """Clear the suspension on a hold. If a loanable copy is now
+        available, immediately promote it (same path as place() does for
+        first-time holds); otherwise it re-enters the queue at its original
+        placed_at position."""
+        hold = self._holds.get(hold_id)
+        if hold is None:
+            raise NotFoundError(f"No hold with id={hold_id}")
+        if patron_id is not None and hold.patron_id != patron_id:
+            raise BusinessRuleError("Hold does not belong to this patron")
+        if hold.suspended_until is None:
+            raise BusinessRuleError(f"Hold {hold_id} is not suspended.")
+        if hold.status != HoldStatus.WAITING.value:
+            raise BusinessRuleError(
+                f"Cannot resume a hold in status {hold.status}."
+            )
+        prior_until = hold.suspended_until.isoformat()
+        hold.suspended_until = None
+        hold.suspended_reason = None
+        # If a copy is available, promote in place.
+        copy = self._works.first_available_loanable_copy(hold.work_id)
+        if copy is not None:
+            now = datetime.now(timezone.utc)
+            hold.status = HoldStatus.AVAILABLE.value
+            hold.held_item_id = copy.id
+            hold.expires_at = now + timedelta(days=self._pickup_days)
+            hold.notified_at = now
+            copy.status = ItemStatus.ON_HOLD.value
+            self._items.update(copy)
+            if self._notifications is not None:
+                self._notifications.queue_hold_ready(hold)
+        updated = self._holds.update(hold)
+        self._record(
+            AuditEntityType.PATRON,
+            hold.patron_id,
+            AuditAction.HOLD_RESUME,
+            {
+                "hold_id": hold.id,
+                "work_id": hold.work_id,
+                "resumed_from": prior_until,
+                "promoted": hold.status == HoldStatus.AVAILABLE.value,
+            },
+        )
+        return updated
+
+    def resume_expired_suspends(
+        self, *, today: date | None = None, dry_run: bool = False
+    ) -> list[Hold]:
+        """Auto-resume holds whose suspended_until <= today. Returns the list
+        of holds that match (whether or not dry_run). On non-dry-run, each
+        matching hold is resumed (and auto-promoted if a copy is available).
+        Emits one HOLD_RESUME audit entry per hold."""
+        cutoff = today or date.today()
+        matches = self._holds.list_suspended_expiring_on_or_before(cutoff)
+        if dry_run:
+            return matches
+        resumed: list[Hold] = []
+        for hold in matches:
+            # resume() would re-audit; we want a single "auto" marker. Do the
+            # resume inline here so the audit detail can tag `reason=auto`.
+            prior_until = hold.suspended_until.isoformat() if hold.suspended_until else None
+            hold.suspended_until = None
+            hold.suspended_reason = None
+            copy = self._works.first_available_loanable_copy(hold.work_id)
+            if copy is not None:
+                now = datetime.now(timezone.utc)
+                hold.status = HoldStatus.AVAILABLE.value
+                hold.held_item_id = copy.id
+                hold.expires_at = now + timedelta(days=self._pickup_days)
+                hold.notified_at = now
+                copy.status = ItemStatus.ON_HOLD.value
+                self._items.update(copy)
+                if self._notifications is not None:
+                    self._notifications.queue_hold_ready(hold)
+            self._holds.update(hold)
+            self._record(
+                AuditEntityType.PATRON,
+                hold.patron_id,
+                AuditAction.HOLD_RESUME,
+                {
+                    "hold_id": hold.id,
+                    "work_id": hold.work_id,
+                    "resumed_from": prior_until,
+                    "promoted": hold.status == HoldStatus.AVAILABLE.value,
+                    "reason": "auto",
+                },
+            )
+            resumed.append(hold)
+        return resumed
 
     def expire_holds(self) -> int:
         holds = self._holds.get_expired_waiting(datetime.now(timezone.utc))

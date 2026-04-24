@@ -7,7 +7,7 @@ from sqlalchemy.orm import Session
 
 from compendium.db.engine import get_settings
 from compendium.db.session import get_session
-from compendium.domain.errors import AuthError, BusinessRuleError, NotFoundError
+from compendium.domain.errors import AuthError, BusinessRuleError, NotFoundError, ValidationError
 from compendium.domain.models import AppUser, Patron
 from compendium.repositories.sql.audit_log_repository import SqlAuditLogRepository
 from compendium.repositories.sql.branch_repository import SqlBranchRepository
@@ -48,7 +48,7 @@ def _circ(
     )
 
 
-def _holds_svc(session: Session) -> HoldService:
+def _holds_svc(session: Session, actor: AppUser | None = None) -> HoldService:
     settings = get_settings()
     return HoldService(
         hold_repo=SqlHoldRepository(session),
@@ -58,6 +58,9 @@ def _holds_svc(session: Session) -> HoldService:
         item_repo=SqlItemRepository(session),
         hold_expiry_days=settings.hold_expiry_days,
         hold_pickup_days=settings.hold_pickup_days,
+        audit_svc=AuditService(SqlAuditLogRepository(session)),
+        actor=actor,
+        source="web",
     )
 
 
@@ -146,6 +149,7 @@ def claim_loan_returned(
 @router.get("/me/holds")
 def my_holds(
     request: Request,
+    error: str | None = None,
     user: AppUser = Depends(require_web_user),
     patron: Patron = Depends(get_web_patron),
     session: Session = Depends(get_session),
@@ -172,6 +176,7 @@ def my_holds(
             "user": user,
             "patron": patron,
             "holds": holds,
+            "error": error,
             "pay_at_pickup_warning": status == CheckoutStatus.BLOCKED_AT_PICKUP,
             "outstanding_cents": outstanding,
         },
@@ -259,8 +264,60 @@ def cancel_hold(
 ):
     check_csrf_form(request, csrf_token)
     try:
-        _holds_svc(session).cancel(hold_id, patron_id=patron.id)
+        _holds_svc(session, actor=user).cancel(hold_id, patron_id=patron.id)
         return HTMLResponse("<tr><td colspan='4'><em>Hold cancelled.</em></td></tr>")
+    except (BusinessRuleError, NotFoundError) as exc:
+        return HTMLResponse(
+            f"<tr><td colspan='4' class='error-banner'>{escape(str(exc))}</td></tr>"
+        )
+
+
+@router.post("/me/holds/{hold_id:int}/suspend")
+def suspend_hold(
+    hold_id: int,
+    request: Request,
+    until: str = Form(default=""),
+    reason: str = Form(default=""),
+    csrf_token: str = Form(default=""),
+    user: AppUser = Depends(require_web_user),
+    patron: Patron = Depends(get_web_patron),
+    session: Session = Depends(get_session),
+):
+    from datetime import datetime
+
+    check_csrf_form(request, csrf_token)
+    try:
+        parsed = datetime.strptime(until.strip(), "%Y-%m-%d").date()
+    except ValueError:
+        return RedirectResponse(
+            "/ui/me/holds?error=Please+pick+a+valid+end+date.", status_code=303
+        )
+    try:
+        _holds_svc(session, actor=user).suspend(
+            hold_id, until=parsed, patron_id=patron.id, reason=reason.strip() or None
+        )
+        return RedirectResponse("/ui/me/holds", status_code=303)
+    except (BusinessRuleError, NotFoundError, ValidationError) as exc:
+        from urllib.parse import quote
+
+        return RedirectResponse(
+            f"/ui/me/holds?error={quote(str(exc))}", status_code=303
+        )
+
+
+@router.post("/me/holds/{hold_id:int}/resume", response_class=HTMLResponse)
+def resume_hold(
+    hold_id: int,
+    request: Request,
+    csrf_token: str = Form(default=""),
+    user: AppUser = Depends(require_web_user),
+    patron: Patron = Depends(get_web_patron),
+    session: Session = Depends(get_session),
+):
+    check_csrf_form(request, csrf_token)
+    try:
+        _holds_svc(session, actor=user).resume(hold_id, patron_id=patron.id)
+        return HTMLResponse("<tr><td colspan='4'><em>Hold resumed. Refresh to see updated state.</em></td></tr>")
     except (BusinessRuleError, NotFoundError) as exc:
         return HTMLResponse(
             f"<tr><td colspan='4' class='error-banner'>{escape(str(exc))}</td></tr>"

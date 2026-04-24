@@ -1,8 +1,12 @@
+from datetime import date
+
 from fastapi import APIRouter, Depends, HTTPException, Path
+from pydantic import BaseModel
 from sqlalchemy.orm import Session
 
 from compendium.api.deps import require_permission
 from compendium.api.schemas import CreateHoldRequest, HoldResponse
+from compendium.domain.errors import ValidationError
 from compendium.db.engine import get_settings
 from compendium.db.session import get_session
 from compendium.domain.errors import BusinessRuleError, NotFoundError
@@ -11,14 +15,16 @@ from compendium.repositories.sql.branch_repository import SqlBranchRepository
 from compendium.repositories.sql.hold_repository import SqlHoldRepository
 from compendium.repositories.sql.item_repository import SqlItemRepository
 from compendium.repositories.sql.patron_repository import SqlPatronRepository
+from compendium.repositories.sql.audit_log_repository import SqlAuditLogRepository
 from compendium.repositories.sql.work_repository import SqlWorkRepository
+from compendium.services.audit import AuditService
 from compendium.services.auth import has_permission
 from compendium.services.holds import HoldService
 
 router = APIRouter()
 
 
-def _holds(session: Session) -> HoldService:
+def _holds(session: Session, actor: AppUser | None = None) -> HoldService:
     settings = get_settings()
     return HoldService(
         hold_repo=SqlHoldRepository(session),
@@ -28,6 +34,9 @@ def _holds(session: Session) -> HoldService:
         item_repo=SqlItemRepository(session),
         hold_expiry_days=settings.hold_expiry_days,
         hold_pickup_days=settings.hold_pickup_days,
+        audit_svc=AuditService(SqlAuditLogRepository(session)),
+        actor=actor,
+        source="api",
     )
 
 
@@ -82,6 +91,55 @@ def cancel_hold(
         if caller_patron is None or caller_patron.id != hold.patron_id:
             raise HTTPException(status_code=403, detail="Forbidden")
     try:
-        _holds(session).cancel(hold_id, hold.patron_id)
+        _holds(session, actor=user).cancel(hold_id, hold.patron_id)
     except (NotFoundError, BusinessRuleError) as exc:
         raise HTTPException(status_code=422, detail=str(exc)) from exc
+
+
+class SuspendHoldRequest(BaseModel):
+    until: date
+    reason: str | None = None
+
+
+def _check_hold_owner_or_any(
+    session: Session, user: AppUser, hold_id: int, any_perm: str
+):
+    hold = SqlHoldRepository(session).get(hold_id)
+    if hold is None:
+        raise HTTPException(status_code=404, detail=f"No hold with id={hold_id}")
+    if not has_permission(user.role.permissions, any_perm):
+        caller_patron = SqlPatronRepository(session).get_by_user_id(user.id)
+        if caller_patron is None or caller_patron.id != hold.patron_id:
+            raise HTTPException(status_code=403, detail="Forbidden")
+    return hold
+
+
+@router.post("/{hold_id}/suspend", response_model=HoldResponse)
+def suspend_hold(
+    hold_id: int,
+    body: SuspendHoldRequest,
+    session: Session = Depends(get_session),
+    user: AppUser = Depends(require_permission("hold.place.self")),
+) -> HoldResponse:
+    _check_hold_owner_or_any(session, user, hold_id, "hold.place.any")
+    try:
+        hold = _holds(session, actor=user).suspend(
+            hold_id, until=body.until, reason=body.reason
+        )
+    except (NotFoundError, BusinessRuleError, ValidationError) as exc:
+        raise HTTPException(status_code=422, detail=str(exc)) from exc
+    return HoldResponse.model_validate(hold)
+
+
+@router.post("/{hold_id}/resume", response_model=HoldResponse)
+def resume_hold(
+    hold_id: int,
+    session: Session = Depends(get_session),
+    user: AppUser = Depends(require_permission("hold.place.self")),
+) -> HoldResponse:
+    _check_hold_owner_or_any(session, user, hold_id, "hold.place.any")
+    try:
+        hold = _holds(session, actor=user).resume(hold_id)
+    except (NotFoundError, BusinessRuleError) as exc:
+        raise HTTPException(status_code=422, detail=str(exc)) from exc
+    return HoldResponse.model_validate(hold)

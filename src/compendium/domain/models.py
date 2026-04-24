@@ -244,6 +244,12 @@ class Hold(Base):
     held_item_id: Mapped[int | None] = mapped_column(
         ForeignKey("item.id", ondelete="SET NULL"), nullable=True, index=True
     )
+    # Suspend/freeze: patron can temporarily park a WAITING hold so the queue
+    # skips over them. NULL suspended_until = "indefinite" (resume manually);
+    # a date value means auto-resume when the date passes. suspended_reason
+    # is optional free-text, surfaced in the UI as context.
+    suspended_until: Mapped[date | None] = mapped_column(Date)
+    suspended_reason: Mapped[str | None] = mapped_column(String(256))
 
     work: Mapped[Work] = relationship()
     patron: Mapped[Patron] = relationship()

@@ -3,6 +3,7 @@
 {% block title %}My Holds — Compendium{% endblock %}
 {% block content %}
 <h2>My Holds</h2>
+{% if error %}<p class="error-banner">{{ error }}</p>{% endif %}
 {% if pay_at_pickup_warning %}
 <p class="warning-banner">
   ⚠ You have {{ outstanding_cents | currency }} in outstanding fines. You can
@@ -20,17 +21,46 @@
     {% for hold in holds %}
     <tr id="hold-{{ hold.id }}">
       <td><a href="/ui/catalog/{{ hold.work_id }}">{{ hold.work.title }}</a></td>
-      <td>{{ status_pill(hold.status) }}</td>
-      <td>{{ hold.expires_at.strftime("%Y-%m-%d") if hold.expires_at else "—" }}</td>
       <td>
+        {{ status_pill(hold.status) }}
+        {% if hold.suspended_until %}
+          <br><small><em>Suspended until {{ hold.suspended_until.isoformat() }}</em></small>
+          {% if hold.suspended_reason %}<br><small>{{ hold.suspended_reason }}</small>{% endif %}
+        {% endif %}
+      </td>
+      <td>{{ hold.expires_at.strftime("%Y-%m-%d") if hold.expires_at else "—" }}</td>
+      <td style="display:flex; gap:0.5rem; flex-wrap:wrap">
+        {% if hold.status == "waiting" and not hold.suspended_until %}
+        <form
+          action="/ui/me/holds/{{ hold.id }}/suspend"
+          method="post"
+          style="margin:0; display:flex; gap:0.25rem; align-items:center; flex-wrap:wrap"
+        >
+          <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+          <input type="date" name="until" required style="padding:0.2rem 0.4rem; margin:0">
+          <button type="submit" class="outline" style="padding:0.2rem 0.6rem">Suspend</button>
+        </form>
+        {% elif hold.status == "waiting" and hold.suspended_until %}
+        <form
+          hx-post="/ui/me/holds/{{ hold.id }}/resume"
+          hx-target="#hold-{{ hold.id }}"
+          hx-swap="outerHTML"
+          hx-include="[name='csrf_token']"
+          style="margin:0"
+        >
+          <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+          <button type="submit" class="outline" style="padding:0.2rem 0.6rem">Resume</button>
+        </form>
+        {% endif %}
         <form
           hx-post="/ui/me/holds/{{ hold.id }}/cancel"
           hx-target="#hold-{{ hold.id }}"
           hx-swap="outerHTML"
           hx-include="[name='csrf_token']"
+          style="margin:0"
         >
           <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
-          <button type="submit" class="outline contrast">Cancel</button>
+          <button type="submit" class="outline contrast" style="padding:0.2rem 0.6rem">Cancel</button>
         </form>
       </td>
     </tr>

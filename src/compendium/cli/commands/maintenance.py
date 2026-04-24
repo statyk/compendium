@@ -47,22 +47,49 @@ def deactivate_expired_patrons(
             )
 
 
+def _holds_svc(session) -> HoldService:
+    settings = get_settings()
+    return HoldService(
+        hold_repo=SqlHoldRepository(session),
+        patron_repo=SqlPatronRepository(session),
+        work_repo=SqlWorkRepository(session),
+        branch_repo=SqlBranchRepository(session),
+        item_repo=SqlItemRepository(session),
+        hold_expiry_days=settings.hold_expiry_days,
+        hold_pickup_days=settings.hold_pickup_days,
+        audit_svc=AuditService(SqlAuditLogRepository(session)),
+        actor_label=f"cli:{getpass.getuser()}",
+        source="cli",
+    )
+
+
 @app.command("expire-holds")
 def expire_holds() -> None:
     """Expire waiting holds whose expiry date has passed."""
     with session_scope() as session:
-        settings = get_settings()
-        svc = HoldService(
-            hold_repo=SqlHoldRepository(session),
-            patron_repo=SqlPatronRepository(session),
-            work_repo=SqlWorkRepository(session),
-            branch_repo=SqlBranchRepository(session),
-            item_repo=SqlItemRepository(session),
-            hold_expiry_days=settings.hold_expiry_days,
-            hold_pickup_days=settings.hold_pickup_days,
-        )
-        count = svc.expire_holds()
+        count = _holds_svc(session).expire_holds()
         typer.echo(f"Expired {count} hold(s).")
+
+
+@app.command("resume-expired-suspends")
+def resume_expired_suspends(
+    dry_run: bool = typer.Option(
+        False, "--dry-run", help="Report what would be resumed without changing data."
+    ),
+) -> None:
+    """Auto-resume holds whose suspension end-date has passed."""
+    with session_scope() as session:
+        resumed = _holds_svc(session).resume_expired_suspends(dry_run=dry_run)
+        if not resumed:
+            typer.echo("No suspended holds are ready to resume.")
+            return
+        verb = "Would resume" if dry_run else "Resumed"
+        typer.echo(f"{verb} {len(resumed)} hold(s):")
+        for hold in resumed:
+            note = ""
+            if hold.status == "available" and not dry_run:
+                note = " (immediately promoted)"
+            typer.echo(f"  #{hold.id}  work={hold.work_id}  patron_id={hold.patron_id}{note}")
 
 
 @app.command("prune-audit-log")

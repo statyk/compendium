@@ -1151,6 +1151,100 @@ class TestReportsCli:
 
 
 # ──────────────────────────────────────────────────────────────────────────────
+# hold suspend/resume
+# ──────────────────────────────────────────────────────────────────────────────
+
+
+class TestHoldSuspendCli:
+    def _seed_waiting_hold(self, session):
+        # Seed a work with 1 copy, check it out, place a hold (which will WAIT).
+        from compendium.domain.models import Patron as _Patron
+        from compendium.repositories.sql.branch_repository import SqlBranchRepository
+        from compendium.repositories.sql.hold_repository import SqlHoldRepository
+        from compendium.repositories.sql.item_repository import SqlItemRepository
+        from compendium.repositories.sql.loan_policy_repository import (
+            SqlLoanPolicyRepository,
+        )
+        from compendium.repositories.sql.loan_repository import SqlLoanRepository
+        from compendium.repositories.sql.patron_repository import SqlPatronRepository
+        from compendium.repositories.sql.work_repository import SqlWorkRepository
+        from compendium.services.circulation import CirculationService
+        from compendium.services.holds import HoldService
+
+        work, item = _seed_work(session)
+        holder = _Patron(library_card_number="HSHOLD01", full_name="Holder")
+        session.add(holder)
+        session.flush()
+        CirculationService(
+            item_repo=SqlItemRepository(session),
+            loan_repo=SqlLoanRepository(session),
+            patron_repo=SqlPatronRepository(session),
+            branch_repo=SqlBranchRepository(session),
+            hold_repo=SqlHoldRepository(session),
+            policy_repo=SqlLoanPolicyRepository(session),
+        ).checkout(item.barcode, "HSHOLD01")
+        waiter = _Patron(library_card_number="HSWAIT01", full_name="Waiter")
+        session.add(waiter)
+        session.flush()
+        hold = HoldService(
+            hold_repo=SqlHoldRepository(session),
+            patron_repo=SqlPatronRepository(session),
+            work_repo=SqlWorkRepository(session),
+            branch_repo=SqlBranchRepository(session),
+            item_repo=SqlItemRepository(session),
+        ).place(work.id, "HSWAIT01")
+        return hold
+
+    def test_suspend_and_resume_cycle(self, session):
+        hold = self._seed_waiting_hold(session)
+        # Suspend
+        from datetime import date as _date, timedelta as _td
+        future = (_date.today() + _td(days=7)).isoformat()
+        r = _invoke(
+            session,
+            ["hold", "suspend", "--id", str(hold.id), "--until", future],
+            "compendium.cli.commands.hold",
+        )
+        assert r.exit_code == 0, r.output
+        assert future in r.output
+        # Resume
+        r = _invoke(
+            session,
+            ["hold", "resume", "--id", str(hold.id)],
+            "compendium.cli.commands.hold",
+        )
+        assert r.exit_code == 0, r.output
+        assert "resumed" in r.output.lower()
+
+    def test_suspend_invalid_date_fails(self, session):
+        hold = self._seed_waiting_hold(session)
+        r = _invoke(
+            session,
+            ["hold", "suspend", "--id", str(hold.id), "--until", "not-a-date"],
+            "compendium.cli.commands.hold",
+        )
+        assert r.exit_code != 0
+
+    def test_list_suspended_empty(self, session):
+        r = _invoke(
+            session,
+            ["hold", "list-suspended"],
+            "compendium.cli.commands.hold",
+        )
+        assert r.exit_code == 0
+        assert "No suspended holds" in r.output
+
+    def test_maintenance_resume_expired_no_matches(self, session):
+        r = _invoke(
+            session,
+            ["maintenance", "resume-expired-suspends"],
+            "compendium.cli.commands.maintenance",
+        )
+        assert r.exit_code == 0
+        assert "No suspended holds" in r.output
+
+
+# ──────────────────────────────────────────────────────────────────────────────
 # claims-returned
 # ──────────────────────────────────────────────────────────────────────────────
 

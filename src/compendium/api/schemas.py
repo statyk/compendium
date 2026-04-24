@@ -195,6 +195,8 @@ class HoldResponse(BaseModel):
     placed_at: datetime
     expires_at: datetime | None
     held_item_id: int | None = None
+    suspended_until: date | None = None
+    suspended_reason: str | None = None
 
 
 class CreatePolicyRequest(BaseModel):
