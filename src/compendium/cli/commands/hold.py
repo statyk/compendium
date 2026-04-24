@@ -76,26 +76,80 @@ def cancel(
 
 @app.command("list")
 def list_holds(
-    card: str = typer.Option(..., "--card", help="Patron library card number"),
+    card: str | None = typer.Option(None, "--card", help="Patron library card number. Omit to list all active holds (librarian view)."),
+    status: str | None = typer.Option(None, "--status", help="Filter: waiting / available"),
+    branch: str | None = typer.Option(None, "--branch", help="Filter: branch code"),
+    older_than_days: int | None = typer.Option(None, "--older-than-days", help="Only holds placed more than N days ago"),
+    query: str | None = typer.Option(None, "--query", "-q", help="Search patron name/card or work title"),
+    limit: int = typer.Option(100, "--limit"),
 ) -> None:
-    """List active holds for a patron."""
+    """List active holds.
+
+    With --card: patron-scoped view.
+    Without --card: system-wide active holds for librarian review.
+    """
     with session_scope() as session:
-        patron = SqlPatronRepository(session).get_by_card_number(card)
-        if patron is None:
-            typer.echo(f"No patron with card '{card}'.", err=True)
-            raise typer.Exit(1)
-        holds = SqlHoldRepository(session).get_active_for_patron(patron.id)
+        if card is not None:
+            patron = SqlPatronRepository(session).get_by_card_number(card)
+            if patron is None:
+                typer.echo(f"No patron with card '{card}'.", err=True)
+                raise typer.Exit(1)
+            holds = SqlHoldRepository(session).get_active_for_patron(patron.id)
+            if not holds:
+                typer.echo(f"{patron.full_name} has no active holds.")
+                return
+            header = f"\nActive holds for {patron.full_name}:"
+        else:
+            branch_id: int | None = None
+            if branch is not None:
+                b = SqlBranchRepository(session).get_by_code(branch)
+                if b is None:
+                    typer.echo(f"No branch with code '{branch}'.", err=True)
+                    raise typer.Exit(1)
+                branch_id = b.id
+            holds = SqlHoldRepository(session).list_active(
+                status=status,
+                branch_id=branch_id,
+                query=query,
+                older_than_days=older_than_days,
+                limit=limit,
+            )
+            header = f"\n{len(holds)} active hold(s):"
         if not holds:
-            typer.echo(f"{patron.full_name} has no active holds.")
+            typer.echo("No matching holds.")
             return
-        typer.echo(f"\nActive holds for {patron.full_name}:")
+        typer.echo(header)
         for hold in holds:
             exp = hold.expires_at.strftime("%Y-%m-%d") if hold.expires_at else "—"
             susp = ""
             if hold.suspended_until is not None:
                 susp = f"  suspended_until={hold.suspended_until.isoformat()}"
+            patron_str = hold.patron.library_card_number if card is None else ""
+            work_title = hold.work.title if hold.work and card is None else f"Work {hold.work_id}"
+            extras = f"  patron={patron_str}" if patron_str else ""
             typer.echo(
-                f"  #{hold.id}  Work {hold.work_id}  status={hold.status}  expires={exp}{susp}"
+                f"  #{hold.id}  {work_title}  status={hold.status}  expires={exp}{extras}{susp}"
+            )
+
+
+@app.command("queue")
+def queue_cmd(
+    work_id: int = typer.Option(..., "--work-id", help="Work ID"),
+) -> None:
+    """Show the hold queue for a work (ordered by placement)."""
+    with session_scope() as session:
+        holds = SqlHoldRepository(session).queue_for_work(work_id)
+        if not holds:
+            typer.echo(f"No active holds on work {work_id}.")
+            return
+        typer.echo(f"\nQueue for work {work_id}:")
+        for pos, h in enumerate(holds, start=1):
+            susp = ""
+            if h.suspended_until is not None:
+                susp = f"  suspended_until={h.suspended_until.isoformat()}"
+            typer.echo(
+                f"  #{pos}  hold={h.id}  patron={h.patron.library_card_number}  "
+                f"status={h.status}  placed={h.placed_at.strftime('%Y-%m-%d')}{susp}"
             )
 
 

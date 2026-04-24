@@ -18,6 +18,7 @@ from compendium.repositories.sql.audit_log_repository import SqlAuditLogReposito
 from compendium.repositories.sql.branch_repository import SqlBranchRepository
 from compendium.repositories.sql.creator_repository import SqlCreatorRepository
 from compendium.repositories.sql.hold_repository import SqlHoldRepository
+from compendium.services.auth import has_permission
 from compendium.repositories.sql.item_repository import SqlItemRepository
 from compendium.repositories.sql.loan_repository import SqlLoanRepository
 from compendium.repositories.sql.media_type_repository import SqlMediaTypeRepository
@@ -255,6 +256,10 @@ def work_detail(
             if active is not None:
                 item_due[it.id] = active.due_at
     has_loanable = SqlWorkRepository(session).has_loanable_item(work.id)
+    # Librarian-only hold queue for this work.
+    queue: list = []
+    if user is not None and has_permission(user.role.permissions, "hold.view.any"):
+        queue = SqlHoldRepository(session).queue_for_work(work.id)
     return _render(
         "catalog/detail.html",
         request,
@@ -265,6 +270,7 @@ def work_detail(
             "patron": patron,
             "item_due": item_due,
             "has_loanable": has_loanable,
+            "queue": queue,
             "message": message,
             "error": error,
         },

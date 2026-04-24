@@ -157,7 +157,9 @@ def my_holds(
     from compendium.repositories.sql.fine_repository import SqlFineRepository
     from compendium.services.fines import CheckoutStatus, FineService
 
-    holds = SqlHoldRepository(session).get_active_for_patron(patron.id)
+    hold_repo = SqlHoldRepository(session)
+    holds = hold_repo.get_active_for_patron(patron.id)
+    queue_positions = {h.id: hold_repo.queue_position(h.id) for h in holds}
     fine_svc = FineService(
         fine_repo=SqlFineRepository(session),
         patron_repo=SqlPatronRepository(session),
@@ -176,6 +178,7 @@ def my_holds(
             "user": user,
             "patron": patron,
             "holds": holds,
+            "queue_positions": queue_positions,
             "error": error,
             "pay_at_pickup_warning": status == CheckoutStatus.BLOCKED_AT_PICKUP,
             "outstanding_cents": outstanding,

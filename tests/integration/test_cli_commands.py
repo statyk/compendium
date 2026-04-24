@@ -1244,6 +1244,83 @@ class TestHoldSuspendCli:
         assert "No suspended holds" in r.output
 
 
+class TestHoldListVisibilityCli:
+    def _seed_work_waiting_hold(self, session):
+        from compendium.domain.models import Patron as _Patron
+        from compendium.repositories.sql.branch_repository import SqlBranchRepository
+        from compendium.repositories.sql.hold_repository import SqlHoldRepository
+        from compendium.repositories.sql.item_repository import SqlItemRepository
+        from compendium.repositories.sql.loan_policy_repository import (
+            SqlLoanPolicyRepository,
+        )
+        from compendium.repositories.sql.loan_repository import SqlLoanRepository
+        from compendium.repositories.sql.patron_repository import SqlPatronRepository
+        from compendium.repositories.sql.work_repository import SqlWorkRepository
+        from compendium.services.circulation import CirculationService
+        from compendium.services.holds import HoldService
+
+        work, item = _seed_work(session)
+        holder = _Patron(library_card_number="HVHOLD", full_name="Holder")
+        session.add(holder)
+        session.flush()
+        CirculationService(
+            item_repo=SqlItemRepository(session),
+            loan_repo=SqlLoanRepository(session),
+            patron_repo=SqlPatronRepository(session),
+            branch_repo=SqlBranchRepository(session),
+            hold_repo=SqlHoldRepository(session),
+            policy_repo=SqlLoanPolicyRepository(session),
+        ).checkout(item.barcode, "HVHOLD")
+        waiter = _Patron(library_card_number="HVWAIT", full_name="Waiter Name")
+        session.add(waiter)
+        session.flush()
+        hold = HoldService(
+            hold_repo=SqlHoldRepository(session),
+            patron_repo=SqlPatronRepository(session),
+            work_repo=SqlWorkRepository(session),
+            branch_repo=SqlBranchRepository(session),
+            item_repo=SqlItemRepository(session),
+        ).place(work.id, "HVWAIT")
+        return work, hold
+
+    def test_list_without_card_shows_system_wide(self, session):
+        _, hold = self._seed_work_waiting_hold(session)
+        r = _invoke(session, ["hold", "list"], "compendium.cli.commands.hold")
+        assert r.exit_code == 0, r.output
+        assert f"#{hold.id}" in r.output
+        assert "active hold" in r.output
+
+    def test_list_with_query_filter(self, session):
+        self._seed_work_waiting_hold(session)
+        r = _invoke(
+            session,
+            ["hold", "list", "--query", "Waiter"],
+            "compendium.cli.commands.hold",
+        )
+        assert r.exit_code == 0, r.output
+        assert "HVWAIT" in r.output
+
+    def test_queue_command(self, session):
+        work, hold = self._seed_work_waiting_hold(session)
+        r = _invoke(
+            session,
+            ["hold", "queue", "--work-id", str(work.id)],
+            "compendium.cli.commands.hold",
+        )
+        assert r.exit_code == 0, r.output
+        assert f"hold={hold.id}" in r.output
+
+    def test_queue_empty(self, session):
+        work, _ = _seed_work(session)
+        r = _invoke(
+            session,
+            ["hold", "queue", "--work-id", str(work.id)],
+            "compendium.cli.commands.hold",
+        )
+        assert r.exit_code == 0
+        assert "No active holds" in r.output
+
+
 # ──────────────────────────────────────────────────────────────────────────────
 # claims-returned
 # ──────────────────────────────────────────────────────────────────────────────

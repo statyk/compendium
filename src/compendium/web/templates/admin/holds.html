@@ -1,0 +1,103 @@
+{% extends "base.html" %}
+{% from "_macros.html" import status_pill %}
+{% block title %}Holds — Compendium{% endblock %}
+{% block content %}
+<h2>Holds</h2>
+<p><small>All active holds across the library. Filter by status, branch, patron or work. Suspended holds keep their queue position; the pickup shelf is the "Pickup shelf" status filter.</small></p>
+
+<form method="get" action="/ui/admin/holds" style="display:flex; gap:0.75rem; flex-wrap:wrap; align-items:end; margin-bottom:1rem">
+  <label style="margin-bottom:0">
+    Search
+    <input type="text" name="q" value="{{ q }}" placeholder="Patron name / card / title" style="min-width:18rem">
+  </label>
+  <label style="margin-bottom:0">
+    Status
+    <select name="status">
+      {% for value, label in status_options %}
+      <option value="{{ value }}" {% if status == value %}selected{% endif %}>{{ label }}</option>
+      {% endfor %}
+    </select>
+  </label>
+  <label style="margin-bottom:0">
+    Branch
+    <select name="branch">
+      <option value="">All</option>
+      {% for b in branches %}
+      <option value="{{ b.code }}" {% if branch == b.code %}selected{% endif %}>{{ b.name }}</option>
+      {% endfor %}
+    </select>
+  </label>
+  <label style="margin-bottom:0">
+    Older than
+    <select name="older_than_days">
+      <option value="">Any age</option>
+      {% for d in [7, 14, 30, 60, 90] %}
+      <option value="{{ d }}" {% if older_than_days == d %}selected{% endif %}>{{ d }} days</option>
+      {% endfor %}
+    </select>
+  </label>
+  <button type="submit">Filter</button>
+  <a href="/ui/admin/holds" role="button" class="secondary outline">Reset</a>
+</form>
+
+<p><strong>{{ total }}</strong> matching hold{{ '' if total == 1 else 's' }}{% if status == 'available' %} · on the pickup shelf now{% endif %}</p>
+
+{% if holds %}
+<table>
+  <thead>
+    <tr>
+      <th>#</th>
+      <th>Placed</th>
+      <th>Patron</th>
+      <th>Work</th>
+      <th>Status</th>
+      <th>Branch</th>
+      <th>Suspended</th>
+      <th>Expires</th>
+    </tr>
+  </thead>
+  <tbody>
+    {% for h in holds %}
+    <tr>
+      <td>{{ positions.get(h.id) or "—" }}</td>
+      <td><small>{{ h.placed_at.strftime("%Y-%m-%d") }}</small></td>
+      <td>
+        <a href="/ui/patrons/{{ h.patron.library_card_number }}">{{ h.patron.full_name }}</a>
+        <br><small><code>{{ h.patron.library_card_number }}</code></small>
+      </td>
+      <td>
+        <a href="/ui/catalog/{{ h.work.id }}">{{ h.work.title }}</a>
+      </td>
+      <td>{{ status_pill(h.status) }}</td>
+      <td><small>{{ h.branch.code if h.branch else "—" }}</small></td>
+      <td><small>
+        {% if h.suspended_until %}
+          Until {{ h.suspended_until.isoformat() }}
+          {% if h.suspended_reason %}<br><em>{{ h.suspended_reason }}</em>{% endif %}
+        {% else %}
+          —
+        {% endif %}
+      </small></td>
+      <td><small>{{ h.expires_at.strftime("%Y-%m-%d") if h.expires_at else "—" }}</small></td>
+    </tr>
+    {% endfor %}
+  </tbody>
+</table>
+
+{% if has_prev or has_next %}
+<nav style="display:flex; justify-content:space-between; align-items:center; margin-top:1rem">
+  {% if has_prev %}
+    <a href="/ui/admin/holds?{{ filters_qs + ('&' if filters_qs else '') }}page={{ page - 1 }}" role="button" class="secondary outline">← Previous</a>
+  {% else %}<span></span>{% endif %}
+  <small>Page {{ page }}</small>
+  {% if has_next %}
+    <a href="/ui/admin/holds?{{ filters_qs + ('&' if filters_qs else '') }}page={{ page + 1 }}" role="button" class="secondary outline">Next →</a>
+  {% else %}<span></span>{% endif %}
+</nav>
+{% endif %}
+
+{% else %}
+<p><em>No holds match these filters.</em></p>
+{% endif %}
+
+{% endblock %}

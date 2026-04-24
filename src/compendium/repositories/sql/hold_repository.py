@@ -1,12 +1,12 @@
 from __future__ import annotations
 
-from datetime import date, datetime
+from datetime import date, datetime, timedelta, timezone
 
-from sqlalchemy import or_
-from sqlalchemy.orm import Session
+from sqlalchemy import and_, or_
+from sqlalchemy.orm import Session, joinedload
 
 from compendium.domain.enums import HoldStatus
-from compendium.domain.models import Hold
+from compendium.domain.models import Hold, Patron, Work
 
 _TERMINAL = [HoldStatus.FULFILLED.value, HoldStatus.CANCELLED.value, HoldStatus.EXPIRED.value]
 
@@ -113,3 +113,125 @@ class SqlHoldRepository:
     def update(self, hold: Hold) -> Hold:
         self._s.flush()
         return hold
+
+    # ------------------------------------------------------------------
+    # Librarian list views (admin holds page, work-detail queue block)
+    # ------------------------------------------------------------------
+
+    def _active_filter(
+        self,
+        *,
+        status: str | None,
+        branch_id: int | None,
+        work_id: int | None,
+        patron_id: int | None,
+        query: str | None,
+        older_than_days: int | None,
+    ):
+        q = self._s.query(Hold).filter(Hold.status.not_in(_TERMINAL))
+        if status:
+            q = q.filter(Hold.status == status)
+        if branch_id is not None:
+            q = q.filter(Hold.branch_id == branch_id)
+        if work_id is not None:
+            q = q.filter(Hold.work_id == work_id)
+        if patron_id is not None:
+            q = q.filter(Hold.patron_id == patron_id)
+        if older_than_days is not None:
+            cutoff = datetime.now(timezone.utc) - timedelta(days=older_than_days)
+            q = q.filter(Hold.placed_at < cutoff)
+        if query:
+            like = f"%{query}%"
+            q = (
+                q.join(Patron, Hold.patron_id == Patron.id)
+                .join(Work, Hold.work_id == Work.id)
+                .filter(
+                    or_(
+                        Patron.full_name.ilike(like),
+                        Patron.library_card_number.ilike(like),
+                        Work.title.ilike(like),
+                    )
+                )
+            )
+        return q
+
+    def list_active(
+        self,
+        *,
+        status: str | None = None,
+        branch_id: int | None = None,
+        work_id: int | None = None,
+        patron_id: int | None = None,
+        query: str | None = None,
+        older_than_days: int | None = None,
+        limit: int = 50,
+        offset: int = 0,
+    ) -> list[Hold]:
+        q = self._active_filter(
+            status=status,
+            branch_id=branch_id,
+            work_id=work_id,
+            patron_id=patron_id,
+            query=query,
+            older_than_days=older_than_days,
+        ).options(
+            joinedload(Hold.patron),
+            joinedload(Hold.work),
+            joinedload(Hold.branch),
+        )
+        return (
+            q.order_by(Hold.placed_at.asc(), Hold.id.asc())
+            .limit(limit)
+            .offset(offset)
+            .all()
+        )
+
+    def count_active(
+        self,
+        *,
+        status: str | None = None,
+        branch_id: int | None = None,
+        work_id: int | None = None,
+        patron_id: int | None = None,
+        query: str | None = None,
+        older_than_days: int | None = None,
+    ) -> int:
+        return self._active_filter(
+            status=status,
+            branch_id=branch_id,
+            work_id=work_id,
+            patron_id=patron_id,
+            query=query,
+            older_than_days=older_than_days,
+        ).count()
+
+    def queue_for_work(self, work_id: int) -> list[Hold]:
+        """All active holds on a work, ordered by placed_at. Eager-loads
+        patron for template rendering."""
+        return (
+            self._s.query(Hold)
+            .options(joinedload(Hold.patron))
+            .filter(Hold.work_id == work_id, Hold.status.not_in(_TERMINAL))
+            .order_by(Hold.placed_at.asc(), Hold.id.asc())
+            .all()
+        )
+
+    def queue_position(self, hold_id: int) -> int | None:
+        """1-indexed position of this hold in its work's queue, or None if
+        the hold is in a terminal state. AVAILABLE holds count toward the
+        queue (they're ahead of all WAITING holds on the same work)."""
+        hold = self.get(hold_id)
+        if hold is None or hold.status in _TERMINAL:
+            return None
+        return (
+            self._s.query(Hold)
+            .filter(
+                Hold.work_id == hold.work_id,
+                Hold.status.not_in(_TERMINAL),
+                or_(
+                    Hold.placed_at < hold.placed_at,
+                    and_(Hold.placed_at == hold.placed_at, Hold.id <= hold.id),
+                ),
+            )
+            .count()
+        )

@@ -286,6 +286,58 @@ class HoldService:
             resumed.append(hold)
         return resumed
 
+    # ------------------------------------------------------------------
+    # Librarian list views
+    # ------------------------------------------------------------------
+
+    def list_active(
+        self,
+        *,
+        status: str | None = None,
+        branch_id: int | None = None,
+        work_id: int | None = None,
+        patron_id: int | None = None,
+        query: str | None = None,
+        older_than_days: int | None = None,
+        limit: int = 50,
+        offset: int = 0,
+    ) -> list[Hold]:
+        return self._holds.list_active(
+            status=status,
+            branch_id=branch_id,
+            work_id=work_id,
+            patron_id=patron_id,
+            query=query,
+            older_than_days=older_than_days,
+            limit=limit,
+            offset=offset,
+        )
+
+    def count_active(
+        self,
+        *,
+        status: str | None = None,
+        branch_id: int | None = None,
+        work_id: int | None = None,
+        patron_id: int | None = None,
+        query: str | None = None,
+        older_than_days: int | None = None,
+    ) -> int:
+        return self._holds.count_active(
+            status=status,
+            branch_id=branch_id,
+            work_id=work_id,
+            patron_id=patron_id,
+            query=query,
+            older_than_days=older_than_days,
+        )
+
+    def queue_for_work(self, work_id: int) -> list[Hold]:
+        return self._holds.queue_for_work(work_id)
+
+    def queue_position(self, hold_id: int) -> int | None:
+        return self._holds.queue_position(hold_id)
+
     def expire_holds(self) -> int:
         holds = self._holds.get_expired_waiting(datetime.now(timezone.utc))
         for hold in holds:

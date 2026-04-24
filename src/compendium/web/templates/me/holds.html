@@ -15,7 +15,7 @@
 {% else %}
 <table>
   <thead>
-    <tr><th>Title</th><th>Status</th><th>Expires</th><th>Action</th></tr>
+    <tr><th>Title</th><th>Status</th><th>Queue</th><th>Expires</th><th>Action</th></tr>
   </thead>
   <tbody>
     {% for hold in holds %}
@@ -27,6 +27,12 @@
           <br><small><em>Suspended until {{ hold.suspended_until.isoformat() }}</em></small>
           {% if hold.suspended_reason %}<br><small>{{ hold.suspended_reason }}</small>{% endif %}
         {% endif %}
+      </td>
+      <td>
+        {% set pos = queue_positions.get(hold.id) %}
+        {% if pos %}
+          #{{ pos }}
+        {% else %}—{% endif %}
       </td>
       <td>{{ hold.expires_at.strftime("%Y-%m-%d") if hold.expires_at else "—" }}</td>
       <td style="display:flex; gap:0.5rem; flex-wrap:wrap">

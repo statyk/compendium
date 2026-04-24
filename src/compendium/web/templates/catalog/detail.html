@@ -140,6 +140,34 @@
   {% endif %}
 {% endif %}
 
+{% if has_permission(user, 'hold.view.any') %}
+<hr>
+<h3>Hold queue</h3>
+{% if queue %}
+<table>
+  <thead>
+    <tr><th>#</th><th>Patron</th><th>Placed</th><th>Status</th><th>Suspended</th></tr>
+  </thead>
+  <tbody>
+    {% for h in queue %}
+    <tr>
+      <td>{{ loop.index }}</td>
+      <td>
+        <a href="/ui/patrons/{{ h.patron.library_card_number }}">{{ h.patron.full_name }}</a>
+        <br><small><code>{{ h.patron.library_card_number }}</code></small>
+      </td>
+      <td><small>{{ h.placed_at.strftime("%Y-%m-%d") }}</small></td>
+      <td>{{ status_pill(h.status) }}</td>
+      <td><small>{% if h.suspended_until %}Until {{ h.suspended_until.isoformat() }}{% else %}—{% endif %}</small></td>
+    </tr>
+    {% endfor %}
+  </tbody>
+</table>
+{% else %}
+<p><em>No active holds.</em></p>
+{% endif %}
+{% endif %}
+
 {% if work.external_ids and work.external_ids.get('tmdb') %}
 <hr>
 <p style="font-size:0.8rem; color:var(--pico-muted-color)">

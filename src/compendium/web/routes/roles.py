@@ -25,7 +25,7 @@ _PERM = "role.manage"
 PERMISSION_GROUPS = [
     ("Catalog", ["work.view", "work.edit", "item.view", "item.create", "item.edit", "item.delete", "catalog.import"]),
     ("Loans", ["loan.checkout", "loan.checkin", "loan.renew.any", "loan.renew.self", "loan.view.self", "loan.claim.self"]),
-    ("Holds", ["hold.place.self", "hold.place.any", "hold.view.self"]),
+    ("Holds", ["hold.place.self", "hold.place.any", "hold.view.self", "hold.view.any"]),
     ("Fines", ["fine.manage", "fine.view.self"]),
     ("Notifications", ["notification.manage"]),
     ("Reports", ["report.view"]),

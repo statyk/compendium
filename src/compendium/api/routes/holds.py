@@ -1,6 +1,6 @@
 from datetime import date
 
-from fastapi import APIRouter, Depends, HTTPException, Path
+from fastapi import APIRouter, Depends, HTTPException, Path, Query
 from pydantic import BaseModel
 from sqlalchemy.orm import Session
 
@@ -65,15 +65,61 @@ def place_hold(
 
 @router.get("/", response_model=list[HoldResponse])
 def list_holds(
-    card_number: str,
+    card_number: str | None = Query(default=None),
+    status: str | None = Query(default=None),
+    branch: str | None = Query(default=None, description="Branch code"),
+    work_id: int | None = Query(default=None),
+    q: str | None = Query(default=None, description="Search patron or work title"),
+    older_than_days: int | None = Query(default=None, ge=1),
+    limit: int = Query(default=50, ge=1, le=500),
+    offset: int = Query(default=0, ge=0),
     session: Session = Depends(get_session),
     user: AppUser = Depends(require_permission("hold.view.self")),
 ) -> list[HoldResponse]:
-    _require_self_or_any(user, session, card_number, "hold.view.any")
-    patron = SqlPatronRepository(session).get_by_card_number(card_number)
-    if patron is None:
-        raise HTTPException(status_code=404, detail=f"No patron with card '{card_number}'")
-    holds = SqlHoldRepository(session).get_active_for_patron(patron.id)
+    """List holds.
+
+    - With ``card_number``: returns that patron's active holds. Callers who
+      don't hold ``hold.view.any`` may only query their own card.
+    - Without ``card_number``: system-wide list with filters. Requires
+      ``hold.view.any``.
+    """
+    if card_number is not None:
+        _require_self_or_any(user, session, card_number, "hold.view.any")
+        patron = SqlPatronRepository(session).get_by_card_number(card_number)
+        if patron is None:
+            raise HTTPException(
+                status_code=404, detail=f"No patron with card '{card_number}'"
+            )
+        holds = SqlHoldRepository(session).get_active_for_patron(patron.id)
+        return [HoldResponse.model_validate(h) for h in holds]
+
+    if not has_permission(user.role.permissions, "hold.view.any"):
+        raise HTTPException(status_code=403, detail="Forbidden")
+
+    branch_id: int | None = None
+    if branch:
+        b = SqlBranchRepository(session).get_by_code(branch)
+        if b is not None:
+            branch_id = b.id
+    holds = SqlHoldRepository(session).list_active(
+        status=status,
+        branch_id=branch_id,
+        work_id=work_id,
+        query=q,
+        older_than_days=older_than_days,
+        limit=limit,
+        offset=offset,
+    )
+    return [HoldResponse.model_validate(h) for h in holds]
+
+
+@router.get("/queue/{work_id}", response_model=list[HoldResponse])
+def work_queue(
+    work_id: int = Path(),
+    session: Session = Depends(get_session),
+    user: AppUser = Depends(require_permission("hold.view.any")),
+) -> list[HoldResponse]:
+    holds = SqlHoldRepository(session).queue_for_work(work_id)
     return [HoldResponse.model_validate(h) for h in holds]
 
 

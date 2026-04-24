@@ -192,6 +192,30 @@ class HoldRepository(Protocol):
     def get_active_for_patron_work(self, patron_id: int, work_id: int) -> Hold | None: ...
     def get_expired_waiting(self, before: datetime) -> list[Hold]: ...
     def list_suspended_expiring_on_or_before(self, cutoff: "date") -> list[Hold]: ...
+    def list_active(
+        self,
+        *,
+        status: str | None = None,
+        branch_id: int | None = None,
+        work_id: int | None = None,
+        patron_id: int | None = None,
+        query: str | None = None,
+        older_than_days: int | None = None,
+        limit: int = 50,
+        offset: int = 0,
+    ) -> list[Hold]: ...
+    def count_active(
+        self,
+        *,
+        status: str | None = None,
+        branch_id: int | None = None,
+        work_id: int | None = None,
+        patron_id: int | None = None,
+        query: str | None = None,
+        older_than_days: int | None = None,
+    ) -> int: ...
+    def queue_for_work(self, work_id: int) -> list[Hold]: ...
+    def queue_position(self, hold_id: int) -> int | None: ...
     def update(self, hold: Hold) -> Hold: ...
 
 
