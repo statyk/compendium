@@ -1542,6 +1542,7 @@ class TestDbInitCli:
         monkeypatch.setenv("COMPENDIUM_JWT_SECRET_KEY", "a" * 48)
         from compendium.db import engine as _engine
         _engine.get_settings.cache_clear()
+        _engine.get_engine.cache_clear()
         try:
             r = CliRunner().invoke(app, ["db", "init"])
             assert r.exit_code == 0, r.output
@@ -1551,6 +1552,7 @@ class TestDbInitCli:
             assert r.exit_code == 0
         finally:
             _engine.get_settings.cache_clear()
+            _engine.get_engine.cache_clear()
 
     def test_db_upgrade(self, tmp_path, monkeypatch):
         db_file = tmp_path / "cli_upgrade.db"
@@ -1558,12 +1560,14 @@ class TestDbInitCli:
         monkeypatch.setenv("COMPENDIUM_JWT_SECRET_KEY", "a" * 48)
         from compendium.db import engine as _engine
         _engine.get_settings.cache_clear()
+        _engine.get_engine.cache_clear()
         try:
             r = CliRunner().invoke(app, ["db", "upgrade"])
             assert r.exit_code == 0
             assert "Migrations applied" in r.output
         finally:
             _engine.get_settings.cache_clear()
+            _engine.get_engine.cache_clear()
 
 
 # ──────────────────────────────────────────────────────────────────────────────

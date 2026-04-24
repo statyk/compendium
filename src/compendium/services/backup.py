@@ -338,6 +338,11 @@ class BackupService:
                         shutil.rmtree(dst)
                     shutil.copytree(src, dst)
 
+        # Restored site_setting rows must not be masked by a stale cache.
+        from compendium.services.site_settings import invalidate_cache
+
+        invalidate_cache()
+
         return manifest
 
     def _insert_all(self, data_dir: Path, engine: Engine) -> None:

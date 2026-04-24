@@ -1,6 +1,6 @@
 {% extends "base.html" %}
 {% from "_macros.html" import status_pill %}
-{% block title %}My Holds — Compendium{% endblock %}
+{% block title %}My Holds — {{ library_name() }}{% endblock %}
 {% block content %}
 <h2>My Holds</h2>
 {% if error %}<p class="error-banner">{{ error }}</p>{% endif %}

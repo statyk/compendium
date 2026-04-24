@@ -36,6 +36,7 @@ from compendium.repositories.base import (
 )
 from compendium.services.audit import AuditAction, AuditEntityType, AuditService
 from compendium.services.notifications.smtp import SMTPSender
+from compendium.services.site_settings import get_site_setting
 
 _log = logging.getLogger("compendium.notifications")
 
@@ -114,7 +115,7 @@ class NotificationService:
             "work_title": work.title if work else "(unknown work)",
             "branch_name": branch.name if branch else "the library",
             "expires_at": hold.expires_at,
-            "library_name": self._settings.smtp_from_name,
+            "library_name": get_site_setting("library_name"),
         }
         return self._insert(
             template=NotificationTemplate.HOLD_READY,
@@ -148,7 +149,7 @@ class NotificationService:
             "item_barcode": item.barcode if item else "",
             "due_at": loan.due_at,
             "days_before": days_before,
-            "library_name": self._settings.smtp_from_name,
+            "library_name": get_site_setting("library_name"),
         }
         return self._insert(
             template=NotificationTemplate.DUE_SOON,
@@ -182,7 +183,7 @@ class NotificationService:
             "due_at": loan.due_at,
             "days_late": days_late,
             "tier": tier,
-            "library_name": self._settings.smtp_from_name,
+            "library_name": get_site_setting("library_name"),
         }
         return self._insert(
             template=NotificationTemplate.OVERDUE,

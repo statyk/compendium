@@ -9,7 +9,6 @@ from fastapi.responses import Response
 from sqlalchemy.orm import Session
 
 from compendium.api.deps import require_permission
-from compendium.db.engine import get_settings
 from compendium.db.session import get_session
 from compendium.domain.models import AppUser, Item, MediaType, Patron, PatronCategory, Work
 from compendium.services.labels import (
@@ -19,6 +18,7 @@ from compendium.services.labels import (
     generate_item_labels,
     generate_patron_cards,
 )
+from compendium.services.site_settings import get_site_setting
 
 router = APIRouter()
 
@@ -167,7 +167,7 @@ def patron_cards(
             rows,
             template_key=template,
             format=format,
-            library_name=get_settings().library_name,
+            library_name=get_site_setting("library_name"),
             start_label=start_label,
         )
     except ValueError as exc:

@@ -9,6 +9,7 @@ from fastapi.responses import Response
 from sqlalchemy.orm import Session
 
 from compendium.db.engine import get_settings
+from compendium.services.site_settings import get_site_setting
 from compendium.db.session import get_session
 from compendium.domain.models import AppUser, Item, MediaType, Patron, PatronCategory, Work
 from compendium.services.labels import (
@@ -299,7 +300,7 @@ def patron_cards_post(
             rows,
             template_key=template,
             format=format,
-            library_name=get_settings().library_name,
+            library_name=get_site_setting("library_name"),
             start_label=max(0, int(start_label or 0)),
         )
     except ValueError as exc:

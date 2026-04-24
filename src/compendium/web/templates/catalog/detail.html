@@ -1,6 +1,6 @@
 {% extends "base.html" %}
 {% from "_macros.html" import status_pill, media_pill, cover_url, loan_pill %}
-{% block title %}{{ work.title }} — Compendium{% endblock %}
+{% block title %}{{ work.title }} — {{ library_name() }}{% endblock %}
 {% block content %}
 <nav aria-label="breadcrumb">
   <ul>

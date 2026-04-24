@@ -4,7 +4,7 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>{% block title %}Compendium{% endblock %}</title>
+  <title>{% block title %}{{ library_name() }}{% endblock %}</title>
   <link rel="icon" type="image/svg+xml" href="/ui/static/favicon.svg">
   <script>
     // Apply per-browser theme override before first paint to avoid FOUC.
@@ -127,7 +127,7 @@
               <rect x="8.5" y="8" width="7" height="2" rx="0.5" fill="#f4e5c3"/>
               <circle cx="12" cy="15" r="1.4" fill="#d4a24a"/>
             </svg>
-            Compendium
+            {{ library_name() }}
           </a>
         </li>
       </ul>
@@ -217,7 +217,7 @@
   </main>
 
   <footer class="container">
-    <small>Compendium &mdash; library catalog system</small>
+    <small>{{ library_name() }} &mdash; library catalog system</small>
   </footer>
   <script>
     (function () {

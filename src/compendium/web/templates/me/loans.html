@@ -1,5 +1,5 @@
 {% extends "base.html" %}
-{% block title %}My Loans — Compendium{% endblock %}
+{% block title %}My Loans — {{ library_name() }}{% endblock %}
 {% block content %}
 <h2>My Loans</h2>
 {% if not loans %}

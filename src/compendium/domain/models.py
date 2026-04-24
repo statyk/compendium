@@ -370,3 +370,18 @@ class AuditLog(Base):
     details: Mapped[dict[str, Any] | None] = mapped_column(JSON)
 
     actor: Mapped[AppUser | None] = relationship()
+
+
+class SiteSetting(Base):
+    __tablename__ = "site_setting"
+
+    key: Mapped[str] = mapped_column(String(128), primary_key=True)
+    value: Mapped[str] = mapped_column(Text, nullable=False)
+    updated_at: Mapped[datetime] = mapped_column(
+        UtcDateTime, server_default=func.now(), onupdate=func.now()
+    )
+    updated_by_id: Mapped[int | None] = mapped_column(
+        ForeignKey("app_user.id", ondelete="SET NULL"), nullable=True
+    )
+
+    updated_by: Mapped[AppUser | None] = relationship()

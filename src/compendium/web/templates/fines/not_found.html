@@ -1,5 +1,5 @@
 {% extends "base.html" %}
-{% block title %}Not found — Compendium{% endblock %}
+{% block title %}Not found — {{ library_name() }}{% endblock %}
 {% block content %}
 <p class="error-banner">No record found for '<code>{{ card_number }}</code>'.</p>
 <p><a href="/ui/patrons">Back to patrons</a></p>

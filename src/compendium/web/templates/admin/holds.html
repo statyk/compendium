@@ -1,6 +1,6 @@
 {% extends "base.html" %}
 {% from "_macros.html" import status_pill %}
-{% block title %}Holds — Compendium{% endblock %}
+{% block title %}Holds — {{ library_name() }}{% endblock %}
 {% block content %}
 <h2>Holds</h2>
 <p><small>All active holds across the library. Filter by status, branch, patron or work. Suspended holds keep their queue position; the pickup shelf is the "Pickup shelf" status filter.</small></p>

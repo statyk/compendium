@@ -7,7 +7,6 @@ from pathlib import Path
 
 import typer
 
-from compendium.db.engine import get_settings
 from compendium.db.session import session_scope
 from compendium.services.labels import (
     ItemLabelRow,
@@ -16,6 +15,7 @@ from compendium.services.labels import (
     generate_item_labels,
     generate_patron_cards,
 )
+from compendium.services.site_settings import get_site_setting
 
 app = typer.Typer(help="Generate printable PDFs for item labels and patron cards.")
 
@@ -183,7 +183,7 @@ def patrons_cards(
             rows,
             template_key=template,
             format=format,
-            library_name=get_settings().library_name,
+            library_name=get_site_setting("library_name"),
             start_label=start_label,
         )
     except ValueError as exc:

@@ -1,6 +1,6 @@
 {% extends "base.html" %}
 {% from "_macros.html" import status_pill, loan_pill %}
-{% block title %}Item {{ item.barcode }} — Compendium{% endblock %}
+{% block title %}Item {{ item.barcode }} — {{ library_name() }}{% endblock %}
 {% block content %}
 <nav aria-label="breadcrumb">
   <ul>

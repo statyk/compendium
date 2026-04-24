@@ -1,5 +1,5 @@
 {% extends "base.html" %}
-{% block title %}My Fines — Compendium{% endblock %}
+{% block title %}My Fines — {{ library_name() }}{% endblock %}
 {% block content %}
 <h2>My Fines</h2>
 <p>Outstanding balance: <strong>{{ outstanding_cents | currency }}</strong></p>
