@@ -1432,3 +1432,98 @@ class TestDbInitCli:
             assert "Migrations applied" in r.output
         finally:
             _engine.get_settings.cache_clear()
+
+
+# ──────────────────────────────────────────────────────────────────────────────
+# backup / restore — end-to-end CLI roundtrip against fresh SQLite files
+# ──────────────────────────────────────────────────────────────────────────────
+
+
+class TestBackupCli:
+    def test_backup_and_restore_roundtrip(self, tmp_path, monkeypatch):
+        src = tmp_path / "src.db"
+        monkeypatch.setenv("COMPENDIUM_DATABASE_URL", f"sqlite:///{src}")
+        monkeypatch.setenv("COMPENDIUM_JWT_SECRET_KEY", "a" * 48)
+        from compendium.db import engine as _engine
+        _engine.get_settings.cache_clear()
+        _engine.get_engine.cache_clear()
+        try:
+            assert CliRunner().invoke(app, ["db", "init"]).exit_code == 0
+            assert CliRunner().invoke(
+                app, ["user", "add", "--username", "alice",
+                      "--password", "secret1234", "--role", "Librarian"]
+            ).exit_code == 0
+
+            archive = tmp_path / "backup.tar.gz"
+            r = CliRunner().invoke(app, ["backup", "--output", str(archive)])
+            assert r.exit_code == 0, r.output
+            assert archive.exists()
+            assert "rows total" in r.output
+
+            # Restore into a fresh empty DB
+            dst = tmp_path / "dst.db"
+            monkeypatch.setenv("COMPENDIUM_DATABASE_URL", f"sqlite:///{dst}")
+            _engine.get_settings.cache_clear()
+            _engine.get_engine.cache_clear()
+            r = CliRunner().invoke(
+                app, ["restore", str(archive), "--no-covers"]
+            )
+            assert r.exit_code == 0, r.output
+            assert "Restored" in r.output
+
+            # Verify alice landed in the destination
+            r = CliRunner().invoke(app, ["user", "list"])
+            assert "alice" in r.output
+        finally:
+            _engine.get_settings.cache_clear()
+            _engine.get_engine.cache_clear()
+
+    def test_restore_refuses_populated_db_without_force(self, tmp_path, monkeypatch):
+        db = tmp_path / "live.db"
+        monkeypatch.setenv("COMPENDIUM_DATABASE_URL", f"sqlite:///{db}")
+        monkeypatch.setenv("COMPENDIUM_JWT_SECRET_KEY", "a" * 48)
+        from compendium.db import engine as _engine
+        _engine.get_settings.cache_clear()
+        _engine.get_engine.cache_clear()
+        try:
+            assert CliRunner().invoke(app, ["db", "init"]).exit_code == 0
+            assert CliRunner().invoke(
+                app, ["user", "add", "--username", "alice",
+                      "--password", "secret1234", "--role", "Librarian"]
+            ).exit_code == 0
+            archive = tmp_path / "backup.tar.gz"
+            assert CliRunner().invoke(
+                app, ["backup", "--output", str(archive)]
+            ).exit_code == 0
+
+            # Restoring over the existing DB (which has alice) requires --force
+            r = CliRunner().invoke(app, ["restore", str(archive), "--no-covers"])
+            assert r.exit_code == 1
+            assert "--force" in r.output
+        finally:
+            _engine.get_settings.cache_clear()
+            _engine.get_engine.cache_clear()
+
+    def test_backup_no_audit_flag_honored(self, tmp_path, monkeypatch):
+        src = tmp_path / "src.db"
+        monkeypatch.setenv("COMPENDIUM_DATABASE_URL", f"sqlite:///{src}")
+        monkeypatch.setenv("COMPENDIUM_JWT_SECRET_KEY", "a" * 48)
+        from compendium.db import engine as _engine
+        _engine.get_settings.cache_clear()
+        _engine.get_engine.cache_clear()
+        try:
+            assert CliRunner().invoke(app, ["db", "init"]).exit_code == 0
+            archive = tmp_path / "backup.tar.gz"
+            r = CliRunner().invoke(
+                app, ["backup", "--output", str(archive), "--no-audit"]
+            )
+            assert r.exit_code == 0, r.output
+            import json, tarfile
+            with tarfile.open(archive, "r:gz") as tar:
+                with tar.extractfile("meta.json") as f:
+                    manifest = json.loads(f.read().decode())
+            assert manifest["include_audit"] is False
+            assert manifest["tables"]["audit_log"] == 0
+        finally:
+            _engine.get_settings.cache_clear()
+            _engine.get_engine.cache_clear()

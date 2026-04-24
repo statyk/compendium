@@ -23,3 +23,6 @@
 # Optional: monthly retention prune for old audit rows + notifications.
 # 0 3 1 * * cd /path/to/compendium && uv run compendium maintenance prune-audit-log --older-than-days 365 >> /var/log/compendium-maintenance.log 2>&1
 # 30 3 1 * * cd /path/to/compendium && uv run compendium maintenance prune-notifications --older-than-days 180 >> /var/log/compendium-maintenance.log 2>&1
+
+# Nightly backup. Rotate / sync to off-machine storage separately.
+15 2 * * * cd /path/to/compendium && uv run compendium backup --output "/var/backups/compendium/$(date +\%Y-\%m-\%d).tar.gz" >> /var/log/compendium-maintenance.log 2>&1

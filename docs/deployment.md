@@ -267,3 +267,69 @@ uv sync
 compendium db init   # applies any new Alembic migrations
 compendium serve
 ```
+
+---
+
+## Backup and restore
+
+Compendium ships portable JSONL dumps that round-trip across SQLite and
+Postgres. One backup format works for disaster recovery *and* for migrating
+between backends.
+
+### Taking a backup
+
+```bash
+compendium backup --output /var/backups/compendium/2026-04-24.tar.gz
+```
+
+The tarball contains a `meta.json` manifest, one JSONL file per table under
+`data/`, and (by default) the on-disk cover image cache under `covers/`.
+
+Options:
+
+- `--no-covers` — skip the cover cache (covers are fetched on demand, so this
+  is safe; use it if the cache is large and you keep backups off-machine).
+- `--no-audit` — drop the `audit_log` table (slimmer file; lose forensic
+  history).
+
+Nightly cron entry:
+
+```
+15 2 * * *  compendium backup --output "/var/backups/compendium/$(date +\%Y-\%m-\%d).tar.gz"
+```
+
+### Restoring
+
+```bash
+compendium restore /var/backups/compendium/2026-04-24.tar.gz
+```
+
+Restore refuses if the target database already has real data (rows in any
+non-seed table). Pass `--force` to wipe and replace; `--yes` skips the
+confirmation prompt for scripted use.
+
+Restore is **lenient** by default: if the backup was taken at an older
+Alembic revision than the currently-installed Compendium, the restore
+automatically migrates the target to the backup's revision, inserts the
+rows, then replays migrations forward to the current head. You can safely
+restore a months-old backup into an upgraded deployment.
+
+Restore will refuse when the backup's revision isn't known to the current
+code — upgrade Compendium to a version that includes that revision before
+restoring.
+
+### Migrating backends
+
+The same format restores into a different backend:
+
+```bash
+# On the SQLite source
+compendium backup --output compendium-pre-migrate.tar.gz
+
+# Install Postgres, create database (see "PostgreSQL setup" above)
+export COMPENDIUM_DATABASE_URL=postgresql://compendium:...@localhost/compendium
+compendium restore compendium-pre-migrate.tar.gz
+```
+
+The reverse (Postgres → SQLite) works identically, subject to the scale
+limits documented in "Database backends."

@@ -4,6 +4,7 @@ import typer
 
 from compendium.cli.commands import (
     audit,
+    backup,
     branch,
     bulk_ops,
     creator,
@@ -48,6 +49,9 @@ app.add_typer(bulk_ops.export_app, name="export")
 app.add_typer(fine.app, name="fine")
 app.add_typer(reports.app, name="reports")
 app.add_typer(labels.app, name="labels")
+
+app.command("backup")(backup.backup_command)
+app.command("restore")(backup.restore_command)
 
 
 @app.command("serve")
