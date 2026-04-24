@@ -262,6 +262,8 @@ def patron_unlink_user(
 def patron_loans(
     card_number: str,
     request: Request,
+    status: str = Query(default="active"),
+    page: int = Query(default=1, ge=1),
     user: AppUser = Depends(require_web_permission(_PERM)),
     session: Session = Depends(get_session),
 ):
@@ -273,11 +275,31 @@ def patron_loans(
             {"request": request, "user": user, "message": f"Patron '{card_number}' not found"},
             status_code=404,
         )
-    loans = SqlLoanRepository(session).get_active_for_patron(patron.id)
+    if status not in ("active", "returned", "all"):
+        status = "active"
+    page_size = 50
+    offset = (page - 1) * page_size
+    loan_repo = SqlLoanRepository(session)
+    loans = loan_repo.list_for_patron(
+        patron.id, status=status, limit=page_size, offset=offset
+    )
+    total = loan_repo.count_for_patron(patron.id, status=status)
+    has_prev = page > 1
+    has_next = offset + len(loans) < total
     return _render(
         "patrons/loans.html",
         request,
-        {"request": request, "user": user, "patron": patron, "loans": loans},
+        {
+            "request": request,
+            "user": user,
+            "patron": patron,
+            "loans": loans,
+            "status": status,
+            "total": total,
+            "page": page,
+            "has_prev": has_prev,
+            "has_next": has_next,
+        },
     )
 
 

@@ -10,9 +10,17 @@
 </nav>
 
 <hgroup>
-  <h2>Active loans</h2>
+  <h2>{{ status | title }} loans</h2>
   <p>{{ patron.full_name }} — <code>{{ patron.library_card_number }}</code></p>
 </hgroup>
+
+<nav style="margin-bottom:1rem">
+  <a href="/ui/patrons/{{ patron.library_card_number }}/loans?status=active" role="button" {% if status != 'active' %}class="outline"{% endif %}>Active</a>
+  <a href="/ui/patrons/{{ patron.library_card_number }}/loans?status=returned" role="button" {% if status != 'returned' %}class="outline"{% endif %}>Returned</a>
+  <a href="/ui/patrons/{{ patron.library_card_number }}/loans?status=all" role="button" {% if status != 'all' %}class="outline"{% endif %}>All</a>
+</nav>
+
+<p><strong>{{ total }}</strong> {{ status }} loan{{ '' if total == 1 else 's' }}</p>
 
 {% if loans %}
 <table>
@@ -23,6 +31,7 @@
       <th>Branch</th>
       <th>Checked out</th>
       <th>Due</th>
+      {% if status != 'active' %}<th>Returned</th>{% endif %}
     </tr>
   </thead>
   <tbody>
@@ -33,11 +42,27 @@
       <td>{{ loan.item.branch.name if loan.item.branch else "—" }}</td>
       <td>{{ loan.checked_out_at.strftime("%Y-%m-%d") if loan.checked_out_at else "—" }}</td>
       <td>{{ loan.due_at.strftime("%Y-%m-%d") if loan.due_at else "—" }}</td>
+      {% if status != 'active' %}
+      <td>{{ loan.returned_at.strftime("%Y-%m-%d") if loan.returned_at else "—" }}</td>
+      {% endif %}
     </tr>
     {% endfor %}
   </tbody>
 </table>
+
+{% if has_prev or has_next %}
+<nav style="display:flex; justify-content:space-between; align-items:center; margin-top:1rem">
+  {% if has_prev %}
+    <a href="/ui/patrons/{{ patron.library_card_number }}/loans?status={{ status }}&page={{ page - 1 }}" role="button" class="secondary outline">← Previous</a>
+  {% else %}<span></span>{% endif %}
+  <small>Page {{ page }}</small>
+  {% if has_next %}
+    <a href="/ui/patrons/{{ patron.library_card_number }}/loans?status={{ status }}&page={{ page + 1 }}" role="button" class="secondary outline">Next →</a>
+  {% else %}<span></span>{% endif %}
+</nav>
+{% endif %}
+
 {% else %}
-  <p><em>No active loans.</em></p>
+  <p><em>No {{ status }} loans.</em></p>
 {% endif %}
 {% endblock %}

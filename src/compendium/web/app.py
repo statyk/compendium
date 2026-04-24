@@ -6,6 +6,7 @@ from fastapi import APIRouter
 
 from compendium.web.deps import NoPatronAccountException, RequiresLoginException
 from compendium.web.routes import (
+    admin_circulation,
     admin_holds,
     audit,
     auth,
@@ -53,6 +54,7 @@ def create_web_router() -> APIRouter:
     router.include_router(kiosk.router)
     router.include_router(labels.router)
     router.include_router(admin_holds.router)
+    router.include_router(admin_circulation.router)
     return router
 
 

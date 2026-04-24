@@ -134,6 +134,93 @@ def active_loans(
             typer.echo(f"  {loan.item.work.title}  |  due {due}{overdue}")
 
 
+@app.command("list")
+def list_loans(
+    due: str | None = typer.Option(None, "--due", help="Filter: overdue / due_soon / on_time"),
+    branch: str | None = typer.Option(None, "--branch", help="Filter: branch code"),
+    query: str | None = typer.Option(None, "--query", "-q", help="Search patron / barcode / title"),
+    limit: int = typer.Option(100, "--limit"),
+) -> None:
+    """System-wide active loans (librarian view). For a single patron's loans use 'active --card X'."""
+    with session_scope() as session:
+        branch_id: int | None = None
+        if branch is not None:
+            b = SqlBranchRepository(session).get_by_code(branch)
+            if b is None:
+                typer.echo(f"No branch with code '{branch}'.", err=True)
+                raise typer.Exit(1)
+            branch_id = b.id
+        loans = SqlLoanRepository(session).list_active(
+            due=due, branch_id=branch_id, query=query, limit=limit
+        )
+        if not loans:
+            typer.echo("No matching loans.")
+            return
+        typer.echo(f"\n{len(loans)} active loan(s):")
+        for loan in loans:
+            due_str = loan.due_at.strftime("%Y-%m-%d")
+            typer.echo(
+                f"  loan={loan.id}  patron={loan.patron.library_card_number}  "
+                f"barcode={loan.item.barcode}  title={loan.item.work.title!r}  due={due_str}"
+            )
+
+
+@app.command("history")
+def patron_history(
+    card: str = typer.Option(..., "--card", help="Patron library card number"),
+    status: str = typer.Option("all", "--status", help="active / returned / all"),
+    limit: int = typer.Option(100, "--limit"),
+) -> None:
+    """Loan history for a patron (active, returned, or all)."""
+    if status not in ("active", "returned", "all"):
+        typer.echo("--status must be active, returned, or all.", err=True)
+        raise typer.Exit(1)
+    with session_scope() as session:
+        patron = SqlPatronRepository(session).get_by_card_number(card)
+        if patron is None:
+            typer.echo(f"No patron with card '{card}'.", err=True)
+            raise typer.Exit(1)
+        loans = SqlLoanRepository(session).list_for_patron(
+            patron.id, status=status, limit=limit
+        )
+        if not loans:
+            typer.echo(f"{patron.full_name} has no {status} loans.")
+            return
+        typer.echo(f"\n{len(loans)} {status} loan(s) for {patron.full_name}:")
+        for loan in loans:
+            out = loan.checked_out_at.strftime("%Y-%m-%d") if loan.checked_out_at else "—"
+            ret = loan.returned_at.strftime("%Y-%m-%d") if loan.returned_at else "open"
+            typer.echo(
+                f"  loan={loan.id}  barcode={loan.item.barcode}  "
+                f"title={loan.item.work.title!r}  out={out}  returned={ret}"
+            )
+
+
+@app.command("item-history")
+def item_history(
+    barcode: str = typer.Option(..., "--barcode", help="Item barcode"),
+    limit: int = typer.Option(25, "--limit"),
+) -> None:
+    """Loan history for a specific copy."""
+    with session_scope() as session:
+        item = SqlItemRepository(session).get_by_barcode(barcode)
+        if item is None:
+            typer.echo(f"No item with barcode '{barcode}'.", err=True)
+            raise typer.Exit(1)
+        loans = SqlLoanRepository(session).list_for_item(item.id, limit=limit)
+        if not loans:
+            typer.echo(f"Item {barcode} has no loan history.")
+            return
+        typer.echo(f"\n{len(loans)} loan(s) for item {barcode}:")
+        for loan in loans:
+            out = loan.checked_out_at.strftime("%Y-%m-%d") if loan.checked_out_at else "—"
+            ret = loan.returned_at.strftime("%Y-%m-%d") if loan.returned_at else "open"
+            typer.echo(
+                f"  loan={loan.id}  patron={loan.patron.library_card_number}  "
+                f"out={out}  returned={ret}  renewals={loan.renewal_count}"
+            )
+
+
 @app.command("declare-lost")
 def declare_lost(
     barcode: str = typer.Option(..., "--barcode", help="Item barcode"),

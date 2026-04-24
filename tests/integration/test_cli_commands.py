@@ -1244,6 +1244,61 @@ class TestHoldSuspendCli:
         assert "No suspended holds" in r.output
 
 
+class TestLoanVisibilityCli:
+    def _seed_loan(self, session):
+        from compendium.domain.models import Patron as _Patron
+        from compendium.repositories.sql.branch_repository import SqlBranchRepository
+        from compendium.repositories.sql.hold_repository import SqlHoldRepository
+        from compendium.repositories.sql.item_repository import SqlItemRepository
+        from compendium.repositories.sql.loan_policy_repository import (
+            SqlLoanPolicyRepository,
+        )
+        from compendium.repositories.sql.loan_repository import SqlLoanRepository
+        from compendium.repositories.sql.patron_repository import SqlPatronRepository
+        from compendium.services.circulation import CirculationService
+
+        work, item = _seed_work(session)
+        patron = _Patron(library_card_number="LVLIST", full_name="LoanViewer")
+        session.add(patron)
+        session.flush()
+        loan = CirculationService(
+            item_repo=SqlItemRepository(session),
+            loan_repo=SqlLoanRepository(session),
+            patron_repo=SqlPatronRepository(session),
+            branch_repo=SqlBranchRepository(session),
+            hold_repo=SqlHoldRepository(session),
+            policy_repo=SqlLoanPolicyRepository(session),
+        ).checkout(item.barcode, "LVLIST")
+        return work, item, patron, loan
+
+    def test_loan_list_system_wide(self, session):
+        _, item, _, loan = self._seed_loan(session)
+        r = _invoke(session, ["loan", "list"], "compendium.cli.commands.loan")
+        assert r.exit_code == 0, r.output
+        assert f"loan={loan.id}" in r.output
+        assert item.barcode in r.output
+
+    def test_loan_history_for_patron(self, session):
+        _, item, patron, _ = self._seed_loan(session)
+        r = _invoke(
+            session,
+            ["loan", "history", "--card", patron.library_card_number, "--status", "all"],
+            "compendium.cli.commands.loan",
+        )
+        assert r.exit_code == 0, r.output
+        assert item.barcode in r.output
+
+    def test_loan_item_history(self, session):
+        _, item, patron, _ = self._seed_loan(session)
+        r = _invoke(
+            session,
+            ["loan", "item-history", "--barcode", item.barcode],
+            "compendium.cli.commands.loan",
+        )
+        assert r.exit_code == 0, r.output
+        assert patron.library_card_number in r.output
+
+
 class TestHoldListVisibilityCli:
     def _seed_work_waiting_hold(self, session):
         from compendium.domain.models import Patron as _Patron

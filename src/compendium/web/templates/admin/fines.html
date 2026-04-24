@@ -1,0 +1,80 @@
+{% extends "base.html" %}
+{% block title %}Outstanding fines — Compendium{% endblock %}
+{% block content %}
+<h2>Outstanding fines</h2>
+<p><small>All unpaid fines across the library. Pay or waive individual fines from the patron's fines page.</small></p>
+
+<form method="get" action="/ui/admin/fines" style="display:flex; gap:0.75rem; flex-wrap:wrap; align-items:end; margin-bottom:1rem">
+  <label style="margin-bottom:0">
+    Search
+    <input type="text" name="q" value="{{ q }}" placeholder="Patron name or card" style="min-width:18rem">
+  </label>
+  <label style="margin-bottom:0">
+    Kind
+    <select name="kind">
+      {% for value, label in kind_options %}
+      <option value="{{ value }}" {% if kind == value %}selected{% endif %}>{{ label }}</option>
+      {% endfor %}
+    </select>
+  </label>
+  <button type="submit">Filter</button>
+  <a href="/ui/admin/fines" role="button" class="secondary outline">Reset</a>
+</form>
+
+<p>
+  <strong>{{ total }}</strong> fine{{ '' if total == 1 else 's' }} · total owed
+  <strong>{{ grand_total_cents | currency }}</strong>
+</p>
+
+{% if fines %}
+<table>
+  <thead>
+    <tr>
+      <th>Patron</th>
+      <th>Amount</th>
+      <th>Kind</th>
+      <th>Assessed</th>
+      <th>Item</th>
+      <th></th>
+    </tr>
+  </thead>
+  <tbody>
+    {% for fine in fines %}
+    <tr>
+      <td>
+        <a href="/ui/patrons/{{ fine.patron.library_card_number }}">{{ fine.patron.full_name }}</a>
+        <br><small><code>{{ fine.patron.library_card_number }}</code></small>
+      </td>
+      <td><strong>{{ fine.amount_cents | currency }}</strong></td>
+      <td><span class="pill pill-{{ fine.kind }}">{{ fine.kind }}</span></td>
+      <td><small>{{ fine.assessed_at.strftime("%Y-%m-%d") }}</small></td>
+      <td>
+        {% if fine.item %}
+          <a href="/ui/items/{{ fine.item.barcode }}"><code>{{ fine.item.barcode }}</code></a>
+        {% else %}—{% endif %}
+      </td>
+      <td>
+        <a href="/ui/patrons/{{ fine.patron.library_card_number }}/fines" role="button" class="outline" style="padding:0.2rem 0.6rem">Resolve</a>
+      </td>
+    </tr>
+    {% endfor %}
+  </tbody>
+</table>
+
+{% if has_prev or has_next %}
+<nav style="display:flex; justify-content:space-between; align-items:center; margin-top:1rem">
+  {% if has_prev %}
+    <a href="/ui/admin/fines?{{ filters_qs + ('&' if filters_qs else '') }}page={{ page - 1 }}" role="button" class="secondary outline">← Previous</a>
+  {% else %}<span></span>{% endif %}
+  <small>Page {{ page }}</small>
+  {% if has_next %}
+    <a href="/ui/admin/fines?{{ filters_qs + ('&' if filters_qs else '') }}page={{ page + 1 }}" role="button" class="secondary outline">Next →</a>
+  {% else %}<span></span>{% endif %}
+</nav>
+{% endif %}
+
+{% else %}
+<p><em>No outstanding fines.</em></p>
+{% endif %}
+
+{% endblock %}

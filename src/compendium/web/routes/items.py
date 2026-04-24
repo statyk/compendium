@@ -351,6 +351,12 @@ def item_detail(
             {"request": request, "user": user, "message": f"Item '{barcode}' not found"},
             status_code=404,
         )
+    from compendium.repositories.sql.loan_repository import SqlLoanRepository
+    from compendium.services.auth import has_permission
+
+    loan_history: list = []
+    if has_permission(user.role.permissions, "loan.view.any"):
+        loan_history = SqlLoanRepository(session).list_for_item(item.id, limit=25)
     return _render(
         "items/detail.html",
         request,
@@ -358,6 +364,7 @@ def item_detail(
             "request": request,
             "user": user,
             "item": item,
+            "loan_history": loan_history,
             "message": message,
             "error": error,
         },

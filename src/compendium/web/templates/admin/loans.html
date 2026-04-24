@@ -1,0 +1,84 @@
+{% extends "base.html" %}
+{% block title %}Active loans — Compendium{% endblock %}
+{% block content %}
+<h2>Active loans</h2>
+<p><small>All loans currently checked out. Default sort is due date ascending (most-overdue first).</small></p>
+
+<form method="get" action="/ui/admin/loans" style="display:flex; gap:0.75rem; flex-wrap:wrap; align-items:end; margin-bottom:1rem">
+  <label style="margin-bottom:0">
+    Search
+    <input type="text" name="q" value="{{ q }}" placeholder="Patron / barcode / title" style="min-width:18rem">
+  </label>
+  <label style="margin-bottom:0">
+    Due
+    <select name="due">
+      {% for value, label in due_options %}
+      <option value="{{ value }}" {% if due == value %}selected{% endif %}>{{ label }}</option>
+      {% endfor %}
+    </select>
+  </label>
+  <label style="margin-bottom:0">
+    Branch
+    <select name="branch">
+      <option value="">All</option>
+      {% for b in branches %}
+      <option value="{{ b.code }}" {% if branch == b.code %}selected{% endif %}>{{ b.name }}</option>
+      {% endfor %}
+    </select>
+  </label>
+  <button type="submit">Filter</button>
+  <a href="/ui/admin/loans" role="button" class="secondary outline">Reset</a>
+</form>
+
+<p><strong>{{ total }}</strong> active loan{{ '' if total == 1 else 's' }}</p>
+
+{% if loans %}
+<table>
+  <thead>
+    <tr>
+      <th>Patron</th>
+      <th>Item</th>
+      <th>Title</th>
+      <th>Checked out</th>
+      <th>Due</th>
+      <th>Branch</th>
+    </tr>
+  </thead>
+  <tbody>
+    {% for loan in loans %}
+    {% set overdue = loan.due_at < now() %}
+    <tr>
+      <td>
+        <a href="/ui/patrons/{{ loan.patron.library_card_number }}">{{ loan.patron.full_name }}</a>
+        <br><small><code>{{ loan.patron.library_card_number }}</code></small>
+      </td>
+      <td><a href="/ui/items/{{ loan.item.barcode }}"><code>{{ loan.item.barcode }}</code></a></td>
+      <td><a href="/ui/catalog/{{ loan.item.work.id }}">{{ loan.item.work.title }}</a></td>
+      <td><small>{{ loan.checked_out_at.strftime("%Y-%m-%d") }}</small></td>
+      <td>
+        <small>{{ loan.due_at.strftime("%Y-%m-%d") }}</small>
+        {% if overdue %}<br><span class="pill pill-damaged">overdue</span>{% endif %}
+      </td>
+      <td><small>{{ loan.branch.code if loan.branch else "—" }}</small></td>
+    </tr>
+    {% endfor %}
+  </tbody>
+</table>
+
+{% if has_prev or has_next %}
+<nav style="display:flex; justify-content:space-between; align-items:center; margin-top:1rem">
+  {% if has_prev %}
+    <a href="/ui/admin/loans?{{ filters_qs + ('&' if filters_qs else '') }}page={{ page - 1 }}" role="button" class="secondary outline">← Previous</a>
+  {% else %}<span></span>{% endif %}
+  <small>Page {{ page }}</small>
+  {% if has_next %}
+    <a href="/ui/admin/loans?{{ filters_qs + ('&' if filters_qs else '') }}page={{ page + 1 }}" role="button" class="secondary outline">Next →</a>
+  {% else %}<span></span>{% endif %}
+</nav>
+{% endif %}
+
+{% else %}
+<p><em>No loans match these filters.</em></p>
+{% endif %}
+
+{% endblock %}

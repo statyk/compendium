@@ -1,4 +1,4 @@
-from fastapi import APIRouter, Depends, HTTPException, Path
+from fastapi import APIRouter, Depends, HTTPException, Path, Query
 from pydantic import BaseModel, ConfigDict
 from sqlalchemy.orm import Session
 
@@ -144,3 +144,62 @@ def claim_returned(
         raise HTTPException(status_code=422, detail=str(exc)) from exc
     # Re-fetch the loan (still open; we surface the existing row)
     return LoanResponse.model_validate(SqlLoanRepository(session).get(loan_id))
+
+
+@router.get("", response_model=list[LoanResponse])
+def list_active_loans(
+    due: str | None = Query(default=None),
+    branch: str | None = Query(default=None),
+    q: str | None = Query(default=None),
+    limit: int = Query(default=50, ge=1, le=500),
+    offset: int = Query(default=0, ge=0),
+    session: Session = Depends(get_session),
+    _user: AppUser = Depends(require_permission("loan.view.any")),
+) -> list[LoanResponse]:
+    """System-wide active loans, librarian view."""
+    branch_id: int | None = None
+    if branch:
+        b = SqlBranchRepository(session).get_by_code(branch)
+        if b is not None:
+            branch_id = b.id
+    loans = SqlLoanRepository(session).list_active(
+        due=due, branch_id=branch_id, query=q, limit=limit, offset=offset
+    )
+    return [LoanResponse.model_validate(l) for l in loans]
+
+
+@router.get("/patron/{card_number}", response_model=list[LoanResponse])
+def list_patron_loans(
+    card_number: str = Path(),
+    status: str = Query(default="active"),
+    limit: int = Query(default=100, ge=1, le=500),
+    offset: int = Query(default=0, ge=0),
+    session: Session = Depends(get_session),
+    _user: AppUser = Depends(require_permission("loan.view.any")),
+) -> list[LoanResponse]:
+    """Patron loan history (active / returned / all)."""
+    patron = SqlPatronRepository(session).get_by_card_number(card_number)
+    if patron is None:
+        raise HTTPException(status_code=404, detail=f"No patron with card '{card_number}'")
+    if status not in ("active", "returned", "all"):
+        raise HTTPException(status_code=422, detail="status must be active|returned|all")
+    loans = SqlLoanRepository(session).list_for_patron(
+        patron.id, status=status, limit=limit, offset=offset
+    )
+    return [LoanResponse.model_validate(l) for l in loans]
+
+
+@router.get("/item/{barcode}", response_model=list[LoanResponse])
+def list_item_loans(
+    barcode: str = Path(),
+    limit: int = Query(default=25, ge=1, le=500),
+    offset: int = Query(default=0, ge=0),
+    session: Session = Depends(get_session),
+    _user: AppUser = Depends(require_permission("loan.view.any")),
+) -> list[LoanResponse]:
+    """Loan history for a specific copy."""
+    item = SqlItemRepository(session).get_by_barcode(barcode)
+    if item is None:
+        raise HTTPException(status_code=404, detail=f"No item with barcode '{barcode}'")
+    loans = SqlLoanRepository(session).list_for_item(item.id, limit=limit, offset=offset)
+    return [LoanResponse.model_validate(l) for l in loans]

@@ -1,10 +1,10 @@
 from __future__ import annotations
 
-from sqlalchemy import func
-from sqlalchemy.orm import Session
+from sqlalchemy import func, or_
+from sqlalchemy.orm import Session, joinedload
 
 from compendium.domain.enums import FineKind, FineStatus
-from compendium.domain.models import Fine
+from compendium.domain.models import Fine, Patron
 
 
 class SqlFineRepository:
@@ -58,3 +58,65 @@ class SqlFineRepository:
     def update(self, fine: Fine) -> Fine:
         self._s.flush()
         return fine
+
+    # ------------------------------------------------------------------
+    # Librarian list views: system-wide outstanding fines
+    # ------------------------------------------------------------------
+
+    def _outstanding_filter(
+        self,
+        *,
+        kind: str | None,
+        query: str | None,
+    ):
+        q = self._s.query(Fine).filter(Fine.status == FineStatus.OUTSTANDING.value)
+        if kind:
+            q = q.filter(Fine.kind == kind)
+        if query:
+            like = f"%{query}%"
+            q = q.join(Patron, Fine.patron_id == Patron.id).filter(
+                or_(
+                    Patron.full_name.ilike(like),
+                    Patron.library_card_number.ilike(like),
+                )
+            )
+        return q
+
+    def list_outstanding(
+        self,
+        *,
+        kind: str | None = None,
+        query: str | None = None,
+        limit: int = 50,
+        offset: int = 0,
+    ) -> list[Fine]:
+        return (
+            self._outstanding_filter(kind=kind, query=query)
+            .options(joinedload(Fine.patron), joinedload(Fine.item))
+            .order_by(Fine.assessed_at.desc(), Fine.id.desc())
+            .limit(limit)
+            .offset(offset)
+            .all()
+        )
+
+    def count_outstanding(
+        self,
+        *,
+        kind: str | None = None,
+        query: str | None = None,
+    ) -> int:
+        return self._outstanding_filter(kind=kind, query=query).count()
+
+    def outstanding_total_all(
+        self,
+        *,
+        kind: str | None = None,
+        query: str | None = None,
+    ) -> int:
+        """Sum of amount_cents across outstanding fines matching the filter."""
+        total = (
+            self._outstanding_filter(kind=kind, query=query)
+            .with_entities(func.coalesce(func.sum(Fine.amount_cents), 0))
+            .scalar()
+        )
+        return int(total or 0)

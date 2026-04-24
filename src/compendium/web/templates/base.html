@@ -159,7 +159,9 @@
                               or has_permission(user, 'report.view')
                               or has_permission(user, 'labels.generate')
                               or has_permission(user, 'loan.checkin')
+                              or has_permission(user, 'loan.view.any')
                               or has_permission(user, 'hold.view.any')
+                              or has_permission(user, 'fine.manage')
                               or has_permission(user, 'item.view') %}
           {% if show_admin %}
           <li>
@@ -178,6 +180,8 @@
                 {% if has_permission(user, 'labels.generate') %}<li><a href="/ui/labels">Labels</a></li>{% endif %}
                 {% if has_permission(user, 'loan.checkin') %}<li><a href="/ui/admin/claims">Claims</a></li>{% endif %}
                 {% if has_permission(user, 'hold.view.any') %}<li><a href="/ui/admin/holds">Holds</a></li>{% endif %}
+                {% if has_permission(user, 'loan.view.any') %}<li><a href="/ui/admin/loans">Active Loans</a></li>{% endif %}
+                {% if has_permission(user, 'fine.manage') %}<li><a href="/ui/admin/fines">Outstanding Fines</a></li>{% endif %}
                 {% if has_permission(user, 'patron.manage') %}<li><a href="/ui/audit">Audit Log</a></li>{% endif %}
               </ul>
             </details>

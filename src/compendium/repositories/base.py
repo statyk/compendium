@@ -161,6 +161,34 @@ class LoanRepository(Protocol):
     def list_active_overdue_joined(
         self, *, branch_id: int | None = None
     ) -> list[tuple[Loan, Patron, Item, Work]]: ...
+    def list_active(
+        self,
+        *,
+        due: str | None = None,
+        branch_id: int | None = None,
+        query: str | None = None,
+        limit: int = 50,
+        offset: int = 0,
+    ) -> list[Loan]: ...
+    def count_active(
+        self,
+        *,
+        due: str | None = None,
+        branch_id: int | None = None,
+        query: str | None = None,
+    ) -> int: ...
+    def list_for_patron(
+        self,
+        patron_id: int,
+        *,
+        status: str = "active",
+        limit: int = 100,
+        offset: int = 0,
+    ) -> list[Loan]: ...
+    def count_for_patron(self, patron_id: int, *, status: str = "active") -> int: ...
+    def list_for_item(
+        self, item_id: int, *, limit: int = 25, offset: int = 0
+    ) -> list[Loan]: ...
 
 
 @runtime_checkable
@@ -260,6 +288,20 @@ class FineRepository(Protocol):
     ) -> list[Fine]: ...
     def get_outstanding_overdue_for_loan(self, loan_id: int) -> Fine | None: ...
     def outstanding_total(self, patron_id: int) -> int: ...
+    def list_outstanding(
+        self,
+        *,
+        kind: str | None = None,
+        query: str | None = None,
+        limit: int = 50,
+        offset: int = 0,
+    ) -> list[Fine]: ...
+    def count_outstanding(
+        self, *, kind: str | None = None, query: str | None = None
+    ) -> int: ...
+    def outstanding_total_all(
+        self, *, kind: str | None = None, query: str | None = None
+    ) -> int: ...
     def update(self, fine: Fine) -> Fine: ...
 
 

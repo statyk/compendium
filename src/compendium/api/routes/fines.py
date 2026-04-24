@@ -3,7 +3,7 @@ overdue materialization."""
 
 from __future__ import annotations
 
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, Query
 from pydantic import BaseModel
 from sqlalchemy.orm import Session
 
@@ -105,6 +105,22 @@ def assess_overdue_for_patron(
 
 
 # ── /fines (manual assess + pay + waive) ─────────────────────────────────────
+
+
+@fines_router.get("", response_model=list[FineResponse])
+def list_outstanding_fines(
+    kind: str | None = Query(default=None),
+    q: str | None = Query(default=None),
+    limit: int = Query(default=50, ge=1, le=500),
+    offset: int = Query(default=0, ge=0),
+    session: Session = Depends(get_session),
+    _user: AppUser = Depends(require_permission("fine.manage")),
+) -> list[FineResponse]:
+    """System-wide list of outstanding fines."""
+    fines = SqlFineRepository(session).list_outstanding(
+        kind=kind, query=q, limit=limit, offset=offset
+    )
+    return [FineResponse.model_validate(f) for f in fines]
 
 
 @fines_router.post("", response_model=FineResponse)

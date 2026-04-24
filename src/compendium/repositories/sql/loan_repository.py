@@ -1,7 +1,7 @@
 from datetime import datetime, timedelta, timezone
 
-from sqlalchemy import func
-from sqlalchemy.orm import Session
+from sqlalchemy import func, or_
+from sqlalchemy.orm import Session, joinedload
 
 from compendium.domain.models import Item, Loan, Patron, Work
 
@@ -121,3 +121,117 @@ class SqlLoanRepository:
         if branch_id is not None:
             q = q.filter(Loan.branch_id == branch_id)
         return q.order_by(Loan.due_at).all()
+
+    # ------------------------------------------------------------------
+    # Librarian list views: all-active, patron history, item history
+    # ------------------------------------------------------------------
+
+    def _active_filter(
+        self,
+        *,
+        due: str | None,
+        branch_id: int | None,
+        query: str | None,
+    ):
+        now = datetime.now(tz=timezone.utc)
+        q = self._s.query(Loan).filter(Loan.returned_at.is_(None))
+        if branch_id is not None:
+            q = q.filter(Loan.branch_id == branch_id)
+        if due == "overdue":
+            q = q.filter(Loan.due_at < now)
+        elif due == "due_soon":
+            q = q.filter(Loan.due_at >= now, Loan.due_at <= now + timedelta(days=3))
+        elif due == "on_time":
+            q = q.filter(Loan.due_at > now + timedelta(days=3))
+        if query:
+            like = f"%{query}%"
+            q = (
+                q.join(Patron, Loan.patron_id == Patron.id)
+                .join(Item, Loan.item_id == Item.id)
+                .join(Work, Item.work_id == Work.id)
+                .filter(
+                    or_(
+                        Patron.full_name.ilike(like),
+                        Patron.library_card_number.ilike(like),
+                        Item.barcode.ilike(like),
+                        Work.title.ilike(like),
+                    )
+                )
+            )
+        return q
+
+    def list_active(
+        self,
+        *,
+        due: str | None = None,
+        branch_id: int | None = None,
+        query: str | None = None,
+        limit: int = 50,
+        offset: int = 0,
+    ) -> list[Loan]:
+        return (
+            self._active_filter(due=due, branch_id=branch_id, query=query)
+            .options(
+                joinedload(Loan.patron),
+                joinedload(Loan.item).joinedload(Item.work),
+                joinedload(Loan.branch),
+            )
+            .order_by(Loan.due_at.asc(), Loan.id.asc())
+            .limit(limit)
+            .offset(offset)
+            .all()
+        )
+
+    def count_active(
+        self,
+        *,
+        due: str | None = None,
+        branch_id: int | None = None,
+        query: str | None = None,
+    ) -> int:
+        return self._active_filter(due=due, branch_id=branch_id, query=query).count()
+
+    def list_for_patron(
+        self,
+        patron_id: int,
+        *,
+        status: str = "active",
+        limit: int = 100,
+        offset: int = 0,
+    ) -> list[Loan]:
+        """status: 'active' | 'returned' | 'all'. Ordered newest-first."""
+        q = self._s.query(Loan).filter(Loan.patron_id == patron_id)
+        if status == "active":
+            q = q.filter(Loan.returned_at.is_(None))
+        elif status == "returned":
+            q = q.filter(Loan.returned_at.is_not(None))
+        # 'all' — no extra filter
+        return (
+            q.options(joinedload(Loan.item).joinedload(Item.work))
+            .order_by(Loan.checked_out_at.desc(), Loan.id.desc())
+            .limit(limit)
+            .offset(offset)
+            .all()
+        )
+
+    def count_for_patron(self, patron_id: int, *, status: str = "active") -> int:
+        q = self._s.query(Loan).filter(Loan.patron_id == patron_id)
+        if status == "active":
+            q = q.filter(Loan.returned_at.is_(None))
+        elif status == "returned":
+            q = q.filter(Loan.returned_at.is_not(None))
+        return q.count()
+
+    def list_for_item(
+        self, item_id: int, *, limit: int = 25, offset: int = 0
+    ) -> list[Loan]:
+        """Loan history for a specific copy, newest-first."""
+        return (
+            self._s.query(Loan)
+            .options(joinedload(Loan.patron))
+            .filter(Loan.item_id == item_id)
+            .order_by(Loan.checked_out_at.desc(), Loan.id.desc())
+            .limit(limit)
+            .offset(offset)
+            .all()
+        )
