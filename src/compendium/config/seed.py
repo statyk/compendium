@@ -18,6 +18,50 @@ _PATRON_CATEGORIES = [
     ("teacher", "Teacher", False),
 ]
 
+# Slimmed Librarian preset — day-to-day operations. Explicit list, no
+# wildcard. New permissions added in future slices must be added here too
+# (Administrator picks them up via "*"). System-tier perms (system.manage,
+# user.manage, role.manage) intentionally omitted — those go on SystemAdmin.
+_LIBRARIAN_PERMISSIONS = [
+    # Catalog
+    "work.view", "work.edit",
+    "item.view", "item.create", "item.edit", "item.delete",
+    "catalog.import",
+    # Loans
+    "loan.checkout", "loan.checkin",
+    "loan.renew.any", "loan.renew.self",
+    "loan.view.self", "loan.view.any",
+    "loan.claim.self",
+    # Holds
+    "hold.place.self", "hold.place.any",
+    "hold.view.self", "hold.view.any",
+    # Fines
+    "fine.manage", "fine.view.self",
+    # Notifications
+    "notification.manage",
+    # Reports
+    "report.view",
+    # Labels
+    "labels.generate",
+    # Audit
+    "audit.view",
+    # Administration
+    "patron.manage", "policy.edit", "branch.edit",
+]
+
+# SystemAdmin preset — IT/sysadmin seat in multi-person deployments. Manages
+# users, roles, and infrastructure settings (slice C will add the settings
+# UI). Intentionally not given librarian-tier perms; pair with a separate
+# Librarian user in deployments where roles are split.
+_SYSTEM_ADMIN_PERMISSIONS = [
+    "system.manage",
+    "user.manage",
+    "role.manage",
+    "audit.view",
+    # Minimal view perms so SystemAdmin isn't staring at a blank page
+    "item.view", "work.view",
+]
+
 _PRESET_ROLES = [
     (
         "ReadOnly",
@@ -40,6 +84,16 @@ _PRESET_ROLES = [
     ),
     (
         "Librarian",
+        _LIBRARIAN_PERMISSIONS,
+        True,
+    ),
+    (
+        "SystemAdmin",
+        _SYSTEM_ADMIN_PERMISSIONS,
+        True,
+    ),
+    (
+        "Administrator",
         ["*"],
         True,
     ),

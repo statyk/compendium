@@ -111,7 +111,9 @@ def _make_patron_user(s: Session, username: str) -> tuple[AppUser, Patron, str]:
 
 
 def _make_librarian(s: Session, username: str) -> tuple[AppUser, str]:
-    role = SqlRoleRepository(s).get_by_name("Librarian")
+    # Uses Administrator (wildcard). Tests that need slimmed-Librarian denial
+    # behavior should construct their own user explicitly.
+    role = SqlRoleRepository(s).get_by_name("Administrator")
     user = AppUser(username=username, password_hash=hash_password("password"), role_id=role.id)
     SqlUserRepository(s).add(user)
     s.flush()
@@ -269,3 +271,53 @@ class TestSecurityHeaders:
         assert resp.headers.get("X-Content-Type-Options") == "nosniff"
         assert resp.headers.get("Referrer-Policy") == "no-referrer"
         assert "Content-Security-Policy" in resp.headers
+
+
+def _make_slimmed_librarian(s: Session, username: str) -> tuple[AppUser, str]:
+    """Authenticated user holding the slimmed Librarian preset (no wildcard)."""
+    role = SqlRoleRepository(s).get_by_name("Librarian")
+    user = AppUser(username=username, password_hash=hash_password("pw"), role_id=role.id)
+    SqlUserRepository(s).add(user)
+    s.flush()
+    user.role = role
+    token = AuthService(
+        user_repo=SqlUserRepository(s),
+        role_repo=SqlRoleRepository(s),
+        settings=_SETTINGS,
+    ).issue_token(user)
+    return user, token
+
+
+class TestSlimmedLibrarianDenials:
+    """Verifies the slice-B split: slimmed Librarian preset cannot reach
+    user/role/system-tier endpoints. Use Administrator (or a custom role
+    with the right permission) for those flows."""
+
+    def test_cannot_deactivate_another_user(self, authz_client, authz_session):
+        _, tok = _make_slimmed_librarian(authz_session, "slim_lib_user_deact")
+        target, _, _ = _make_patron_user(authz_session, "slim_target")
+        resp = authz_client.post(
+            f"/users/{target.username}/deactivate",
+            headers={"Authorization": f"Bearer {tok}"},
+        )
+        assert resp.status_code == 403
+
+    def test_can_view_audit_log(self, authz_client, authz_session):
+        """Audit access stays with Librarian — the audit.view permission is
+        in the slimmed list (security review is a librarian concern too)."""
+        _, tok = _make_slimmed_librarian(authz_session, "slim_lib_audit")
+        resp = authz_client.get(
+            "/audit/", headers={"Authorization": f"Bearer {tok}"}
+        )
+        assert resp.status_code == 200
+
+    def test_can_manage_patrons(self, authz_client, authz_session):
+        """Sanity check: librarian-tier perms (patron.manage) still work."""
+        _, tok = _make_slimmed_librarian(authz_session, "slim_lib_patrons")
+        resp = authz_client.post(
+            "/patrons/",
+            json={"library_card_number": "SLIM01", "full_name": "Slim"},
+            headers={"Authorization": f"Bearer {tok}"},
+        )
+        # 200 on success, 409 if duplicate; either way not 403.
+        assert resp.status_code in (200, 201, 409)

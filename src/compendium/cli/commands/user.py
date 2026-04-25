@@ -31,7 +31,11 @@ def add_user(
     password: str = typer.Option(
         ..., "--password", prompt=True, hide_input=True, confirmation_prompt=True
     ),
-    role: str = typer.Option("Librarian", "--role", help="Role: ReadOnly, Patron, Librarian"),
+    role: str = typer.Option(
+        "Administrator",
+        "--role",
+        help="Role: ReadOnly, Patron, Librarian, SystemAdmin, Administrator",
+    ),
     email: str | None = typer.Option(None, "--email"),
 ) -> None:
     """Create a new user account."""

@@ -81,7 +81,11 @@ def web_client(web_session):
 
 @pytest.fixture
 def librarian(web_session):
-    role = SqlRoleRepository(web_session).get_by_name("Librarian")
+    # Uses Administrator (wildcard) so existing tests pass through user/role/
+    # system routes that slimmed Librarian no longer covers. Tests that need
+    # to verify slimmed-Librarian denial behavior should create their own
+    # role-bound user.
+    role = SqlRoleRepository(web_session).get_by_name("Administrator")
     user = AppUser(username="lib01", password_hash=hash_password("secret"), role_id=role.id)
     SqlUserRepository(web_session).add(user)
     web_session.flush()

@@ -57,12 +57,47 @@ class _SecurityHeadersMiddleware(BaseHTTPMiddleware):
         return response
 
 
+def _warn_if_no_system_admin() -> None:
+    """Log a warning if no active user holds the system.manage permission.
+
+    Doesn't raise — a deployment mid-migration legitimately may not have one
+    yet, and a hard fail would lock the operator out. Best-effort: we open a
+    short-lived session and swallow exceptions (table missing, DB unreachable).
+    """
+    try:
+        from sqlalchemy.orm import Session
+
+        from compendium.db.engine import get_engine
+        from compendium.domain.models import AppUser
+        from compendium.services.auth import has_permission
+
+        with Session(get_engine()) as s:
+            users = (
+                s.query(AppUser)
+                .filter(AppUser.is_active == True)  # noqa: E712
+                .all()
+            )
+            for u in users:
+                if u.role and has_permission(u.role.permissions, "system.manage"):
+                    return
+            if users:
+                _log.warning(
+                    "No active user holds 'system.manage'. Infrastructure "
+                    "settings (slice C: SMTP, retention, etc.) will be "
+                    "unmanageable from the UI. Assign Administrator or "
+                    "SystemAdmin to at least one active user."
+                )
+    except Exception:  # pragma: no cover — startup convenience only
+        _log.debug("system.manage holder check skipped (DB not ready?)")
+
+
 def create_app() -> FastAPI:
     if get_settings().jwt_secret_key == INSECURE_JWT_DEFAULT:
         _log.warning(
             "SECURITY: COMPENDIUM_JWT_SECRET_KEY is set to the insecure default. "
             "Set it to a random secret before exposing this server to the network."
         )
+    _warn_if_no_system_admin()
 
     app = FastAPI(title="Compendium", version="0.1.0")
     app.add_middleware(_SecurityHeadersMiddleware)

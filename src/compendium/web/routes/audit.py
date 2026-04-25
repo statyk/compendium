@@ -14,7 +14,7 @@ from compendium.web.jinja import templates
 
 router = APIRouter()
 
-_PERM = "patron.manage"
+_PERM = "audit.view"
 
 _ENTITY_CHOICES = [
     ("", "All types"),

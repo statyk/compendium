@@ -30,7 +30,9 @@ PERMISSION_GROUPS = [
     ("Notifications", ["notification.manage"]),
     ("Reports", ["report.view"]),
     ("Labels", ["labels.generate"]),
-    ("Administration", ["patron.manage", "user.manage", "role.manage", "policy.edit", "branch.edit"]),
+    ("Audit", ["audit.view"]),
+    ("Administration", ["patron.manage", "policy.edit", "branch.edit"]),
+    ("System", ["system.manage", "user.manage", "role.manage"]),
 ]
 
 

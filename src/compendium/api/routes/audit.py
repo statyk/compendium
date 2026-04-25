@@ -10,7 +10,7 @@ from compendium.services.audit import AuditService
 
 router = APIRouter()
 
-_PERM = "patron.manage"
+_PERM = "audit.view"
 
 
 @router.get("/", response_model=list[AuditLogResponse])

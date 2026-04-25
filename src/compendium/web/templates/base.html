@@ -149,40 +149,71 @@
           {% if has_permission(user, 'loan.checkout') %}<li><a href="/ui/circ">Circ Desk</a></li>{% endif %}
           {% if has_permission(user, 'loan.checkout') %}<li><a href="/ui/kiosk">Kiosk</a></li>{% endif %}
           {% if has_permission(user, 'item.create') %}<li><a href="/ui/items/new">Add Item</a></li>{% endif %}
-          {% if has_permission(user, 'patron.manage') %}<li><a href="/ui/patrons">Patrons</a></li>{% endif %}
-          {% set show_admin = has_permission(user, 'user.manage')
-                              or has_permission(user, 'role.manage')
+          {% set show_circulation = has_permission(user, 'patron.manage')
+                                     or has_permission(user, 'loan.view.any')
+                                     or has_permission(user, 'fine.manage')
+                                     or has_permission(user, 'hold.view.any')
+                                     or has_permission(user, 'loan.checkin') %}
+          {% if show_circulation %}
+          <li>
+            <details class="dropdown">
+              <summary>Circulation</summary>
+              <ul>
+                {% if has_permission(user, 'patron.manage') %}<li><a href="/ui/patrons">Patrons</a></li>{% endif %}
+                {% if has_permission(user, 'loan.view.any') %}<li><a href="/ui/admin/loans">Active Loans</a></li>{% endif %}
+                {% if has_permission(user, 'fine.manage') %}<li><a href="/ui/admin/fines">Outstanding Fines</a></li>{% endif %}
+                {% if has_permission(user, 'hold.view.any') %}<li><a href="/ui/admin/holds">Holds</a></li>{% endif %}
+                {% if has_permission(user, 'loan.checkin') %}<li><a href="/ui/admin/claims">Claims</a></li>{% endif %}
+              </ul>
+            </details>
+          </li>
+          {% endif %}
+          {% set show_cataloging = has_permission(user, 'catalog.import')
+                                    or has_permission(user, 'item.view')
+                                    or has_permission(user, 'labels.generate') %}
+          {% if show_cataloging %}
+          <li>
+            <details class="dropdown">
+              <summary>Cataloging</summary>
+              <ul>
+                {% if has_permission(user, 'catalog.import') %}<li><a href="/ui/admin/import">Import</a></li>{% endif %}
+                {% if has_permission(user, 'item.view') %}<li><a href="/ui/admin/export">Export</a></li>{% endif %}
+                {% if has_permission(user, 'labels.generate') %}<li><a href="/ui/labels">Labels</a></li>{% endif %}
+              </ul>
+            </details>
+          </li>
+          {% endif %}
+          {% set show_admin = has_permission(user, 'patron.manage')
                               or has_permission(user, 'policy.edit')
                               or has_permission(user, 'branch.edit')
-                              or has_permission(user, 'patron.manage')
-                              or has_permission(user, 'catalog.import')
+                              or has_permission(user, 'notification.manage')
                               or has_permission(user, 'report.view')
-                              or has_permission(user, 'labels.generate')
-                              or has_permission(user, 'loan.checkin')
-                              or has_permission(user, 'loan.view.any')
-                              or has_permission(user, 'hold.view.any')
-                              or has_permission(user, 'fine.manage')
-                              or has_permission(user, 'item.view') %}
+                              or has_permission(user, 'audit.view') %}
           {% if show_admin %}
           <li>
             <details class="dropdown">
               <summary>Admin</summary>
               <ul>
-                {% if has_permission(user, 'user.manage') %}<li><a href="/ui/users">Users</a></li>{% endif %}
-                {% if has_permission(user, 'role.manage') %}<li><a href="/ui/roles">Roles</a></li>{% endif %}
-                {% if has_permission(user, 'policy.edit') %}<li><a href="/ui/policies">Policies</a></li>{% endif %}
                 {% if has_permission(user, 'patron.manage') %}<li><a href="/ui/admin/patron-categories">Patron Categories</a></li>{% endif %}
+                {% if has_permission(user, 'policy.edit') %}<li><a href="/ui/policies">Policies</a></li>{% endif %}
                 {% if has_permission(user, 'branch.edit') %}<li><a href="/ui/branches">Branches</a></li>{% endif %}
-                {% if has_permission(user, 'catalog.import') %}<li><a href="/ui/admin/import">Import</a></li>{% endif %}
-                {% if has_permission(user, 'item.view') %}<li><a href="/ui/admin/export">Export</a></li>{% endif %}
                 {% if has_permission(user, 'notification.manage') %}<li><a href="/ui/admin/notifications">Notifications</a></li>{% endif %}
                 {% if has_permission(user, 'report.view') %}<li><a href="/ui/reports">Reports</a></li>{% endif %}
-                {% if has_permission(user, 'labels.generate') %}<li><a href="/ui/labels">Labels</a></li>{% endif %}
-                {% if has_permission(user, 'loan.checkin') %}<li><a href="/ui/admin/claims">Claims</a></li>{% endif %}
-                {% if has_permission(user, 'hold.view.any') %}<li><a href="/ui/admin/holds">Holds</a></li>{% endif %}
-                {% if has_permission(user, 'loan.view.any') %}<li><a href="/ui/admin/loans">Active Loans</a></li>{% endif %}
-                {% if has_permission(user, 'fine.manage') %}<li><a href="/ui/admin/fines">Outstanding Fines</a></li>{% endif %}
-                {% if has_permission(user, 'patron.manage') %}<li><a href="/ui/audit">Audit Log</a></li>{% endif %}
+                {% if has_permission(user, 'audit.view') %}<li><a href="/ui/audit">Audit Log</a></li>{% endif %}
+              </ul>
+            </details>
+          </li>
+          {% endif %}
+          {% set show_system = has_permission(user, 'user.manage')
+                               or has_permission(user, 'role.manage')
+                               or has_permission(user, 'system.manage') %}
+          {% if show_system %}
+          <li>
+            <details class="dropdown">
+              <summary>System</summary>
+              <ul>
+                {% if has_permission(user, 'user.manage') %}<li><a href="/ui/users">Users</a></li>{% endif %}
+                {% if has_permission(user, 'role.manage') %}<li><a href="/ui/roles">Roles</a></li>{% endif %}
               </ul>
             </details>
           </li>
