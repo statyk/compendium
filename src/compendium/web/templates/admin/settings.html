@@ -16,25 +16,67 @@
 {% if message %}<p class="success-banner">{{ message }}</p>{% endif %}
 {% if error %}<p class="error-banner">{{ error }}</p>{% endif %}
 
+<style>
+  .settings-table .setting-name {
+    font-size: 1rem;
+    font-weight: 600;
+    margin: 0;
+  }
+  .settings-table .setting-key {
+    font-size: 0.8em;
+    opacity: 0.65;
+    font-family: var(--pico-font-family-monospace, monospace);
+  }
+  .settings-table .setting-help {
+    display: block;
+    margin-top: 0.25rem;
+  }
+  .settings-table .env-warning {
+    display: block;
+    margin-top: 0.4rem;
+    color: var(--pico-color-amber-600, #b86e00);
+    font-size: 0.85em;
+  }
+  .settings-table .reset-cell {
+    text-align: center;
+    white-space: nowrap;
+  }
+  .settings-table .reset-cell label {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.35em;
+    margin: 0;
+    cursor: pointer;
+  }
+  .settings-table .reset-cell input[type=checkbox] {
+    margin: 0;
+  }
+</style>
+
 <form method="post">
   <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
 
-  <table>
+  <table class="settings-table">
     <thead>
       <tr>
-        <th style="width:30%">Setting</th>
+        <th style="width:35%">Setting</th>
         <th>Value</th>
-        <th style="width:6em">Reset</th>
+        <th style="width:5em">Reset</th>
       </tr>
     </thead>
     <tbody>
       {% for row in rows %}
       <tr>
         <td>
-          <strong><code>{{ row.key }}</code></strong>
-          <br><small>{{ row.desc.help_text }}</small>
+          <div class="setting-name">{{ row.display_name }}</div>
+          <div class="setting-key">{{ row.key }}</div>
+          <small class="setting-help">{{ row.desc.help_text }}</small>
           {% if row.env_overridden %}
-            <br><small style="color: var(--pico-color-amber-500, #c08000)">⚠ Overridden by env var <code>{{ row.env_var }}</code> — UI edits won't take effect until that's cleared.</small>
+            <small class="env-warning">
+              ⚠ This parameter was set by environment variable
+              <code>{{ row.env_var }}</code> at start time and cannot be
+              modified here. Contact your system administrator to make changes.
+            </small>
           {% endif %}
         </td>
         <td>
@@ -63,10 +105,10 @@
             </small>
           {% endif %}
         </td>
-        <td>
+        <td class="reset-cell">
           <label>
             <input type="checkbox" name="reset" value="{{ row.key }}">
-            <small>reset</small>
+            <span>reset</span>
           </label>
         </td>
       </tr>

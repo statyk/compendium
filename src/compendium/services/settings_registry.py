@@ -37,12 +37,16 @@ class SettingDescriptor:
     default: Any
     scope: Scope
     help_text: str
+    display_name: str = ""  # Human-friendly label; falls back to key.title() if blank.
     validator: Callable[[Any], None] | None = None
     env_var: str | None = None
     nullable: bool = False  # If True, an empty string parses to None.
 
     def resolved_env_var(self) -> str:
         return self.env_var or f"COMPENDIUM_{self.key.upper()}"
+
+    def resolved_display_name(self) -> str:
+        return self.display_name or self.key.replace("_", " ").title()
 
 
 _REGISTRY: dict[str, SettingDescriptor] = {}
@@ -201,6 +205,7 @@ def _register_builtins() -> None:
     register(
         SettingDescriptor(
             key="library_name",
+            display_name="Library Name",
             type=str,
             default="Compendium",
             scope="librarian",
@@ -213,6 +218,7 @@ def _register_builtins() -> None:
     register(
         SettingDescriptor(
             key="default_theme",
+            display_name="Default Theme",
             type=Literal["light", "dark", "auto"],
             default="light",
             scope="librarian",
@@ -225,6 +231,7 @@ def _register_builtins() -> None:
     register(
         SettingDescriptor(
             key="guest_search_enabled",
+            display_name="Enable Guest Search",
             type=bool,
             default=True,
             scope="librarian",
@@ -237,6 +244,7 @@ def _register_builtins() -> None:
     register(
         SettingDescriptor(
             key="currency_symbol",
+            display_name="Currency Symbol",
             type=str,
             default="$",
             scope="librarian",
@@ -246,6 +254,7 @@ def _register_builtins() -> None:
     register(
         SettingDescriptor(
             key="currency_symbol_position",
+            display_name="Currency Symbol Position",
             type=Literal["before", "after"],
             default="before",
             scope="librarian",
@@ -255,6 +264,7 @@ def _register_builtins() -> None:
     register(
         SettingDescriptor(
             key="fine_block_threshold_cents",
+            display_name="Fine Block Threshold (cents)",
             type=int,
             default=None,
             nullable=True,
@@ -269,6 +279,7 @@ def _register_builtins() -> None:
     register(
         SettingDescriptor(
             key="fine_block_holds",
+            display_name="Block Holds When Over Fine Threshold",
             type=bool,
             default=False,
             scope="librarian",
@@ -281,6 +292,7 @@ def _register_builtins() -> None:
     register(
         SettingDescriptor(
             key="overdue_tiers",
+            display_name="Overdue Notification Tiers (days)",
             type=list[int],
             default=[3, 14, 30],
             scope="librarian",
@@ -294,6 +306,7 @@ def _register_builtins() -> None:
     register(
         SettingDescriptor(
             key="due_soon_days_before",
+            display_name="Due-Soon Reminder Lead Time (days)",
             type=int,
             default=3,
             scope="librarian",
@@ -304,6 +317,7 @@ def _register_builtins() -> None:
     register(
         SettingDescriptor(
             key="kiosk_idle_timeout_seconds",
+            display_name="Kiosk Idle Timeout (seconds)",
             type=int,
             default=60,
             scope="librarian",
@@ -317,6 +331,7 @@ def _register_builtins() -> None:
     register(
         SettingDescriptor(
             key="hold_expiry_days",
+            display_name="Hold Queue Expiry (days)",
             type=int,
             default=30,
             scope="librarian",
@@ -327,6 +342,7 @@ def _register_builtins() -> None:
     register(
         SettingDescriptor(
             key="hold_pickup_days",
+            display_name="Pickup Shelf Window (days)",
             type=int,
             default=3,
             scope="librarian",
@@ -342,6 +358,7 @@ def _register_builtins() -> None:
     register(
         SettingDescriptor(
             key="smtp_host",
+            display_name="SMTP Host",
             type=str,
             default=None,
             nullable=True,
@@ -355,6 +372,7 @@ def _register_builtins() -> None:
     register(
         SettingDescriptor(
             key="smtp_port",
+            display_name="SMTP Port",
             type=int,
             default=587,
             scope="system",
@@ -365,6 +383,7 @@ def _register_builtins() -> None:
     register(
         SettingDescriptor(
             key="smtp_username",
+            display_name="SMTP Username",
             type=str,
             default=None,
             nullable=True,
@@ -375,6 +394,7 @@ def _register_builtins() -> None:
     register(
         SettingDescriptor(
             key="smtp_use_starttls",
+            display_name="Use STARTTLS",
             type=bool,
             default=True,
             scope="system",
@@ -384,6 +404,7 @@ def _register_builtins() -> None:
     register(
         SettingDescriptor(
             key="smtp_use_ssl",
+            display_name="Use Implicit TLS (SMTPS)",
             type=bool,
             default=False,
             scope="system",
@@ -396,6 +417,7 @@ def _register_builtins() -> None:
     register(
         SettingDescriptor(
             key="smtp_from_address",
+            display_name="From Address",
             type=str,
             default=None,
             nullable=True,
@@ -406,6 +428,7 @@ def _register_builtins() -> None:
     register(
         SettingDescriptor(
             key="smtp_from_name",
+            display_name="From Display Name",
             type=str,
             default="Compendium",
             scope="system",
@@ -415,6 +438,7 @@ def _register_builtins() -> None:
     register(
         SettingDescriptor(
             key="notifications_batch_size",
+            display_name="Notifications Batch Size",
             type=int,
             default=50,
             scope="system",
@@ -425,6 +449,7 @@ def _register_builtins() -> None:
     register(
         SettingDescriptor(
             key="notifications_max_attempts",
+            display_name="Notifications Max Attempts",
             type=int,
             default=5,
             scope="system",
@@ -435,6 +460,7 @@ def _register_builtins() -> None:
     register(
         SettingDescriptor(
             key="notification_retention_days",
+            display_name="Notification Retention (days)",
             type=int,
             default=None,
             nullable=True,
@@ -449,6 +475,7 @@ def _register_builtins() -> None:
     register(
         SettingDescriptor(
             key="audit_retention_days",
+            display_name="Audit Log Retention (days)",
             type=int,
             default=None,
             nullable=True,

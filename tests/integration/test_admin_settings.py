@@ -400,8 +400,9 @@ class TestSettingsWeb:
         cookies = _login_cookies(client, "lib_env")
         r = client.get("/ui/admin/settings/general", cookies=cookies)
         assert r.status_code == 200
-        assert b"Overridden by env var" in r.content
+        assert b"set by environment variable" in r.content
         assert b"COMPENDIUM_LIBRARY_NAME" in r.content
+        assert b"Contact your system administrator" in r.content
 
 
 # ──────────────────────────────────────────────────────────────────────────

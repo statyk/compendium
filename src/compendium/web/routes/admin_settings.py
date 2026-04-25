@@ -157,6 +157,7 @@ def _build_rows(keys: list[str]) -> list[dict[str, Any]]:
         rows.append(
             {
                 "key": key,
+                "display_name": desc.resolved_display_name(),
                 "desc": desc,
                 "value": value,
                 "value_str": _to_form_string(value, desc.type),
