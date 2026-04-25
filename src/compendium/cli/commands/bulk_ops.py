@@ -13,6 +13,7 @@ from pathlib import Path
 
 import typer
 
+from compendium.cli.io import is_stdio, open_input, open_output
 from compendium.db.session import session_scope
 from compendium.domain.errors import DomainError
 from compendium.repositories.sql.audit_log_repository import SqlAuditLogRepository
@@ -102,7 +103,7 @@ def _common_import_options(
 
 @import_app.command("csv")
 def import_csv_cmd(
-    file: Path = typer.Argument(..., exists=True, readable=True, help="CSV file to import."),
+    file: str = typer.Argument(..., help="CSV file to import. Use '-' for stdin."),
     dry_run: bool = typer.Option(False, "--dry-run", help="Parse and validate without writing."),
     mode: str = typer.Option(
         "append",
@@ -127,11 +128,12 @@ def import_csv_cmd(
     options = _common_import_options(
         dry_run, mode, default_branch, default_media_type, barcode_prefix
     )
+    label = "stdin" if is_stdio(file) else Path(file).name
     try:
         with session_scope() as session:
             importer = _make_importer(session)
-            with file.open("r", encoding="utf-8", newline="") as stream:
-                report = importer.import_csv(stream, options, filename=str(file.name))
+            with open_input(file, binary=False) as stream:
+                report = importer.import_csv(stream, options, filename=label)
             _print_report(report)
     except DomainError as exc:
         typer.echo(f"Error: {exc}", err=True)
@@ -142,30 +144,39 @@ def import_csv_cmd(
 
 @import_app.command("marc")
 def import_marc_cmd(
-    file: Path = typer.Argument(..., exists=True, readable=True, help="MARC file to import (.mrc binary or .xml)."),
+    file: str = typer.Argument(
+        ...,
+        help="MARC file to import (.mrc binary or .xml). Use '-' for stdin.",
+    ),
     dry_run: bool = typer.Option(False, "--dry-run"),
     mode: str = typer.Option("append", "--mode"),
     default_branch: str | None = typer.Option(None, "--default-branch"),
     default_media_type: str | None = typer.Option(None, "--default-media-type"),
     barcode_prefix: str | None = typer.Option(None, "--barcode-prefix"),
+    xml: bool = typer.Option(
+        False,
+        "--xml",
+        help="Force MARCXML parsing (required when reading XML from stdin).",
+    ),
 ) -> None:
     """Import catalog records from a MARC21 binary (.mrc) or MARCXML (.xml) file."""
     options = _common_import_options(
         dry_run, mode, default_branch, default_media_type, barcode_prefix
     )
-    is_xml = file.suffix.lower() in {".xml", ".marcxml"}
+    if is_stdio(file):
+        is_xml = xml  # extension-sniffing isn't possible for stdin; explicit flag wins
+        label = "stdin"
+    else:
+        is_xml = xml or Path(file).suffix.lower() in {".xml", ".marcxml"}
+        label = Path(file).name
     try:
         with session_scope() as session:
             importer = _make_importer(session)
-            with file.open("rb") as stream:
+            with open_input(file, binary=True) as stream:
                 if is_xml:
-                    report = importer.import_marcxml(
-                        stream, options, filename=str(file.name)
-                    )
+                    report = importer.import_marcxml(stream, options, filename=label)
                 else:
-                    report = importer.import_marc(
-                        stream, options, filename=str(file.name)
-                    )
+                    report = importer.import_marc(stream, options, filename=label)
             _print_report(report)
     except DomainError as exc:
         typer.echo(f"Error: {exc}", err=True)
@@ -195,7 +206,9 @@ def _build_filters(media_type, branch, since) -> ExportFilters:
 
 @export_app.command("csv")
 def export_csv_cmd(
-    output: Path = typer.Argument(..., help="Path to write CSV output."),
+    output: str = typer.Argument(
+        ..., help="Path to write CSV output. Use '-' for stdout."
+    ),
     media_type: str | None = typer.Option(
         None, "--media-type", help="Restrict to works of this media_type code."
     ),
@@ -208,16 +221,20 @@ def export_csv_cmd(
 ) -> None:
     """Export catalog to a CSV file."""
     filters = _build_filters(media_type, branch, since)
+    to_stdout = is_stdio(output)
     with session_scope() as session:
         exporter = ExportService(work_repo=SqlWorkRepository(session))
-        with output.open("w", encoding="utf-8", newline="") as stream:
+        with open_output(output, binary=False) as stream:
             count = exporter.export_csv(stream, filters)
-    typer.echo(f"Wrote {count} item rows to {output}.")
+    where = "stdout" if to_stdout else output
+    typer.echo(f"Wrote {count} item rows to {where}.", err=to_stdout)
 
 
 @export_app.command("marc")
 def export_marc_cmd(
-    output: Path = typer.Argument(..., help="Path to write MARC output."),
+    output: str = typer.Argument(
+        ..., help="Path to write MARC output. Use '-' for stdout."
+    ),
     media_type: str | None = typer.Option(None, "--media-type"),
     branch: str | None = typer.Option(None, "--branch"),
     since: str | None = typer.Option(None, "--since"),
@@ -227,11 +244,13 @@ def export_marc_cmd(
 ) -> None:
     """Export catalog to a MARC file (.mrc binary, or MARCXML with --xml)."""
     filters = _build_filters(media_type, branch, since)
+    to_stdout = is_stdio(output)
     with session_scope() as session:
         exporter = ExportService(work_repo=SqlWorkRepository(session))
-        with output.open("wb") as stream:
+        with open_output(output, binary=True) as stream:
             if xml:
                 count = exporter.export_marcxml(stream, filters)
             else:
                 count = exporter.export_marc(stream, filters)
-    typer.echo(f"Wrote {count} records to {output}.")
+    where = "stdout" if to_stdout else output
+    typer.echo(f"Wrote {count} records to {where}.", err=to_stdout)

@@ -7,6 +7,7 @@ from pathlib import Path
 
 import typer
 
+from compendium.cli.io import is_stdio, open_output
 from compendium.db.session import session_scope
 from compendium.services.labels import (
     ItemLabelRow,
@@ -99,7 +100,10 @@ def list_templates() -> None:
 
 @app.command("items")
 def items_labels(
-    output: Path = typer.Option(..., "--output", "-o", help="Output PDF path"),
+    output: str = typer.Option(
+        ..., "--output", "-o",
+        help="Output PDF path. Use '-' for stdout.",
+    ),
     template: str = typer.Option("avery-5160", "--template"),
     format: str | None = typer.Option(
         None,
@@ -144,13 +148,19 @@ def items_labels(
         use_isbn_barcode=use_isbn_barcode,
         start_label=start_label,
     )
-    output.write_bytes(pdf)
-    typer.echo(f"Wrote {len(rows)} label(s) to {output}")
+    to_stdout = is_stdio(output)
+    with open_output(output, binary=True) as f:
+        f.write(pdf)
+    where = "stdout" if to_stdout else output
+    typer.echo(f"Wrote {len(rows)} label(s) to {where}", err=to_stdout)
 
 
 @app.command("patrons")
 def patrons_cards(
-    output: Path = typer.Option(..., "--output", "-o", help="Output PDF path"),
+    output: str = typer.Option(
+        ..., "--output", "-o",
+        help="Output PDF path. Use '-' for stdout.",
+    ),
     template: str = typer.Option("avery-5871", "--template"),
     format: str = typer.Option("full", "--format", help="full | sticker"),
     cards: str | None = typer.Option(
@@ -189,5 +199,8 @@ def patrons_cards(
     except ValueError as exc:
         typer.echo(f"Error: {exc}", err=True)
         raise typer.Exit(1) from exc
-    output.write_bytes(pdf)
-    typer.echo(f"Wrote {len(rows)} card(s) to {output}")
+    to_stdout = is_stdio(output)
+    with open_output(output, binary=True) as f:
+        f.write(pdf)
+    where = "stdout" if to_stdout else output
+    typer.echo(f"Wrote {len(rows)} card(s) to {where}", err=to_stdout)

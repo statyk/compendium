@@ -194,11 +194,16 @@ class BackupService:
 
     def create(
         self,
-        output_path: Path,
+        output_path: Path | None = None,
         *,
+        output_fileobj: Any | None = None,
         include_covers: bool = True,
         include_audit: bool = True,
     ) -> dict[str, Any]:
+        if (output_path is None) == (output_fileobj is None):
+            raise BackupError(
+                "Provide exactly one of output_path or output_fileobj."
+            )
         engine = self._session.get_bind()
         revision = _db_revision(engine)
         head = _current_code_head()
@@ -214,8 +219,9 @@ class BackupService:
             )
 
         counts: dict[str, int] = {}
-        output_path = Path(output_path).expanduser().resolve()
-        output_path.parent.mkdir(parents=True, exist_ok=True)
+        if output_path is not None:
+            output_path = Path(output_path).expanduser().resolve()
+            output_path.parent.mkdir(parents=True, exist_ok=True)
 
         with tempfile.TemporaryDirectory() as td:
             staging = Path(td)
@@ -244,7 +250,13 @@ class BackupService:
             }
             (staging / _MANIFEST_NAME).write_text(json.dumps(manifest, indent=2))
 
-            with tarfile.open(output_path, "w:gz") as tar:
+            # Streaming write mode (``w|gz``) for fileobj — stdout pipes
+            # aren't seekable, and ``w:gz`` may attempt to rewrite headers.
+            if output_path is not None:
+                open_args = {"name": str(output_path), "mode": "w:gz"}
+            else:
+                open_args = {"fileobj": output_fileobj, "mode": "w|gz"}
+            with tarfile.open(**open_args) as tar:
                 for entry in sorted(staging.iterdir()):
                     tar.add(entry, arcname=entry.name)
 
@@ -267,21 +279,33 @@ class BackupService:
 
     def restore(
         self,
-        input_path: Path,
+        input_path: Path | None = None,
         *,
+        input_fileobj: Any | None = None,
         force: bool = False,
         include_covers: bool = True,
     ) -> dict[str, Any]:
-        input_path = Path(input_path).expanduser().resolve()
-        if not input_path.exists():
-            raise BackupError(f"Backup file not found: {input_path}")
+        if (input_path is None) == (input_fileobj is None):
+            raise BackupError(
+                "Provide exactly one of input_path or input_fileobj."
+            )
+        if input_path is not None:
+            input_path = Path(input_path).expanduser().resolve()
+            if not input_path.exists():
+                raise BackupError(f"Backup file not found: {input_path}")
 
         engine = self._session.get_bind()
         db_url = self._settings.database_url
 
         with tempfile.TemporaryDirectory() as td:
             staging = Path(td)
-            with tarfile.open(input_path, "r:gz") as tar:
+            # Streaming mode (``r|gz``) when reading from a fileobj — pipes
+            # aren't seekable, which the random-access ``r:gz`` mode requires.
+            if input_path is not None:
+                open_args = {"name": str(input_path), "mode": "r:gz"}
+            else:
+                open_args = {"fileobj": input_fileobj, "mode": "r|gz"}
+            with tarfile.open(**open_args) as tar:
                 _safe_extract(tar, staging)
 
             manifest_path = staging / _MANIFEST_NAME
@@ -430,10 +454,15 @@ def _reset_postgres_sequences_conn(conn: sa.Connection) -> None:
 
 
 def _safe_extract(tar: tarfile.TarFile, dest: Path) -> None:
-    """Reject absolute paths and traversal attempts before extraction."""
+    """Reject absolute paths and traversal attempts before extraction.
+
+    Iterates members one at a time so this works for both random-access
+    (``r:gz``) and streaming (``r|gz``) tarfiles — `getmembers()` would
+    consume a streaming tar, leaving `extractall()` nothing to extract.
+    """
     dest = dest.resolve()
-    for member in tar.getmembers():
+    for member in tar:
         target = (dest / member.name).resolve()
         if not str(target).startswith(str(dest)):
             raise BackupError(f"Unsafe path in archive: {member.name}")
-    tar.extractall(dest)
+        tar.extract(member, dest)
