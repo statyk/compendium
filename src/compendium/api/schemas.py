@@ -270,6 +270,7 @@ class ImportReportResponse(BaseModel):
     created_works: int
     added_copies: int
     skipped_duplicates: int
+    enriched_rows: int = 0
     errors: list[ImportRowErrorResponse]
     dry_run: bool
 

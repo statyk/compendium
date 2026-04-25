@@ -77,6 +77,7 @@ def _report_to_response(report: ImportReport) -> ImportReportResponse:
         created_works=report.created_works,
         added_copies=report.added_copies,
         skipped_duplicates=report.skipped_duplicates,
+        enriched_rows=report.enriched_rows,
         errors=[
             ImportRowErrorResponse(
                 row_number=e.row_number, identifier=e.identifier, message=e.message
@@ -93,6 +94,7 @@ def _options(
     default_branch: str | None,
     default_media_type: str | None,
     barcode_prefix: str | None,
+    enrich: bool = False,
 ) -> ImportOptions:
     return ImportOptions(
         mode=_mode(mode),
@@ -100,6 +102,7 @@ def _options(
         default_branch_code=default_branch,
         default_media_type=default_media_type,
         barcode_prefix=barcode_prefix,
+        enrich_from_external=enrich,
     )
 
 
@@ -111,6 +114,7 @@ def import_csv(
     default_branch: str | None = Query(None),
     default_media_type: str | None = Query(None),
     barcode_prefix: str | None = Query(None),
+    enrich: bool = Query(False, description="Fill missing fields from the external metadata source per row."),
     session: Session = Depends(get_session),
     user: AppUser = Depends(require_permission("catalog.import")),
 ) -> ImportReportResponse:
@@ -123,7 +127,7 @@ def import_csv(
         raise HTTPException(
             status_code=422, detail=f"CSV must be UTF-8 encoded: {exc}"
         ) from exc
-    options = _options(dry_run, mode, default_branch, default_media_type, barcode_prefix)
+    options = _options(dry_run, mode, default_branch, default_media_type, barcode_prefix, enrich)
     importer = _make_importer(session, user)
     try:
         report = importer.import_csv(text_stream, options, filename=file.filename)
@@ -145,6 +149,7 @@ def import_marc(
         alias="xml",
         description="Set true if uploading MARCXML instead of binary MARC21.",
     ),
+    enrich: bool = Query(False, description="Fill missing fields from the external metadata source per record."),
     session: Session = Depends(get_session),
     user: AppUser = Depends(require_permission("catalog.import")),
 ) -> ImportReportResponse:
@@ -156,7 +161,7 @@ def import_marc(
         file.filename is not None
         and file.filename.lower().endswith((".xml", ".marcxml"))
     )
-    options = _options(dry_run, mode, default_branch, default_media_type, barcode_prefix)
+    options = _options(dry_run, mode, default_branch, default_media_type, barcode_prefix, enrich)
     importer = _make_importer(session, user)
     try:
         if auto_xml:

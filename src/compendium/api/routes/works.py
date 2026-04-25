@@ -119,6 +119,52 @@ def update_work(
     return WorkDetail.model_validate(work)
 
 
+def _serialize_refresh_report(report) -> dict:
+    return {
+        "work_id": report.work_id,
+        "source": report.source,
+        "lookup_kind": report.lookup_kind,
+        "lookup_value": report.lookup_value,
+        "found": report.found,
+        "error": report.error,
+        "applied": report.applied,
+        "cover_cache_busted": report.cover_cache_busted,
+        # Convert tuple values to JSON-friendly dicts.
+        "planned": {
+            k: {"current": old, "new": new}
+            for k, (old, new) in report.planned.items()
+        },
+    }
+
+
+@router.get("/{work_id}/refresh-metadata")
+def preview_refresh_metadata(
+    work_id: int,
+    session: Session = Depends(get_session),
+    user: AppUser = Depends(require_permission("work.edit")),
+) -> dict:
+    """Dry-run a metadata refresh — returns the planned diff without committing."""
+    try:
+        report = _catalog(session, user).refresh_metadata(work_id, dry_run=True)
+    except NotFoundError as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
+    return _serialize_refresh_report(report)
+
+
+@router.post("/{work_id}/refresh-metadata")
+def apply_refresh_metadata(
+    work_id: int,
+    session: Session = Depends(get_session),
+    user: AppUser = Depends(require_permission("work.edit")),
+) -> dict:
+    """Apply a metadata refresh: commits fill-missing diff + busts cover cache."""
+    try:
+        report = _catalog(session, user).refresh_metadata(work_id, dry_run=False)
+    except NotFoundError as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
+    return _serialize_refresh_report(report)
+
+
 @router.put("/{work_id}/creators", response_model=WorkDetail)
 def replace_work_creators(
     work_id: int,

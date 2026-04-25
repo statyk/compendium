@@ -74,4 +74,23 @@
   <button type="submit">Save</button>
   <a href="/ui/catalog/{{ work.id }}" role="button" class="outline secondary">Cancel</a>
 </form>
+
+{% set _has_lookup_key = work.isbn or work.upc
+                          or (work.external_ids and (work.external_ids.get('mbid') or work.external_ids.get('tmdb_id'))) %}
+{% if _has_lookup_key %}
+<hr>
+<h3>Refresh metadata</h3>
+<p>
+  <small>
+    Re-fetch this work's metadata from its external source (Open Library,
+    MusicBrainz, or TMDb depending on media type). You'll see a preview of
+    what would change before anything is committed. Text fields are only
+    filled when the current value is empty; the cover URL is replaced if
+    upstream offers a new one.
+  </small>
+</p>
+<a href="/ui/catalog/{{ work.id }}/refresh-metadata" role="button" class="outline">
+  Refresh from external source
+</a>
+{% endif %}
 {% endblock %}

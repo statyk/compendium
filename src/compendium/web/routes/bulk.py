@@ -101,6 +101,7 @@ async def import_submit(
     default_branch: str | None = Form(None),
     default_media_type: str | None = Form(None),
     barcode_prefix: str | None = Form(None),
+    enrich: str | None = Form(None),
     csrf_token: str = Form(...),
     user: AppUser = Depends(require_web_permission("catalog.import")),
     session: Session = Depends(get_session),
@@ -130,6 +131,7 @@ async def import_submit(
         default_branch_code=default_branch or None,
         default_media_type=default_media_type or None,
         barcode_prefix=barcode_prefix or None,
+        enrich_from_external=bool(enrich),
     )
 
     data = await file.read()

@@ -52,6 +52,11 @@ class ImportOptions:
     default_branch_code: str | None = None
     default_media_type: str | None = None
     barcode_prefix: str | None = None
+    # When True, rows with an ISBN/UPC and at least one missing metadata
+    # field will be enriched from the appropriate external source
+    # (Open Library / MusicBrainz / TMDb) at import time. Disabled by
+    # default — bulk imports of clean data shouldn't pay one HTTP per row.
+    enrich_from_external: bool = False
 
 
 @dataclass
@@ -69,6 +74,7 @@ class ImportReport:
     created_works: int = 0
     added_copies: int = 0
     skipped_duplicates: int = 0
+    enriched_rows: int = 0  # rows where external lookup contributed metadata
     errors: list[ImportRowError] = field(default_factory=list)
     dry_run: bool = False
 
@@ -93,6 +99,7 @@ CSV_COLUMNS = [
     "classification_code",
     "description",
     "language",
+    "cover_image_url",
     "barcode",
     "accession_number",
     "branch",
@@ -431,9 +438,11 @@ class ImportService:
         for row_num, row in enumerate(reader, start=2):
             report.total_rows += 1
             try:
-                _, _, outcome = self._process_csv_row(
+                _, _, outcome, enriched = self._process_csv_row(
                     row, options, seen_barcodes, seen_accessions
                 )
+                if enriched:
+                    report.enriched_rows += 1
                 if outcome == "created_work":
                     report.created_works += 1
                 elif outcome == "added_copy":
@@ -540,6 +549,10 @@ class ImportService:
                 meta["upc"] = normalize_upc(meta["upc"])
             except ValidationError:
                 meta["upc"] = None
+
+        if options.enrich_from_external and (meta.get("isbn") or meta.get("upc")):
+            if self._enrich_meta(meta, mt):
+                report.enriched_rows += 1
 
         try:
             _, _, outcome = self._catalog.add_from_import(
@@ -700,6 +713,7 @@ class ImportService:
             "publication_year": pub_year,
             "description": _strip(row.get("description")),
             "language": _strip(row.get("language")) or "en",
+            "cover_image_url": _strip(row.get("cover_image_url")),
             "isbn": isbn,
             "upc": upc,
             "classification_scheme": _strip(row.get("classification_scheme")),
@@ -708,7 +722,11 @@ class ImportService:
             "extra_metadata": {},
         }
 
-        return self._catalog.add_from_import(
+        enriched = False
+        if options.enrich_from_external and (isbn or upc):
+            enriched = self._enrich_meta(meta, mt)
+
+        work, item, outcome = self._catalog.add_from_import(
             media_type_code=mt,
             meta=meta,
             conflict_mode=options.mode.value,
@@ -723,6 +741,65 @@ class ImportService:
             loan_restriction_reason=reason,
             loan_restriction_note=note,
         )
+        return work, item, outcome, enriched
+
+    def _enrich_meta(self, meta: dict, media_type_code: str) -> bool:
+        """Fill missing meta fields from the appropriate external source.
+
+        Only triggered when ``ImportOptions.enrich_from_external`` is True
+        AND the row has an ISBN or UPC. Network failures are logged and
+        swallowed — the row continues to import with whatever the CSV
+        provided. Returns True if at least one field was filled.
+        """
+        from compendium.domain.errors import ExternalLookupError
+        from compendium.services.metadata import lookup_metadata
+
+        kind: str | None = None
+        value: str | None = None
+        if meta.get("isbn"):
+            kind, value = "isbn", meta["isbn"]
+        elif meta.get("upc"):
+            kind, value = "upc", meta["upc"]
+        if kind is None:
+            return False
+        try:
+            data = lookup_metadata(media_type_code, kind, value)
+        except ExternalLookupError:
+            return False
+        if not data:
+            return False
+
+        filled = False
+        # Fill scalar text fields when current value is empty.
+        for fname in (
+            "subtitle",
+            "publisher",
+            "publication_year",
+            "description",
+            "cover_image_url",
+        ):
+            current = meta.get(fname)
+            new = data.get(fname)
+            if not new:
+                continue
+            if current is None or (isinstance(current, str) and not current.strip()):
+                meta[fname] = new
+                filled = True
+
+        # Authors: only fill if the CSV row provided none.
+        if not meta.get("creators") and data.get("authors"):
+            default_role = meta.get("creator_role") or "author"
+            meta["creators"] = [(name, default_role) for name in data["authors"] if name]
+            if meta["creators"]:
+                filled = True
+
+        # Merge external_ids without overwriting existing keys.
+        external_ids = meta.setdefault("external_ids", {}) or {}
+        for k, v in (data.get("external_ids") or {}).items():
+            if k not in external_ids and v:
+                external_ids[k] = v
+                filled = True
+        return filled
 
 
 class ExportService:
@@ -770,6 +847,7 @@ class ExportService:
                         "classification_code": work.classification_code or "",
                         "description": work.description or "",
                         "language": work.language or "",
+                        "cover_image_url": work.cover_image_url or "",
                         "barcode": item.barcode or "",
                         "accession_number": item.accession_number or "",
                         "branch": item.branch.code if item.branch else "",

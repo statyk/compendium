@@ -54,6 +54,14 @@
     <input type="checkbox" name="dry_run" value="1" checked> Dry run (preview only, nothing written)
   </label>
 
+  <label>
+    <input type="checkbox" name="enrich" value="1">
+    Enrich from external source — for rows with an ISBN or UPC, fill in
+    missing fields (cover, description, publisher, etc.) by looking up the
+    record in Open Library / MusicBrainz / TMDb. Adds one HTTP per row;
+    keep off for fast bulk imports.
+  </label>
+
   <button type="submit">Upload</button>
 </form>
 
@@ -79,6 +87,7 @@
   <dt>Works created</dt><dd>{{ report.created_works }}</dd>
   <dt>Added copies (existing work)</dt><dd>{{ report.added_copies }}</dd>
   <dt>Skipped duplicates</dt><dd>{{ report.skipped_duplicates }}</dd>
+  {% if report.enriched_rows %}<dt>Enriched rows</dt><dd>{{ report.enriched_rows }}</dd>{% endif %}
   <dt>Errors</dt><dd>{{ report.errors | length }}</dd>
 </dl>
 

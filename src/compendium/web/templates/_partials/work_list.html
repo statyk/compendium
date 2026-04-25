@@ -11,7 +11,7 @@
   <li>
     <div class="cover-thumb" aria-hidden="true">
       {% if work.cover_image_url %}
-      <img src="{{ cover_url(work.cover_image_url) }}" alt="" loading="lazy">
+      <img src="{{ cover_url(work.cover_image_url, work.updated_at) }}" alt="" loading="lazy">
       {% endif %}
     </div>
     <div class="work-entry">

@@ -1,12 +1,16 @@
+import getpass
+
 import typer
 
 from compendium.db.session import session_scope
 from compendium.domain.errors import DomainError, NotFoundError
+from compendium.repositories.sql.audit_log_repository import SqlAuditLogRepository
 from compendium.repositories.sql.branch_repository import SqlBranchRepository
 from compendium.repositories.sql.creator_repository import SqlCreatorRepository
 from compendium.repositories.sql.item_repository import SqlItemRepository
 from compendium.repositories.sql.media_type_repository import SqlMediaTypeRepository
 from compendium.repositories.sql.work_repository import SqlWorkRepository
+from compendium.services.audit import AuditService
 from compendium.services.catalog import CatalogService
 
 app = typer.Typer(help="Work (catalog title) commands.")
@@ -14,13 +18,17 @@ creator_app = typer.Typer(help="Manage creators on a specific work.")
 app.add_typer(creator_app, name="creator")
 
 
-def _catalog(session):
+def _catalog(session, *, audit: bool = False):
+    audit_svc = AuditService(SqlAuditLogRepository(session)) if audit else None
     return CatalogService(
         work_repo=SqlWorkRepository(session),
         item_repo=SqlItemRepository(session),
         creator_repo=SqlCreatorRepository(session),
         branch_repo=SqlBranchRepository(session),
         media_type_repo=SqlMediaTypeRepository(session),
+        audit_svc=audit_svc,
+        actor_label=f"cli:{getpass.getuser()}" if audit else None,
+        source="cli" if audit else "system",
     )
 
 
@@ -349,3 +357,53 @@ def show_work(
                 typer.echo(f"    {item.barcode}  [{item.status}]{loc}")
         else:
             typer.echo("\n  No copies.")
+
+
+@app.command("refresh-metadata")
+def refresh_metadata_cmd(
+    work_id: int = typer.Option(..., "--work-id", help="Work ID to refresh."),
+    apply: bool = typer.Option(
+        False,
+        "--apply",
+        help="Commit the changes. Without this flag, the command runs in dry-run mode and prints what would change.",
+    ),
+) -> None:
+    """Re-fetch metadata for a work from its external source.
+
+    Text fields are filled only when currently empty; the cover URL is
+    replaced when upstream offers a new one. The local cover-image cache is
+    invalidated on apply (even when the URL is unchanged) so an upstream
+    image update at the same URL is picked up on next render.
+    """
+    try:
+        with session_scope() as session:
+            report = _catalog(session, audit=apply).refresh_metadata(
+                work_id, dry_run=not apply
+            )
+    except NotFoundError as exc:
+        typer.echo(f"Error: {exc}", err=True)
+        raise typer.Exit(1) from exc
+
+    if not report.found:
+        typer.echo(f"\nNo refresh applied: {report.error}", err=True)
+        raise typer.Exit(1)
+
+    typer.echo(f"\nWork #{report.work_id}")
+    typer.echo(f"  Source: {report.source} ({report.lookup_kind}={report.lookup_value})")
+    if not report.planned:
+        typer.echo("  No fields would change.")
+        if apply and report.cover_cache_busted:
+            typer.echo("  Cover image cache invalidated (will refresh on next render).")
+        return
+
+    typer.echo(f"  Planned changes ({len(report.planned)}):")
+    for fname, (old, new) in sorted(report.planned.items()):
+        old_str = (old if old not in (None, "") else "(empty)")
+        typer.echo(f"    {fname}: {old_str!r} → {new!r}")
+
+    if apply:
+        typer.echo(f"\n  Applied {len(report.planned)} change(s).")
+        if report.cover_cache_busted:
+            typer.echo("  Cover image cache invalidated.")
+    else:
+        typer.echo("\n  Dry run. Pass --apply to commit.")

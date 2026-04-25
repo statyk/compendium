@@ -1,3 +1,7 @@
+from dataclasses import dataclass, field
+from datetime import datetime, timezone
+from typing import Any
+
 from compendium.domain.enums import CreatorRole, HoldStatus, ItemStatus, LoanRestrictionReason
 from compendium.domain.errors import (
     BusinessRuleError,
@@ -24,6 +28,41 @@ from compendium.services.metadata import (
 
 _MISSING = object()
 
+
+# Fields the refresh-metadata flow may update on a Work. Title is excluded
+# (librarians treat their copy as authoritative; never overwrite). Authors
+# are excluded for first cut (relationship handling is fiddly — refreshing
+# them risks duplicate creators or order churn).
+_REFRESHABLE_TEXT_FIELDS: tuple[str, ...] = (
+    "subtitle",
+    "publisher",
+    "publication_year",
+    "description",
+    "language",
+)
+
+
+@dataclass
+class RefreshReport:
+    """Result of a refresh-metadata attempt.
+
+    ``found=True`` means the upstream lookup succeeded. ``planned`` lists the
+    fields that *would* change under fill-missing semantics (cover URL is
+    the only field that may overwrite an existing value when upstream
+    differs). ``cover_cache_busted`` is True when the proxy disk-cache file
+    was removed (apply-mode only)."""
+
+    work_id: int
+    source: str | None  # "openlibrary" / "musicbrainz" / "tmdb" / None
+    lookup_kind: str | None  # "isbn" / "upc" / "mbid" / "tmdb_id" / None
+    lookup_value: str | None
+    found: bool
+    error: str | None = None
+    # field_name -> (current_value, new_value)
+    planned: dict[str, tuple[Any, Any]] = field(default_factory=dict)
+    applied: bool = False
+    cover_cache_busted: bool = False
+
 _DEFAULT_CREATOR_ROLE: dict[str, str] = {
     "book": "author",
     "vinyl": "artist",
@@ -31,6 +70,17 @@ _DEFAULT_CREATOR_ROLE: dict[str, str] = {
     "dvd": "director",
     "bluray": "director",
     "vhs": "director",
+}
+
+# Human-friendly source label per media type — used in the refresh-metadata
+# preview page header and audit details.
+_SOURCE_FOR_MEDIA_TYPE: dict[str, str] = {
+    "book": "openlibrary",
+    "vinyl": "musicbrainz",
+    "cd": "musicbrainz",
+    "dvd": "tmdb",
+    "bluray": "tmdb",
+    "vhs": "tmdb",
 }
 
 
@@ -287,6 +337,179 @@ class CatalogService:
             {"title": work.title, "changes": changes},
         )
         return result
+
+    def refresh_metadata(
+        self,
+        work_id: int,
+        *,
+        dry_run: bool = True,
+    ) -> RefreshReport:
+        """Re-fetch metadata for an existing Work and (optionally) apply.
+
+        Strategy:
+        - Pick a lookup key from the work — preferring ``external_ids``
+          (mbid / tmdb_id) over isbn/upc, since those are more specific.
+        - Call the appropriate adapter via ``lookup_metadata``.
+        - Build a fill-missing diff for text fields (only update where the
+          current value is null or empty).
+        - Cover URL is exempt: replace if upstream has one and it differs
+          from current. If upstream and current URL match, still bust the
+          proxy cache on apply (the bytes at that URL may have changed).
+        - On apply, force-bump ``work.updated_at`` so cover_url(version=)
+          cache-busting kicks in even when only cover bytes changed.
+
+        ``dry_run=True`` (default) returns the planned changes without
+        committing. Use ``dry_run=False`` to apply.
+        """
+        work = self._works.get(work_id)
+        if work is None:
+            raise NotFoundError(f"No work with id {work_id}")
+
+        media_type_code = work.media_type.code if work.media_type else None
+        if media_type_code is None:
+            return RefreshReport(
+                work_id=work_id,
+                source=None,
+                lookup_kind=None,
+                lookup_value=None,
+                found=False,
+                error="Work has no media type — cannot pick a metadata source.",
+            )
+
+        kind, value = self._pick_refresh_lookup_key(work, media_type_code)
+        if kind is None:
+            return RefreshReport(
+                work_id=work_id,
+                source=None,
+                lookup_kind=None,
+                lookup_value=None,
+                found=False,
+                error=(
+                    "Work has no ISBN/UPC/MBID/TMDb ID to look up. "
+                    "Add an external identifier to enable refresh."
+                ),
+            )
+
+        source = _SOURCE_FOR_MEDIA_TYPE.get(media_type_code, "external")
+        try:
+            data = lookup_metadata(media_type_code, kind, value)
+        except ExternalLookupError as exc:
+            return RefreshReport(
+                work_id=work_id,
+                source=source,
+                lookup_kind=kind,
+                lookup_value=value,
+                found=False,
+                error=str(exc),
+            )
+
+        if not data:
+            return RefreshReport(
+                work_id=work_id,
+                source=source,
+                lookup_kind=kind,
+                lookup_value=value,
+                found=False,
+                error="Upstream returned no data for this identifier.",
+            )
+
+        planned = self._compute_refresh_diff(work, data)
+
+        if dry_run:
+            return RefreshReport(
+                work_id=work_id,
+                source=source,
+                lookup_kind=kind,
+                lookup_value=value,
+                found=True,
+                planned=planned,
+            )
+
+        # Apply.
+        old_cover = work.cover_image_url
+        new_cover = data.get("cover_image_url") or None
+
+        for fname, (_old, new) in planned.items():
+            setattr(work, fname, new)
+
+        # Always force-bump updated_at so cover_url(version=) busts the
+        # browser cache even when only cover bytes (not the URL) changed.
+        work.updated_at = datetime.now(tz=timezone.utc)
+        result = self._works.update(work)
+
+        # Bust the cover proxy disk cache for any URL that might be stale.
+        cover_cache_busted = False
+        from compendium.services import covers as _covers
+
+        if old_cover:
+            cover_cache_busted = _covers.invalidate(old_cover) or cover_cache_busted
+        if new_cover and new_cover != old_cover:
+            cover_cache_busted = _covers.invalidate(new_cover) or cover_cache_busted
+
+        self._record(
+            AuditEntityType.WORK,
+            result.id,
+            AuditAction.UPDATE,
+            {
+                "refreshed_from": source,
+                "lookup_kind": kind,
+                "lookup_value": value,
+                "fields_updated": sorted(planned.keys()),
+                "cover_cache_busted": cover_cache_busted,
+            },
+        )
+        return RefreshReport(
+            work_id=work_id,
+            source=source,
+            lookup_kind=kind,
+            lookup_value=value,
+            found=True,
+            planned=planned,
+            applied=True,
+            cover_cache_busted=cover_cache_busted,
+        )
+
+    @staticmethod
+    def _pick_refresh_lookup_key(
+        work: Work, media_type_code: str
+    ) -> tuple[str | None, str | None]:
+        """Choose (kind, value) for an upstream lookup.
+
+        Prefers identifier specificity: MBID/TMDb-ID over UPC over ISBN.
+        """
+        ext = work.external_ids or {}
+        if media_type_code in ("vinyl", "cd") and ext.get("mbid"):
+            return "mbid", str(ext["mbid"])
+        if media_type_code in ("dvd", "bluray", "vhs") and ext.get("tmdb_id"):
+            return "tmdb_id", str(ext["tmdb_id"])
+        if work.isbn:
+            return "isbn", work.isbn
+        if work.upc:
+            return "upc", work.upc
+        return None, None
+
+    @staticmethod
+    def _compute_refresh_diff(work: Work, data: dict) -> dict[str, tuple[Any, Any]]:
+        """Build the field-by-field plan under fill-missing-plus-cover rules."""
+        planned: dict[str, tuple[Any, Any]] = {}
+        for fname in _REFRESHABLE_TEXT_FIELDS:
+            current = getattr(work, fname, None)
+            new = data.get(fname)
+            if not new:
+                continue
+            # Strict fill-missing: only update if current is None / empty.
+            if current is None or (isinstance(current, str) and not current.strip()):
+                planned[fname] = (current, new)
+
+        # Cover URL — exempt from fill-missing. Replace when upstream differs.
+        # (Classification refresh is intentionally skipped: it requires a
+        # target scheme + can require a separate LoC lookup, and changes
+        # rarely upstream. Out of scope here; can be added per-scheme later.)
+        new_cover = data.get("cover_image_url")
+        if new_cover and new_cover != work.cover_image_url:
+            planned["cover_image_url"] = (work.cover_image_url, new_cover)
+
+        return planned
 
     def update_item(
         self,

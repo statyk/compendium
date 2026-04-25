@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from urllib.parse import quote
+
 from fastapi import APIRouter, Depends, Form, Query, Request
 from fastapi.responses import HTMLResponse, RedirectResponse
 from markupsafe import escape
@@ -363,6 +365,72 @@ def work_edit_submit(
         )
     return RedirectResponse(
         f"/ui/catalog/{work_id}?message=Work+updated.", status_code=303
+    )
+
+
+@router.get("/catalog/{work_id:int}/refresh-metadata")
+def work_refresh_preview(
+    work_id: int,
+    request: Request,
+    user: AppUser = Depends(require_web_permission("work.edit")),
+    session: Session = Depends(get_session),
+):
+    """Preview a metadata refresh — fetches upstream + computes diff. No DB writes."""
+    try:
+        report = _catalog_svc(session, user).refresh_metadata(work_id, dry_run=True)
+    except NotFoundError:
+        return _render(
+            "error.html",
+            request,
+            {"request": request, "user": user, "message": "Work not found"},
+            status_code=404,
+        )
+    work = SqlWorkRepository(session).get(work_id)
+    return _render(
+        "catalog/refresh_preview.html",
+        request,
+        {
+            "request": request,
+            "user": user,
+            "work": work,
+            "report": report,
+        },
+    )
+
+
+@router.post("/catalog/{work_id:int}/refresh-metadata")
+def work_refresh_apply(
+    work_id: int,
+    request: Request,
+    csrf_token: str = Form(default=""),
+    user: AppUser = Depends(require_web_permission("work.edit")),
+    session: Session = Depends(get_session),
+):
+    """Apply a metadata refresh. Re-fetches upstream (idempotent) and commits."""
+    check_csrf_form(request, csrf_token)
+    try:
+        report = _catalog_svc(session, user).refresh_metadata(work_id, dry_run=False)
+    except NotFoundError:
+        return _render(
+            "error.html",
+            request,
+            {"request": request, "user": user, "message": "Work not found"},
+            status_code=404,
+        )
+    if not report.found:
+        return RedirectResponse(
+            f"/ui/catalog/{work_id}/edit?error={quote(report.error or 'refresh_failed')}",
+            status_code=303,
+        )
+    if not report.planned:
+        return RedirectResponse(
+            f"/ui/catalog/{work_id}/edit?message=No+changes+to+apply.",
+            status_code=303,
+        )
+    summary = ", ".join(sorted(report.planned.keys()))
+    return RedirectResponse(
+        f"/ui/catalog/{work_id}/edit?message=Refreshed+from+{report.source}:+{quote(summary)}",
+        status_code=303,
     )
 
 

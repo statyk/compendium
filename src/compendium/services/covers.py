@@ -117,6 +117,30 @@ def fetch_or_404(url: str) -> Path:
     return hit
 
 
+def invalidate(url: str) -> bool:
+    """Remove the cached JPEG and any negative-cache sentinel for ``url``.
+
+    Used when refreshing metadata: even if the upstream URL is unchanged,
+    the bytes at that URL may have been updated. Forces the next read to
+    re-fetch from upstream. Safe to call when nothing is cached.
+
+    Returns True if at least one file was removed.
+    """
+    d = cache_dir()
+    key = cache_key(url)
+    removed = False
+    for suffix in (".jpg", ".404"):
+        path = d / f"{key}{suffix}"
+        try:
+            path.unlink()
+            removed = True
+        except FileNotFoundError:
+            continue
+        except OSError:
+            continue
+    return removed
+
+
 def prune(max_bytes: int) -> tuple[int, int]:
     """Evict cache files (oldest mtime first) until total size ≤ ``max_bytes``.
 

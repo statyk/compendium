@@ -93,7 +93,7 @@
             <a href="/ui/catalog/{{ w.id }}" title="{{ w.title }}">
               <div class="cover-thumb cover-thumb-shelf" aria-hidden="true">
                 {% if w.cover_image_url %}
-                <img src="{{ cover_url(w.cover_image_url) }}" alt="" loading="lazy">
+                <img src="{{ cover_url(w.cover_image_url, w.updated_at) }}" alt="" loading="lazy">
                 {% endif %}
               </div>
               <small class="shelf-title">{{ w.title }}</small>
@@ -110,7 +110,7 @@
             <a href="/ui/catalog/{{ w.id }}" title="{{ w.title }}">
               <div class="cover-thumb cover-thumb-shelf" aria-hidden="true">
                 {% if w.cover_image_url %}
-                <img src="{{ cover_url(w.cover_image_url) }}" alt="" loading="lazy">
+                <img src="{{ cover_url(w.cover_image_url, w.updated_at) }}" alt="" loading="lazy">
                 {% endif %}
               </div>
               <small class="shelf-title">{{ w.title }}</small>

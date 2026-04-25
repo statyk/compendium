@@ -1,0 +1,80 @@
+{% extends "base.html" %}
+{% block title %}Refresh metadata — {{ work.title }} — {{ library_name() }}{% endblock %}
+{% block content %}
+
+<nav aria-label="breadcrumb">
+  <ul>
+    <li><a href="/ui/catalog">Catalog</a></li>
+    <li><a href="/ui/catalog/{{ work.id }}">{{ work.title }}</a></li>
+    <li><a href="/ui/catalog/{{ work.id }}/edit">Edit</a></li>
+    <li>Refresh</li>
+  </ul>
+</nav>
+
+<h2>Refresh metadata</h2>
+
+{% if not report.found %}
+  <p class="error-banner">
+    Refresh failed: {{ report.error or "no upstream data found" }}
+  </p>
+  <p>
+    <a href="/ui/catalog/{{ work.id }}/edit" role="button" class="secondary">Back to edit</a>
+  </p>
+{% else %}
+  <p>
+    Source:
+    <strong>{{ report.source }}</strong>
+    (lookup: <code>{{ report.lookup_kind }}={{ report.lookup_value }}</code>)
+  </p>
+
+  {% if report.planned %}
+    <p>
+      Applying this refresh will update <strong>{{ report.planned | length }}</strong>
+      field{{ '' if report.planned | length == 1 else 's' }} on this work.
+      Text fields are only filled when the current value is empty; the cover
+      URL is replaced when upstream provides a new one. Local cover-image
+      cache is always re-downloaded so a same-URL upstream image update is
+      picked up.
+    </p>
+
+    <table>
+      <thead>
+        <tr>
+          <th>Field</th>
+          <th>Current</th>
+          <th>New (from {{ report.source }})</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for fname, change in report.planned.items() | sort %}
+        <tr>
+          <th scope="row"><code>{{ fname }}</code></th>
+          <td><small>{% if change[0] %}{{ change[0] }}{% else %}<em>empty</em>{% endif %}</small></td>
+          <td><strong>{{ change[1] }}</strong></td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  {% else %}
+    <p>
+      No fields would change. The work already has values for every field
+      this source provides, and the cover URL is unchanged.
+    </p>
+    <p>
+      <small>
+        Confirming will still re-download the cover image from upstream in
+        case the bytes have been updated at the same URL.
+      </small>
+    </p>
+  {% endif %}
+
+  <form method="post" style="display:inline">
+    <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+    <button type="submit">
+      {% if report.planned %}Apply changes{% else %}Re-download cover image{% endif %}
+    </button>
+  </form>
+  <a href="/ui/catalog/{{ work.id }}/edit" role="button" class="secondary">Cancel</a>
+{% endif %}
+
+{% endblock %}

@@ -64,6 +64,8 @@ def _print_report(report) -> None:
     typer.echo(f"  created     : {report.created_works}")
     typer.echo(f"  added copy  : {report.added_copies}")
     typer.echo(f"  skipped     : {report.skipped_duplicates}")
+    if report.enriched_rows:
+        typer.echo(f"  enriched    : {report.enriched_rows}")
     typer.echo(f"  errors      : {len(report.errors)}")
     if report.dry_run:
         typer.echo("  (dry-run — no changes persisted)")
@@ -91,6 +93,7 @@ def _common_import_options(
     default_branch: str | None,
     default_media_type: str | None,
     barcode_prefix: str | None,
+    enrich: bool = False,
 ) -> ImportOptions:
     return ImportOptions(
         mode=_resolve_mode(mode),
@@ -98,6 +101,7 @@ def _common_import_options(
         default_branch_code=default_branch,
         default_media_type=default_media_type,
         barcode_prefix=barcode_prefix,
+        enrich_from_external=enrich,
     )
 
 
@@ -123,10 +127,20 @@ def import_csv_cmd(
         "--barcode-prefix",
         help="Prefix for auto-generated barcodes in this batch (e.g. 'IMP-').",
     ),
+    enrich: bool = typer.Option(
+        False,
+        "--enrich",
+        help=(
+            "When a row has an ISBN or UPC, fill missing fields (cover, "
+            "description, etc.) from the relevant external source. "
+            "Default off — bulk imports of clean data should skip the "
+            "per-row HTTP call."
+        ),
+    ),
 ) -> None:
     """Import catalog rows from a CSV file."""
     options = _common_import_options(
-        dry_run, mode, default_branch, default_media_type, barcode_prefix
+        dry_run, mode, default_branch, default_media_type, barcode_prefix, enrich
     )
     label = "stdin" if is_stdio(file) else Path(file).name
     try:
@@ -158,10 +172,19 @@ def import_marc_cmd(
         "--xml",
         help="Force MARCXML parsing (required when reading XML from stdin).",
     ),
+    enrich: bool = typer.Option(
+        False,
+        "--enrich",
+        help=(
+            "Fill missing metadata from the external source matching the "
+            "record's media type. ISBN/UPC must be present on the record. "
+            "Default off."
+        ),
+    ),
 ) -> None:
     """Import catalog records from a MARC21 binary (.mrc) or MARCXML (.xml) file."""
     options = _common_import_options(
-        dry_run, mode, default_branch, default_media_type, barcode_prefix
+        dry_run, mode, default_branch, default_media_type, barcode_prefix, enrich
     )
     if is_stdio(file):
         is_xml = xml  # extension-sniffing isn't possible for stdin; explicit flag wins
