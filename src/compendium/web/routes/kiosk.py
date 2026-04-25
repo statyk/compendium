@@ -21,6 +21,7 @@ from markupsafe import escape
 from sqlalchemy.orm import Session
 
 from compendium.config.settings import Settings
+from compendium.services.site_settings import get_site_setting
 from compendium.db.engine import get_settings
 from compendium.db.session import get_session
 from compendium.domain.errors import (
@@ -70,7 +71,7 @@ def _circ(session: Session, actor: AppUser, settings: Settings) -> CirculationSe
         branch_repo=SqlBranchRepository(session),
         hold_repo=SqlHoldRepository(session),
         policy_repo=SqlLoanPolicyRepository(session),
-        hold_pickup_days=settings.hold_pickup_days,
+        hold_pickup_days=get_site_setting("hold_pickup_days"),
         fine_svc=_fine_svc(session, settings),
         audit_svc=AuditService(SqlAuditLogRepository(session)),
         actor=actor,
@@ -116,7 +117,7 @@ def kiosk_landing(
             "request": request,
             "user": user,
             "error": error,
-            "idle_timeout_seconds": settings.kiosk_idle_timeout_seconds,
+            "idle_timeout_seconds": get_site_setting("kiosk_idle_timeout_seconds"),
         },
     )
 
@@ -175,7 +176,7 @@ def kiosk_session(
             "request": request,
             "user": user,
             "patron": patron,
-            "idle_timeout_seconds": settings.kiosk_idle_timeout_seconds,
+            "idle_timeout_seconds": get_site_setting("kiosk_idle_timeout_seconds"),
         },
     )
 

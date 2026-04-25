@@ -9,6 +9,7 @@ from sqlalchemy.orm import Session
 
 from compendium.db.engine import get_settings
 from compendium.db.session import get_session
+from compendium.services.site_settings import get_site_setting
 from compendium.domain.errors import BusinessRuleError, NotFoundError, ValidationError
 from compendium.domain.models import AppUser, Patron
 from compendium.repositories.sql.audit_log_repository import SqlAuditLogRepository
@@ -320,15 +321,14 @@ def patron_cancel_hold(
     patron = SqlPatronRepository(session).get_by_card_number(card_number)
     if patron is None or hold.patron_id != patron.id:
         return HTMLResponse("<span class='error-banner'>Hold does not belong to this patron.</span>")
-    settings = get_settings()
     holds_svc = HoldService(
         hold_repo=hold_repo,
         patron_repo=SqlPatronRepository(session),
         work_repo=SqlWorkRepository(session),
         branch_repo=SqlBranchRepository(session),
         item_repo=SqlItemRepository(session),
-        hold_expiry_days=settings.hold_expiry_days,
-        hold_pickup_days=settings.hold_pickup_days,
+        hold_expiry_days=get_site_setting("hold_expiry_days"),
+        hold_pickup_days=get_site_setting("hold_pickup_days"),
     )
     try:
         holds_svc.cancel(hold_id, hold.patron_id)

@@ -7,6 +7,7 @@ from sqlalchemy.orm import Session
 
 from compendium.db.engine import get_settings
 from compendium.db.session import get_session
+from compendium.services.site_settings import get_site_setting
 from compendium.domain.errors import (
     BusinessRuleError,
     NotFoundError,
@@ -70,8 +71,8 @@ def _holds_svc(session: Session) -> HoldService:
         work_repo=SqlWorkRepository(session),
         branch_repo=SqlBranchRepository(session),
         item_repo=SqlItemRepository(session),
-        hold_expiry_days=settings.hold_expiry_days,
-        hold_pickup_days=settings.hold_pickup_days,
+        hold_expiry_days=get_site_setting("hold_expiry_days"),
+        hold_pickup_days=get_site_setting("hold_pickup_days"),
         notification_svc=notifs,
     )
 
@@ -131,7 +132,7 @@ def catalog_search(
     session: Session = Depends(get_session),
 ):
     settings = get_settings()
-    if not (settings.guest_search_enabled or user is not None):
+    if not (get_site_setting("guest_search_enabled") or user is not None):
         return _render(
             "catalog/search.html",
             request,
@@ -204,7 +205,7 @@ def catalog_search_results(
     session: Session = Depends(get_session),
 ):
     settings = get_settings()
-    if not (settings.guest_search_enabled or user is not None):
+    if not (get_site_setting("guest_search_enabled") or user is not None):
         return templates.TemplateResponse(
             request, "_partials/work_list.html", {"page": None, "q": q}
         )

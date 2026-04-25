@@ -68,13 +68,15 @@ class FineService:
         return self._fines.outstanding_total(patron_id)
 
     def checkout_status(self, patron: Patron) -> CheckoutStatus:
-        threshold = self._settings.fine_block_threshold_cents
+        from compendium.services.site_settings import get_site_setting
+
+        threshold = get_site_setting("fine_block_threshold_cents")
         if threshold is None:
             return CheckoutStatus.OK
         total = self._fines.outstanding_total(patron.id)
         if total <= threshold:
             return CheckoutStatus.OK
-        if self._settings.fine_block_holds:
+        if get_site_setting("fine_block_holds"):
             return CheckoutStatus.BLOCKED
         return CheckoutStatus.BLOCKED_AT_PICKUP
 

@@ -142,6 +142,10 @@ def set_site_setting(
     *,
     session: Session,
     updated_by_id: int | None = None,
+    audit_svc: Any | None = None,
+    actor: Any | None = None,
+    actor_label: str | None = None,
+    source: str = "service",
 ) -> SiteSetting:
     """Validate, persist, and invalidate-cache for a setting key.
 
@@ -149,20 +153,64 @@ def set_site_setting(
     commit after calling, which is fine — cache invalidation runs now
     and the next read will re-query (seeing the committed row because
     the caller commits before returning).
+
+    When ``audit_svc`` is provided, emits a SETTING_UPDATE audit entry
+    with ``{key, before, after}`` details (before is the previously stored
+    raw text; "" represents "default / not overridden").
     """
     desc = get_descriptor(key)
+    if value is None and not desc.nullable:
+        from compendium.services.settings_registry import SettingValidationError
+
+        raise SettingValidationError(f"setting {key!r} is not nullable")
     validate(desc, value)
     raw = encode_for_storage(value, desc.type)
     repo = SqlSiteSettingRepository(session)
+    existing = repo.get(key)
+    before = existing.value if existing is not None else None
     row = repo.upsert(key, raw, updated_by_id=updated_by_id)
     invalidate_cache()
+    if audit_svc is not None:
+        from compendium.services.audit import AuditAction, AuditEntityType
+
+        audit_svc.record(
+            actor=actor,
+            actor_label=actor_label,
+            source=source,
+            entity_type=AuditEntityType.SITE_SETTING,
+            entity_id=None,
+            action=AuditAction.SETTING_UPDATE,
+            details={"key": key, "before": before, "after": raw},
+        )
     return row
 
 
-def delete_site_setting(key: str, *, session: Session) -> bool:
+def delete_site_setting(
+    key: str,
+    *,
+    session: Session,
+    audit_svc: Any | None = None,
+    actor: Any | None = None,
+    actor_label: str | None = None,
+    source: str = "service",
+) -> bool:
     """Remove a setting override; subsequent reads fall through to default."""
-    get_descriptor(key)  # ensure registered — prevents typos
+    desc = get_descriptor(key)  # ensure registered — prevents typos
     repo = SqlSiteSettingRepository(session)
+    existing = repo.get(key)
+    before = existing.value if existing is not None else None
     result = repo.delete(key)
     invalidate_cache()
+    if audit_svc is not None and result:
+        from compendium.services.audit import AuditAction, AuditEntityType
+
+        audit_svc.record(
+            actor=actor,
+            actor_label=actor_label,
+            source=source,
+            entity_type=AuditEntityType.SITE_SETTING,
+            entity_id=None,
+            action=AuditAction.SETTING_RESET,
+            details={"key": key, "before": before},
+        )
     return result

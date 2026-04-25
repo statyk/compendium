@@ -127,10 +127,12 @@ class CirculationService:
         if self._fines is not None:
             status = self._fines.checkout_status(patron)
             if status != CheckoutStatus.OK:
+                from compendium.services.site_settings import get_site_setting
+
                 raise BlockedByFinesError(
                     patron.library_card_number,
                     self._fines.outstanding_total(patron.id),
-                    self._fines._settings.fine_block_threshold_cents or 0,
+                    get_site_setting("fine_block_threshold_cents") or 0,
                 )
 
         if not item.is_loanable:

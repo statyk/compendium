@@ -8,6 +8,7 @@ from sqlalchemy.orm import Session
 
 from compendium.api.deps import get_current_patron, require_permission
 from compendium.api.schemas import HoldResponse, LoanResponse, SelfHoldRequest
+from compendium.services.site_settings import get_site_setting
 from compendium.db.engine import get_settings
 from compendium.db.session import get_session
 from compendium.domain.errors import BusinessRuleError, NotFoundError, ValidationError
@@ -34,7 +35,7 @@ def _circulation(session: Session) -> CirculationService:
         branch_repo=SqlBranchRepository(session),
         hold_repo=SqlHoldRepository(session),
         policy_repo=SqlLoanPolicyRepository(session),
-        hold_pickup_days=settings.hold_pickup_days,
+        hold_pickup_days=get_site_setting("hold_pickup_days"),
     )
 
 
@@ -46,8 +47,8 @@ def _holds(session: Session) -> HoldService:
         work_repo=SqlWorkRepository(session),
         branch_repo=SqlBranchRepository(session),
         item_repo=SqlItemRepository(session),
-        hold_expiry_days=settings.hold_expiry_days,
-        hold_pickup_days=settings.hold_pickup_days,
+        hold_expiry_days=get_site_setting("hold_expiry_days"),
+        hold_pickup_days=get_site_setting("hold_pickup_days"),
     )
 
 

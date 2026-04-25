@@ -3,6 +3,7 @@ from datetime import datetime, timedelta, timezone
 
 import typer
 
+from compendium.services.site_settings import get_site_setting
 from compendium.db.engine import get_settings
 from compendium.db.session import session_scope
 from compendium.repositories.sql.audit_log_repository import SqlAuditLogRepository
@@ -55,8 +56,8 @@ def _holds_svc(session) -> HoldService:
         work_repo=SqlWorkRepository(session),
         branch_repo=SqlBranchRepository(session),
         item_repo=SqlItemRepository(session),
-        hold_expiry_days=settings.hold_expiry_days,
-        hold_pickup_days=settings.hold_pickup_days,
+        hold_expiry_days=get_site_setting("hold_expiry_days"),
+        hold_pickup_days=get_site_setting("hold_pickup_days"),
         audit_svc=AuditService(SqlAuditLogRepository(session)),
         actor_label=f"cli:{getpass.getuser()}",
         source="cli",
@@ -109,7 +110,7 @@ def prune_audit_log(
     setting; errors if neither is provided. No default is assumed so that
     sysadmins set the retention window intentionally.
     """
-    days = older_than_days if older_than_days is not None else get_settings().audit_retention_days
+    days = older_than_days if older_than_days is not None else get_site_setting("audit_retention_days")
     if days is None:
         typer.echo(
             "Error: pass --older-than-days N or set COMPENDIUM_AUDIT_RETENTION_DAYS.",
@@ -221,7 +222,7 @@ def queue_due_soon_notices_cmd(
     """Queue a due-soon reminder for each active loan due within the window."""
     with session_scope() as session:
         svc = _make_notification_svc(session)
-        effective = days_before if days_before is not None else get_settings().due_soon_days_before
+        effective = days_before if days_before is not None else get_site_setting("due_soon_days_before")
         counts = svc.queue_due_soon_batch(days_before=effective)
     typer.echo(f"Due-soon notices queued: {counts.queued}")
 
@@ -233,12 +234,16 @@ def queue_overdue_notices_cmd(
     ),
 ) -> None:
     """Queue an overdue notice per active overdue loan at the highest matching tier."""
-    raw = tiers if tiers is not None else get_settings().overdue_tiers
-    try:
-        tier_list = sorted({int(x.strip()) for x in raw.split(",") if x.strip()})
-    except ValueError as exc:
-        typer.echo(f"Error: tiers must be integers: {exc}", err=True)
-        raise typer.Exit(1) from exc
+    if tiers is not None:
+        try:
+            tier_list = sorted(
+                {int(x.strip()) for x in tiers.split(",") if x.strip()}
+            )
+        except ValueError as exc:
+            typer.echo(f"Error: tiers must be integers: {exc}", err=True)
+            raise typer.Exit(1) from exc
+    else:
+        tier_list = sorted(set(get_site_setting("overdue_tiers")))
     if not tier_list:
         typer.echo("Error: at least one tier is required.", err=True)
         raise typer.Exit(1)
@@ -269,7 +274,7 @@ def prune_notifications_cmd(
 
     days = older_than_days
     if days is None:
-        days = get_settings().notification_retention_days
+        days = get_site_setting("notification_retention_days")
     if days is None and status is None:
         typer.echo(
             "Error: pass --older-than-days N, set COMPENDIUM_NOTIFICATION_RETENTION_DAYS, "

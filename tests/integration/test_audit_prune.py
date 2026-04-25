@@ -133,27 +133,28 @@ def test_cli_prunes_and_reports_count(session):
     assert session.query(AuditLog).count() == 2
 
 
-def test_cli_uses_setting_when_flag_omitted(session):
+def test_cli_uses_setting_when_flag_omitted(session, monkeypatch):
+    monkeypatch.setenv("COMPENDIUM_AUDIT_RETENTION_DAYS", "50")
+    from compendium.services import site_settings as _ss
+    _ss.invalidate_cache()
     _seed(session)
 
-    result = _run_cli(
-        session,
-        ["prune-audit-log"],
-        settings=Settings(audit_retention_days=50),
-    )
+    result = _run_cli(session, ["prune-audit-log"])
 
     assert result.exit_code == 0
     assert "Pruned 1" in result.output
     assert session.query(AuditLog).count() == 2
 
 
-def test_cli_flag_overrides_setting(session):
+def test_cli_flag_overrides_setting(session, monkeypatch):
+    monkeypatch.setenv("COMPENDIUM_AUDIT_RETENTION_DAYS", "365")
+    from compendium.services import site_settings as _ss
+    _ss.invalidate_cache()
     _seed(session)
 
     result = _run_cli(
         session,
         ["prune-audit-log", "--older-than-days", "10"],
-        settings=Settings(audit_retention_days=365),
     )
 
     assert result.exit_code == 0

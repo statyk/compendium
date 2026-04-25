@@ -20,6 +20,7 @@ from compendium.cli.commands import (
     policy,
     reports,
     role,
+    settings as settings_cmd,
     user,
     work,
 )
@@ -49,6 +50,7 @@ app.add_typer(bulk_ops.export_app, name="export")
 app.add_typer(fine.app, name="fine")
 app.add_typer(reports.app, name="reports")
 app.add_typer(labels.app, name="labels")
+app.add_typer(settings_cmd.app, name="settings")
 
 app.command("backup")(backup.backup_command)
 app.command("restore")(backup.restore_command)

@@ -295,7 +295,12 @@ def test_send_pending_retries_after_transient_failure(session):
     assert "connection refused" in row.last_error
 
 
-def test_send_pending_gives_up_at_max_attempts(session):
+def test_send_pending_gives_up_at_max_attempts(session, monkeypatch):
+    monkeypatch.setenv("COMPENDIUM_NOTIFICATIONS_MAX_ATTEMPTS", "2")
+    monkeypatch.setenv("COMPENDIUM_SMTP_HOST", "mail.test")
+    monkeypatch.setenv("COMPENDIUM_SMTP_FROM_ADDRESS", "noreply@example.test")
+    from compendium.services import site_settings as _ss
+    _ss.invalidate_cache()
     work, item = _seed_work_item(session)
     patron = _make_patron(session, "ND0004")
     hold = _make_hold(session, patron, work, item.branch_id)
@@ -303,13 +308,7 @@ def test_send_pending_gives_up_at_max_attempts(session):
     fake_sender = MagicMock(spec=SMTPSender)
     fake_sender.is_configured.return_value = True
     fake_sender.send.side_effect = RuntimeError("auth failed")
-    settings = Settings(
-        database_url="sqlite:///:memory:",
-        smtp_host="mail.test",
-        smtp_from_address="noreply@example.test",
-        notifications_max_attempts=2,
-    )
-    svc, _ = _build(session, settings=settings, sender=fake_sender)
+    svc, _ = _build(session, sender=fake_sender)
     svc.queue_hold_ready(hold)
     svc.send_pending()
     svc.send_pending()

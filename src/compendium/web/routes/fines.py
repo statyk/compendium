@@ -8,6 +8,7 @@ from fastapi import APIRouter, Depends, Form, Request
 from fastapi.responses import RedirectResponse
 from sqlalchemy.orm import Session
 
+from compendium.services.site_settings import get_site_setting
 from compendium.db.engine import get_settings
 from compendium.db.session import get_session
 from compendium.domain.errors import (
@@ -59,7 +60,7 @@ def _circulation(session: Session, user: AppUser | None) -> CirculationService:
         branch_repo=SqlBranchRepository(session),
         hold_repo=SqlHoldRepository(session),
         policy_repo=SqlLoanPolicyRepository(session),
-        hold_pickup_days=settings.hold_pickup_days,
+        hold_pickup_days=get_site_setting("hold_pickup_days"),
         fine_svc=_fine_svc(session, user),
         audit_svc=audit,
         actor=user,

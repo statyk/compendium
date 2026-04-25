@@ -87,7 +87,7 @@ def client(engine, db_session):
 
 
 @pytest.fixture
-def client_with_block(engine, db_session):
+def client_with_block(engine, db_session, monkeypatch):
     app = create_app()
 
     def _override():
@@ -103,11 +103,14 @@ def client_with_block(engine, db_session):
             s.close()
 
     app.dependency_overrides[get_session] = _override
+    # Settings now sourced via get_site_setting; env var wins so these are the
+    # easiest way to inject test config without polluting the shared DB.
+    monkeypatch.setenv("COMPENDIUM_FINE_BLOCK_THRESHOLD_CENTS", "100")
+    monkeypatch.setenv("COMPENDIUM_FINE_BLOCK_HOLDS", "false")
+    from compendium.services import site_settings as _ss
+    _ss.invalidate_cache()
     blocked = _settings_with_block(threshold=100, block_holds=False)
-    # Patch every route-module reference that shallow-imported get_settings.
-    with patch("compendium.db.engine.get_settings", return_value=blocked), patch(
-        "compendium.web.routes.me.get_settings", return_value=blocked
-    ), patch("compendium.web.routes.fines.get_settings", return_value=blocked):
+    with patch("compendium.db.engine.get_settings", return_value=blocked):
         yield TestClient(app, follow_redirects=False)
 
 

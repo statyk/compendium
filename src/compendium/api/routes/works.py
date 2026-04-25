@@ -10,6 +10,7 @@ from compendium.api.schemas import (
 )
 from compendium.db.engine import get_settings
 from compendium.db.session import get_session
+from compendium.services.site_settings import get_site_setting
 from compendium.domain.errors import (
     BusinessRuleError,
     NotFoundError,
@@ -47,7 +48,7 @@ def _discovery(session: Session) -> DiscoveryService:
 
 
 def _gate_search(user: AppUser | None) -> None:
-    if not get_settings().guest_search_enabled and user is None:
+    if not get_site_setting("guest_search_enabled") and user is None:
         raise HTTPException(status_code=401, detail="Authentication required to search")
 
 

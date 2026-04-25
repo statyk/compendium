@@ -229,7 +229,7 @@ class NotificationService:
     ) -> NotificationCounts:
         counts = NotificationCounts()
         batch = self._notifications.list_pending(
-            limit=batch_size or self._settings.notifications_batch_size
+            limit=batch_size or get_site_setting("notifications_batch_size")
         )
         if not batch:
             self._record_send_summary(counts)
@@ -248,7 +248,7 @@ class NotificationService:
             self._record_send_summary(counts)
             return counts
 
-        max_attempts = self._settings.notifications_max_attempts
+        max_attempts = get_site_setting("notifications_max_attempts")
         for row in batch:
             if not row.recipient_email:
                 row.status = NotificationStatus.CANCELLED.value

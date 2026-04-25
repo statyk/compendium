@@ -136,16 +136,15 @@ def test_checkin_no_fine_when_returned_on_time(session):
     assert fines.list(patron_id=patron.id) == []
 
 
-def test_checkout_blocked_when_over_threshold(session):
+def test_checkout_blocked_when_over_threshold(session, monkeypatch):
+    monkeypatch.setenv("COMPENDIUM_FINE_BLOCK_THRESHOLD_CENTS", "100")
+    monkeypatch.setenv("COMPENDIUM_FINE_BLOCK_HOLDS", "false")
+    from compendium.services import site_settings as _ss
+    _ss.invalidate_cache()
     _, item = _seed(session)
     patron = _patron(session, "CIRC0003")
     _set_policy(session, per_day=50)
-    settings = Settings(
-        database_url="sqlite:///:memory:",
-        fine_block_threshold_cents=100,
-        fine_block_holds=False,
-    )
-    circ, _, fines = _build(session, settings=settings)
+    circ, _, fines = _build(session)
 
     # Assess a large manual fine so patron is blocked
     fines.assess_manual(patron, kind=FineKind.OTHER.value, amount_cents=500, note="x")
@@ -165,15 +164,14 @@ def test_checkout_allowed_under_threshold(session):
     assert loan is not None
 
 
-def test_hold_allowed_when_only_checkout_blocked(session):
+def test_hold_allowed_when_only_checkout_blocked(session, monkeypatch):
+    monkeypatch.setenv("COMPENDIUM_FINE_BLOCK_THRESHOLD_CENTS", "100")
+    monkeypatch.setenv("COMPENDIUM_FINE_BLOCK_HOLDS", "false")
+    from compendium.services import site_settings as _ss
+    _ss.invalidate_cache()
     work, item = _seed(session)
     patron = _patron(session, "CIRC0005")
-    settings = Settings(
-        database_url="sqlite:///:memory:",
-        fine_block_threshold_cents=100,
-        fine_block_holds=False,
-    )
-    circ, holds, fines = _build(session, settings=settings)
+    circ, holds, fines = _build(session)
     fines.assess_manual(patron, kind=FineKind.OTHER.value, amount_cents=500, note="x")
 
     # Holds allowed (AVAILABLE copy → immediate promote)
@@ -184,15 +182,14 @@ def test_hold_allowed_when_only_checkout_blocked(session):
         circ.checkout(item.barcode, "CIRC0005")
 
 
-def test_hold_blocked_when_fine_block_holds_true(session):
+def test_hold_blocked_when_fine_block_holds_true(session, monkeypatch):
+    monkeypatch.setenv("COMPENDIUM_FINE_BLOCK_THRESHOLD_CENTS", "100")
+    monkeypatch.setenv("COMPENDIUM_FINE_BLOCK_HOLDS", "true")
+    from compendium.services import site_settings as _ss
+    _ss.invalidate_cache()
     work, item = _seed(session)
     patron = _patron(session, "CIRC0006")
-    settings = Settings(
-        database_url="sqlite:///:memory:",
-        fine_block_threshold_cents=100,
-        fine_block_holds=True,
-    )
-    _, holds, fines = _build(session, settings=settings)
+    _, holds, fines = _build(session)
     fines.assess_manual(patron, kind=FineKind.OTHER.value, amount_cents=500, note="x")
     with pytest.raises(BlockedByFinesError):
         holds.place(work.id, "CIRC0006")

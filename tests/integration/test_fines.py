@@ -120,26 +120,34 @@ def test_checkout_status_ok_when_no_threshold(session):
     assert svc.checkout_status(patron) == CheckoutStatus.OK
 
 
-def test_checkout_status_blocked_at_pickup_under_holds_allowed(session):
+def test_checkout_status_blocked_at_pickup_under_holds_allowed(session, monkeypatch):
+    monkeypatch.setenv("COMPENDIUM_FINE_BLOCK_THRESHOLD_CENTS", "100")
+    monkeypatch.setenv("COMPENDIUM_FINE_BLOCK_HOLDS", "false")
+    from compendium.services import site_settings as _ss
+    _ss.invalidate_cache()
     _, item = _seed_work_with_item(session)
     patron = _make_patron(session)
     _set_policy_fines(session, per_day=50)
     loan = _make_overdue_loan(session, patron, item, days_late=10)
 
     # Book the overdue fine explicitly
-    svc = _fine_svc(session, settings=_settings(threshold=100, block_holds=False))
+    svc = _fine_svc(session)
     svc.assess_overdue(loan)
     # 10 days × 50 = 500 cents > 100 threshold
     assert svc.outstanding_total(patron.id) == 500
     assert svc.checkout_status(patron) == CheckoutStatus.BLOCKED_AT_PICKUP
 
 
-def test_checkout_status_blocked_when_holds_also_blocked(session):
+def test_checkout_status_blocked_when_holds_also_blocked(session, monkeypatch):
+    monkeypatch.setenv("COMPENDIUM_FINE_BLOCK_THRESHOLD_CENTS", "100")
+    monkeypatch.setenv("COMPENDIUM_FINE_BLOCK_HOLDS", "true")
+    from compendium.services import site_settings as _ss
+    _ss.invalidate_cache()
     _, item = _seed_work_with_item(session)
     patron = _make_patron(session)
     _set_policy_fines(session, per_day=50)
     loan = _make_overdue_loan(session, patron, item, days_late=10)
-    svc = _fine_svc(session, settings=_settings(threshold=100, block_holds=True))
+    svc = _fine_svc(session)
     svc.assess_overdue(loan)
     assert svc.checkout_status(patron) == CheckoutStatus.BLOCKED
 

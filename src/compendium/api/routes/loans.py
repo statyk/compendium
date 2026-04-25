@@ -4,6 +4,7 @@ from sqlalchemy.orm import Session
 
 from compendium.api.deps import require_permission
 from compendium.api.schemas import CheckoutRequest, LoanResponse
+from compendium.services.site_settings import get_site_setting
 from compendium.db.engine import get_settings
 from compendium.db.session import get_session
 from compendium.domain.errors import BusinessRuleError, NotFoundError
@@ -30,7 +31,7 @@ def _circulation(session: Session, actor: AppUser | None = None) -> CirculationS
         branch_repo=SqlBranchRepository(session),
         hold_repo=SqlHoldRepository(session),
         policy_repo=SqlLoanPolicyRepository(session),
-        hold_pickup_days=settings.hold_pickup_days,
+        hold_pickup_days=get_site_setting("hold_pickup_days"),
         audit_svc=AuditService(SqlAuditLogRepository(session)),
         actor=actor,
         source="api",

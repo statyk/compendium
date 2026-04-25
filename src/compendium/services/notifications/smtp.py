@@ -1,4 +1,8 @@
-"""SMTP sender — thin wrapper around ``smtplib`` (stdlib, no new dep)."""
+"""SMTP sender — thin wrapper around ``smtplib`` (stdlib, no new dep).
+
+Reads non-secret SMTP settings from the site_setting registry; reads the
+password from the env-only ``Settings`` (hybrid model — secrets stay env-only).
+"""
 
 from __future__ import annotations
 
@@ -7,16 +11,19 @@ import smtplib
 from email.message import EmailMessage
 
 from compendium.config.settings import Settings
+from compendium.services.site_settings import get_site_setting
 
 _log = logging.getLogger("compendium.notifications.smtp")
 
 
 class SMTPSender:
     def __init__(self, settings: Settings) -> None:
+        # Settings is retained only for the env-only secret (smtp_password).
+        # All other SMTP knobs go through get_site_setting().
         self._s = settings
 
     def is_configured(self) -> bool:
-        return bool(self._s.smtp_host and self._s.smtp_from_address)
+        return bool(get_site_setting("smtp_host") and get_site_setting("smtp_from_address"))
 
     def send(self, *, to: str, subject: str, body: str) -> None:
         """Send a plain-text email. Raises ``smtplib.SMTPException`` on failure."""
@@ -29,10 +36,10 @@ class SMTPSender:
         msg["To"] = to
         msg.set_content(body)
 
-        host = self._s.smtp_host
-        port = self._s.smtp_port
+        host = get_site_setting("smtp_host")
+        port = get_site_setting("smtp_port")
 
-        if self._s.smtp_use_ssl:
+        if get_site_setting("smtp_use_ssl"):
             with smtplib.SMTP_SSL(host, port, timeout=30) as smtp:
                 self._authenticate(smtp)
                 smtp.send_message(msg)
@@ -40,19 +47,21 @@ class SMTPSender:
 
         with smtplib.SMTP(host, port, timeout=30) as smtp:
             smtp.ehlo()
-            if self._s.smtp_use_starttls:
+            if get_site_setting("smtp_use_starttls"):
                 smtp.starttls()
                 smtp.ehlo()
             self._authenticate(smtp)
             smtp.send_message(msg)
 
     def _format_from(self) -> str:
-        addr = self._s.smtp_from_address
-        name = self._s.smtp_from_name
+        addr = get_site_setting("smtp_from_address")
+        name = get_site_setting("smtp_from_name")
         if name:
             return f"{name} <{addr}>"
         return addr or ""
 
     def _authenticate(self, smtp: smtplib.SMTP) -> None:
-        if self._s.smtp_username and self._s.smtp_password:
-            smtp.login(self._s.smtp_username, self._s.smtp_password)
+        username = get_site_setting("smtp_username")
+        password = self._s.smtp_password  # env-only secret
+        if username and password:
+            smtp.login(username, password)

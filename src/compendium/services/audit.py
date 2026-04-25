@@ -15,6 +15,7 @@ class AuditEntityType:
     CREATOR = "creator"
     FINE = "fine"
     NOTIFICATION = "notification"
+    SITE_SETTING = "site_setting"
 
 
 class AuditAction:
@@ -42,6 +43,8 @@ class AuditAction:
     RETRY_NOTIFICATION = "retry_notification"
     PRUNE_NOTIFICATIONS = "prune_notifications"
     CHECKOUT_OVERRIDE_HOLDS = "checkout_override_holds"
+    SETTING_UPDATE = "setting_update"
+    SETTING_RESET = "setting_reset"
 
 
 class AuditService:

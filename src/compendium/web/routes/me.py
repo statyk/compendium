@@ -7,6 +7,7 @@ from sqlalchemy.orm import Session
 
 from compendium.db.engine import get_settings
 from compendium.db.session import get_session
+from compendium.services.site_settings import get_site_setting
 from compendium.domain.errors import AuthError, BusinessRuleError, NotFoundError, ValidationError
 from compendium.domain.models import AppUser, Patron
 from compendium.repositories.sql.audit_log_repository import SqlAuditLogRepository
@@ -33,7 +34,6 @@ router = APIRouter()
 def _circ(
     session: Session, actor: AppUser | None = None
 ) -> CirculationService:
-    settings = get_settings()
     return CirculationService(
         item_repo=SqlItemRepository(session),
         loan_repo=SqlLoanRepository(session),
@@ -41,7 +41,7 @@ def _circ(
         branch_repo=SqlBranchRepository(session),
         hold_repo=SqlHoldRepository(session),
         policy_repo=SqlLoanPolicyRepository(session),
-        hold_pickup_days=settings.hold_pickup_days,
+        hold_pickup_days=get_site_setting("hold_pickup_days"),
         audit_svc=AuditService(SqlAuditLogRepository(session)),
         actor=actor,
         source="web",
@@ -49,15 +49,14 @@ def _circ(
 
 
 def _holds_svc(session: Session, actor: AppUser | None = None) -> HoldService:
-    settings = get_settings()
     return HoldService(
         hold_repo=SqlHoldRepository(session),
         patron_repo=SqlPatronRepository(session),
         work_repo=SqlWorkRepository(session),
         branch_repo=SqlBranchRepository(session),
         item_repo=SqlItemRepository(session),
-        hold_expiry_days=settings.hold_expiry_days,
-        hold_pickup_days=settings.hold_pickup_days,
+        hold_expiry_days=get_site_setting("hold_expiry_days"),
+        hold_pickup_days=get_site_setting("hold_pickup_days"),
         audit_svc=AuditService(SqlAuditLogRepository(session)),
         actor=actor,
         source="web",

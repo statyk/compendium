@@ -23,6 +23,7 @@ from compendium.api.routes import (
     patrons,
     policies,
     reports,
+    settings as settings_routes,
     users,
     works,
 )
@@ -127,6 +128,7 @@ def create_app() -> FastAPI:
     app.include_router(api_notifications.router, prefix="/notifications", tags=["notifications"])
     app.include_router(reports.router, prefix="/reports", tags=["reports"])
     app.include_router(labels.router, prefix="/labels", tags=["labels"])
+    app.include_router(settings_routes.router, prefix="/settings", tags=["settings"])
 
     # Web UI routes (HTMX + Jinja2)
     app.mount("/ui/static", StaticFiles(directory=str(_WEB_STATIC)), name="web_static")

@@ -39,6 +39,7 @@ class SettingDescriptor:
     help_text: str
     validator: Callable[[Any], None] | None = None
     env_var: str | None = None
+    nullable: bool = False  # If True, an empty string parses to None.
 
     def resolved_env_var(self) -> str:
         return self.env_var or f"COMPENDIUM_{self.key.upper()}"
@@ -123,6 +124,8 @@ def _coerce(value: str, t: Any) -> Any:
 
 def encode_for_storage(value: Any, t: Any) -> str:
     """Serialize a Python value to the text form stored in the DB / env."""
+    if value is None:
+        return ""
     if t is str:
         return str(value)
     if t is bool:
@@ -138,6 +141,8 @@ def encode_for_storage(value: Any, t: Any) -> str:
 
 def validate(desc: SettingDescriptor, value: Any) -> None:
     """Run the descriptor's validator, raising SettingValidationError on fail."""
+    if value is None and desc.nullable:
+        return
     if desc.validator is None:
         return
     try:
@@ -148,6 +153,8 @@ def validate(desc: SettingDescriptor, value: Any) -> None:
 
 def parse(desc: SettingDescriptor, raw: str) -> Any:
     """Coerce a raw string (DB text or env var) into the typed value."""
+    if desc.nullable and raw == "":
+        return None
     value = _coerce(raw, desc.type)
     validate(desc, value)
     return value
@@ -161,7 +168,36 @@ def parse(desc: SettingDescriptor, raw: str) -> Any:
 # ---------------------------------------------------------------------------
 
 
+# ---------------------------------------------------------------------------
+# Common validators
+# ---------------------------------------------------------------------------
+
+
+def _positive_int(v: int) -> None:
+    if not isinstance(v, int) or v <= 0:
+        raise ValueError("must be a positive integer")
+
+
+def _non_negative_int(v: int) -> None:
+    if not isinstance(v, int) or v < 0:
+        raise ValueError("must be a non-negative integer")
+
+
+def _port_range(v: int) -> None:
+    if not isinstance(v, int) or not (1 <= v <= 65535):
+        raise ValueError("must be a TCP port (1-65535)")
+
+
+def _all_positive_ints(v: list) -> None:
+    if not isinstance(v, list):
+        raise ValueError("must be a list")
+    for x in v:
+        if not isinstance(x, int) or x <= 0:
+            raise ValueError(f"each entry must be a positive int, got {x!r}")
+
+
 def _register_builtins() -> None:
+    # ── Librarian-tier ─────────────────────────────────────────────────────
     register(
         SettingDescriptor(
             key="library_name",
@@ -205,6 +241,223 @@ def _register_builtins() -> None:
             default="$",
             scope="librarian",
             help_text="Symbol prefixed or suffixed to fine amounts.",
+        )
+    )
+    register(
+        SettingDescriptor(
+            key="currency_symbol_position",
+            type=Literal["before", "after"],
+            default="before",
+            scope="librarian",
+            help_text="Whether the currency symbol appears before or after the amount.",
+        )
+    )
+    register(
+        SettingDescriptor(
+            key="fine_block_threshold_cents",
+            type=int,
+            default=None,
+            nullable=True,
+            scope="librarian",
+            help_text=(
+                "Outstanding-fine threshold (in cents) at which patrons "
+                "are blocked from new checkouts. Leave empty to disable."
+            ),
+            validator=_non_negative_int,
+        )
+    )
+    register(
+        SettingDescriptor(
+            key="fine_block_holds",
+            type=bool,
+            default=False,
+            scope="librarian",
+            help_text=(
+                "When enabled, the fine-block threshold also blocks placing "
+                "new holds. Default is to block checkouts only."
+            ),
+        )
+    )
+    register(
+        SettingDescriptor(
+            key="overdue_tiers",
+            type=list[int],
+            default=[3, 14, 30],
+            scope="librarian",
+            help_text=(
+                "Days-overdue checkpoints that trigger a notification. "
+                "One notice per highest matching tier per loan."
+            ),
+            validator=_all_positive_ints,
+        )
+    )
+    register(
+        SettingDescriptor(
+            key="due_soon_days_before",
+            type=int,
+            default=3,
+            scope="librarian",
+            help_text="How many days ahead of due date to send the due-soon reminder.",
+            validator=_positive_int,
+        )
+    )
+    register(
+        SettingDescriptor(
+            key="kiosk_idle_timeout_seconds",
+            type=int,
+            default=60,
+            scope="librarian",
+            help_text=(
+                "How long a self-checkout session waits idle before "
+                "redirecting back to the landing page."
+            ),
+            validator=_positive_int,
+        )
+    )
+    register(
+        SettingDescriptor(
+            key="hold_expiry_days",
+            type=int,
+            default=30,
+            scope="librarian",
+            help_text="How many days a WAITING hold sits before auto-cancelling.",
+            validator=_positive_int,
+        )
+    )
+    register(
+        SettingDescriptor(
+            key="hold_pickup_days",
+            type=int,
+            default=3,
+            scope="librarian",
+            help_text=(
+                "How many days a notified hold (AVAILABLE on the pickup "
+                "shelf) sits before auto-cancelling."
+            ),
+            validator=_positive_int,
+        )
+    )
+
+    # ── System-tier (infrastructure) ───────────────────────────────────────
+    register(
+        SettingDescriptor(
+            key="smtp_host",
+            type=str,
+            default=None,
+            nullable=True,
+            scope="system",
+            help_text=(
+                "SMTP server hostname. Leave empty to disable email "
+                "delivery (notifications still queue but stay 'skipped')."
+            ),
+        )
+    )
+    register(
+        SettingDescriptor(
+            key="smtp_port",
+            type=int,
+            default=587,
+            scope="system",
+            help_text="SMTP TCP port.",
+            validator=_port_range,
+        )
+    )
+    register(
+        SettingDescriptor(
+            key="smtp_username",
+            type=str,
+            default=None,
+            nullable=True,
+            scope="system",
+            help_text="Username for SMTP auth, if required.",
+        )
+    )
+    register(
+        SettingDescriptor(
+            key="smtp_use_starttls",
+            type=bool,
+            default=True,
+            scope="system",
+            help_text="Issue STARTTLS after the initial connection (port 587).",
+        )
+    )
+    register(
+        SettingDescriptor(
+            key="smtp_use_ssl",
+            type=bool,
+            default=False,
+            scope="system",
+            help_text=(
+                "Use SMTPS (implicit TLS, typically port 465). Mutually "
+                "exclusive with STARTTLS."
+            ),
+        )
+    )
+    register(
+        SettingDescriptor(
+            key="smtp_from_address",
+            type=str,
+            default=None,
+            nullable=True,
+            scope="system",
+            help_text="Email address used in the From header. Leave empty to disable delivery.",
+        )
+    )
+    register(
+        SettingDescriptor(
+            key="smtp_from_name",
+            type=str,
+            default="Compendium",
+            scope="system",
+            help_text="Display name used in the From header.",
+        )
+    )
+    register(
+        SettingDescriptor(
+            key="notifications_batch_size",
+            type=int,
+            default=50,
+            scope="system",
+            help_text="Max notifications drained per cron-invoked send.",
+            validator=_positive_int,
+        )
+    )
+    register(
+        SettingDescriptor(
+            key="notifications_max_attempts",
+            type=int,
+            default=5,
+            scope="system",
+            help_text="Max delivery attempts before a notification is marked 'failed'.",
+            validator=_positive_int,
+        )
+    )
+    register(
+        SettingDescriptor(
+            key="notification_retention_days",
+            type=int,
+            default=None,
+            nullable=True,
+            scope="system",
+            help_text=(
+                "Auto-prune sent + cancelled notifications older than this "
+                "many days. Leave empty to keep forever."
+            ),
+            validator=_non_negative_int,
+        )
+    )
+    register(
+        SettingDescriptor(
+            key="audit_retention_days",
+            type=int,
+            default=None,
+            nullable=True,
+            scope="system",
+            help_text=(
+                "Default --older-than-days for the audit-log prune "
+                "maintenance command. Leave empty for no default."
+            ),
+            validator=_non_negative_int,
         )
     )
 

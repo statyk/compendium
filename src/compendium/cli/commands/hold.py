@@ -3,6 +3,7 @@ from datetime import datetime
 
 import typer
 
+from compendium.services.site_settings import get_site_setting
 from compendium.db.engine import get_settings
 from compendium.db.session import session_scope
 from compendium.domain.errors import DomainError
@@ -26,8 +27,8 @@ def _holds(session) -> HoldService:
         work_repo=SqlWorkRepository(session),
         branch_repo=SqlBranchRepository(session),
         item_repo=SqlItemRepository(session),
-        hold_expiry_days=settings.hold_expiry_days,
-        hold_pickup_days=settings.hold_pickup_days,
+        hold_expiry_days=get_site_setting("hold_expiry_days"),
+        hold_pickup_days=get_site_setting("hold_pickup_days"),
         audit_svc=AuditService(SqlAuditLogRepository(session)),
         actor_label=f"cli:{getpass.getuser()}",
         source="cli",

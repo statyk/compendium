@@ -285,16 +285,17 @@ class TestCheckoutPost:
         assert "error-banner" in resp.text
         assert "currently checked out" in resp.text
 
-    def test_blocked_by_fines_shows_friendly_error(self, kiosk_client, kiosk_session):
+    def test_blocked_by_fines_shows_friendly_error(
+        self, kiosk_client, kiosk_session, monkeypatch
+    ):
         # Configure a low fine block threshold + assess an overdue-blocking fine.
         from compendium.domain.enums import FineKind, FineStatus
         from compendium.domain.models import Fine
+        from compendium.services import site_settings as _ss
 
-        blocking_settings = Settings(
-            database_url="sqlite:///:memory:",
-            jwt_secret_key=_SECRET,
-            fine_block_threshold_cents=100,
-        )
+        # Threshold lookup now goes through get_site_setting; env wins.
+        monkeypatch.setenv("COMPENDIUM_FINE_BLOCK_THRESHOLD_CENTS", "100")
+        _ss.invalidate_cache()
         cookies = _login_kiosk(kiosk_client, kiosk_session, "kl11")
         p = _patron(kiosk_session)
         item = _book(kiosk_session)
@@ -311,19 +312,14 @@ class TestCheckoutPost:
 
         raw, signed = _csrf_pair()
         cookies[CSRF_COOKIE] = signed
-        # The kiosk route imports get_settings via `from ... import`, so we must
-        # patch the name on the importing module as well (CLAUDE.md: patch trap).
-        with patch(
-            "compendium.web.routes.kiosk.get_settings", return_value=blocking_settings
-        ):
-            resp = kiosk_client.post(
-                "/ui/kiosk/start",
-                data={"card_number": p.library_card_number, "csrf_token": raw},
-                cookies=cookies,
-            )
-            assert resp.status_code == 303
-            # Should bounce back to landing with outstanding-fees message
-            assert (
-                "outstanding+fees" in resp.headers["location"]
-                or "outstanding%20fees" in resp.headers["location"]
-            )
+        resp = kiosk_client.post(
+            "/ui/kiosk/start",
+            data={"card_number": p.library_card_number, "csrf_token": raw},
+            cookies=cookies,
+        )
+        assert resp.status_code == 303
+        # Should bounce back to landing with outstanding-fees message
+        assert (
+            "outstanding+fees" in resp.headers["location"]
+            or "outstanding%20fees" in resp.headers["location"]
+        )
