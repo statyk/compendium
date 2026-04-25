@@ -132,11 +132,11 @@ If a partial-word query returns nothing from the default box, switch to a field-
 
 ### Migrating from SQLite to Postgres
 
-Currently a manual data migration (dump/restore). A `compendium db migrate-to-postgres` command is deferred.
+Use `compendium backup --output backup.tar.gz` on the SQLite source, then `compendium restore backup.tar.gz` against a fresh Postgres instance — the JSONL backup format is backend-agnostic, so this doubles as the official SQLite→Postgres migration path. (Or stream directly: `compendium backup -o - | COMPENDIUM_DATABASE_URL=postgresql://... compendium restore -`.)
 
 ---
 
-## Authentication
+## Authentication & authorization
 
 Hand-rolled JWT auth using PyJWT + bcrypt. `fastapi-users` was considered but would fight the custom permission model.
 
@@ -144,7 +144,21 @@ Tokens carry `sub` (user ID), `username`, `role`, and `permissions` (full permis
 
 Permission strings follow `entity.action[.scope]` convention: `item.view`, `loan.renew.self`, `loan.renew.any`. The `.self` vs `.any` scope handles patron self-service.
 
-Guest search is controlled by `COMPENDIUM_GUEST_SEARCH_ENABLED` (default `true`).
+### Preset roles
+
+Five roles seed at startup; they are all `is_system=true` and can't be edited in place (clone to customize):
+
+| Role | Permissions | Use case |
+|---|---|---|
+| **Administrator** | `["*"]` (wildcard) | Single-person deployments where one person does everything |
+| **SystemAdmin** | `system.manage`, `user.manage`, `role.manage`, `audit.view`, plus minimal view perms (`item.view`, `work.view`) | Multi-person shops — IT/sysadmin seat. Manages users, roles, infra settings |
+| **Librarian** | All catalog/circ/holds/fines/notifications/reports/labels/audit perms + `patron.manage`, `policy.edit`, `branch.edit`. **No** `user.manage` / `role.manage` / `system.manage`. | Multi-person shops — day-to-day operational seat |
+| **Patron** | Self-service: `loan.view.self`, `loan.renew.self`, `hold.place.self`, `hold.view.self`, `fine.view.self`, `loan.claim.self` | Library members with a login account |
+| **ReadOnly** | `item.view`, `work.view` | Anonymous catalog browsing or read-only auditors |
+
+A startup warning logs if no active user holds `system.manage` — best-effort, doesn't block startup.
+
+Guest catalog search is controlled by the `guest_search_enabled` site setting (env: `COMPENDIUM_GUEST_SEARCH_ENABLED`, default `true`).
 
 ---
 
@@ -232,10 +246,10 @@ Whole elapsed days in UTC: `max(0, (now - due_at).days)`. Sub-day portions don't
 
 ### Threshold-based blocking
 
-Two env-var settings:
+Two site-settings (DB-editable via `/ui/admin/settings/circulation`; env vars still win):
 
-- `COMPENDIUM_FINE_BLOCK_THRESHOLD_CENTS` (int | None; default None = no block).
-- `COMPENDIUM_FINE_BLOCK_HOLDS` (bool; default false).
+- `fine_block_threshold_cents` (int, nullable; default None = no block).
+- `fine_block_holds` (bool; default false).
 
 When threshold is set and outstanding total exceeds it:
 - Checkouts always raise `BlockedByFinesError`.
@@ -256,7 +270,7 @@ When threshold is set and outstanding total exceeds it:
 
 - `fine.manage` (new) — assess / pay / waive fines; declare lost; mark damaged; clear damage/lost. Gated on all librarian-facing fine UI and actions.
 - `fine.view.self` (new) — patron self-service view of their own fines. Added to the Patron preset role.
-- Librarian preset covers `fine.manage` via its `*` wildcard.
+- Librarian preset covers `fine.manage` (in the slimmed-Librarian explicit list); Administrator covers via `*`.
 
 ### API surface (summary)
 
@@ -323,21 +337,25 @@ On each run:
 
 ### SMTP configuration
 
+All non-secret knobs are **DB-editable** via `/ui/admin/system/{smtp,retention}` or `compendium settings set ...`. The env vars below remain a break-glass override (env wins on read). Only `COMPENDIUM_SMTP_PASSWORD` is *exclusively* env-backed (secret).
+
 ```
-COMPENDIUM_SMTP_HOST                   (unset = inert — rows queue but don't send)
-COMPENDIUM_SMTP_PORT                   (default 587)
-COMPENDIUM_SMTP_USERNAME
-COMPENDIUM_SMTP_PASSWORD
-COMPENDIUM_SMTP_USE_STARTTLS           (default true)
-COMPENDIUM_SMTP_USE_SSL                (default false; mutually exclusive with STARTTLS)
-COMPENDIUM_SMTP_FROM_ADDRESS           (required when SMTP_HOST is set)
-COMPENDIUM_SMTP_FROM_NAME              (default "Compendium")
-COMPENDIUM_NOTIFICATIONS_BATCH_SIZE    (default 50)
-COMPENDIUM_NOTIFICATIONS_MAX_ATTEMPTS  (default 5)
-COMPENDIUM_NOTIFICATION_RETENTION_DAYS (optional default for prune)
-COMPENDIUM_DUE_SOON_DAYS_BEFORE        (default 3)
-COMPENDIUM_OVERDUE_TIERS               (default "3,14,30")
+smtp_host                   (unset = inert — rows queue but don't send)
+smtp_port                   (default 587)
+smtp_username
+COMPENDIUM_SMTP_PASSWORD    (env-only — secret)
+smtp_use_starttls           (default true)
+smtp_use_ssl                (default false; mutually exclusive with STARTTLS)
+smtp_from_address           (required when smtp_host is set)
+smtp_from_name              (default "Compendium")
+notifications_batch_size    (default 50)
+notifications_max_attempts  (default 5)
+notification_retention_days (optional default for prune)
+due_soon_days_before        (default 3)
+overdue_tiers               (default [3, 14, 30] — list[int])
 ```
+
+Each key listed without an env-var prefix can be set via `COMPENDIUM_<KEY>` env var, the web admin form, or `compendium settings set <key> <value>`.
 
 ### Dev setup
 
@@ -366,7 +384,7 @@ Refuses to run with no filter. Audit entry (`PRUNE_NOTIFICATIONS`) records the f
 
 ### Permissions
 
-- `notification.manage` — admin log viewer + manual retry. New "Notifications" group in `PERMISSION_GROUPS`. Librarian covers via `*`.
+- `notification.manage` — admin log viewer + manual retry. "Notifications" group in `PERMISSION_GROUPS`. Held by the Librarian preset (and Administrator via `*`).
 - Patron self-service opt-out toggle on `/ui/me/preferences` needs no explicit permission (it edits the authenticated patron's own record).
 
 ### API surface
@@ -375,6 +393,27 @@ Refuses to run with no filter. Audit entry (`PRUNE_NOTIFICATIONS`) records the f
 GET    /notifications?status=&template_key=&limit=&offset=
 POST   /notifications/{id}/retry
 ```
+
+---
+
+## Site settings
+
+Most runtime configuration is DB-editable via the `site_setting` table, with environment variables as a break-glass override.
+
+**Read order**: env var → `site_setting` row → registry default. The first non-empty value wins. An unparseable env var raises `SettingValidationError` (fail-loud, matches Pydantic-Settings).
+
+**Registry**: `services/settings_registry.py` is the canonical list of *what settings exist*. Each `SettingDescriptor` declares key, type, default, scope (`librarian` or `system`), human-friendly `display_name`, help text, optional validator, and `nullable` flag. New settings get added here; the table just stores text overrides.
+
+**Cache**: `services/site_settings.py` keeps a process-local cache keyed on `MAX(updated_at)` with a 30s TTL. Writes invalidate immediately. Multi-worker (gunicorn) deployments see writes within 30s without a per-read DB round trip. Resilient to a missing `site_setting` table (logs a warning, returns defaults — covers the pre-`db init` case).
+
+**Surfaces**:
+- Web: `/ui/admin/settings/{general,circulation,kiosk}` (librarian-tier) and `/ui/admin/system/{smtp,retention}` (system-tier). Per-row "⚠ Overridden by env var" indicator when the env var is set; inputs disabled in that case.
+- CLI: `compendium settings {list,get,set,reset}`.
+- API: `GET /settings/`, `GET/PATCH/DELETE /settings/{key}`.
+
+**Hybrid for secrets**: `smtp_password` stays env-only (`COMPENDIUM_SMTP_PASSWORD`). Other SMTP knobs (host/port/from/etc.) are DB-editable. Same model for any future secrets — env-only by deliberate exclusion from the registry.
+
+**Audit**: every write emits a `SETTING_UPDATE` (or `SETTING_RESET`) audit entry under `entity_type=site_setting` with `{key, before, after}` details.
 
 ---
 

@@ -118,7 +118,10 @@ Physical copy of a work.
 | call_number | varchar(64) | Shelf location call number |
 | location | varchar(256) | Free-text shelf description |
 | condition | varchar(16) | `good`, `fair`, `poor` |
-| status | varchar(16) INDEX | `available`, `checked_out`, `on_hold`, `lost`, `damaged`, `withdrawn` |
+| status | varchar(16) INDEX | `available`, `checked_out`, `on_hold`, `claims_returned`, `lost`, `damaged`, `withdrawn` |
+| is_loanable | boolean | Default true. Per-item non-circulating flag (Koha-style) |
+| loan_restriction_reason | varchar(32) NULLABLE | When `is_loanable=false`: `reference`, `in_library_use`, `archive`, `staff_only`, `display`, `other` |
+| loan_restriction_note | varchar(256) NULLABLE | Free-text required when reason is `other` |
 | acquired_at | date | |
 | notes | text | |
 | created_at | timestamptz | |
@@ -138,7 +141,7 @@ Named permission bundle for app users.
 | is_system | boolean | If true, role cannot be edited; can be cloned |
 | created_at | timestamptz | |
 
-System roles seeded at startup: `ReadOnly`, `Patron`, `Librarian`. Use `["*"]` to grant all permissions.
+System roles seeded at startup: `ReadOnly`, `Patron`, `Librarian` (slimmed — explicit list, no wildcard), `SystemAdmin` (manages users, roles, infrastructure settings), `Administrator` (`["*"]` wildcard — single-person deployments). Custom roles use `["*"]` to grant all permissions.
 
 ---
 
@@ -159,6 +162,22 @@ Authentication identity. Table name avoids the reserved word `user`.
 
 ---
 
+### `patron_category`
+
+Patron category (Adult/Child/Staff/Teacher) used for category-aware loan policies.
+
+| Column | Type | Notes |
+|--------|------|-------|
+| id | integer PK | |
+| code | varchar(32) UNIQUE | e.g. `adult`, `child`, `staff`, `teacher` |
+| display_name | varchar(64) | |
+| is_default | boolean | Exactly one row may be the default; assigned to new patrons |
+| created_at | timestamptz | |
+
+System defaults seeded at startup: `adult` (default), `child`, `staff`, `teacher`.
+
+---
+
 ### `patron`
 
 Borrower record. `user_id` is nullable — card-only patrons (children, guests) can borrow without an app account.
@@ -167,6 +186,7 @@ Borrower record. `user_id` is nullable — card-only patrons (children, guests) 
 |--------|------|-------|
 | id | integer PK | |
 | user_id | integer FK → app_user NULLABLE | 1:1 enforced at service level |
+| category_id | integer FK → patron_category NULLABLE INDEX | Drives category-aware loan policies |
 | library_card_number | varchar(64) UNIQUE | |
 | full_name | varchar(256) | |
 | contact_email | varchar(256) | |
@@ -175,6 +195,7 @@ Borrower record. `user_id` is nullable — card-only patrons (children, guests) 
 | notes | text | |
 | is_active | boolean | |
 | receive_notifications | boolean | Default true; patron self-service opt-out |
+| expires_at | date NULLABLE | Card expiry. Past-expiry patrons can't check out (holds still allowed) |
 | created_at | timestamptz | |
 | updated_at | timestamptz | |
 
@@ -189,6 +210,7 @@ Configures loan duration, renewal limits, and fine rates, optionally scoped to a
 | id | integer PK | |
 | name | varchar(128) | |
 | media_type_id | integer FK → media_type NULLABLE | Null = applies to all types |
+| patron_category_id | integer FK → patron_category NULLABLE | Null = applies to all categories |
 | loan_period_days | integer | |
 | max_renewals | integer | |
 | is_default | boolean | At least one policy must be default; swap is atomic at service level |
@@ -197,6 +219,8 @@ Configures loan duration, renewal limits, and fine rates, optionally scoped to a
 | grace_period_days | integer | Default 0; days overdue before fines accrue |
 | lost_item_default_cents | integer NULLABLE | Fallback replacement cost |
 | lost_item_processing_fee_cents | integer NULLABLE | Flat fee added on lost declarations |
+
+Resolution precedence at runtime: (media+category) > (media,any) > (any,category) > default. Media wins the tiebreaker between #2 and #3 (Koha convention).
 
 ---
 
@@ -230,10 +254,13 @@ Work-level reservation. Any available copy satisfies the hold; copy-level holds 
 | work_id | integer FK → work INDEX | |
 | patron_id | integer FK → patron INDEX | |
 | branch_id | integer FK → branch | |
+| held_item_id | integer FK → item NULLABLE | When hold is `available`, this records which copy is on the pickup shelf (ON DELETE SET NULL) |
 | status | varchar(16) INDEX | `waiting`, `available`, `fulfilled`, `cancelled`, `expired` |
 | placed_at | timestamptz | |
-| expires_at | timestamptz | Set when status → `available`; maintenance job expires waiting holds |
-| notified_at | timestamptz | Set when status → `available` (for future notification feature) |
+| expires_at | timestamptz | Pickup-shelf or queue expiry; maintenance job expires past-deadline rows |
+| notified_at | timestamptz | Set when status → `available` and `hold_ready` notification is queued |
+| suspended_until | date NULLABLE | If set, queue-promotion skips this hold until this date; auto-resume via maintenance command |
+| suspended_reason | varchar(256) NULLABLE | Patron-supplied free text |
 
 ---
 
@@ -296,7 +323,7 @@ Outstanding or resolved charges owed by a patron. One row per definitive charge;
 
 ### `audit_log`
 
-Append-only log of Librarian-level mutations. Routine circulation (loans, returns) is not audited — the loan table itself carries that history.
+Append-only log of administrative mutations (Librarian and System tier). Routine circulation (loans, returns) is not audited — the loan table itself carries that history.
 
 | Column | Type | Notes |
 |--------|------|-------|
@@ -305,14 +332,29 @@ Append-only log of Librarian-level mutations. Routine circulation (loans, return
 | user_id | integer FK → app_user NULLABLE | Null for system/CLI actions |
 | actor_label | varchar(128) | Username or label at time of action |
 | source | varchar(16) | `web`, `api`, `cli`, `system` |
-| entity_type | varchar(32) | `work`, `item`, `patron`, `policy`, `role`, `fine`, `creator`, `user` |
+| entity_type | varchar(32) | `work`, `item`, `patron`, `patron_category`, `policy`, `role`, `fine`, `creator`, `user`, `notification`, `site_setting` |
 | entity_id | integer NULLABLE | |
-| action | varchar(32) | `create`, `update`, `delete`, `withdraw` |
+| action | varchar(32) | `create`, `update`, `delete`, `withdraw`, `claim_returned`, `claim_verified`, `hold_suspend`, `setting_update`, `setting_reset`, … (see `services/audit.AuditAction` for the full set) |
 | details | JSON | Snapshot of changed fields |
 
 **Compound indexes:**
 - `ix_audit_log_entity` on `(entity_type, entity_id, occurred_at)`
 - `ix_audit_log_user_time` on `(user_id, occurred_at)`
+
+---
+
+### `site_setting`
+
+DB-backed override layer for runtime-configurable settings (introduced in slice A; descriptors in `services/settings_registry.py`). Read order: env var → DB row → registry default. Each row records who changed it and when.
+
+| Column | Type | Notes |
+|--------|------|-------|
+| key | varchar(128) PK | Setting key (e.g. `library_name`, `smtp_host`) |
+| value | text | JSON-encoded value; nullable settings store `""` for None |
+| updated_at | timestamptz | Doubles as the in-memory cache's epoch source |
+| updated_by_id | integer FK → app_user NULLABLE | ON DELETE SET NULL |
+
+Writes go through `services/site_settings.set_site_setting()`, which also emits a `SETTING_UPDATE` audit entry with `{key, before, after}`. Schema-side, the registry is the source of truth for which keys are valid; arbitrary keys can be inserted but reads will fail with `UnknownSettingError`.
 
 ---
 
@@ -340,3 +382,12 @@ Append-only log of Librarian-level mutations. Routine circulation (loans, return
 | `a9b9ea15933f` | Add holds and loan policies |
 | `b3c4d5e6f7a8` | Add audit log |
 | `11dbd4cede12` | Add search_text + FTS (SQLite FTS5 / Postgres GIN) |
+| `c1d2e3f4a5b6` | Add branch.default_classification_scheme |
+| `d4e5f6a7b8c9` | Add item.is_loanable + restriction reason/note |
+| `e5f6a7b8c9d0` | Add fines (Fine entity, policy fine columns, item.lost/damaged status) |
+| `f6a7b8c9d0e1` | Add notification table + patron.receive_notifications |
+| `a7b8c9d0e1f2` | Add hold.held_item_id (immediate hold promotion) |
+| `b8c9d0e1f2a3` | Add patron_category + patron.category_id/expires_at + loan_policy.patron_category_id |
+| `c9d0e1f2a3b4` | Add hold.suspended_until / suspended_reason |
+| `d0e1f2a3b4c5` | Add site_setting (env→DB→default settings) |
+| `e1f2a3b4c5d6` | Split admin roles (Administrator + SystemAdmin presets, slim Librarian) |

@@ -38,8 +38,8 @@ Run the daemon for the web UI and use CLI commands for admin tasks or scripts �
 # 1. Initialise database (creates compendium.db in the current directory for SQLite)
 compendium db init
 
-# 2. Create the first Librarian account
-compendium user add --username admin --role Librarian
+# 2. Create the first administrator account
+compendium user add --username admin --role Administrator
 
 # 3. (Optional) Seed a patron for testing
 compendium patron add --name "Test Patron"
@@ -52,7 +52,9 @@ compendium serve
 
 ## Production configuration
 
-All settings are read from environment variables (prefix `COMPENDIUM_`) or a `.env` file in the working directory.
+Compendium reads configuration from three layers, in order: env var → `site_setting` DB row → registered default. Most knobs (library name, fine thresholds, hold/overdue defaults, kiosk timeout, SMTP host/port/from, retention, etc.) are now **DB-editable** at runtime via `/ui/admin/settings/*`, the CLI (`compendium settings ...`), or the API. Env vars still win when set — useful as a deployment-time pin or break-glass override.
+
+The `.env` file is for things that *must* be set before the DB is available, plus secrets:
 
 ```dotenv
 # .env — example production settings
@@ -60,14 +62,15 @@ All settings are read from environment variables (prefix `COMPENDIUM_`) or a `.e
 COMPENDIUM_DATABASE_URL=sqlite:////var/lib/compendium/compendium.db
 COMPENDIUM_JWT_SECRET_KEY=<generate with: python -c "import secrets; print(secrets.token_hex(32))">
 COMPENDIUM_JWT_EXPIRE_MINUTES=480
-COMPENDIUM_GUEST_SEARCH_ENABLED=true
-COMPENDIUM_HOLD_EXPIRY_DAYS=30
-COMPENDIUM_HOLD_PICKUP_DAYS=3
+COMPENDIUM_SECURE_COOKIES=true            # set when serving over HTTPS
+
+# SMTP — host/port/from are DB-editable but you can pin them here too
+COMPENDIUM_SMTP_PASSWORD=<secret>          # password is env-only by design
 ```
 
-**`JWT_SECRET_KEY` must be set to a strong random value in any non-development deployment.** The built-in default is intentionally weak and will produce a startup warning in a future release.
+**`JWT_SECRET_KEY` must be set to a strong random value in any non-development deployment.** The built-in default is intentionally weak and emits a startup warning.
 
-**Settings are loaded once per process.** `get_settings()` is `@lru_cache`-wrapped, so changes to env vars or `.env` (SMTP credentials, fine thresholds, currency symbol, search flags, etc.) don't take effect until you restart `compendium serve`. CLI invocations re-read on each run. When the planned `site_setting` table lands, runtime-editable knobs will move there.
+**Env-only**: `database_url`, `jwt_secret_key`, `jwt_algorithm`, `jwt_expire_minutes`, `ssl_certfile`, `ssl_keyfile`, `secure_cookies`, `tmdb_api_key`, `smtp_password`. Everything else can flow through the DB-backed `site_setting` table — see `compendium settings list` for the full registered set with current sources.
 
 ---
 
@@ -125,10 +128,10 @@ compendium db init
 
 This applies all Alembic migrations and seeds the default branch, media types, roles, and loan policy. It is safe to re-run; subsequent invocations are no-ops once schema and seed rows are in place.
 
-#### 5. Create the first Librarian
+#### 5. Create the first administrator
 
 ```bash
-compendium user add --username admin --role Librarian
+compendium user add --username admin --role Administrator
 compendium serve
 ```
 
@@ -151,11 +154,14 @@ There is no built-in migration tool. For an existing deployment, export data wit
 
 Several maintenance commands should run periodically:
 
-- `maintenance expire-holds` — expires holds whose pickup window has passed.
+- `maintenance expire-holds` — expires waiting and pickup-shelf holds past their deadline.
+- `maintenance resume-expired-suspends` — auto-resumes patron-suspended holds whose end date has passed.
 - `maintenance assess-overdue-fines` — materializes outstanding overdue fines (idempotent).
 - `maintenance queue-due-soon-notices` + `queue-overdue-notices` — queue reminder emails.
 - `maintenance send-queued-notifications` — drain the outbox via SMTP.
 - `maintenance prune-notifications` / `prune-audit-log` — retention cleanup.
+- `maintenance deactivate-expired-patrons` — flips `is_active=false` for patrons whose `expires_at` has passed.
+- `maintenance prune-cover-cache --max-mb N` — bound the on-disk cover-image cache.
 
 See [`crontab.sample`](crontab.sample) for a ready-made schedule and [`compendium.service.sample`](compendium.service.sample) for running the daemon under systemd.
 

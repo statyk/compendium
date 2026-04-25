@@ -105,7 +105,11 @@ class AuthService:
         if role is None:
             raise NotFoundError(f"No role named '{role_name}'")
         old_role = user.role.name
+        # Update both the FK and the cached relationship — otherwise the
+        # returned object still reports the old role.name on access until
+        # SQLAlchemy refetches the relationship.
         user.role_id = role.id
+        user.role = role
         result = self._users.update(user)
         self._record(
             AuditEntityType.USER,

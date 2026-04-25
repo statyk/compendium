@@ -3,7 +3,7 @@ set -eu
 
 : "${COMPENDIUM_ADMIN_USERNAME:=admin}"
 : "${COMPENDIUM_ADMIN_PASSWORD:=compendium}"
-: "${COMPENDIUM_ADMIN_ROLE:=Librarian}"
+: "${COMPENDIUM_ADMIN_ROLE:=Administrator}"
 
 echo "[compendium] Running database migrations..."
 compendium db init

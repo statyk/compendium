@@ -59,8 +59,8 @@ project root.
 
 The `compendium` container's entrypoint runs `compendium db init` on every
 start. On the first start only (when the username does not yet exist in the
-database), it creates a Librarian account using `COMPENDIUM_ADMIN_USERNAME` and
-`COMPENDIUM_ADMIN_PASSWORD` from `.env`.
+database), it creates an Administrator account using `COMPENDIUM_ADMIN_USERNAME`
+and `COMPENDIUM_ADMIN_PASSWORD` from `.env`.
 
 **Changing the password post-bootstrap:** editing `.env` has no effect once the
 user exists. Run:
