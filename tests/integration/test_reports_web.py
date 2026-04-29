@@ -171,3 +171,71 @@ class TestOverduesTable:
         body = resp.content.decode()
         assert "WebOverdueTitle" in body
         assert "WC0001" in body
+
+
+class TestChartJsonEscaping:
+    """Regression tests for stored XSS via chart-data JSON (H1).
+
+    json.dumps does not escape '</', so a Work title containing '</script>'
+    can break out of the inline <script> block on the popular/checkouts pages.
+    With CSP allowing 'unsafe-inline', any injected script then executes.
+    """
+
+    def _seed_loan_with_title(self, session, title: str, *, barcode: str, card: str):
+        book = session.query(MediaType).filter_by(code="book").one()
+        work = Work(title=title, media_type_id=book.id)
+        session.add(work)
+        session.flush()
+        branch = SqlBranchRepository(session).get_default()
+        item = Item(
+            work_id=work.id,
+            branch_id=branch.id,
+            barcode=barcode,
+            accession_number=barcode + "-A",
+        )
+        session.add(item)
+        session.flush()
+        patron = Patron(library_card_number=card, full_name="Eve")
+        session.add(patron)
+        session.flush()
+        # A returned loan within the popular-works default window (90 days).
+        now = datetime.now(tz=timezone.utc)
+        session.add(
+            Loan(
+                item_id=item.id,
+                patron_id=patron.id,
+                branch_id=branch.id,
+                checked_out_at=now - timedelta(days=10),
+                due_at=now - timedelta(days=3),
+                returned_at=now - timedelta(days=2),
+            )
+        )
+        session.flush()
+
+    def test_popular_chart_escapes_script_close(self, rw_client, rw_session):
+        cookies = _login_as(rw_client, rw_session, "lib_xss_pop", "Librarian")
+        payload = "</script><script>window.__pwn=1</script>"
+        self._seed_loan_with_title(
+            rw_session, payload, barcode="XSS001", card="XSSC01"
+        )
+        resp = rw_client.get("/ui/reports/popular", cookies=cookies)
+        assert resp.status_code == 200
+        body = resp.content.decode()
+        # The title must appear (it's the data we're charting), but never as
+        # a literal '</script>' that would close the inline script tag.
+        assert "window.__pwn" not in body or r"</script>" in body or r"<\/script>" in body
+        assert "</script><script>window.__pwn" not in body
+
+    def test_checkouts_chart_escapes_script_close(self, rw_client, rw_session):
+        # Checkouts chart_labels are month strings (not user input today), but
+        # the same |safe pattern is used — guard against future label sources.
+        cookies = _login_as(rw_client, rw_session, "lib_xss_co", "Librarian")
+        resp = rw_client.get("/ui/reports/checkouts?months=2", cookies=cookies)
+        assert resp.status_code == 200
+        body = resp.content.decode()
+        # Sanity: the chart block exists.
+        assert "var labels =" in body
+        # Belt-and-suspenders: no literal </script> appears inside a JS string.
+        # (Tightens once we wire the escape; today this trivially passes since
+        # months never contain '<'.)
+        assert "</script><script>" not in body

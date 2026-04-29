@@ -56,6 +56,15 @@ def _parse_date(s: str | None) -> datetime | None:
         raise HTTPException(status_code=400, detail="Date must be YYYY-MM-DD") from exc
 
 
+def _chart_json(value) -> str:
+    """JSON-encode for embedding inside an inline <script>.
+
+    json.dumps() does not escape '</', so a string containing '</script>'
+    would close the surrounding <script> tag and execute injected JS.
+    """
+    return json.dumps(value).replace("</", "<\\/")
+
+
 def _csv_response(rows: list[dict], fieldnames: list[str], filename: str) -> Response:
     buf = io.StringIO()
     writer = csv.DictWriter(buf, fieldnames=fieldnames)
@@ -109,8 +118,8 @@ def report_checkouts(
             "months": months,
             "branches": _branches(session),
             "selected_branch": branch,
-            "chart_labels": json.dumps([r.month for r in rows]),
-            "chart_values": json.dumps([r.count for r in rows]),
+            "chart_labels": _chart_json([r.month for r in rows]),
+            "chart_values": _chart_json([r.count for r in rows]),
         },
     )
 
@@ -161,8 +170,8 @@ def report_popular(
             "limit": limit,
             "branches": _branches(session),
             "selected_branch": branch,
-            "chart_labels": json.dumps([r.title for r in rows]),
-            "chart_values": json.dumps([r.checkout_count for r in rows]),
+            "chart_labels": _chart_json([r.title for r in rows]),
+            "chart_values": _chart_json([r.checkout_count for r in rows]),
         },
     )
 

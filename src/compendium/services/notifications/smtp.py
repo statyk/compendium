@@ -8,6 +8,7 @@ from __future__ import annotations
 
 import logging
 import smtplib
+import ssl
 from email.message import EmailMessage
 
 from compendium.config.settings import Settings
@@ -38,9 +39,13 @@ class SMTPSender:
 
         host = get_site_setting("smtp_host")
         port = get_site_setting("smtp_port")
+        # Without an explicit context, smtplib falls back to a stdlib context
+        # with verify_mode=CERT_NONE / check_hostname=False — i.e. no TLS
+        # validation. Hand it a verifying context so MitM is detected.
+        tls_ctx = ssl.create_default_context()
 
         if get_site_setting("smtp_use_ssl"):
-            with smtplib.SMTP_SSL(host, port, timeout=30) as smtp:
+            with smtplib.SMTP_SSL(host, port, timeout=30, context=tls_ctx) as smtp:
                 self._authenticate(smtp)
                 smtp.send_message(msg)
             return
@@ -48,7 +53,7 @@ class SMTPSender:
         with smtplib.SMTP(host, port, timeout=30) as smtp:
             smtp.ehlo()
             if get_site_setting("smtp_use_starttls"):
-                smtp.starttls()
+                smtp.starttls(context=tls_ctx)
                 smtp.ehlo()
             self._authenticate(smtp)
             smtp.send_message(msg)
