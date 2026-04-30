@@ -12,8 +12,9 @@ docker/
 ├── docker-compose.yml      # db + compendium + nginx
 ├── .env.example            # copy to .env and edit before first run
 ├── crontab.sample          # scheduled maintenance lines for host cron
-├── install-cron.sh         # one-shot installer for the above
+├── install-cron.sh         # one-shot installer for the above (--log-file flag)
 ├── backups/                # nightly backups land here (created on first cron tick)
+├── logs/                   # maintenance.log (default destination; install-cron.sh creates)
 ├── certs/                  # (optional) drop fullchain.pem + privkey.pem here
 ├── nginx/
 │   ├── nginx.conf          # TLS + /ui/* reverse proxy; everything else → /ui/catalog
@@ -136,6 +137,20 @@ This appends `docker/crontab.sample` to the current user's crontab,
 substituting the absolute path to `docker/`. The user must be in the
 `docker` group (or otherwise able to run `docker compose` without
 `sudo`). Re-running the script is a no-op — it refuses to install twice.
+
+By default the script writes maintenance output to
+`docker/logs/maintenance.log` (auto-created). Override with `--log-file`:
+
+```bash
+docker/install-cron.sh --log-file journal
+docker/install-cron.sh --log-file /var/log/compendium/maintenance.log
+```
+
+`--log-file journal` routes output to the systemd journal (view with
+`journalctl -t compendium-maintenance -f`). For paths the installer can't
+create unprivileged (e.g. `/var/log/...`), it prints the one-time `sudo`
+command needed to create the directory and exits without modifying the
+crontab.
 
 ### What's scheduled
 

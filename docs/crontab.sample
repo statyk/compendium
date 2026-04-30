@@ -1,37 +1,44 @@
-# Compendium — sample crontab entries
+# Compendium — sample crontab entries (bare-metal install)
 #
-# Install with:  crontab -e
-# Adjust the path to `compendium` to match your installation.
-# If using uv in a project directory, use:
-#   cd /path/to/compendium && uv run compendium <command>
+# Install with:
+#   scripts/install-cron.sh
 #
-# Run `crontab -l` to view your current crontab.
+# Or paste these lines into `crontab -e`. The installer substitutes:
+#   COMPENDIUM_DIR  → absolute path to the project (default: $(pwd))
+#   LOG_REDIRECT    → `>> $LOG_FILE 2>&1` for a file path,
+#                     or `2>&1 | logger -t compendium-maintenance` for the
+#                     systemd journal.
+#
+# Default LOG_FILE is $HOME/.local/state/compendium/maintenance.log
+# (user-writable, no sudo). Override with `install-cron.sh --log-file PATH`
+# or `--log-file journal`.
 
-# Expire holds whose pickup window has passed — runs nightly at 02:00.
-0 2 * * * cd /path/to/compendium && uv run compendium maintenance expire-holds >> /var/log/compendium-maintenance.log 2>&1
+# Drain the email outbox every 5 minutes. Without this, queued notifications
+# (hold-ready, due-soon, overdue) sit in the DB forever.
+*/5 * * * * cd COMPENDIUM_DIR && uv run compendium maintenance send-queued-notifications LOG_REDIRECT
+
+# Expire holds whose pickup window has passed.
+0 2 * * * cd COMPENDIUM_DIR && uv run compendium maintenance expire-holds LOG_REDIRECT
 
 # Auto-resume patron-suspended holds whose suspended_until has passed.
-5 2 * * * cd /path/to/compendium && uv run compendium maintenance resume-expired-suspends >> /var/log/compendium-maintenance.log 2>&1
+5 2 * * * cd COMPENDIUM_DIR && uv run compendium maintenance resume-expired-suspends LOG_REDIRECT
 
 # Deactivate patrons whose card has expired.
-10 2 * * * cd /path/to/compendium && uv run compendium maintenance deactivate-expired-patrons >> /var/log/compendium-maintenance.log 2>&1
+10 2 * * * cd COMPENDIUM_DIR && uv run compendium maintenance deactivate-expired-patrons LOG_REDIRECT
 
-# Queue notification reminders (daily).
-0 8 * * * cd /path/to/compendium && uv run compendium maintenance queue-due-soon-notices >> /var/log/compendium-maintenance.log 2>&1
-15 8 * * * cd /path/to/compendium && uv run compendium maintenance queue-overdue-notices >> /var/log/compendium-maintenance.log 2>&1
+# Materialize overdue fines so reports see current state.
+30 2 * * * cd COMPENDIUM_DIR && uv run compendium maintenance assess-overdue-fines LOG_REDIRECT
 
-# Drain the notification outbox every 5 minutes.
-*/5 * * * * cd /path/to/compendium && uv run compendium maintenance send-queued-notifications >> /var/log/compendium-maintenance.log 2>&1
-
-# Materialize overdue fines daily (so reports see current state).
-30 2 * * * cd /path/to/compendium && uv run compendium maintenance assess-overdue-fines >> /var/log/compendium-maintenance.log 2>&1
-
-# Optional: monthly retention prune for old audit rows + notifications.
-# 0 3 1 * * cd /path/to/compendium && uv run compendium maintenance prune-audit-log --older-than-days 365 >> /var/log/compendium-maintenance.log 2>&1
-# 30 3 1 * * cd /path/to/compendium && uv run compendium maintenance prune-notifications --older-than-days 180 >> /var/log/compendium-maintenance.log 2>&1
-
-# Optional: bound the on-disk cover-image cache (weekly).
-# 45 3 * * 0 cd /path/to/compendium && uv run compendium maintenance prune-cover-cache --max-mb 500 >> /var/log/compendium-maintenance.log 2>&1
+# Queue notification reminders (daily). The 5-minute drain above ships them.
+0 8 * * * cd COMPENDIUM_DIR && uv run compendium maintenance queue-due-soon-notices LOG_REDIRECT
+15 8 * * * cd COMPENDIUM_DIR && uv run compendium maintenance queue-overdue-notices LOG_REDIRECT
 
 # Nightly backup. Rotate / sync to off-machine storage separately.
-15 2 * * * cd /path/to/compendium && uv run compendium backup --output "/var/backups/compendium/$(date +\%Y-\%m-\%d).tar.gz" >> /var/log/compendium-maintenance.log 2>&1
+15 2 * * * cd COMPENDIUM_DIR && uv run compendium backup --output "/var/backups/compendium/$(date +\%Y-\%m-\%d).tar.gz" LOG_REDIRECT
+
+# Optional: monthly retention prune for old audit rows + sent notifications.
+# 0 3 1 * * cd COMPENDIUM_DIR && uv run compendium maintenance prune-audit-log --older-than-days 365 LOG_REDIRECT
+# 30 3 1 * * cd COMPENDIUM_DIR && uv run compendium maintenance prune-notifications --older-than-days 180 LOG_REDIRECT
+
+# Optional: bound the on-disk cover-image cache (weekly).
+# 45 3 * * 0 cd COMPENDIUM_DIR && uv run compendium maintenance prune-cover-cache --max-mb 500 LOG_REDIRECT

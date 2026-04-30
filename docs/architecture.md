@@ -42,14 +42,22 @@ Business logic. Services are plain classes whose constructors accept repository 
 
 | Service | Responsibility |
 |---------|---------------|
-| `CatalogService` | Add works from ISBN/UPC/MBID/TMDb/title search, add manual items, withdraw items |
-| `CirculationService` | Checkout, checkin, renew |
-| `HoldService` | Place, cancel, expire holds |
-| `PatronService` | Patron CRUD, user linking |
+| `CatalogService` | Add works from ISBN/UPC/MBID/TMDb/title search, add manual items, withdraw items, refresh metadata for existing works |
+| `CirculationService` | Checkout, checkin, renew, declare-lost, mark-damaged, claims-returned |
+| `HoldService` | Place, cancel, expire, suspend/resume holds; immediate promotion |
+| `FineService` | Assess/pay/waive fines; overdue materialization; threshold-based blocking |
+| `PatronService` | Patron CRUD, user linking, category assignment, expiry handling |
+| `PatronCategoryService` | Patron category CRUD |
 | `AuthService` | Login, JWT issuance, password hashing, user/role management |
-| `PolicyService` | Loan policy CRUD |
-| `RoleService` | Role CRUD, clone |
-| `AuditService` | Append audit log entries |
+| `PolicyService` | Loan policy CRUD (per media type ± patron category) |
+| `RoleService` | Role CRUD, clone (preset roles are `is_system=true` and clone-only) |
+| `AuditService` | Append audit log entries; queryable via web/CLI/API |
+| `NotificationService` | Outbox-pattern email queue + drainer (hold-ready/due-soon/overdue) |
+| `ReportsService` | Checkouts/popular/dormant/overdues queries with CSV + chart data shaping |
+| `LabelsService` | PDF generation (Avery item labels + patron cards via reportlab) |
+| `BackupService` | Portable JSONL tarballs, backend-agnostic restore (SQLite ↔ Postgres) |
+| `CoversService` | On-disk cover proxy cache with allowlist + LRU eviction |
+| `SettingsRegistry` + `site_settings` | DB-editable settings with env-wins-on-read overrides |
 | `metadata` module | External lookup (Open Library, MusicBrainz, TMDb) |
 
 Services **never** import from `api/`, `web/`, or `cli/`. Config access in services is limited to `os.getenv()` for external API keys (documented architectural compromise).
@@ -72,7 +80,10 @@ Pydantic `Settings` (reads from env vars with `COMPENDIUM_` prefix and `.env` fi
 
 ### db/
 
-Engine factory (`make_engine()`) and session lifecycle (`session_scope()`, `get_session()` FastAPI dependency). The engine is dialect-aware: SQLite gets `check_same_thread=False`; Postgres gets connection pool tuning and `pool_pre_ping`.
+Engine factory (`make_engine()`) and session lifecycle (`session_scope()`, `get_session()` FastAPI dependency). The engine is dialect-aware:
+
+- **SQLite** gets `check_same_thread=False` and a `connect`-time pragma listener that sets `journal_mode=WAL`, `busy_timeout=5000`, and `synchronous=NORMAL`. The pragmas are necessary for multi-process safety: cron-driven maintenance commands run as separate Python processes against the same DB file as the daemon, and the default rollback-journal mode + zero `busy_timeout` would surface as `database is locked` errors on contention. WAL is silently a no-op on `:memory:` databases (used in tests) — applies to file-backed SQLite only.
+- **Postgres** gets connection pool tuning (`pool_size=5`, `max_overflow=10`) and `pool_pre_ping=True`.
 
 ---
 
@@ -258,7 +269,7 @@ When threshold is set and outstanding total exceeds it:
 
 ### Currency display
 
-`services/formatting.format_currency(cents, settings=None)` reads `COMPENDIUM_CURRENCY_SYMBOL` (default `$`) and `COMPENDIUM_CURRENCY_SYMBOL_POSITION` (`before` | `after`, default `before`). Registered as a Jinja filter `| currency` for templates; CLI imports the helper directly. **API responses always use `amount_cents: int`**; clients format client-side. Decimal separator is hardcoded `.` — full locale-aware number formatting is out of v1 scope.
+`services/formatting.format_currency(cents)` reads the `currency_symbol` (default `$`) and `currency_symbol_position` (`before` | `after`, default `before`) site settings. Registered as a Jinja filter `| currency` for templates; CLI imports the helper directly. **API responses always use `amount_cents: int`**; clients format client-side. Decimal separator is hardcoded `.` — full locale-aware number formatting is out of v1 scope.
 
 ### Lost vs damaged semantics
 
@@ -408,7 +419,7 @@ Most runtime configuration is DB-editable via the `site_setting` table, with env
 
 **Surfaces**:
 - Web: `/ui/admin/settings/{general,circulation,kiosk}` (librarian-tier) and `/ui/admin/system/{smtp,retention}` (system-tier). Per-row "⚠ Overridden by env var" indicator when the env var is set; inputs disabled in that case.
-- CLI: `compendium settings {list,get,set,reset}`.
+- CLI: `compendium settings {list,get,set,reset}`. By default `list` shows DB-editable items only; pass `--all` to also include env-only `Settings` fields (DB URL, JWT secret, TLS material, etc.) — sensitive values mask to `********` unless `--show-secrets` is also passed. `--scope env-only` filters to just those. The combined `--all` view is the canonical answer to "what `COMPENDIUM_*` env vars does this app recognize?"
 - API: `GET /settings/`, `GET/PATCH/DELETE /settings/{key}`.
 
 **Hybrid for secrets**: `smtp_password` stays env-only (`COMPENDIUM_SMTP_PASSWORD`). Other SMTP knobs (host/port/from/etc.) are DB-editable. Same model for any future secrets — env-only by deliberate exclusion from the registry.

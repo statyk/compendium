@@ -163,7 +163,34 @@ Several maintenance commands should run periodically:
 - `maintenance deactivate-expired-patrons` — flips `is_active=false` for patrons whose `expires_at` has passed.
 - `maintenance prune-cover-cache --max-mb N` — bound the on-disk cover-image cache.
 
-See [`crontab.sample`](crontab.sample) for a ready-made schedule and [`compendium.service.sample`](compendium.service.sample) for running the daemon under systemd.
+### Installing the schedule
+
+[`crontab.sample`](crontab.sample) holds the full schedule. The fastest way
+to wire it up is the bundled installer:
+
+```bash
+scripts/install-cron.sh
+```
+
+The installer substitutes the project path and the log destination into the
+sample, then appends the rendered block to the current user's crontab. Two
+flags worth knowing:
+
+- `--project-dir PATH` — defaults to `$(pwd)`. Use when you run the script
+  from somewhere other than the repo root.
+- `--log-file PATH` — defaults to `$HOME/.local/state/compendium/maintenance.log`
+  (auto-created). Pass `journal` to route output to the systemd journal
+  (view with `journalctl -t compendium-maintenance -f`). Paths outside the
+  user's writable territory (e.g. `/var/log/...`) require a one-time
+  `sudo install -d -o $USER ...` — the installer prints the exact command
+  and exits without modifying the crontab if the directory isn't ready.
+
+Re-running the script is a no-op — it refuses to install twice and prints
+the tag markers to remove if you want to re-install. Edit the crontab
+directly with `crontab -e`.
+
+See also [`compendium.service.sample`](compendium.service.sample) for running
+the daemon under systemd.
 
 ---
 

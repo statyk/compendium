@@ -1,10 +1,11 @@
 # Compendium — sample systemd unit file for the daemon
 #
 # Copy to /etc/systemd/system/compendium.service and adjust:
-#   - User / Group
-#   - WorkingDirectory (path to the compendium project)
-#   - ExecStart (path to uv or the installed compendium binary)
-#   - EnvironmentFile (optional; path to your .env file)
+#   - User / Group              (create the account if it doesn't exist:
+#                                  sudo useradd --system --home /opt/compendium compendium)
+#   - WorkingDirectory          (path to the compendium project)
+#   - EnvironmentFile           (optional; path to your .env file)
+#   - ExecStart                 (host/port/TLS — see notes below)
 #
 # Then:
 #   sudo systemctl daemon-reload
@@ -20,6 +21,12 @@ User=compendium
 Group=compendium
 WorkingDirectory=/opt/compendium
 EnvironmentFile=/opt/compendium/.env
+# Default binding is 127.0.0.1:8000 — appropriate when fronted by a reverse
+# proxy (Caddy, nginx, Traefik) on the same host. To listen on the LAN
+# directly, add `--host 0.0.0.0`. To terminate TLS in-process instead of at a
+# proxy, add `--ssl-certfile /path/fullchain.pem --ssl-keyfile /path/privkey.pem`.
+# When fronted by HTTPS (proxy or in-process), set COMPENDIUM_SECURE_COOKIES=true
+# in the .env file so session cookies carry the Secure flag.
 ExecStart=uv run compendium serve
 Restart=on-failure
 RestartSec=5
@@ -32,31 +39,43 @@ PrivateTmp=yes
 WantedBy=multi-user.target
 
 
-# ── Companion timer for maintenance tasks ─────────────────────────────────────
+# ── Scheduled maintenance ────────────────────────────────────────────────────
 #
-# To run `expire-holds` nightly via systemd instead of cron, create two
-# additional files:
+# This unit only runs the daemon. Compendium also has a set of cron-driven
+# maintenance commands (email outbox drain, hold expiry, fines materialization,
+# retention prunes, backups). The recommended way to schedule them is the
+# bundled cron installer, which works under any init system:
 #
-# /etc/systemd/system/compendium-maintenance.service
-# ──────────────────────────────────────────────────
+#   scripts/install-cron.sh
+#
+# See `docs/deployment.md` for the full schedule and the `--log-file` /
+# `--project-dir` flags.
+#
+# If you prefer systemd timers (per-task `systemctl status`, journald output
+# under `journalctl -u …`), the pattern for one timer is below. Mirror it for
+# each of the maintenance commands listed in `docs/deployment.md`. The cron
+# installer is simpler if you don't need that level of introspection.
+#
+# /etc/systemd/system/compendium-send-queued-notifications.service
+# ────────────────────────────────────────────────────────────────
 # [Unit]
-# Description=Compendium nightly maintenance
+# Description=Compendium — drain email outbox
 #
 # [Service]
 # Type=oneshot
 # User=compendium
 # WorkingDirectory=/opt/compendium
 # EnvironmentFile=/opt/compendium/.env
-# ExecStart=uv run compendium maintenance expire-holds
+# ExecStart=uv run compendium maintenance send-queued-notifications
 #
 #
-# /etc/systemd/system/compendium-maintenance.timer
-# ─────────────────────────────────────────────────
+# /etc/systemd/system/compendium-send-queued-notifications.timer
+# ──────────────────────────────────────────────────────────────
 # [Unit]
-# Description=Run Compendium maintenance nightly
+# Description=Compendium — drain email outbox every 5 minutes
 #
 # [Timer]
-# OnCalendar=*-*-* 02:00:00
+# OnUnitActiveSec=5min
 # Persistent=true
 #
 # [Install]
@@ -64,4 +83,4 @@ WantedBy=multi-user.target
 #
 # Then:
 #   sudo systemctl daemon-reload
-#   sudo systemctl enable --now compendium-maintenance.timer
+#   sudo systemctl enable --now compendium-send-queued-notifications.timer

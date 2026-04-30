@@ -1,40 +1,53 @@
 #!/bin/sh
-# Compendium — install scheduled-maintenance crontab for the Docker deployment.
+# Compendium — install scheduled-maintenance crontab for a bare-metal install.
 #
-# Appends docker/crontab.sample to the current user's crontab, with two
+# Appends docs/crontab.sample to the current user's crontab, with two
 # placeholders substituted:
-#   COMPENDIUM_DIR  → absolute path to this docker/ directory
+#   COMPENDIUM_DIR  → absolute path to the Compendium project (default: $(pwd))
 #   LOG_REDIRECT    → either ">> /path/to/log 2>&1" (file mode) or
 #                     "2>&1 | logger -t compendium-maintenance" (journal)
 #
 # Idempotent: re-running detects a previous install and refuses to duplicate.
 #
 # Usage:
-#   install-cron.sh [--log-file PATH | --log-file journal]
+#   scripts/install-cron.sh [--project-dir PATH] [--log-file PATH | --log-file journal]
 #
 # Defaults:
-#   --log-file <docker-dir>/logs/maintenance.log
+#   --project-dir $(pwd)
+#   --log-file $HOME/.local/state/compendium/maintenance.log
 #
 # Override examples:
-#   install-cron.sh --log-file journal
-#   install-cron.sh --log-file /var/log/compendium/maintenance.log
+#   scripts/install-cron.sh --log-file journal
+#   scripts/install-cron.sh --log-file /var/log/compendium/maintenance.log
+#   scripts/install-cron.sh --project-dir /opt/compendium
 #
-# For paths outside $HOME (e.g. /var/log/...), the installer expects the
-# directory to already exist and be writable by the current user. It will
-# print one-time setup commands if not, and exit without modifying crontab.
+# For paths outside writable territory (e.g. /var/log/...), the installer
+# expects the directory to already exist and be writable. It prints one-time
+# setup commands if not, and exits without modifying crontab.
 
 set -eu
 
-DOCKER_DIR="$(cd "$(dirname "$0")" && pwd)"
-SAMPLE="${DOCKER_DIR}/crontab.sample"
-TAG_BEGIN="# >>> compendium docker maintenance >>>"
-TAG_END="# <<< compendium docker maintenance <<<"
-DEFAULT_LOG="${DOCKER_DIR}/logs/maintenance.log"
+REPO_DIR="$(cd "$(dirname "$0")/.." && pwd)"
+SAMPLE="${REPO_DIR}/docs/crontab.sample"
+TAG_BEGIN="# >>> compendium maintenance >>>"
+TAG_END="# <<< compendium maintenance <<<"
 
-LOG_DEST="${DEFAULT_LOG}"
+PROJECT_DIR="$(pwd)"
+LOG_DEST="${HOME}/.local/state/compendium/maintenance.log"
 
 while [ $# -gt 0 ]; do
     case "$1" in
+        --project-dir)
+            shift
+            if [ $# -eq 0 ]; then
+                echo "Error: --project-dir needs a path." >&2
+                exit 1
+            fi
+            PROJECT_DIR="$1"
+            ;;
+        --project-dir=*)
+            PROJECT_DIR="${1#--project-dir=}"
+            ;;
         --log-file)
             shift
             if [ $# -eq 0 ]; then
@@ -58,15 +71,21 @@ while [ $# -gt 0 ]; do
     shift
 done
 
+PROJECT_DIR="$(cd "${PROJECT_DIR}" 2>/dev/null && pwd)" || {
+    echo "Error: --project-dir does not exist or isn't a directory." >&2
+    exit 1
+}
+
 if [ ! -f "${SAMPLE}" ]; then
     echo "Error: ${SAMPLE} not found." >&2
     exit 1
 fi
 
-if ! command -v docker >/dev/null 2>&1; then
-    echo "Error: 'docker' is not on PATH for this user." >&2
-    echo "       cron jobs run under your shell, so docker must be invokable here." >&2
-    exit 1
+if ! command -v uv >/dev/null 2>&1; then
+    echo "Warning: 'uv' is not on PATH for this shell." >&2
+    echo "         Cron jobs run under your login shell; if uv isn't on its" >&2
+    echo "         PATH the maintenance commands will fail. Install uv or" >&2
+    echo "         edit the rendered crontab to use an absolute path." >&2
 fi
 
 # Resolve the LOG_REDIRECT replacement string.
@@ -109,11 +128,10 @@ if printf '%s' "${EXISTING}" | grep -qF "${TAG_BEGIN}"; then
     exit 1
 fi
 
-# Substitute. `!` delimiter avoids slash-escaping for paths AND avoids
-# colliding with the `|` in the journal-mode redirect's pipe-to-logger.
-# The REDIRECT variable already escapes its `&` for sed's replacement syntax.
+# `!` delimiter avoids slash-escaping for paths AND avoids colliding with
+# the `|` in the journal-mode redirect's pipe-to-logger.
 RENDERED="$(sed \
-    -e "s!COMPENDIUM_DIR!${DOCKER_DIR}!g" \
+    -e "s!COMPENDIUM_DIR!${PROJECT_DIR}!g" \
     -e "s!LOG_REDIRECT!${REDIRECT}!g" \
     "${SAMPLE}")"
 
@@ -125,4 +143,5 @@ RENDERED="$(sed \
 } | crontab -
 
 echo "Installed Compendium maintenance crontab. Run 'crontab -l' to view."
+echo "Project: ${PROJECT_DIR}"
 echo "Logs: ${LOG_DESCRIPTION}"

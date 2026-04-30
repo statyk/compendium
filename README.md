@@ -249,7 +249,30 @@ and run `compendium db init` to apply migrations. Full setup (creating the role 
 
 ## Scheduled maintenance
 
-The `compendium maintenance expire-holds` command should run periodically via cron or a systemd timer. See [`docs/crontab.sample`](docs/crontab.sample) and [`docs/compendium.service.sample`](docs/compendium.service.sample).
+Several maintenance commands need to run on a cadence — most importantly the
+email outbox drain (`send-queued-notifications`), without which queued
+notifications never go out. Install the bundled crontab via:
+
+```bash
+scripts/install-cron.sh
+```
+
+By default this writes the project path into the crontab and points logs at
+`$HOME/.local/state/compendium/maintenance.log`. Override either with flags:
+
+```bash
+scripts/install-cron.sh --project-dir /opt/compendium --log-file journal
+scripts/install-cron.sh --log-file /var/log/compendium/maintenance.log
+```
+
+`--log-file journal` routes output to the systemd journal (view with
+`journalctl -t compendium-maintenance -f`). For paths the installer can't
+create unprivileged (e.g. `/var/log/...`), it prints the one-time `sudo`
+command and exits without touching the crontab.
+
+See [`docs/crontab.sample`](docs/crontab.sample) for the full schedule and
+[`docs/compendium.service.sample`](docs/compendium.service.sample) for
+running the daemon under systemd.
 
 ## Running tests
 
