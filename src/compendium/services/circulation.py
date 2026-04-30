@@ -22,8 +22,10 @@ from compendium.repositories.base import (
 from compendium.services.audit import AuditAction, AuditEntityType, AuditService
 from compendium.services.fines import CheckoutStatus, FineService
 from compendium.services.notifications import NotificationService
+from compendium.services.site_settings import get_site_setting
 
-_DEFAULT_LOAN_DAYS = 14
+# max_renewals is still hardcoded — there's no registry descriptor for it
+# and no per-deployment knob today. Migrate alongside if ever needed.
 _DEFAULT_MAX_RENEWALS = 2
 
 
@@ -81,7 +83,7 @@ class CirculationService:
         category_id = patron.category_id if patron is not None else None
         policy = self._policies.resolve(item.work.media_type_id, category_id)
         if policy is None:
-            return _DEFAULT_LOAN_DAYS, _DEFAULT_MAX_RENEWALS
+            return get_site_setting("default_loan_period_days"), _DEFAULT_MAX_RENEWALS
         return policy.loan_period_days, policy.max_renewals
 
     def _promote_hold(self, item: Item) -> None:

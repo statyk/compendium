@@ -345,6 +345,20 @@ def _register_builtins() -> None:
     )
     register(
         SettingDescriptor(
+            key="default_loan_period_days",
+            display_name="Default Loan Period (days)",
+            type=int,
+            default=14,
+            scope="librarian",
+            help_text=(
+                "Loan period applied when no policy matches the item's "
+                "media type / patron category."
+            ),
+            validator=_positive_int,
+        )
+    )
+    register(
+        SettingDescriptor(
             key="hold_expiry_days",
             display_name="Hold Queue Expiry (days)",
             type=int,

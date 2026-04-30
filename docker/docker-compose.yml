@@ -28,7 +28,6 @@ services:
       COMPENDIUM_DATABASE_URL: postgresql+psycopg://compendium:${POSTGRES_PASSWORD}@db:5432/compendium
       COMPENDIUM_JWT_SECRET_KEY: ${COMPENDIUM_JWT_SECRET_KEY:?COMPENDIUM_JWT_SECRET_KEY must be set in .env}
       COMPENDIUM_JWT_EXPIRE_MINUTES: ${COMPENDIUM_JWT_EXPIRE_MINUTES:-480}
-      COMPENDIUM_DEFAULT_LOAN_PERIOD_DAYS: ${COMPENDIUM_DEFAULT_LOAN_PERIOD_DAYS:-14}
       # nginx terminates TLS in front of Compendium — issue cookies with the
       # Secure flag so they only travel over HTTPS.
       COMPENDIUM_SECURE_COOKIES: "true"

@@ -68,6 +68,7 @@ _PAGES: dict[str, dict[str, Any]] = {
             "individual loan policies take precedence."
         ),
         "keys": [
+            "default_loan_period_days",
             "currency_symbol",
             "currency_symbol_position",
             "fine_block_threshold_cents",

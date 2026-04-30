@@ -14,7 +14,6 @@ class Settings(BaseSettings):
     )
 
     database_url: str = "sqlite:///compendium.db"
-    default_loan_period_days: int = 14
     guest_search_enabled: bool = True
     jwt_secret_key: str = INSECURE_JWT_DEFAULT
     jwt_algorithm: str = "HS256"
