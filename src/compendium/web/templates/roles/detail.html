@@ -98,7 +98,7 @@
 {% endif %}
 {% endblock %}
 {% block scripts %}
-<script>
+<script nonce="{{ csp_nonce(request) }}">
 function togglePerms(cb) {
   document.querySelectorAll('.perm-check').forEach(el => {
     el.disabled = cb.checked;

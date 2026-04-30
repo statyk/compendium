@@ -166,7 +166,7 @@
   }
   .pagination { display:flex; gap:0.5rem; justify-content:center; margin-top:1rem; }
 </style>
-<script>
+<script nonce="{{ csp_nonce(request) }}">
   (function () {
     var form = document.getElementById('catalog-form');
     if (!form) return;

@@ -6,7 +6,7 @@
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>{% block title %}{{ library_name() }}{% endblock %}</title>
   <link rel="icon" type="image/svg+xml" href="/ui/static/favicon.svg">
-  <script>
+  <script nonce="{{ csp_nonce(request) }}">
     // Apply per-browser theme override before first paint to avoid FOUC.
     try {
       var t = localStorage.getItem('compendium_theme');
@@ -255,7 +255,7 @@
   <footer class="container">
     <small>Compendium &mdash; library catalog system</small>
   </footer>
-  <script>
+  <script nonce="{{ csp_nonce(request) }}">
     (function () {
       var menu = document.getElementById('theme-menu');
       if (!menu) return;

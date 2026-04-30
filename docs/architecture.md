@@ -171,6 +171,16 @@ A startup warning logs if no active user holds `system.manage` — best-effort, 
 
 Guest catalog search is controlled by the `guest_search_enabled` site setting (env: `COMPENDIUM_GUEST_SEARCH_ENABLED`, default `true`).
 
+### CSP and inline scripts
+
+`_SecurityHeadersMiddleware` (`api/app.py`) generates a fresh CSP nonce per request via `secrets.token_urlsafe(16)`, stamps it on `request.state.csp_nonce`, and emits `script-src 'self' 'nonce-{nonce}' 'strict-dynamic'`. There is no `'unsafe-inline'` for scripts — a comment-field XSS that slips past output sanitization can't smuggle a `<script>` block because nonces are unguessable per request.
+
+**Convention for inline scripts in templates.** Every `<script>...</script>` block in `web/templates/` must include `nonce="{{ csp_nonce(request) }}"`. External `<script src="/ui/static/...">` tags don't need a nonce — they match `'self'`. The `csp_nonce()` Jinja global is registered in `web/jinja.py` and reads from `request.state`.
+
+A pytest test (`tests/integration/test_csp_nonce.py::test_every_inline_script_in_templates_has_nonce`) walks the templates directory and fails if any inline script is missing a nonce. Miss one in a future template and the test catches it before the page silently breaks in a browser.
+
+**Style-src** still allows `'unsafe-inline'` because templates use `style="..."` attributes throughout. CSS-based attacks (data exfil via crafted selectors) are real but much lower impact than script execution; tightening that would be a separate, larger refactor.
+
 ---
 
 ## External metadata

@@ -26,7 +26,7 @@
 {% endblock %}
 
 {% block scripts %}
-<script>
+<script nonce="{{ csp_nonce(request) }}">
   (function () {
     // Idle timeout: after N seconds with no activity, return to the kiosk
     // landing page so one patron's session can't be used by the next.

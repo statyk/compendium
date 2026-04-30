@@ -6,7 +6,7 @@
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>{% block title %}Self-Checkout — {{ library_name() }}{% endblock %}</title>
   <link rel="icon" type="image/svg+xml" href="/ui/static/favicon.svg">
-  <script>
+  <script nonce="{{ csp_nonce(request) }}">
     try {
       var t = localStorage.getItem('compendium_theme');
       if (t === 'light' || t === 'dark') document.documentElement.setAttribute('data-theme', t);

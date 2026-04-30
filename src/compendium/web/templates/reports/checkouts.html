@@ -48,7 +48,7 @@
 
 {% block scripts %}
 <script src="/ui/static/chart.min.js"></script>
-<script>
+<script nonce="{{ csp_nonce(request) }}">
   (function () {
     var el = document.getElementById('checkouts-chart');
     if (!el || typeof Chart === 'undefined') return;

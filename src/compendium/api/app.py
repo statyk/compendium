@@ -1,5 +1,6 @@
 import logging
 import os
+import secrets
 from pathlib import Path
 
 from fastapi import FastAPI, Request
@@ -40,11 +41,22 @@ _log = logging.getLogger("compendium")
 class _SecurityHeadersMiddleware(BaseHTTPMiddleware):
     """Apply baseline security headers to every response.
 
-    CSP includes a small allowance for the inline JS used in a few HTMX partials
-    and the ZXing WebAssembly worker. Tighten once inline scripts are eliminated.
+    Generates a per-request CSP nonce (`request.state.csp_nonce`) that
+    templates inject into legitimate `<script>` tags via the `csp_nonce()`
+    Jinja global. The CSP itself drops `'unsafe-inline'` for scripts in
+    favor of `'nonce-...' 'strict-dynamic'`, so a comment-field XSS can't
+    smuggle a script even if it slips past output sanitization. Style-src
+    still allows inline because templates use `style="..."` attributes
+    extensively; cosmetic CSS XSS is much lower impact.
+
+    A test in `tests/integration/test_csp_nonce.py` walks the templates
+    directory and asserts every inline `<script>` block has `nonce=` —
+    miss one and the test fails before the page silently breaks.
     """
 
     async def dispatch(self, request: Request, call_next):
+        nonce = secrets.token_urlsafe(16)
+        request.state.csp_nonce = nonce
         response = await call_next(request)
         response.headers.setdefault("X-Frame-Options", "DENY")
         response.headers.setdefault("X-Content-Type-Options", "nosniff")
@@ -52,7 +64,8 @@ class _SecurityHeadersMiddleware(BaseHTTPMiddleware):
         response.headers.setdefault(
             "Content-Security-Policy",
             "default-src 'self'; img-src 'self' data: https://covers.openlibrary.org "
-            "https://image.tmdb.org; script-src 'self' 'unsafe-inline'; "
+            "https://image.tmdb.org; "
+            f"script-src 'self' 'nonce-{nonce}' 'strict-dynamic'; "
             "style-src 'self' 'unsafe-inline'; object-src 'none'; base-uri 'self'; "
             "frame-ancestors 'none'; worker-src 'self' blob:",
         )
