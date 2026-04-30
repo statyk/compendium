@@ -6,9 +6,11 @@ from fastapi.responses import RedirectResponse
 from compendium.db.engine import get_settings
 from compendium.db.session import get_session
 from compendium.domain.errors import AuthError
+from compendium.repositories.sql.failed_login_repository import SqlFailedLoginRepository
 from compendium.repositories.sql.role_repository import SqlRoleRepository
 from compendium.repositories.sql.user_repository import SqlUserRepository
 from compendium.services.auth import AuthService
+from compendium.services.rate_limit import RateLimitService
 from compendium.web.csrf import check_csrf_form, generate_token, set_csrf_cookie
 from compendium.web.deps import clear_auth_cookie, get_web_user, set_auth_cookie
 from compendium.web.jinja import templates
@@ -22,6 +24,10 @@ def _auth_svc(session=Depends(get_session)) -> AuthService:
         role_repo=SqlRoleRepository(session),
         settings=get_settings(),
     )
+
+
+def _rate_limit_svc(session=Depends(get_session)) -> RateLimitService:
+    return RateLimitService(SqlFailedLoginRepository(session))
 
 
 @router.get("/login")
@@ -57,13 +63,34 @@ def login_submit(
     next: str = Form(default=""),
     csrf_token: str = Form(default=""),
     svc: AuthService = Depends(_auth_svc),
+    rl: RateLimitService = Depends(_rate_limit_svc),
 ):
     check_csrf_form(request, csrf_token)
     token = generate_token()
+
+    retry_after = rl.check("login_user", username)
+    if retry_after is not None:
+        resp = templates.TemplateResponse(
+            request,
+            "login.html",
+            {
+                "user": None,
+                "next": next,
+                "csrf_token": token,
+                "error": f"Too many failed login attempts. Try again in {retry_after} seconds.",
+                "message": None,
+            },
+            status_code=429,
+            headers={"Retry-After": str(retry_after)},
+        )
+        set_csrf_cookie(resp, token, get_settings().jwt_secret_key)
+        return resp
+
     try:
         user = svc.authenticate(username, password)
         jwt_token = svc.issue_token(user)
     except AuthError as exc:
+        rl.record_failure("login_user", username)
         resp = templates.TemplateResponse(
             request,
             "login.html",
@@ -79,6 +106,7 @@ def login_submit(
         set_csrf_cookie(resp, token, get_settings().jwt_secret_key)
         return resp
 
+    rl.clear("login_user", username)
     redirect_to = (
         next
         if next.startswith("/ui/") and not next.startswith("/ui//") and "\\" not in next

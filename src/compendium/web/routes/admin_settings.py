@@ -120,6 +120,23 @@ _SYSTEM_PAGES: dict[str, dict[str, Any]] = {
             "audit_retention_days",
         ],
     },
+    "security": {
+        "title": "Security & rate limiting",
+        "scope_perm": "system.manage",
+        "intro": (
+            "Per-identity login throttling (per username or kiosk card number). "
+            "After login_max_failures consecutive failures within the window, "
+            "further attempts are blocked with a 429 response until the oldest "
+            "failure ages out of the window. Set login_max_failures to 0 to "
+            "disable throttling. Note: credential-stuffing protection (one source "
+            "testing many usernames) is not covered here — configure rate limiting "
+            "at the reverse proxy for that."
+        ),
+        "keys": [
+            "login_max_failures",
+            "login_failure_window_seconds",
+        ],
+    },
 }
 
 _ALL_PAGES = {**_PAGES, **_SYSTEM_PAGES}
@@ -468,6 +485,39 @@ async def retention_post(
     return _post_handler(
         "retention",
         _SYSTEM_PAGES["retention"],
+        request,
+        form_values,
+        reset_keys,
+        session,
+        user,
+    )
+
+
+@router.get("/admin/system/security")
+def security_get(
+    request: Request,
+    message: str | None = Query(default=None),
+    error: str | None = Query(default=None),
+    user: AppUser = Depends(require_web_permission("system.manage")),
+):
+    return _show_page(
+        "security", _SYSTEM_PAGES["security"], request, message, error, user
+    )
+
+
+@router.post("/admin/system/security")
+async def security_post(
+    request: Request,
+    user: AppUser = Depends(require_web_permission("system.manage")),
+    session: Session = Depends(get_session),
+):
+    form = await request.form()
+    check_csrf_form(request, form.get("csrf_token", ""))
+    reset_keys = form.getlist("reset")
+    form_values = {k: v for k, v in form.items() if k not in ("csrf_token", "reset")}
+    return _post_handler(
+        "security",
+        _SYSTEM_PAGES["security"],
         request,
         form_values,
         reset_keys,

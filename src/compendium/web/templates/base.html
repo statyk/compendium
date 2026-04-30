@@ -219,6 +219,7 @@
                 {% if has_permission(user, 'role.manage') %}<li><a href="/ui/roles">Roles</a></li>{% endif %}
                 {% if has_permission(user, 'system.manage') %}<li><a href="/ui/admin/system/smtp">SMTP</a></li>{% endif %}
                 {% if has_permission(user, 'system.manage') %}<li><a href="/ui/admin/system/retention">Retention</a></li>{% endif %}
+                {% if has_permission(user, 'system.manage') %}<li><a href="/ui/admin/system/security">Security</a></li>{% endif %}
               </ul>
             </details>
           </li>

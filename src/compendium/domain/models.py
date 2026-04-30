@@ -385,3 +385,22 @@ class SiteSetting(Base):
     )
 
     updated_by: Mapped[AppUser | None] = relationship()
+
+
+class FailedLogin(Base):
+    """One row per failed authentication attempt.
+
+    Keyed on (scope, identifier) with occurred_at for sliding-window queries.
+    No FK to app_user or patron — a non-existent username still counts.
+    """
+
+    __tablename__ = "failed_login"
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    scope: Mapped[str] = mapped_column(Text, nullable=False)
+    identifier: Mapped[str] = mapped_column(Text, nullable=False)
+    occurred_at: Mapped[datetime] = mapped_column(UtcDateTime, nullable=False)
+
+    __table_args__ = (
+        Index("ix_failed_login_scope_id_at", "scope", "identifier", "occurred_at"),
+    )

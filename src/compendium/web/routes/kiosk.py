@@ -33,6 +33,7 @@ from compendium.domain.errors import (
 from compendium.domain.models import AppUser, Patron
 from compendium.repositories.sql.audit_log_repository import SqlAuditLogRepository
 from compendium.repositories.sql.branch_repository import SqlBranchRepository
+from compendium.repositories.sql.failed_login_repository import SqlFailedLoginRepository
 from compendium.repositories.sql.fine_repository import SqlFineRepository
 from compendium.repositories.sql.hold_repository import SqlHoldRepository
 from compendium.repositories.sql.item_repository import SqlItemRepository
@@ -42,6 +43,7 @@ from compendium.repositories.sql.patron_repository import SqlPatronRepository
 from compendium.services.audit import AuditService
 from compendium.services.circulation import CirculationService
 from compendium.services.fines import CheckoutStatus, FineService
+from compendium.services.rate_limit import RateLimitService
 from compendium.web.csrf import check_csrf_form, ensure_csrf, set_csrf_cookie
 from compendium.web.deps import require_web_permission
 from compendium.web.jinja import templates
@@ -137,8 +139,18 @@ def kiosk_start(
             "/ui/kiosk?error=" + quote("Please enter or scan a card number."),
             status_code=303,
         )
+    rl = RateLimitService(SqlFailedLoginRepository(session))
+    retry_after = rl.check("kiosk_card", card)
+    if retry_after is not None:
+        return RedirectResponse(
+            "/ui/kiosk?error=" + quote(
+                f"Too many failed attempts. Try again in {retry_after} seconds."
+            ),
+            status_code=303,
+        )
     patron = SqlPatronRepository(session).get_by_card_number(card)
     if patron is None:
+        rl.record_failure("kiosk_card", card)
         return RedirectResponse(
             "/ui/kiosk?error=" + quote("Card not recognized. Please see the desk."),
             status_code=303,
@@ -147,6 +159,7 @@ def kiosk_start(
     gate = _gate_patron(session, patron, settings)
     if gate is not None:
         return RedirectResponse("/ui/kiosk?error=" + quote(gate), status_code=303)
+    rl.clear("kiosk_card", card)
     return RedirectResponse(
         f"/ui/kiosk/session/{patron.library_card_number}", status_code=303
     )

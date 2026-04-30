@@ -516,6 +516,36 @@ def _register_builtins() -> None:
             validator=_non_negative_int,
         )
     )
+    register(
+        SettingDescriptor(
+            key="login_max_failures",
+            display_name="Login Max Failures",
+            type=int,
+            default=10,
+            scope="system",
+            help_text=(
+                "Number of consecutive failed login attempts (per username or "
+                "kiosk card number) allowed within the throttle window before "
+                "further attempts are blocked. Set to 0 to disable throttling."
+            ),
+            validator=_non_negative_int,
+        )
+    )
+    register(
+        SettingDescriptor(
+            key="login_failure_window_seconds",
+            display_name="Login Failure Window (seconds)",
+            type=int,
+            default=300,
+            scope="system",
+            help_text=(
+                "Sliding-window duration for counting failed login attempts. "
+                "Failures older than this (in seconds) are ignored. Default "
+                "300 = 5 minutes."
+            ),
+            validator=_positive_int,
+        )
+    )
 
 
 _register_builtins()

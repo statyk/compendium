@@ -8,6 +8,7 @@ from compendium.db.engine import get_settings
 from compendium.db.session import session_scope
 from compendium.repositories.sql.audit_log_repository import SqlAuditLogRepository
 from compendium.repositories.sql.branch_repository import SqlBranchRepository
+from compendium.repositories.sql.failed_login_repository import SqlFailedLoginRepository
 from compendium.repositories.sql.hold_repository import SqlHoldRepository
 from compendium.repositories.sql.item_repository import SqlItemRepository
 from compendium.repositories.sql.loan_repository import SqlLoanRepository
@@ -130,6 +131,39 @@ def prune_audit_log(
             return
         count = repo.delete_older_than(cutoff)
         typer.echo(f"Pruned {count} audit row(s) older than {days} day(s).")
+
+
+@app.command("prune-failed-logins")
+def prune_failed_logins(
+    older_than_days: int = typer.Option(
+        ..., "--older-than-days",
+        help="Delete failed-login rows older than this many days.",
+    ),
+    dry_run: bool = typer.Option(
+        False, "--dry-run",
+        help="Report what would be deleted without touching the database.",
+    ),
+) -> None:
+    """Delete old failed-login rows.
+
+    Keeps the failed_login table from growing unboundedly.  The sliding-window
+    throttle only looks back ``login_failure_window_seconds`` (default 300 s),
+    so rows older than a day are already stale for throttling purposes.
+    Suggested cron cadence: weekly.
+    """
+    if older_than_days < 1:
+        typer.echo("Error: --older-than-days must be at least 1.", err=True)
+        raise typer.Exit(1)
+
+    cutoff = datetime.now(timezone.utc) - timedelta(days=older_than_days)
+    with session_scope() as session:
+        repo = SqlFailedLoginRepository(session)
+        if dry_run:
+            count = repo.count_older_than(cutoff)
+            typer.echo(f"Would prune {count} failed-login row(s) older than {older_than_days} day(s).")
+            return
+        count = repo.delete_older_than(cutoff)
+        typer.echo(f"Pruned {count} failed-login row(s) older than {older_than_days} day(s).")
 
 
 @app.command("assess-overdue-fines")
