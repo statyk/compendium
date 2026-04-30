@@ -1,5 +1,18 @@
 import os
 
+# Set BEFORE any test module imports. Test modules construct `Settings(...)` at
+# import time, so env-var defaults that those tests rely on must be in place
+# before pytest starts collecting.
+#
+# - ALLOW_INSECURE_JWT: tests use the literal INSECURE_JWT_DEFAULT; without this
+#   the H3 hard-fail would block every create_app() call. Real deployments must
+#   set a strong secret instead.
+# - SECURE_COOKIES: TestClient runs over plain HTTP (`http://testserver`); the
+#   default of `True` (post-M6) makes httpx drop the Secure-flagged auth cookie
+#   on subsequent requests, breaking any test that relies on cookie round-trip.
+os.environ.setdefault("COMPENDIUM_ALLOW_INSECURE_JWT", "1")
+os.environ.setdefault("COMPENDIUM_SECURE_COOKIES", "false")
+
 import pytest
 from sqlalchemy import create_engine
 from sqlalchemy.orm import Session, sessionmaker
@@ -7,20 +20,6 @@ from sqlalchemy.orm import Session, sessionmaker
 from compendium.config.seed import seed_defaults
 from compendium.domain.models import Base
 from tests.helpers import setup_sqlite_fts
-
-
-@pytest.fixture(autouse=True, scope="session")
-def _allow_insecure_jwt_in_tests():
-    # Tests construct Settings with the literal INSECURE_JWT_DEFAULT and call
-    # create_app(); without this the H3 hard-fail would block every TestClient
-    # startup. Real deployments must set a strong secret instead.
-    prev = os.environ.get("COMPENDIUM_ALLOW_INSECURE_JWT")
-    os.environ["COMPENDIUM_ALLOW_INSECURE_JWT"] = "1"
-    yield
-    if prev is None:
-        os.environ.pop("COMPENDIUM_ALLOW_INSECURE_JWT", None)
-    else:
-        os.environ["COMPENDIUM_ALLOW_INSECURE_JWT"] = prev
 
 
 @pytest.fixture(scope="session")

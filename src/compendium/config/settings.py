@@ -27,7 +27,7 @@ class Settings(BaseSettings):
     ssl_certfile: str | None = None
     ssl_keyfile: str | None = None
     tmdb_api_key: str | None = None
-    secure_cookies: bool = False
+    secure_cookies: bool = True
     audit_retention_days: int | None = None
     default_theme: Literal["light", "dark", "auto"] = "light"
     fine_block_threshold_cents: int | None = None

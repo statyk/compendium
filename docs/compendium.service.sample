@@ -25,8 +25,9 @@ EnvironmentFile=/opt/compendium/.env
 # proxy (Caddy, nginx, Traefik) on the same host. To listen on the LAN
 # directly, add `--host 0.0.0.0`. To terminate TLS in-process instead of at a
 # proxy, add `--ssl-certfile /path/fullchain.pem --ssl-keyfile /path/privkey.pem`.
-# When fronted by HTTPS (proxy or in-process), set COMPENDIUM_SECURE_COOKIES=true
-# in the .env file so session cookies carry the Secure flag.
+# Session cookies carry the Secure flag by default (correct for HTTPS deploys
+# and localhost dev). For plain-HTTP LAN deploys with no TLS, set
+# COMPENDIUM_SECURE_COOKIES=false in the .env file or login state will break.
 ExecStart=uv run compendium serve
 Restart=on-failure
 RestartSec=5

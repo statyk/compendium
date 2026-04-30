@@ -62,13 +62,15 @@ The `.env` file is for things that *must* be set before the DB is available, plu
 COMPENDIUM_DATABASE_URL=sqlite:////var/lib/compendium/compendium.db
 COMPENDIUM_JWT_SECRET_KEY=<generate with: python -c "import secrets; print(secrets.token_hex(32))">
 COMPENDIUM_JWT_EXPIRE_MINUTES=480
-COMPENDIUM_SECURE_COOKIES=true            # set when serving over HTTPS
+COMPENDIUM_SECURE_COOKIES=true            # default; set `false` for plain-HTTP LAN deploys
 
 # SMTP — host/port/from are DB-editable but you can pin them here too
 COMPENDIUM_SMTP_PASSWORD=<secret>          # password is env-only by design
 ```
 
 **`JWT_SECRET_KEY` must be set to a strong random value.** The built-in default is intentionally weak — the server refuses to start when it's detected. Generate one with `python -c "import secrets; print(secrets.token_urlsafe(48))"` (or `openssl rand -base64 48`). For first-run / dev work you may set `COMPENDIUM_ALLOW_INSECURE_JWT=1` to bypass the check, which downgrades it to a startup warning; do not use that in production.
+
+**`SECURE_COOKIES` defaults to `true`.** Auth and CSRF cookies ship with the `Secure` flag, which browsers only return over HTTPS. This is correct for HTTPS deployments (in-process TLS or a reverse proxy terminating TLS) and for localhost dev (browsers treat localhost as a secure context). Set `COMPENDIUM_SECURE_COOKIES=false` only if you are intentionally serving plain HTTP to non-localhost browsers — e.g., a small classroom or home deployment on a trusted LAN with no TLS anywhere. Without that opt-out, login state will collapse on plain-HTTP origins because the browser refuses to send the cookie back.
 
 **Env-only**: `database_url`, `jwt_secret_key`, `jwt_algorithm`, `jwt_expire_minutes`, `ssl_certfile`, `ssl_keyfile`, `secure_cookies`, `tmdb_api_key`, `smtp_password`. Everything else can flow through the DB-backed `site_setting` table — see `compendium settings list` for the full registered set with current sources.
 
