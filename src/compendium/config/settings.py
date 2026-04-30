@@ -48,6 +48,11 @@ class Settings(BaseSettings):
     due_soon_days_before: int = 3
     overdue_tiers: str = "3,14,30"
     kiosk_idle_timeout_seconds: int = 60
+    # Hard cap on the size of any single bulk-import upload. Defends the
+    # daemon from OOM via a multi-GB POST body. Env-only on purpose — DB
+    # editability would let a compromised admin token raise the cap to
+    # bypass the protection.
+    max_upload_bytes: int = 100 * 1024 * 1024
     # Library name — printed on patron cards, shown in emails, and (future)
     # in the nav brand. First of several Settings that should migrate to a
     # DB-backed site_setting table when that slice lands; see CLAUDE.md.

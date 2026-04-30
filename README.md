@@ -226,6 +226,7 @@ Most settings (library name, theme, fine thresholds, hold/overdue defaults, kios
 | `COMPENDIUM_SECURE_COOKIES` | Default `true`; set `false` only for plain-HTTP LAN deployments (browsers won't send `Secure` cookies over non-HTTPS, except localhost). |
 | `COMPENDIUM_TMDB_API_KEY` | Secret |
 | `COMPENDIUM_SMTP_PASSWORD` | Secret (host/port/from are DB-editable; password stays env) |
+| `COMPENDIUM_MAX_UPLOAD_BYTES` | Hard cap on bulk-import upload size (default 100 MB / 104857600). Env-only so a compromised admin token can't raise it. |
 
 For everything else, run `compendium settings list` to see the current value, source (env vs db/default), and per-key help text. The web admin UI shows the same with an "⚠ Overridden by env var" indicator on rows where an env var is currently masking the DB value.
 

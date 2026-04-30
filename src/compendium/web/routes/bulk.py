@@ -5,10 +5,12 @@ from __future__ import annotations
 import io
 from datetime import datetime
 
-from fastapi import APIRouter, Depends, File, Form, Request, UploadFile
+from fastapi import APIRouter, Depends, File, Form, Header, HTTPException, Request, UploadFile
 from fastapi.responses import Response
 from sqlalchemy.orm import Session
 
+from compendium.api.uploads import read_upload_bounded
+from compendium.config.settings import Settings
 from compendium.db.engine import get_settings
 from compendium.db.session import get_session
 from compendium.domain.errors import ValidationError
@@ -103,6 +105,8 @@ async def import_submit(
     barcode_prefix: str | None = Form(None),
     enrich: str | None = Form(None),
     csrf_token: str = Form(...),
+    content_length: int | None = Header(default=None, alias="content-length"),
+    settings: Settings = Depends(get_settings),
     user: AppUser = Depends(require_web_permission("catalog.import")),
     session: Session = Depends(get_session),
 ):
@@ -134,7 +138,15 @@ async def import_submit(
         enrich_from_external=bool(enrich),
     )
 
-    data = await file.read()
+    try:
+        data = await read_upload_bounded(
+            file, cap=settings.max_upload_bytes, content_length=content_length
+        )
+    except HTTPException as exc:
+        if exc.status_code == 413:
+            ctx["error"] = exc.detail
+            return _render("admin/import.html", request, ctx, status_code=413)
+        raise
     importer = _make_importer(session, user)
     try:
         if format == "csv":

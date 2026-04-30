@@ -5,11 +5,14 @@ from __future__ import annotations
 import getpass
 from datetime import datetime
 
-from fastapi import APIRouter, Depends, File, HTTPException, Query, UploadFile
+from fastapi import APIRouter, Depends, File, Header, HTTPException, Query, UploadFile
 from fastapi.responses import StreamingResponse
 from sqlalchemy.orm import Session
 
 from compendium.api.deps import require_permission
+from compendium.api.uploads import read_upload_bounded
+from compendium.config.settings import Settings
+from compendium.db.engine import get_settings
 from compendium.api.schemas import (
     ImportReportResponse,
     ImportRowErrorResponse,
@@ -107,7 +110,7 @@ def _options(
 
 
 @import_router.post("/csv", response_model=ImportReportResponse)
-def import_csv(
+async def import_csv(
     file: UploadFile = File(..., description="CSV file."),
     dry_run: bool = Query(False),
     mode: str = Query("append"),
@@ -115,12 +118,16 @@ def import_csv(
     default_media_type: str | None = Query(None),
     barcode_prefix: str | None = Query(None),
     enrich: bool = Query(False, description="Fill missing fields from the external metadata source per row."),
+    content_length: int | None = Header(default=None, alias="content-length"),
+    settings: Settings = Depends(get_settings),
     session: Session = Depends(get_session),
     user: AppUser = Depends(require_permission("catalog.import")),
 ) -> ImportReportResponse:
     import io as _io
 
-    data = file.file.read()
+    data = await read_upload_bounded(
+        file, cap=settings.max_upload_bytes, content_length=content_length
+    )
     try:
         text_stream = _io.StringIO(data.decode("utf-8"))
     except UnicodeDecodeError as exc:
@@ -137,7 +144,7 @@ def import_csv(
 
 
 @import_router.post("/marc", response_model=ImportReportResponse)
-def import_marc(
+async def import_marc(
     file: UploadFile = File(..., description="MARC21 binary (.mrc) or MARCXML file."),
     dry_run: bool = Query(False),
     mode: str = Query("append"),
@@ -150,12 +157,16 @@ def import_marc(
         description="Set true if uploading MARCXML instead of binary MARC21.",
     ),
     enrich: bool = Query(False, description="Fill missing fields from the external metadata source per record."),
+    content_length: int | None = Header(default=None, alias="content-length"),
+    settings: Settings = Depends(get_settings),
     session: Session = Depends(get_session),
     user: AppUser = Depends(require_permission("catalog.import")),
 ) -> ImportReportResponse:
     import io as _io
 
-    data = file.file.read()
+    data = await read_upload_bounded(
+        file, cap=settings.max_upload_bytes, content_length=content_length
+    )
     stream = _io.BytesIO(data)
     auto_xml = is_xml or (
         file.filename is not None

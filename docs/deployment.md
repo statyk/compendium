@@ -72,7 +72,9 @@ COMPENDIUM_SMTP_PASSWORD=<secret>          # password is env-only by design
 
 **`SECURE_COOKIES` defaults to `true`.** Auth and CSRF cookies ship with the `Secure` flag, which browsers only return over HTTPS. This is correct for HTTPS deployments (in-process TLS or a reverse proxy terminating TLS) and for localhost dev (browsers treat localhost as a secure context). Set `COMPENDIUM_SECURE_COOKIES=false` only if you are intentionally serving plain HTTP to non-localhost browsers — e.g., a small classroom or home deployment on a trusted LAN with no TLS anywhere. Without that opt-out, login state will collapse on plain-HTTP origins because the browser refuses to send the cookie back.
 
-**Env-only**: `database_url`, `jwt_secret_key`, `jwt_algorithm`, `jwt_expire_minutes`, `ssl_certfile`, `ssl_keyfile`, `secure_cookies`, `tmdb_api_key`, `smtp_password`. Everything else can flow through the DB-backed `site_setting` table — see `compendium settings list` for the full registered set with current sources.
+**`MAX_UPLOAD_BYTES` defaults to 100 MB.** Bulk-import endpoints (`/import/csv`, `/import/marc`, `/ui/admin/import`) reject any upload larger than this with `413 Content Too Large`. Env-only on purpose — making it DB-editable would let a compromised admin token raise the cap to bypass the protection. Adjust at deploy time if you regularly import larger catalogs (`COMPENDIUM_MAX_UPLOAD_BYTES=209715200` for 200 MB, etc.). The CLI import commands are not subject to this cap (different trust boundary; the operator already has shell access).
+
+**Env-only**: `database_url`, `jwt_secret_key`, `jwt_algorithm`, `jwt_expire_minutes`, `ssl_certfile`, `ssl_keyfile`, `secure_cookies`, `tmdb_api_key`, `smtp_password`, `max_upload_bytes`. Everything else can flow through the DB-backed `site_setting` table — see `compendium settings list` for the full registered set with current sources.
 
 ---
 
