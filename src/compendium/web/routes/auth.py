@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from urllib.parse import urlparse
+
 from fastapi import APIRouter, Depends, Form, Request
 from fastapi.responses import RedirectResponse
 
@@ -107,11 +109,8 @@ def login_submit(
         return resp
 
     rl.clear("login_user", username)
-    redirect_to = (
-        next
-        if next.startswith("/ui/") and not next.startswith("/ui//") and "\\" not in next
-        else "/ui/catalog"
-    )
+    parsed = urlparse(next)
+    redirect_to = next if (parsed.netloc == "" and next.startswith("/ui/")) else "/ui/catalog"
     resp = RedirectResponse(url=redirect_to, status_code=303)
     set_auth_cookie(resp, jwt_token)
     set_csrf_cookie(resp, token, get_settings().jwt_secret_key)

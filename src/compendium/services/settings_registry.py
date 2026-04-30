@@ -546,6 +546,40 @@ def _register_builtins() -> None:
             validator=_positive_int,
         )
     )
+    register(
+        SettingDescriptor(
+            key="password_min_length",
+            display_name="Password Minimum Length",
+            type=int,
+            default=8,
+            scope="librarian",
+            help_text=(
+                "Minimum character length for user passwords. "
+                "NIST SP 800-63B recommends at least 8. "
+                "Existing passwords are not retroactively affected."
+            ),
+            validator=_positive_int,
+        )
+    )
+    register(
+        SettingDescriptor(
+            key="bcrypt_rounds",
+            display_name="bcrypt Cost Factor",
+            type=int,
+            default=12,
+            scope="system",
+            help_text=(
+                "bcrypt cost factor used when hashing new passwords. "
+                "Higher values are slower and more resistant to brute-force. "
+                "Must be between 4 and 15. Existing password hashes are "
+                "not affected (bcrypt embeds the cost in each hash)."
+            ),
+            validator=lambda v: (
+                None if 4 <= int(v) <= 15
+                else "bcrypt_rounds must be between 4 and 15"
+            ),
+        )
+    )
 
 
 _register_builtins()

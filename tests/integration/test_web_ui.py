@@ -1535,6 +1535,35 @@ def test_open_redirect_absolute_url_falls_back(web_client, librarian):
     assert resp.headers["location"].startswith("/ui/catalog")
 
 
+@pytest.mark.parametrize("bad_next", [
+    "//evil.com",
+    "/\\evil.com",
+    "/ui/%5C%5Cevil.com",  # URL-encoded backslashes
+    "http://evil.com/ui/ok",
+    "//evil.com/ui/ok",
+])
+def test_open_redirect_parametrized_bad_values_fall_back(web_client, librarian, bad_next):
+    raw, signed = _make_csrf_pair()
+    resp = web_client.post(
+        f"/ui/login?next={bad_next}",
+        data={"username": "lib01", "password": "secret", "csrf_token": raw},
+        cookies={CSRF_COOKIE: signed},
+    )
+    assert resp.status_code == 303
+    assert resp.headers["location"].startswith("/ui/catalog"), f"Expected fallback for next={bad_next!r}"
+
+
+def test_open_redirect_valid_ui_path_allowed(web_client, librarian):
+    raw, signed = _make_csrf_pair()
+    resp = web_client.post(
+        "/ui/login?next=/ui/catalog",
+        data={"username": "lib01", "password": "secret", "csrf_token": raw},
+        cookies={CSRF_COOKIE: signed},
+    )
+    assert resp.status_code == 303
+    assert resp.headers["location"] == "/ui/catalog"
+
+
 def test_patron_sees_403_not_login_redirect_on_librarian_page(web_client, patron_user):
     """A logged-in user without the permission should get 403, not a login loop."""
     cookies = _login(web_client, "patron01")

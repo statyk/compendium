@@ -398,6 +398,65 @@ class TestLenientRestore:
         assert _db_revision(check_engine) == _current_code_head()
 
 
+class TestSafeExtract:
+    """Unit-level tests for _safe_extract's traversal + symlink guards."""
+
+    def _make_malicious_tar(self, tmp_path: Path, member_name: str, *, symlink_to: str = "") -> tarfile.TarFile:
+        """Build an in-memory TarFile with a single problematic member."""
+        import io
+        buf = io.BytesIO()
+        with tarfile.open(fileobj=buf, mode="w") as tf:
+            info = tarfile.TarInfo(name=member_name)
+            if symlink_to:
+                info.type = tarfile.SYMTYPE
+                info.linkname = symlink_to
+            else:
+                info.size = 0
+            tf.addfile(info)
+        buf.seek(0)
+        return tarfile.open(fileobj=buf, mode="r")
+
+    def test_dotdot_traversal_rejected(self, tmp_path):
+        from compendium.services.backup import BackupError, _safe_extract
+        dest = tmp_path / "dest"
+        dest.mkdir()
+        with self._make_malicious_tar(tmp_path, "../evil.txt") as tar:
+            with pytest.raises(BackupError, match="Unsafe path"):
+                _safe_extract(tar, dest)
+
+    def test_absolute_path_rejected(self, tmp_path):
+        from compendium.services.backup import BackupError, _safe_extract
+        dest = tmp_path / "dest"
+        dest.mkdir()
+        with self._make_malicious_tar(tmp_path, "/etc/passwd") as tar:
+            with pytest.raises(BackupError, match="Unsafe path"):
+                _safe_extract(tar, dest)
+
+    def test_escaping_symlink_rejected(self, tmp_path):
+        from compendium.services.backup import BackupError, _safe_extract
+        dest = tmp_path / "dest"
+        dest.mkdir()
+        with self._make_malicious_tar(tmp_path, "link.txt", symlink_to="../../outside") as tar:
+            with pytest.raises(BackupError, match="Unsafe link"):
+                _safe_extract(tar, dest)
+
+    def test_safe_member_allowed(self, tmp_path):
+        from compendium.services.backup import _safe_extract
+        dest = tmp_path / "dest"
+        dest.mkdir()
+        import io
+        buf = io.BytesIO()
+        with tarfile.open(fileobj=buf, mode="w") as tf:
+            info = tarfile.TarInfo(name="data/ok.txt")
+            content = b"hello"
+            info.size = len(content)
+            tf.addfile(info, io.BytesIO(content))
+        buf.seek(0)
+        with tarfile.open(fileobj=buf, mode="r") as tar:
+            _safe_extract(tar, dest)
+        assert (dest / "data" / "ok.txt").read_bytes() == b"hello"
+
+
 def _rewrite_manifest_revision(archive: Path, new_revision: str) -> None:
     """Open a tar.gz backup, rewrite meta.json's alembic_head, and repack."""
     import shutil

@@ -175,7 +175,7 @@ class TestSetPassword:
     def test_unknown_user_raises(self):
         svc = _service()
         with pytest.raises(NotFoundError):
-            svc.set_password("nobody", "x")
+            svc.set_password("nobody", "valid-test-pw!")
 
     def test_empty_password_raises(self):
         role = _librarian_role()
@@ -244,9 +244,9 @@ class TestAdminResetPassword:
         svc.admin_reset_password(
             target_username="bob",
             actor_current_password="adminpw",
-            new_password="freshpw",
+            new_password="fresh-new-pw!",
         )
-        assert verify_password("freshpw", target.password_hash)
+        assert verify_password("fresh-new-pw!", target.password_hash)
 
     def test_wrong_actor_password_raises(self):
         svc, _, target = self._setup()
@@ -254,7 +254,7 @@ class TestAdminResetPassword:
             svc.admin_reset_password(
                 target_username="bob",
                 actor_current_password="wrong",
-                new_password="freshpw",
+                new_password="fresh-new-pw!",
             )
         assert verify_password("oldpw", target.password_hash)
 
@@ -264,7 +264,7 @@ class TestAdminResetPassword:
             svc.admin_reset_password(
                 target_username="admin",
                 actor_current_password="adminpw",
-                new_password="freshpw",
+                new_password="fresh-new-pw!",
             )
         assert verify_password("adminpw", actor.password_hash)
 
@@ -276,3 +276,50 @@ class TestAdminResetPassword:
                 actor_current_password="x",
                 new_password="y",
             )
+
+
+class TestPasswordStrength:
+    """_validate_password_strength is called from set_password."""
+
+    def _svc(self, user_override=None):
+        role = _librarian_role()
+        user = user_override or _make_user(role)
+        user_repo = MagicMock()
+        user_repo.get_by_username.return_value = user
+        user_repo.update.return_value = user
+        return AuthService(user_repo=user_repo, role_repo=MagicMock(), settings=_settings())
+
+    def test_accepts_long_enough_password(self):
+        svc = self._svc()
+        svc.set_password("alice", "long-enough-pw")
+
+    def test_rejects_too_short(self):
+        svc = self._svc()
+        with pytest.raises(BusinessRuleError, match="at least"):
+            svc.set_password("alice", "short")
+
+    def test_rejects_common_password(self):
+        svc = self._svc()
+        with pytest.raises(BusinessRuleError, match="too common"):
+            svc.set_password("alice", "password")
+
+    def test_rejects_common_password_case_insensitive(self):
+        svc = self._svc()
+        with pytest.raises(BusinessRuleError, match="too common"):
+            svc.set_password("alice", "PASSWORD")
+
+    def test_exactly_min_length_accepted(self):
+        svc = self._svc()
+        svc.set_password("alice", "Oak&Moon")  # exactly 8 chars, not in blocklist
+
+    def test_env_override_min_length(self, monkeypatch):
+        import compendium.services.site_settings as ss
+        monkeypatch.setenv("COMPENDIUM_PASSWORD_MIN_LENGTH", "12")
+        ss.invalidate_cache()
+        svc = self._svc()
+        try:
+            with pytest.raises(BusinessRuleError, match="at least"):
+                svc.set_password("alice", "only-9ch!")  # 9 chars < 12
+        finally:
+            monkeypatch.delenv("COMPENDIUM_PASSWORD_MIN_LENGTH", raising=False)
+            ss.invalidate_cache()

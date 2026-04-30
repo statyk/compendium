@@ -169,12 +169,13 @@ def create_app() -> FastAPI:
     async def _no_patron(request: Request, exc: NoPatronAccountException) -> HTMLResponse:
         from types import SimpleNamespace
 
+        from sqlalchemy.orm import Session
+
+        from compendium.db.engine import get_engine
+        from compendium.repositories.sql.user_repository import SqlUserRepository
         from compendium.web.csrf import ensure_csrf, set_csrf_cookie
         from compendium.web.deps import AUTH_COOKIE, _decode_token
 
-        # Build a lightweight user view from the JWT payload so the nav can
-        # render without a DB round-trip. The exception handler runs outside
-        # FastAPI DI, so we can't rely on a request-scoped session.
         user = None
         username = None
         token = request.cookies.get(AUTH_COOKIE)
@@ -182,9 +183,26 @@ def create_app() -> FastAPI:
             payload = _decode_token(token)
             if payload:
                 username = payload.get("username")
+                # Attempt to reload fresh permissions from the DB so they
+                # reflect any role change since the JWT was issued.  Fall
+                # back to the JWT payload snapshot on any failure so the
+                # page always renders (tests use a separate StaticPool
+                # engine that this handler can't reach via get_engine()).
+                permissions = None
+                try:
+                    with Session(get_engine()) as s:
+                        db_user = SqlUserRepository(s).get_by_username(username)
+                        if db_user is not None and db_user.role is not None:
+                            permissions = list(db_user.role.permissions)
+                except Exception:
+                    pass
                 user = SimpleNamespace(
                     username=username,
-                    role=SimpleNamespace(permissions=payload.get("permissions", [])),
+                    role=SimpleNamespace(
+                        permissions=permissions
+                        if permissions is not None
+                        else payload.get("permissions", [])
+                    ),
                 )
         csrf_token, fresh = ensure_csrf(request)
         response = templates.TemplateResponse(

@@ -13,8 +13,37 @@ from compendium.repositories.base import RoleRepository, UserRepository
 from compendium.services.audit import AuditAction, AuditEntityType, AuditService
 
 
+_WEAK_PASSWORDS = frozenset({
+    "password", "password1", "password123", "passw0rd",
+    "12345678", "123456789", "1234567890", "123456789a",
+    "qwerty", "qwerty123", "qwertyuiop",
+    "abc123", "abcdefgh",
+    "letmein", "welcome", "iloveyou", "sunshine",
+    "admin", "admin123", "administrator",
+    "login", "login123",
+    "dragon", "master", "monkey", "shadow",
+    "superman", "batman",
+    "compendium", "library",
+})
+
+
+def _validate_password_strength(password: str) -> None:
+    from compendium.services.site_settings import get_site_setting
+    min_len = int(get_site_setting("password_min_length"))
+    if len(password) < min_len:
+        raise BusinessRuleError(
+            f"Password must be at least {min_len} characters long."
+        )
+    if password.lower() in _WEAK_PASSWORDS:
+        raise BusinessRuleError(
+            "Password is too common. Please choose a more unique password."
+        )
+
+
 def hash_password(password: str) -> str:
-    return bcrypt.hashpw(password.encode(), bcrypt.gensalt()).decode()
+    from compendium.services.site_settings import get_site_setting
+    rounds = int(get_site_setting("bcrypt_rounds"))
+    return bcrypt.hashpw(password.encode(), bcrypt.gensalt(rounds)).decode()
 
 
 def verify_password(plain: str, hashed: str) -> bool:
@@ -122,6 +151,7 @@ class AuthService:
     def set_password(self, username: str, password: str, *, by: str = "cli") -> AppUser:
         if not password:
             raise BusinessRuleError("Password must not be empty")
+        _validate_password_strength(password)
         user = self._users.get_by_username(username)
         if user is None:
             raise NotFoundError(f"No user with username '{username}'")

@@ -135,6 +135,8 @@ _SYSTEM_PAGES: dict[str, dict[str, Any]] = {
         "keys": [
             "login_max_failures",
             "login_failure_window_seconds",
+            "password_min_length",
+            "bcrypt_rounds",
         ],
     },
 }

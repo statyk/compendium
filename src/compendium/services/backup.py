@@ -454,7 +454,7 @@ def _reset_postgres_sequences_conn(conn: sa.Connection) -> None:
 
 
 def _safe_extract(tar: tarfile.TarFile, dest: Path) -> None:
-    """Reject absolute paths and traversal attempts before extraction.
+    """Reject absolute paths, traversal attempts, and escaping symlinks.
 
     Iterates members one at a time so this works for both random-access
     (``r:gz``) and streaming (``r|gz``) tarfiles — `getmembers()` would
@@ -463,6 +463,14 @@ def _safe_extract(tar: tarfile.TarFile, dest: Path) -> None:
     dest = dest.resolve()
     for member in tar:
         target = (dest / member.name).resolve()
-        if not str(target).startswith(str(dest)):
+        try:
+            target.relative_to(dest)
+        except ValueError:
             raise BackupError(f"Unsafe path in archive: {member.name}")
-        tar.extract(member, dest)
+        if member.issym() or member.islnk():
+            link_target = (target.parent / member.linkname).resolve()
+            try:
+                link_target.relative_to(dest)
+            except ValueError:
+                raise BackupError(f"Unsafe link in archive: {member.name} -> {member.linkname}")
+        tar.extract(member, dest, set_attrs=False)
