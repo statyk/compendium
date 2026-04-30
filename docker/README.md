@@ -11,6 +11,9 @@ docker/
 ├── Dockerfile              # app image (multi-stage, Python 3.11 + Postgres driver)
 ├── docker-compose.yml      # db + compendium + nginx
 ├── .env.example            # copy to .env and edit before first run
+├── crontab.sample          # scheduled maintenance lines for host cron
+├── install-cron.sh         # one-shot installer for the above
+├── backups/                # nightly backups land here (created on first cron tick)
 ├── certs/                  # (optional) drop fullchain.pem + privkey.pem here
 ├── nginx/
 │   ├── nginx.conf          # TLS + /ui/* reverse proxy; everything else → /ui/catalog
@@ -74,19 +77,109 @@ docker compose exec compendium compendium user set-password --username admin
 ## Persistence
 
 - `db_data` (Docker named volume) — PostgreSQL data.
+- `cover_cache` (Docker named volume) — proxy cache of cover images.
 - `./certs/` (host bind mount) — TLS material.
-
-To back up the database:
-
-```bash
-docker compose exec db pg_dump -U compendium compendium > backup.sql
-```
+- `./backups/` (host bind mount) — application backups (see below).
 
 To wipe everything and start over:
 
 ```bash
-docker compose down -v     # -v deletes the db_data volume
+docker compose down -v     # -v deletes the db_data + cover_cache volumes
 rm -rf certs/*             # if you also want a fresh self-signed cert
+rm -rf backups/*           # if you also want to discard backups
+```
+
+## Backups
+
+Compendium ships its own portable backup format — gzipped tarballs with
+JSONL-encoded rows that restore cleanly into either SQLite or PostgreSQL.
+Use it instead of `pg_dump` so a backup taken today isn't tied to the
+PostgreSQL version that produced it.
+
+The nightly cron job (see "Scheduled maintenance" below) writes one tarball
+per day to `./backups/` on the host, mounted into the container at
+`/var/backups/compendium`. Filenames are `YYYY-MM-DD.tar.gz`.
+
+To take an ad-hoc backup:
+
+```bash
+docker compose exec -T compendium compendium backup -o - > backup.tar.gz
+```
+
+To restore (replaces the running database):
+
+```bash
+docker compose exec -T compendium compendium restore --force - < backup.tar.gz
+```
+
+The restore process auto-migrates the target DB to the backup's schema
+revision, restores rows, then re-migrates to the current head — so a
+backup from an older Compendium version restores cleanly.
+
+For off-machine archival, point your existing tool (rsync, borg, restic,
+your provider's snapshot service) at `./backups/`.
+
+## Scheduled maintenance
+
+Compendium runs a number of cron-driven maintenance commands — most
+importantly **the email outbox drain**, without which queued
+notifications never get sent. The schedule lives in the host's crontab and
+invokes the CLI inside the running container via `docker compose exec`.
+
+### One-shot setup
+
+```bash
+docker/install-cron.sh
+```
+
+This appends `docker/crontab.sample` to the current user's crontab,
+substituting the absolute path to `docker/`. The user must be in the
+`docker` group (or otherwise able to run `docker compose` without
+`sudo`). Re-running the script is a no-op — it refuses to install twice.
+
+### What's scheduled
+
+Cadences taken from `docker/crontab.sample`:
+
+| Cadence              | Command                                  | Why |
+|----------------------|------------------------------------------|-----|
+| every 5 min          | `send-queued-notifications`              | drains the email outbox |
+| daily 02:00          | `expire-holds`                           | cancels holds whose pickup window passed |
+| daily 02:05          | `resume-expired-suspends`                | unfreezes patron-suspended holds whose date passed |
+| daily 02:10          | `deactivate-expired-patrons`             | flips `is_active=false` on expired cards |
+| daily 02:15          | `compendium backup`                      | nightly tarball to `./backups/` |
+| daily 02:20          | `find ... -mtime +30 -delete`            | prunes backups older than 30 days |
+| daily 02:30          | `assess-overdue-fines`                   | materializes overdue fines for reports |
+| daily 08:00 / 08:15  | `queue-due-soon-notices` / `queue-overdue-notices` | enqueues reminder emails |
+
+Optional (commented out in the sample): `prune-audit-log`,
+`prune-notifications`, `prune-cover-cache`. Uncomment and edit the
+retention windows to suit your deployment.
+
+### Caveats
+
+- **Container must be up.** `docker compose exec` against a stopped
+  container exits non-zero. If you `docker compose down` for an extended
+  window, you'll see error lines in the log; the next tick recovers.
+  After a planned downtime you can manually drain the outbox once with:
+  ```bash
+  docker compose exec -T compendium compendium maintenance send-queued-notifications
+  ```
+- **The `-T` flag.** Cron has no TTY, so without `-T` every job fails
+  with `the input device is not a TTY`. The sample file already includes it.
+- **Logs.** Output goes to `/var/log/compendium-maintenance.log` on the
+  host. Make sure the user owning the crontab can write there, or edit
+  the redirect targets in the sample.
+- **Timezone.** Cron honors the host's `/etc/localtime`; jobs fire at
+  the host's local time, not UTC.
+
+### Manual maintenance
+
+You can always run a maintenance command ad-hoc:
+
+```bash
+docker compose exec compendium compendium maintenance send-queued-notifications
+docker compose exec compendium compendium maintenance expire-holds
 ```
 
 ## What's NOT exposed

@@ -70,6 +70,21 @@ def all_descriptors() -> list[SettingDescriptor]:
     return list(_REGISTRY.values())
 
 
+def env_only_field_names() -> list[str]:
+    """Pydantic ``Settings`` field names that are NOT covered by the registry.
+
+    These are the items that only ever live in environment variables (DB URL,
+    JWT secret, TLS material, the SMTP password, etc.). Useful for tooling
+    that wants the union of "every COMPENDIUM_* env var the app recognizes."
+    """
+    from compendium.config.settings import Settings
+
+    registered = set(_REGISTRY.keys())
+    return sorted(
+        name for name in Settings.model_fields if name not in registered
+    )
+
+
 def _is_list_type(t: Any) -> bool:
     return get_origin(t) is list
 

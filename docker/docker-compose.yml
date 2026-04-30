@@ -24,20 +24,27 @@ services:
       db:
         condition: service_healthy
     environment:
+      # Env-only settings (must live in env; not editable from the UI).
       COMPENDIUM_DATABASE_URL: postgresql+psycopg://compendium:${POSTGRES_PASSWORD}@db:5432/compendium
       COMPENDIUM_JWT_SECRET_KEY: ${COMPENDIUM_JWT_SECRET_KEY:?COMPENDIUM_JWT_SECRET_KEY must be set in .env}
       COMPENDIUM_JWT_EXPIRE_MINUTES: ${COMPENDIUM_JWT_EXPIRE_MINUTES:-480}
-      COMPENDIUM_GUEST_SEARCH_ENABLED: ${COMPENDIUM_GUEST_SEARCH_ENABLED:-true}
       COMPENDIUM_DEFAULT_LOAN_PERIOD_DAYS: ${COMPENDIUM_DEFAULT_LOAN_PERIOD_DAYS:-14}
-      COMPENDIUM_HOLD_EXPIRY_DAYS: ${COMPENDIUM_HOLD_EXPIRY_DAYS:-30}
-      COMPENDIUM_HOLD_PICKUP_DAYS: ${COMPENDIUM_HOLD_PICKUP_DAYS:-3}
+      # nginx terminates TLS in front of Compendium — issue cookies with the
+      # Secure flag so they only travel over HTTPS.
+      COMPENDIUM_SECURE_COOKIES: "true"
+      # Optional secrets — leave empty in .env to skip.
       COMPENDIUM_TMDB_API_KEY: ${COMPENDIUM_TMDB_API_KEY:-}
+      COMPENDIUM_SMTP_PASSWORD: ${COMPENDIUM_SMTP_PASSWORD:-}
+      # First-run admin bootstrap (only used if the username doesn't exist yet).
       COMPENDIUM_ADMIN_USERNAME: ${COMPENDIUM_ADMIN_USERNAME:-admin}
       COMPENDIUM_ADMIN_PASSWORD: ${COMPENDIUM_ADMIN_PASSWORD:-compendium}
-      COMPENDIUM_ADMIN_ROLE: ${COMPENDIUM_ADMIN_ROLE:-Librarian}
-      COMPENDIUM_DEFAULT_THEME: ${COMPENDIUM_DEFAULT_THEME:-light}
+      COMPENDIUM_ADMIN_ROLE: ${COMPENDIUM_ADMIN_ROLE:-Administrator}
+      # Library name, theme, fines, holds, SMTP host/port/from, retention,
+      # etc. are configured at /ui/admin/settings (or via `compendium settings`)
+      # after first login — env vars override but normally aren't set here.
     volumes:
       - cover_cache:/var/cache/compendium/covers
+      - ./backups:/var/backups/compendium
     # No ports published — nginx is the only external-facing service.
     expose:
       - "8000"

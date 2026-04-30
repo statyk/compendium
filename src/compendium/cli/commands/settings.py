@@ -21,6 +21,7 @@ from compendium.services.settings_registry import (
     UnknownSettingError,
     all_descriptors,
     encode_for_storage,
+    env_only_field_names,
     get_descriptor,
 )
 from compendium.services.site_settings import (
@@ -30,6 +31,13 @@ from compendium.services.site_settings import (
 )
 
 app = typer.Typer(help="Inspect and edit site settings (DB-backed configuration).")
+
+# Settings whose value should be masked in `settings list` output unless the
+# operator passes --show-secrets. Includes anything that could leak a secret
+# (DB URL embeds the password, JWT key signs tokens, etc.).
+_SENSITIVE_KEYS: frozenset[str] = frozenset(
+    {"database_url", "jwt_secret_key", "smtp_password", "tmdb_api_key"}
+)
 
 
 def _format_value(v) -> str:
@@ -42,6 +50,12 @@ def _format_value(v) -> str:
     return str(v)
 
 
+def _format_listing_value(key: str, value, *, show_secrets: bool) -> str:
+    if not show_secrets and key in _SENSITIVE_KEYS and value not in (None, ""):
+        return "********"
+    return _format_value(value)
+
+
 def _audit_svc(session) -> AuditService:
     return AuditService(SqlAuditLogRepository(session))
 
@@ -51,28 +65,101 @@ def list_settings(
     scope: str | None = typer.Option(
         None,
         "--scope",
-        help="Filter by scope: librarian or system. Default shows both.",
+        help="Filter by scope: librarian, system, or env-only. Default shows all.",
+    ),
+    all_settings: bool = typer.Option(
+        False,
+        "--all",
+        help="Include env-only Settings fields (DB URL, JWT secret, etc.).",
+    ),
+    show_secrets: bool = typer.Option(
+        False,
+        "--show-secrets",
+        help="Print sensitive values in plaintext (default: masked as ********).",
     ),
 ) -> None:
-    """List every registered setting with its current value and source."""
-    descs = all_descriptors()
-    if scope:
-        if scope not in ("librarian", "system"):
-            typer.echo("Error: --scope must be 'librarian' or 'system'.", err=True)
-            raise typer.Exit(1)
-        descs = [d for d in descs if d.scope == scope]
+    """List recognized settings with their current value, source, and env var.
 
-    typer.echo(f"\n{'KEY':<32} {'SCOPE':<10} {'SOURCE':<8} VALUE")
-    typer.echo("-" * 80)
-    for d in sorted(descs, key=lambda x: (x.scope, x.key)):
-        env_set = os.environ.get(d.resolved_env_var()) is not None
-        try:
-            value = get_site_setting(d.key)
-        except SettingValidationError as exc:
-            typer.echo(f"{d.key:<32} {d.scope:<10} {'env':<8} ERROR: {exc}")
-            continue
-        source = "env" if env_set else "db/default"
-        typer.echo(f"{d.key:<32} {d.scope:<10} {source:<8} {_format_value(value)}")
+    By default lists DB-editable settings only. Pass ``--all`` to also include
+    env-only settings (those defined on the Pydantic ``Settings`` model that
+    aren't migrated to the DB-editable registry).
+
+    Source values:
+      env     — env var is set; that's what readers will see
+      db      — env not set; a row exists in site_setting
+      default — env not set; no row; falls back to the registered default
+    """
+    valid_scopes = {"librarian", "system", "env-only"}
+    if scope and scope not in valid_scopes:
+        typer.echo(
+            f"Error: --scope must be one of {sorted(valid_scopes)}.", err=True
+        )
+        raise typer.Exit(1)
+
+    rows: list[tuple[str, str, str, str, str]] = []  # key, env_var, scope, source, formatted_value
+
+    # Registry items (DB-editable).
+    if scope != "env-only":
+        descs = all_descriptors()
+        if scope:
+            descs = [d for d in descs if d.scope == scope]
+        for d in sorted(descs, key=lambda x: (x.scope, x.key)):
+            env_var = d.resolved_env_var()
+            env_set = os.environ.get(env_var) is not None
+            try:
+                value = get_site_setting(d.key)
+            except SettingValidationError as exc:
+                rows.append((d.key, env_var, d.scope, "env", f"ERROR: {exc}"))
+                continue
+            source = _resolve_source_for_registry(d.key, env_set)
+            formatted = _format_listing_value(d.key, value, show_secrets=show_secrets)
+            rows.append((d.key, env_var, d.scope, source, formatted))
+
+    # Env-only items (Pydantic Settings fields outside the registry).
+    if all_settings or scope == "env-only":
+        from compendium.config.settings import Settings
+
+        s = Settings()
+        for name in env_only_field_names():
+            env_var = f"COMPENDIUM_{name.upper()}"
+            env_set = os.environ.get(env_var) is not None
+            value = getattr(s, name)
+            source = "env" if env_set else "default"
+            formatted = _format_listing_value(name, value, show_secrets=show_secrets)
+            rows.append((name, env_var, "env-only", source, formatted))
+
+    rows.sort(key=lambda r: (r[2], r[0]))
+
+    header = f"{'KEY':<32} {'ENV VAR':<42} {'SCOPE':<10} {'SOURCE':<8} VALUE"
+    typer.echo("\n" + header)
+    typer.echo("-" * len(header))
+    for key, env_var, scope_val, source, formatted in rows:
+        typer.echo(f"{key:<32} {env_var:<42} {scope_val:<10} {source:<8} {formatted}")
+
+
+def _resolve_source_for_registry(key: str, env_set: bool) -> str:
+    """Distinguish env / db / default for a registered descriptor.
+
+    Cheap path: if the env var is set, env wins on read regardless of any DB
+    row, so report 'env'. Otherwise we have to peek at the site_setting table
+    to tell 'db' (override row exists) from 'default' (no row).
+
+    Uses ``engine_mod.get_engine()`` rather than ``session_scope`` so test
+    fixtures that patch ``compendium.db.engine.get_engine`` are honored
+    (function-local module access avoids the from-X-import-Y patch trap).
+    """
+    if env_set:
+        return "env"
+    from sqlalchemy.orm import Session
+
+    from compendium.db import engine as engine_mod
+    from compendium.repositories.sql.site_setting_repository import (
+        SqlSiteSettingRepository,
+    )
+
+    with Session(engine_mod.get_engine()) as session:
+        row = SqlSiteSettingRepository(session).get(key)
+    return "db" if row is not None else "default"
 
 
 @app.command("get")

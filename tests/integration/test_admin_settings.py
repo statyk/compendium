@@ -179,6 +179,93 @@ class TestSettingsCli:
         r = CliRunner().invoke(cli_app, ["settings", "get", "library_name"])
         assert "Riverdale Public" in r.output
 
+    def test_list_default_excludes_env_only(self, s_engine, monkeypatch):
+        monkeypatch.setattr("compendium.db.engine.get_engine", lambda: s_engine)
+        r = CliRunner().invoke(cli_app, ["settings", "list"])
+        assert r.exit_code == 0, r.output
+        # Registry items present
+        assert "library_name" in r.output
+        assert "smtp_host" in r.output
+        # Env-only items absent without --all
+        assert "jwt_secret_key" not in r.output
+        assert "database_url" not in r.output
+
+    def test_list_all_includes_env_only(self, s_engine, monkeypatch):
+        monkeypatch.setattr("compendium.db.engine.get_engine", lambda: s_engine)
+        r = CliRunner().invoke(cli_app, ["settings", "list", "--all"])
+        assert r.exit_code == 0, r.output
+        # Both kinds are listed
+        assert "library_name" in r.output  # registry
+        assert "jwt_secret_key" in r.output  # env-only
+        assert "database_url" in r.output  # env-only
+        assert "default_loan_period_days" in r.output  # env-only (not yet migrated)
+        # New ENV VAR column rendered
+        assert "COMPENDIUM_LIBRARY_NAME" in r.output
+        assert "COMPENDIUM_JWT_SECRET_KEY" in r.output
+        # New env-only scope label
+        assert "env-only" in r.output
+
+    def test_list_all_masks_secrets_by_default(self, s_engine, monkeypatch):
+        monkeypatch.setattr("compendium.db.engine.get_engine", lambda: s_engine)
+        r = CliRunner().invoke(cli_app, ["settings", "list", "--all"])
+        assert r.exit_code == 0, r.output
+        # Sensitive defaults are masked
+        for line in r.output.splitlines():
+            if line.startswith("jwt_secret_key"):
+                assert "********" in line, line
+                assert "insecure-default" not in line, line
+            if line.startswith("database_url"):
+                assert "********" in line, line
+                assert "sqlite" not in line, line
+
+    def test_list_all_show_secrets_unmasks(self, s_engine, monkeypatch):
+        monkeypatch.setattr("compendium.db.engine.get_engine", lambda: s_engine)
+        r = CliRunner().invoke(
+            cli_app, ["settings", "list", "--all", "--show-secrets"]
+        )
+        assert r.exit_code == 0, r.output
+        assert "********" not in r.output
+        assert "insecure-default-change-in-production" in r.output
+
+    def test_list_scope_env_only(self, s_engine, monkeypatch):
+        monkeypatch.setattr("compendium.db.engine.get_engine", lambda: s_engine)
+        r = CliRunner().invoke(
+            cli_app, ["settings", "list", "--scope", "env-only"]
+        )
+        assert r.exit_code == 0, r.output
+        assert "jwt_secret_key" in r.output
+        assert "database_url" in r.output
+        # Registry items filtered out
+        assert "library_name" not in r.output
+        assert "smtp_host" not in r.output
+
+    def test_list_source_db_after_set(self, s_engine, monkeypatch, s_session):
+        """A registry key with a site_setting row should report source=db."""
+        monkeypatch.setattr("compendium.db.engine.get_engine", lambda: s_engine)
+        from contextlib import contextmanager
+
+        @contextmanager
+        def fake_scope():
+            yield s_session
+            s_session.commit()
+
+        monkeypatch.setattr(
+            "compendium.cli.commands.settings.session_scope", fake_scope
+        )
+        # Write a row, then list should show source=db for that key.
+        CliRunner().invoke(
+            cli_app, ["settings", "set", "library_name", "Riverdale Public"]
+        )
+        ss.invalidate_cache()
+        r = CliRunner().invoke(cli_app, ["settings", "list"])
+        assert r.exit_code == 0, r.output
+        for line in r.output.splitlines():
+            if line.startswith("library_name"):
+                assert " db " in f" {line} ", line
+                break
+        else:
+            pytest.fail("library_name not in list output")
+
 
 # ──────────────────────────────────────────────────────────────────────────
 # API

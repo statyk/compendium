@@ -1,0 +1,43 @@
+# Compendium — sample crontab for Docker deployments
+#
+# Install with:
+#   docker/install-cron.sh
+#
+# Or paste these lines into `crontab -e`. Replace COMPENDIUM_DIR with the
+# absolute path to your `docker/` directory (the one containing docker-compose.yml).
+# The user that owns this crontab must be in the `docker` group.
+
+# Drain the email outbox every 5 minutes. Without this, queued notifications
+# (hold-ready, due-soon, overdue) sit in the DB forever.
+*/5 * * * * docker compose --project-directory COMPENDIUM_DIR exec -T compendium compendium maintenance send-queued-notifications >> /var/log/compendium-maintenance.log 2>&1
+
+# Expire holds whose pickup window has passed.
+0 2 * * * docker compose --project-directory COMPENDIUM_DIR exec -T compendium compendium maintenance expire-holds >> /var/log/compendium-maintenance.log 2>&1
+
+# Auto-resume patron-suspended holds whose suspended_until has passed.
+5 2 * * * docker compose --project-directory COMPENDIUM_DIR exec -T compendium compendium maintenance resume-expired-suspends >> /var/log/compendium-maintenance.log 2>&1
+
+# Deactivate patrons whose card has expired.
+10 2 * * * docker compose --project-directory COMPENDIUM_DIR exec -T compendium compendium maintenance deactivate-expired-patrons >> /var/log/compendium-maintenance.log 2>&1
+
+# Materialize overdue fines so reports see current state.
+30 2 * * * docker compose --project-directory COMPENDIUM_DIR exec -T compendium compendium maintenance assess-overdue-fines >> /var/log/compendium-maintenance.log 2>&1
+
+# Queue notification reminders (daily). The 5-minute drain above ships them.
+0 8 * * * docker compose --project-directory COMPENDIUM_DIR exec -T compendium compendium maintenance queue-due-soon-notices >> /var/log/compendium-maintenance.log 2>&1
+15 8 * * * docker compose --project-directory COMPENDIUM_DIR exec -T compendium compendium maintenance queue-overdue-notices >> /var/log/compendium-maintenance.log 2>&1
+
+# Nightly backup. Lands at ./backups/<date>.tar.gz on the host (mounted into
+# the container at /var/backups/compendium). Rotate / sync off-machine separately.
+15 2 * * * docker compose --project-directory COMPENDIUM_DIR exec -T compendium sh -c 'compendium backup -o /var/backups/compendium/$(date +\%Y-\%m-\%d).tar.gz' >> /var/log/compendium-maintenance.log 2>&1
+
+# Optional: prune backups older than 30 days. Comment out if you have your own
+# rotation tool (borg, restic, etc.).
+20 2 * * * docker compose --project-directory COMPENDIUM_DIR exec -T compendium find /var/backups/compendium -name '*.tar.gz' -mtime +30 -delete >> /var/log/compendium-maintenance.log 2>&1
+
+# Optional: monthly retention prune for old audit rows + sent notifications.
+# 0 3 1 * * docker compose --project-directory COMPENDIUM_DIR exec -T compendium compendium maintenance prune-audit-log --older-than-days 365 >> /var/log/compendium-maintenance.log 2>&1
+# 30 3 1 * * docker compose --project-directory COMPENDIUM_DIR exec -T compendium compendium maintenance prune-notifications --older-than-days 180 >> /var/log/compendium-maintenance.log 2>&1
+
+# Optional: bound the on-disk cover-image cache (weekly).
+# 45 3 * * 0 docker compose --project-directory COMPENDIUM_DIR exec -T compendium compendium maintenance prune-cover-cache --max-mb 500 >> /var/log/compendium-maintenance.log 2>&1
