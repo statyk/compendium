@@ -68,7 +68,7 @@ COMPENDIUM_SECURE_COOKIES=true            # set when serving over HTTPS
 COMPENDIUM_SMTP_PASSWORD=<secret>          # password is env-only by design
 ```
 
-**`JWT_SECRET_KEY` must be set to a strong random value in any non-development deployment.** The built-in default is intentionally weak and emits a startup warning.
+**`JWT_SECRET_KEY` must be set to a strong random value.** The built-in default is intentionally weak — the server refuses to start when it's detected. Generate one with `python -c "import secrets; print(secrets.token_urlsafe(48))"` (or `openssl rand -base64 48`). For first-run / dev work you may set `COMPENDIUM_ALLOW_INSECURE_JWT=1` to bypass the check, which downgrades it to a startup warning; do not use that in production.
 
 **Env-only**: `database_url`, `jwt_secret_key`, `jwt_algorithm`, `jwt_expire_minutes`, `ssl_certfile`, `ssl_keyfile`, `secure_cookies`, `tmdb_api_key`, `smtp_password`. Everything else can flow through the DB-backed `site_setting` table — see `compendium settings list` for the full registered set with current sources.
 

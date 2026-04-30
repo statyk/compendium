@@ -220,7 +220,7 @@ Most settings (library name, theme, fine thresholds, hold/overdue defaults, kios
 | Env var | Why env-only |
 |---|---|
 | `COMPENDIUM_DATABASE_URL` | Bootstrap — needed before any DB read |
-| `COMPENDIUM_JWT_SECRET_KEY` | Secret — **must be changed in production** |
+| `COMPENDIUM_JWT_SECRET_KEY` | Secret — **required**; server refuses to start with the built-in default. Generate with `python -c "import secrets; print(secrets.token_urlsafe(48))"`. Set `COMPENDIUM_ALLOW_INSECURE_JWT=1` to bypass for first-run/dev only. |
 | `COMPENDIUM_JWT_ALGORITHM` / `COMPENDIUM_JWT_EXPIRE_MINUTES` | Auth deployment knobs |
 | `COMPENDIUM_SSL_CERTFILE` / `COMPENDIUM_SSL_KEYFILE` | OS-level paths |
 | `COMPENDIUM_SECURE_COOKIES` | Deployment topology dependent |

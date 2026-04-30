@@ -5,6 +5,10 @@ from pydantic_settings import BaseSettings, SettingsConfigDict
 INSECURE_JWT_DEFAULT = "insecure-default-change-in-production"
 
 
+class InsecureConfigError(RuntimeError):
+    """Raised when Compendium is asked to start with a known-insecure config."""
+
+
 class Settings(BaseSettings):
     model_config = SettingsConfigDict(
         env_prefix="COMPENDIUM_",

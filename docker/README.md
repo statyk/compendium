@@ -28,7 +28,7 @@ docker/
 ```bash
 cd docker
 cp .env.example .env
-$EDITOR .env                       # change POSTGRES_PASSWORD, JWT secret, admin password
+$EDITOR .env                       # change POSTGRES_PASSWORD, JWT secret (required), admin password
 
 docker compose up -d --build
 ```

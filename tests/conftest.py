@@ -1,3 +1,5 @@
+import os
+
 import pytest
 from sqlalchemy import create_engine
 from sqlalchemy.orm import Session, sessionmaker
@@ -5,6 +7,20 @@ from sqlalchemy.orm import Session, sessionmaker
 from compendium.config.seed import seed_defaults
 from compendium.domain.models import Base
 from tests.helpers import setup_sqlite_fts
+
+
+@pytest.fixture(autouse=True, scope="session")
+def _allow_insecure_jwt_in_tests():
+    # Tests construct Settings with the literal INSECURE_JWT_DEFAULT and call
+    # create_app(); without this the H3 hard-fail would block every TestClient
+    # startup. Real deployments must set a strong secret instead.
+    prev = os.environ.get("COMPENDIUM_ALLOW_INSECURE_JWT")
+    os.environ["COMPENDIUM_ALLOW_INSECURE_JWT"] = "1"
+    yield
+    if prev is None:
+        os.environ.pop("COMPENDIUM_ALLOW_INSECURE_JWT", None)
+    else:
+        os.environ["COMPENDIUM_ALLOW_INSECURE_JWT"] = prev
 
 
 @pytest.fixture(scope="session")
