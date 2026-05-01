@@ -15,7 +15,7 @@
     } catch (_) {}
   </script>
   <link rel="stylesheet" href="/ui/static/pico.min.css">
-  <script src="/ui/static/htmx.min.js" defer></script>
+  <script src="/ui/static/htmx.min.js" nonce="{{ csp_nonce(request) }}" defer></script>
   <style>
     nav .brand {
       font-weight: bold; font-size: 1.25rem; text-decoration: none; color: inherit;

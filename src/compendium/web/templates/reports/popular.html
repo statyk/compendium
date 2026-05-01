@@ -59,7 +59,7 @@
 {% endblock %}
 
 {% block scripts %}
-<script src="/ui/static/chart.min.js"></script>
+<script src="/ui/static/chart.min.js" nonce="{{ csp_nonce(request) }}"></script>
 <script nonce="{{ csp_nonce(request) }}">
   (function () {
     var el = document.getElementById('popular-chart');

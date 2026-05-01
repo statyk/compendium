@@ -14,7 +14,7 @@
     } catch (_) {}
   </script>
   <link rel="stylesheet" href="/ui/static/pico.min.css">
-  <script src="/ui/static/htmx.min.js" defer></script>
+  <script src="/ui/static/htmx.min.js" nonce="{{ csp_nonce(request) }}" defer></script>
   <style>
     body { max-width: none; }
     .kiosk-shell { max-width: 44rem; margin: 0 auto; padding: 2rem 1.5rem; }

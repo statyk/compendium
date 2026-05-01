@@ -35,28 +35,29 @@ _TEMPLATES_DIR = Path(__file__).parent.parent.parent / "src" / "compendium" / "w
 _INLINE_SCRIPT_RE = re.compile(r"<script\b(?P<attrs>[^>]*)>", re.IGNORECASE)
 
 
-def _is_external(attrs: str) -> bool:
-    return bool(re.search(r"\bsrc\s*=", attrs))
-
-
 def _has_nonce(attrs: str) -> bool:
     return bool(re.search(r"\bnonce\s*=", attrs))
 
 
-def test_every_inline_script_in_templates_has_nonce():
+def test_every_script_in_templates_has_nonce():
+    """Both inline and external <script> tags need nonces under 'strict-dynamic'.
+
+    'strict-dynamic' causes browsers to ignore 'self' and other allowlist
+    sources for scripts, so every <script> tag — src= or inline — must carry
+    a nonce to execute.
+    """
     offenders: list[str] = []
     for path in _TEMPLATES_DIR.rglob("*.html"):
         text = path.read_text()
         for match in _INLINE_SCRIPT_RE.finditer(text):
             attrs = match.group("attrs")
-            if _is_external(attrs):
-                continue
             if not _has_nonce(attrs):
                 line = text[: match.start()].count("\n") + 1
                 offenders.append(f"{path.relative_to(_TEMPLATES_DIR)}:{line} → {match.group(0)}")
     assert not offenders, (
-        "Every inline <script> in web/templates/ must carry "
-        'nonce="{{ csp_nonce(request) }}". Missing nonces:\n  '
+        "Every <script> tag in web/templates/ (inline and src=) must carry "
+        'nonce="{{ csp_nonce(request) }}" because \'strict-dynamic\' overrides '
+        "'self'. Missing nonces:\n  "
         + "\n  ".join(offenders)
     )
 

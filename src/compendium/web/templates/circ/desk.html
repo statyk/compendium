@@ -80,6 +80,6 @@
 {% endblock %}
 
 {% block scripts %}
-<script src="/ui/static/zxing/zxing-browser.min.js"></script>
-<script src="/ui/static/scanner.js"></script>
+<script src="/ui/static/zxing/zxing-browser.min.js" nonce="{{ csp_nonce(request) }}"></script>
+<script src="/ui/static/scanner.js" nonce="{{ csp_nonce(request) }}"></script>
 {% endblock %}
