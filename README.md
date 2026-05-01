@@ -283,7 +283,24 @@ running the daemon under systemd.
 uv run pytest -q
 ```
 
-Tests are split into `tests/unit/` (no DB, mock repos) and `tests/integration/` (SQLite in-memory). 311 tests as of the current build.
+Tests are split into `tests/unit/` (no DB, mock repos) and `tests/integration/` (SQLite in-memory).
+
+### Browser tests (E2E)
+
+Browser tests run against a real `compendium serve` subprocess in Chromium. They are excluded from the default `pytest` run and require a one-time install:
+
+```bash
+uv sync --extra e2e
+playwright install chromium
+```
+
+Then:
+
+```bash
+uv run pytest -m e2e
+```
+
+Expected wall time: 30–60 seconds. Tests live in `tests/e2e/`. The `test_csp_no_console_errors.py` test is the keystone: it navigates to every major page and asserts no console errors, which catches CSP/HTMX loading regressions that unit tests miss.
 
 ## Layout
 

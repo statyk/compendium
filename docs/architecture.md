@@ -445,8 +445,30 @@ Most runtime configuration is DB-editable via the `site_setting` table, with env
 | Unit | `tests/unit/` | No DB; pure logic, mock repos |
 | Integration (SQLite) | `tests/integration/` | In-memory SQLite; full service + repo stack |
 | Integration (Postgres) | `tests/postgres/` | testcontainers Postgres; skipped if Docker unavailable |
-| E2E | `tests/e2e/` | Hits a running daemon; not yet written |
+| E2E | `tests/e2e/` | Hits a real `compendium serve` subprocess; Playwright/Chromium |
 
 Tests use `pytest`. The `session` fixture provides a fresh SQLite session per test (rolled back on teardown). The `pg_session` fixture spins up an ephemeral Postgres container for the duration of the test session.
 
 All API test modules create their own `StaticPool` engine (separate from the integration engine) to avoid SQLite in-memory thread-isolation issues with FastAPI's thread pool.
+
+### Browser tests
+
+E2E tests live in `tests/e2e/` and are tagged `@pytest.mark.e2e`. They are excluded from the default `pytest` run (`addopts = "-m 'not e2e'"`). Run with:
+
+```bash
+uv sync --extra e2e && playwright install chromium
+uv run pytest -m e2e
+```
+
+The harness in `tests/e2e/conftest.py` boots a real `compendium serve` subprocess against a tmp_path SQLite file, seeds a librarian + patron + two works, and tears down the process on exit. Function-scoped `librarian_page` and `patron_page` fixtures return authenticated Playwright pages.
+
+**Keystone test:** `test_csp_no_console_errors.py` navigates to every major page and asserts no `error`-level console messages. CSP violations (e.g. a `<script src>` tag missing a nonce under `'strict-dynamic'`) surface as console errors — this test would have caught the 2026-04-30 regression where HTMX was blocked on all pages.
+
+**Other tests:**
+- `test_login_csrf_roundtrip.py` — login form, auth cookie, logout.
+- `test_place_hold_htmx.py` — HTMX partial swap when placing a hold.
+- `test_theme_toggle_no_fouc.py` — pre-paint script applies localStorage theme immediately.
+- `test_audit_viewer_pagination.py` — audit log filter form.
+- `test_inline_policy_edit.py` — policy form submission and persistence.
+- `test_scanner_mocked.py` — barcode scanner with mocked BarcodeDetector.
+- `test_kiosk_session_flow.py` — kiosk card entry and session page.
