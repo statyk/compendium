@@ -2,7 +2,7 @@
 {% block title %}Circulation Desk — {{ library_name() }}{% endblock %}
 {% block content %}
 <h2>Circulation Desk</h2>
-<div class="grid">
+<div class="grid circ-grid">
 
   <article>
     <header><strong>Check Out</strong></header>
@@ -62,6 +62,7 @@
 
 {% block scripts %}
 <style>
+  .circ-grid > article { display: flex; flex-direction: column; }
   .circ-form { flex: 1; display: flex; flex-direction: column; }
   .circ-form > button[type="submit"] { margin-top: auto; }
 </style>
