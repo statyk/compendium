@@ -1,7 +1,8 @@
 from dataclasses import dataclass, field
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from typing import Any
 
+from compendium.db.engine import get_settings
 from compendium.domain.enums import CreatorRole, HoldStatus, ItemStatus, LoanRestrictionReason
 from compendium.domain.errors import (
     BusinessRuleError,
@@ -19,7 +20,6 @@ from compendium.repositories.base import (
     WorkRepository,
 )
 from compendium.services.audit import AuditAction, AuditEntityType, AuditService
-from compendium.db.engine import get_settings
 from compendium.services.metadata import (
     lookup_cover_fallbacks,
     lookup_metadata,
@@ -423,6 +423,16 @@ class CatalogService:
                 error="Upstream returned no data for this identifier.",
             )
 
+        if media_type_code == "book" and not data.get("cover_image_url") and work.isbn:
+            s = get_settings()
+            fallback = lookup_cover_fallbacks(
+                work.isbn,
+                google_books_key=s.google_books_api_key,
+                librarything_key=s.librarything_api_key,
+            )
+            if fallback:
+                data["cover_image_url"] = fallback
+
         planned = self._compute_refresh_diff(work, data)
 
         if dry_run:
@@ -444,7 +454,7 @@ class CatalogService:
 
         # Always force-bump updated_at so cover_url(version=) busts the
         # browser cache even when only cover bytes (not the URL) changed.
-        work.updated_at = datetime.now(tz=timezone.utc)
+        work.updated_at = datetime.now(tz=UTC)
         result = self._works.update(work)
 
         # Bust the cover proxy disk cache for any URL that might be stale.

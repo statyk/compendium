@@ -20,8 +20,6 @@ from __future__ import annotations
 import io
 from unittest.mock import patch
 
-import pytest
-
 from compendium.domain.errors import ExternalLookupError
 from compendium.repositories.sql.audit_log_repository import SqlAuditLogRepository
 from compendium.repositories.sql.branch_repository import SqlBranchRepository
@@ -29,7 +27,7 @@ from compendium.repositories.sql.creator_repository import SqlCreatorRepository
 from compendium.repositories.sql.item_repository import SqlItemRepository
 from compendium.repositories.sql.media_type_repository import SqlMediaTypeRepository
 from compendium.repositories.sql.work_repository import SqlWorkRepository
-from compendium.services.audit import AuditAction, AuditEntityType, AuditService
+from compendium.services.audit import AuditEntityType, AuditService
 from compendium.services.catalog import CatalogService
 from compendium.services.import_export import (
     ExportFilters,
@@ -37,7 +35,6 @@ from compendium.services.import_export import (
     ImportOptions,
     ImportService,
 )
-
 
 _DUNE = {
     "title": "Dune",
@@ -154,6 +151,47 @@ def test_refresh_dry_run_replaces_cover_when_upstream_differs(session):
     ):
         report = _catalog(session).refresh_metadata(work_id, dry_run=True)
     assert "cover_image_url" in report.planned
+
+
+def test_refresh_falls_back_to_google_books_when_ol_has_no_cover(session, monkeypatch):
+    monkeypatch.setenv("COMPENDIUM_GOOGLE_BOOKS_API_KEY", "gb-key")
+    work_id = _seed_dune(session)
+    work = SqlWorkRepository(session).get(work_id)
+    work.cover_image_url = None
+    session.flush()
+
+    fixture = dict(_DUNE)
+    fixture["isbn"] = work.isbn
+    fixture["cover_image_url"] = None  # OL miss
+
+    with patch(
+        "compendium.services.catalog.lookup_metadata", return_value=fixture
+    ), patch(
+        "compendium.services.catalog.lookup_cover_fallbacks",
+        return_value="http://books.google.com/books/content?id=X",
+    ) as mock_fb:
+        report = _catalog(session).refresh_metadata(work_id, dry_run=True)
+
+    assert "cover_image_url" in report.planned
+    _, new = report.planned["cover_image_url"]
+    assert "books.google.com" in new
+    mock_fb.assert_called_once()
+
+
+def test_refresh_skips_fallback_when_ol_returns_cover(session):
+    work_id = _seed_dune(session)
+    work = SqlWorkRepository(session).get(work_id)
+    fixture = dict(_DUNE)
+    fixture["isbn"] = work.isbn  # cover_image_url already set in _DUNE
+
+    with patch(
+        "compendium.services.catalog.lookup_metadata", return_value=fixture
+    ), patch(
+        "compendium.services.catalog.lookup_cover_fallbacks"
+    ) as mock_fb:
+        _catalog(session).refresh_metadata(work_id, dry_run=True)
+
+    mock_fb.assert_not_called()
 
 
 def test_refresh_apply_commits_and_invalidates_cache(session, tmp_path, monkeypatch):
