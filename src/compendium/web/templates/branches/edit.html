@@ -29,12 +29,9 @@
     <option value="ddc" {% if branch.default_classification_scheme == "ddc" %}selected{% endif %}>
       DDC (Dewey Decimal Classification)
     </option>
-    <option value="mds" {% if branch.default_classification_scheme == "mds" %}selected{% endif %}>
-      MDS (Melvil Decimal System — requires LibraryThing API key)
-    </option>
   </select>
   <small>
-    When set to LCC, DDC, or MDS, the classification number is automatically filled in when adding books by ISBN.
+    When set to LCC or DDC, the classification number is automatically filled in when adding books by ISBN.
     Numbers can always be edited manually.
     All items in this branch should use the same scheme to keep the catalog consistent.
   </small>

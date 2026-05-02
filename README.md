@@ -226,7 +226,6 @@ Most settings (library name, theme, fine thresholds, hold/overdue defaults, kios
 | `COMPENDIUM_SECURE_COOKIES` | Default `true`; set `false` only for plain-HTTP LAN deployments (browsers won't send `Secure` cookies over non-HTTPS, except localhost). |
 | `COMPENDIUM_TMDB_API_KEY` | Secret — required only for film metadata (TMDb). |
 | `COMPENDIUM_GOOGLE_BOOKS_API_KEY` | Optional — enables Google Books as a cover-image fallback when Open Library has none. Free tier at console.cloud.google.com. |
-| `COMPENDIUM_LIBRARYTHING_API_KEY` | Optional — enables LibraryThing as a cover-image fallback and as the MDS classification source. Non-commercial ToS; register at librarything.com/services/keys. |
 | `COMPENDIUM_SMTP_PASSWORD` | Secret (host/port/from are DB-editable; password stays env) |
 | `COMPENDIUM_MAX_UPLOAD_BYTES` | Hard cap on bulk-import upload size (default 100 MB / 104857600). Env-only so a compromised admin token can't raise it. |
 | `COMPENDIUM_LOGIN_MAX_FAILURES` | Max consecutive failed logins before the identity is throttled (default 10). DB-editable at **System → Security**. |

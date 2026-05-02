@@ -24,7 +24,6 @@ _ALLOWED_HOSTS: frozenset[str] = frozenset({
     "image.tmdb.org",
     "coverartarchive.org",
     "books.google.com",
-    "covers.librarything.com",
 })
 _ALLOWED_SUFFIXES: tuple[str, ...] = (".archive.org",)
 

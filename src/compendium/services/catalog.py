@@ -145,11 +145,9 @@ class CatalogService:
             )
 
         if media_type_code == "book" and not meta.get("cover_image_url") and meta.get("isbn"):
-            s = get_settings()
             meta["cover_image_url"] = lookup_cover_fallbacks(
                 meta["isbn"],
-                google_books_key=s.google_books_api_key,
-                librarything_key=s.librarything_api_key,
+                google_books_key=get_settings().google_books_api_key,
             )
 
         # For MBID lookups the returned meta may carry a UPC — check for an
@@ -424,11 +422,9 @@ class CatalogService:
             )
 
         if media_type_code == "book" and not data.get("cover_image_url") and work.isbn:
-            s = get_settings()
             fallback = lookup_cover_fallbacks(
                 work.isbn,
-                google_books_key=s.google_books_api_key,
-                librarything_key=s.librarything_api_key,
+                google_books_key=get_settings().google_books_api_key,
             )
             if fallback:
                 data["cover_image_url"] = fallback
@@ -903,9 +899,7 @@ class CatalogService:
         else:
             scheme = (branch.default_classification_scheme if branch else None) or "none"
             if scheme != "none":
-                code = pick_classification_code(
-                    scheme, meta, librarything_api_key=get_settings().librarything_api_key
-                )
+                code = pick_classification_code(scheme, meta)
                 if code:
                     work.classification_scheme = scheme
                     work.classification_code = code

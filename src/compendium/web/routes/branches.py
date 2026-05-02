@@ -15,7 +15,7 @@ from compendium.web.jinja import templates
 router = APIRouter()
 
 _PERM = "branch.edit"
-_VALID_SCHEMES = {"lcc", "ddc", "mds", "none"}
+_VALID_SCHEMES = {"lcc", "ddc", "none"}
 
 
 def _render(name: str, request: Request, ctx: dict, status_code: int = 200):
