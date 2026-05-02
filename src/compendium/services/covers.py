@@ -19,9 +19,13 @@ from urllib.parse import urlparse
 
 import httpx
 
-_ALLOWED_HOSTS: frozenset[str] = frozenset(
-    {"covers.openlibrary.org", "image.tmdb.org", "coverartarchive.org"}
-)
+_ALLOWED_HOSTS: frozenset[str] = frozenset({
+    "covers.openlibrary.org",
+    "image.tmdb.org",
+    "coverartarchive.org",
+    "books.google.com",
+    "covers.librarything.com",
+})
 _ALLOWED_SUFFIXES: tuple[str, ...] = (".archive.org",)
 
 NEGATIVE_TTL_SECONDS: int = 24 * 3600

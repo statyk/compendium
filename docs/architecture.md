@@ -199,6 +199,21 @@ Adapters are registered in `services/metadata.py` via `_ADAPTERS: dict[str, Meta
 
 Note: TMDb does not index physical-disc UPCs, so film items are added via a title-search candidate picker rather than direct barcode scan. A UPC→title bridge is a deferred enhancement.
 
+### Cover image fallbacks
+
+When Open Library does not provide a cover for a book ISBN, `CatalogService.add_from_lookup` tries two optional fallback sources in order:
+
+1. **Google Books** (`COMPENDIUM_GOOGLE_BOOKS_API_KEY`) — thumbnail URL extracted from the Volumes API. Domain `books.google.com` is on the cover-proxy allowlist.
+2. **LibraryThing** (`COMPENDIUM_LIBRARYTHING_API_KEY`) — direct image URL at `covers.librarything.com`. A HEAD request checks the Content-Length to rule out the 1-pixel placeholder returned for missing covers.
+
+Both are optional. If neither key is configured the behavior is unchanged (no cover stored, placeholder shown in the UI). LibraryThing's non-commercial ToS applies to deployments that configure that key.
+
+### Classification systems (MDS)
+
+In addition to LCC (from Open Library / LoC SRU) and DDC (from LoC SRU), Compendium supports **MDS (Melvil Decimal System)** as a third option. MDS is a Dewey-compatible free alternative built from pre-copyright Dewey schedules and LibraryThing member contributions. Per-book MDS values are bibliographic facts and safe to store (same legal posture as DDC); Compendium never ships MDS schedule tables.
+
+Configure a branch with `mds` as its `default_classification_scheme` (CLI: `compendium branch set --code main --classification mds`; web: Branches → Edit). Requires `COMPENDIUM_LIBRARYTHING_API_KEY`. Coverage is opportunistic — MDS may not be available for every ISBN, and the code is assigned None gracefully when the lookup fails or the key is absent.
+
 ---
 
 ## Bulk import & export

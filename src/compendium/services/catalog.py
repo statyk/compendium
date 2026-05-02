@@ -19,7 +19,9 @@ from compendium.repositories.base import (
     WorkRepository,
 )
 from compendium.services.audit import AuditAction, AuditEntityType, AuditService
+from compendium.db.engine import get_settings
 from compendium.services.metadata import (
+    lookup_cover_fallbacks,
     lookup_metadata,
     normalize_isbn,
     normalize_upc,
@@ -140,6 +142,14 @@ class CatalogService:
             raise ExternalLookupError(
                 f"No metadata found for {identifier_kind} '{identifier_value}'. "
                 "Check the identifier and try again."
+            )
+
+        if media_type_code == "book" and not meta.get("cover_image_url") and meta.get("isbn"):
+            s = get_settings()
+            meta["cover_image_url"] = lookup_cover_fallbacks(
+                meta["isbn"],
+                google_books_key=s.google_books_api_key,
+                librarything_key=s.librarything_api_key,
             )
 
         # For MBID lookups the returned meta may carry a UPC — check for an
@@ -883,7 +893,9 @@ class CatalogService:
         else:
             scheme = (branch.default_classification_scheme if branch else None) or "none"
             if scheme != "none":
-                code = pick_classification_code(scheme, meta)
+                code = pick_classification_code(
+                    scheme, meta, librarything_api_key=get_settings().librarything_api_key
+                )
                 if code:
                     work.classification_scheme = scheme
                     work.classification_code = code

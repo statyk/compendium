@@ -6,7 +6,7 @@ from compendium.repositories.sql.branch_repository import SqlBranchRepository
 
 app = typer.Typer(help="Branch commands.")
 
-_VALID_SCHEMES = {"lcc", "ddc", "none"}
+_VALID_SCHEMES = {"lcc", "ddc", "mds", "none"}
 
 
 @app.command("list")
@@ -27,14 +27,14 @@ def branch_list() -> None:
 def branch_set(
     code: str = typer.Option(..., "--code", help="Branch code"),
     classification: str = typer.Option(
-        ..., "--classification", help="Classification scheme: lcc, ddc, or none"
+        ..., "--classification", help="Classification scheme: lcc, ddc, mds, or none"
     ),
 ) -> None:
     """Set the auto-population classification scheme for a branch."""
     scheme = classification.strip().lower()
     if scheme not in _VALID_SCHEMES:
         typer.echo(
-            f"Error: invalid scheme '{scheme}'. Must be one of: lcc, ddc, none.", err=True
+            f"Error: invalid scheme '{scheme}'. Must be one of: lcc, ddc, mds, none.", err=True
         )
         raise typer.Exit(1)
 

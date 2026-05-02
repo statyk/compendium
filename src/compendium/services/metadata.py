@@ -17,6 +17,9 @@ _MB_BASE = "https://musicbrainz.org/ws/2"
 _MB_UA = "Compendium/0.1.0 (open-source library catalog)"
 _TMDB_BASE = "https://api.themoviedb.org/3"
 _TMDB_IMAGE_BASE = "https://image.tmdb.org/t/p/w500"
+_GOOGLE_BOOKS_URL = "https://www.googleapis.com/books/v1/volumes"
+_LT_REST_URL = "https://www.librarything.com/services/rest/1.1/"
+_LT_COVERS_URL = "https://covers.librarything.com/devkey/{api_key}/large/isbn/{isbn}"
 
 
 # ---------------------------------------------------------------------------
@@ -303,7 +306,95 @@ def lookup_ddc_from_loc(isbn: str, lccn: str | None = None) -> str | None:
     return None
 
 
-def pick_classification_code(scheme: str, meta: dict) -> str | None:
+def lookup_mds_from_librarything(isbn: str, *, api_key: str | None) -> str | None:
+    """Fetch an MDS (Melvil Decimal System) number from LibraryThing Common Knowledge.
+
+    Returns None when the key is absent, the book has no MDS entry, or any
+    network/parse error occurs.  Non-commercial ToS — deployer supplies their
+    own API key (COMPENDIUM_LIBRARYTHING_API_KEY).
+    """
+    if not api_key or not isbn:
+        return None
+    try:
+        with httpx.Client(timeout=10) as client:
+            resp = client.get(
+                _LT_REST_URL,
+                params={"method": "librarything.ck.getwork", "isbn": isbn, "apikey": api_key},
+            )
+            if resp.status_code != 200:
+                return None
+        root = ET.fromstring(resp.text)
+        for field in root.iter("field"):
+            if field.get("type") in ("mds", "dewey"):
+                fact = field.find("factlist/fact")
+                if fact is not None and fact.text:
+                    return fact.text.strip() or None
+        return None
+    except Exception:
+        return None
+
+
+def lookup_cover_from_google_books(isbn: str, *, api_key: str | None) -> str | None:
+    """Fetch a cover thumbnail URL from the Google Books API.
+
+    Returns the largest available thumbnail URL, or None on any failure.
+    Requires COMPENDIUM_GOOGLE_BOOKS_API_KEY.
+    """
+    if not api_key or not isbn:
+        return None
+    try:
+        with httpx.Client(timeout=10) as client:
+            resp = client.get(
+                _GOOGLE_BOOKS_URL,
+                params={"q": f"isbn:{isbn}", "key": api_key, "fields": "items/volumeInfo/imageLinks"},
+            )
+            if resp.status_code != 200:
+                return None
+        items = resp.json().get("items", [])
+        if not items:
+            return None
+        links = items[0].get("volumeInfo", {}).get("imageLinks", {})
+        url = links.get("large") or links.get("medium") or links.get("small") or links.get("thumbnail")
+        return url or None
+    except Exception:
+        return None
+
+
+def lookup_cover_from_librarything(isbn: str, *, api_key: str | None) -> str | None:
+    """Check whether LibraryThing has a cover for this ISBN.
+
+    Performs a HEAD request; returns the cover URL if the response is an
+    image larger than 1 KB (ruling out the 1-pixel placeholder LT returns
+    for missing covers).  Returns None on any failure or missing cover.
+    """
+    if not api_key or not isbn:
+        return None
+    url = _LT_COVERS_URL.format(api_key=api_key, isbn=isbn)
+    try:
+        with httpx.Client(timeout=10, follow_redirects=True) as client:
+            resp = client.head(url)
+        ct = resp.headers.get("content-type", "").lower()
+        cl = int(resp.headers.get("content-length", "0") or "0")
+        if ct.startswith("image/") and cl > 1000:
+            return url
+        return None
+    except Exception:
+        return None
+
+
+def lookup_cover_fallbacks(isbn: str, *, google_books_key: str | None, librarything_key: str | None) -> str | None:
+    """Try cover image fallback sources when the primary (Open Library) has none.
+
+    Tries Google Books first (no key embedded in URL), then LibraryThing.
+    Returns the first successful URL, or None.
+    """
+    url = lookup_cover_from_google_books(isbn, api_key=google_books_key)
+    if url:
+        return url
+    return lookup_cover_from_librarything(isbn, api_key=librarything_key)
+
+
+def pick_classification_code(scheme: str, meta: dict, *, librarything_api_key: str | None = None) -> str | None:
     """Resolve a classification code for the given scheme from metadata.
 
     Prefers the number supplied by the metadata source (e.g. Open Library);
@@ -318,6 +409,8 @@ def pick_classification_code(scheme: str, meta: dict) -> str | None:
         return meta.get("ddc_classification") or lookup_ddc_from_loc(
             isbn=meta.get("isbn") or "", lccn=meta.get("lccn")
         )
+    if scheme == "mds":
+        return lookup_mds_from_librarything(meta.get("isbn") or "", api_key=librarything_api_key)
     return None
 
 

@@ -9,7 +9,7 @@ from compendium.repositories.sql.branch_repository import SqlBranchRepository
 
 router = APIRouter()
 
-_VALID_SCHEMES = {"lcc", "ddc", "none"}
+_VALID_SCHEMES = {"lcc", "ddc", "mds", "none"}
 
 
 @router.get("/", response_model=list[BranchResponse])
