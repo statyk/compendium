@@ -3,7 +3,7 @@ from __future__ import annotations
 from datetime import datetime
 
 from sqlalchemy import exists, func, or_, text
-from sqlalchemy.orm import Session
+from sqlalchemy.orm import Session, selectinload
 
 from compendium.domain.enums import ItemStatus
 from compendium.domain.models import Branch, Creator, Item, Loan, MediaType, Work, WorkCreator
@@ -438,6 +438,9 @@ class SqlWorkRepository:
         cutoff = datetime.now(tz=timezone.utc) - timedelta(days=days)
         return (
             self._s.query(Work)
+            .options(
+                selectinload(Work.creators).selectinload(WorkCreator.creator)
+            )
             .filter(Work.created_at >= cutoff)
             .order_by(Work.created_at.desc())
             .limit(limit)
@@ -458,6 +461,9 @@ class SqlWorkRepository:
         )
         rows = (
             self._s.query(Work, sub.c.last)
+            .options(
+                selectinload(Work.creators).selectinload(WorkCreator.creator)
+            )
             .join(sub, sub.c.work_id == Work.id)
             .filter(sub.c.last >= cutoff)
             .order_by(sub.c.last.desc())

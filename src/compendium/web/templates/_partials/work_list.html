@@ -9,7 +9,9 @@
 <ul class="work-list">
   {% for work in works %}
   <li>
-    <div class="cover-thumb" aria-hidden="true">
+    <div class="cover-thumb{% if not work.cover_image_url %} cover-thumb-empty{% endif %}"
+         {% if not work.cover_image_url %}data-media-type="{{ work.media_type.code if work.media_type else 'book' }}"{% endif %}
+         aria-hidden="true">
       {% if work.cover_image_url %}
       <img src="{{ cover_url(work.cover_image_url, work.updated_at) }}" alt="" loading="lazy">
       {% endif %}

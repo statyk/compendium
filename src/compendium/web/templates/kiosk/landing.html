@@ -9,10 +9,19 @@
 <form method="post" action="/ui/kiosk/start">
   <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
   <label for="card-input">Library card number</label>
-  <input type="text" id="card-input" name="card_number" class="kiosk-card-input"
-         autocomplete="off" autofocus required>
+  <fieldset role="group">
+    <input type="text" id="card-input" name="card_number" class="kiosk-card-input"
+           autocomplete="off" autofocus required>
+    <button type="button" class="outline secondary" data-scan-target="card-input">Scan</button>
+  </fieldset>
   <button type="submit" class="kiosk-big-button">Begin</button>
 </form>
 
+{% include "_partials/scanner_dialog.html" %}
+
 <p class="kiosk-footer"><small>Need help? Please see a librarian at the desk.</small></p>
+{% endblock %}
+
+{% block scripts %}
+{% include "_partials/scanner_scripts.html" %}
 {% endblock %}

@@ -63,6 +63,25 @@
     }
     .cover-thumb img { width: 100%; height: 100%; object-fit: cover; display: block; }
     .cover-thumb-lg { width: 180px; }
+    .cover-thumb-empty {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      background: var(--pico-card-background-color);
+      border: 1px dashed var(--pico-muted-border-color);
+      opacity: 0.55;
+    }
+    .cover-thumb-empty::before {
+      content: '📦';
+      font-size: 1.6rem;
+      line-height: 1;
+    }
+    .cover-thumb-empty[data-media-type="book"]::before { content: '📖'; }
+    .cover-thumb-empty[data-media-type="vinyl"]::before,
+    .cover-thumb-empty[data-media-type="cd"]::before { content: '💿'; }
+    .cover-thumb-empty[data-media-type="dvd"]::before,
+    .cover-thumb-empty[data-media-type="bluray"]::before,
+    .cover-thumb-empty[data-media-type="vhs"]::before { content: '🎬'; }
     .work-list { list-style: none; padding: 0; margin: 0; }
     .work-list > li {
       display: flex;

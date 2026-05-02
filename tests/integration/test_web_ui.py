@@ -1761,3 +1761,30 @@ def test_inactive_user_cookie_denied(web_client, web_session, librarian):
     # get_web_user returns None for inactive users → RequiresLoginException.
     assert resp.status_code == 303
     assert "/ui/login" in resp.headers["location"]
+
+
+# ── UI polish — Slice A (catalog landing) ─────────────────────────────────────
+
+
+def test_search_landing_renders_shelf_author(web_client, work):
+    """New-arrivals shelf renders the creator byline after the N+1 fix."""
+    resp = web_client.get("/ui/catalog")
+    assert resp.status_code == 200
+    assert b"shelf-creator" in resp.content
+    assert b"Frank Herbert" in resp.content
+
+
+def test_search_landing_marks_coverless_thumbs_empty(web_client, work):
+    """Works with no cover image get the cover-thumb-empty modifier and data-media-type."""
+    # The seeded work (_OPEN_LIB_DUNE) has no cover (cover: {}), so cover_image_url is None.
+    resp = web_client.get("/ui/catalog")
+    assert resp.status_code == 200
+    assert b"cover-thumb-empty" in resp.content
+    assert b"data-media-type=" in resp.content
+
+
+def test_facet_drawer_summary_present(web_client, work):
+    """The catalog landing renders <summary>Filter</summary> for the mobile facet toggle."""
+    resp = web_client.get("/ui/catalog")
+    assert resp.status_code == 200
+    assert b"<summary>Filter</summary>" in resp.content

@@ -21,13 +21,14 @@
   <input type="hidden" name="media" value="{{ media|join(',') }}">
   <input type="hidden" name="decade" value="{{ decade if decade is not none else '' }}">
   <input type="hidden" name="avail" value="{% if avail %}1{% else %}{% endif %}">
-  <button type="submit" style="margin-bottom:0">Search</button>
+  <button type="submit" style="margin-bottom:0;width:auto">Search</button>
 </form>
 
 <div class="catalog-layout">
   <aside class="catalog-facets">
+    <details class="facet-drawer" open>
+    <summary>Filter</summary>
     {% if page %}
-    <h4 style="margin-top:0">Filter</h4>
     {% if page.facets.media_type %}
     <details open>
       <summary><strong>Media type</strong></summary>
@@ -79,6 +80,7 @@
     <p><a href="/ui/catalog?q={{ q }}&field={{ field }}"><small>Clear all filters</small></a></p>
     {% endif %}
     {% endif %}
+    </details>
   </aside>
 
   <section class="catalog-main">
@@ -91,12 +93,13 @@
           {% for w in new_arrivals %}
           <li>
             <a href="/ui/catalog/{{ w.id }}" title="{{ w.title }}">
-              <div class="cover-thumb cover-thumb-shelf" aria-hidden="true">
-                {% if w.cover_image_url %}
-                <img src="{{ cover_url(w.cover_image_url, w.updated_at) }}" alt="" loading="lazy">
-                {% endif %}
+              <div class="cover-thumb cover-thumb-shelf{% if not w.cover_image_url %} cover-thumb-empty{% endif %}"
+                   {% if not w.cover_image_url %}data-media-type="{{ w.media_type.code if w.media_type else 'book' }}"{% endif %}
+                   aria-hidden="true">
+                {% if w.cover_image_url %}<img src="{{ cover_url(w.cover_image_url, w.updated_at) }}" alt="" loading="lazy">{% endif %}
               </div>
               <small class="shelf-title">{{ w.title }}</small>
+              {% if w.creators %}<small class="shelf-creator">{{ w.creators[0].creator.display_name }}</small>{% endif %}
             </a>
           </li>
           {% endfor %}
@@ -108,12 +111,13 @@
           {% for w in recently_returned %}
           <li>
             <a href="/ui/catalog/{{ w.id }}" title="{{ w.title }}">
-              <div class="cover-thumb cover-thumb-shelf" aria-hidden="true">
-                {% if w.cover_image_url %}
-                <img src="{{ cover_url(w.cover_image_url, w.updated_at) }}" alt="" loading="lazy">
-                {% endif %}
+              <div class="cover-thumb cover-thumb-shelf{% if not w.cover_image_url %} cover-thumb-empty{% endif %}"
+                   {% if not w.cover_image_url %}data-media-type="{{ w.media_type.code if w.media_type else 'book' }}"{% endif %}
+                   aria-hidden="true">
+                {% if w.cover_image_url %}<img src="{{ cover_url(w.cover_image_url, w.updated_at) }}" alt="" loading="lazy">{% endif %}
               </div>
               <small class="shelf-title">{{ w.title }}</small>
+              {% if w.creators %}<small class="shelf-creator">{{ w.creators[0].creator.display_name }}</small>{% endif %}
             </a>
           </li>
           {% endfor %}
@@ -134,7 +138,7 @@
 {% block scripts %}
 <style>
   .catalog-layout { display:flex; gap:1.5rem; align-items:flex-start; }
-  .catalog-facets { flex:0 0 14rem; }
+  .catalog-facets { flex:0 0 11rem; }
   .catalog-main { flex:1; min-width:0; }
   .facet-list { list-style:none; padding:0; margin:0.25rem 0 0.75rem 0; }
   .facet-list li { padding:0.1rem 0; }
@@ -147,9 +151,15 @@
   .facet-list label small {
     margin-left:auto; color:var(--pico-muted-color); white-space:nowrap;
   }
+  .facet-drawer > summary { display:none; }
   @media (max-width: 720px) {
     .catalog-layout { flex-direction:column; }
-    .catalog-facets { flex:0 0 auto; }
+    .catalog-main { order:1; }
+    .catalog-facets { order:2; flex:0 0 auto; }
+    .facet-drawer > summary {
+      display:list-item; cursor:pointer;
+      padding:0.5rem 0; font-weight:bold;
+    }
   }
   .discovery-shelves h3 { margin-bottom:0.5rem; }
   .cover-shelf {
@@ -163,6 +173,10 @@
     display:block; margin-top:0.25rem;
     overflow:hidden; text-overflow:ellipsis;
     display:-webkit-box; -webkit-line-clamp:2; -webkit-box-orient:vertical;
+  }
+  .shelf-creator {
+    display:block; color:var(--pico-muted-color); font-size:0.75rem;
+    overflow:hidden; text-overflow:ellipsis; white-space:nowrap;
   }
   .pagination { display:flex; gap:0.5rem; justify-content:center; margin-top:1rem; }
 </style>

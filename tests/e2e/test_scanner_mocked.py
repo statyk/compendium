@@ -88,3 +88,27 @@ def test_scanner_dialog_opens(librarian_page, e2e_server):
     assert dialog_visible or barcode_value == _FAKE_BARCODE, (
         "Scanner dialog never opened and barcode was not populated"
     )
+
+
+def test_scanner_populates_kiosk_card_input(librarian_page, e2e_server):
+    """Kiosk landing: clicking Scan populates #card-input via the partial include."""
+    page = librarian_page
+    page.add_init_script(_SCANNER_MOCK)
+
+    page.goto(f"{e2e_server}/ui/kiosk")
+    page.wait_for_load_state("networkidle")
+
+    scan_btn = page.locator("[data-scan-target='card-input']").first
+    assert scan_btn.is_visible(), "Scan button not found on kiosk landing"
+
+    scan_btn.click()
+
+    page.wait_for_function(
+        "() => document.getElementById('card-input').value !== ''",
+        timeout=10000,
+    )
+
+    value = page.locator("#card-input").input_value()
+    assert value == _FAKE_BARCODE, (
+        f"Expected kiosk card-input to be populated with {_FAKE_BARCODE!r}, got {value!r}"
+    )

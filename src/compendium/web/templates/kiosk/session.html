@@ -11,10 +11,15 @@
       hx-on::after-request="this.reset(); this.querySelector('input[name=barcode]').focus();">
   <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
   <label for="barcode-input">Item barcode</label>
-  <input type="text" id="barcode-input" name="barcode" class="kiosk-scanner-input"
-         placeholder="Scan or type" autocomplete="off" autofocus required>
+  <fieldset role="group">
+    <input type="text" id="barcode-input" name="barcode" class="kiosk-scanner-input"
+           placeholder="Scan or type" autocomplete="off" autofocus required>
+    <button type="button" class="outline secondary" data-scan-target="barcode-input">Scan</button>
+  </fieldset>
   <button type="submit" class="kiosk-big-button">Check Out</button>
 </form>
+
+{% include "_partials/scanner_dialog.html" %}
 
 <div id="kiosk-status" aria-live="polite" style="min-height:2rem; margin-top:1rem"></div>
 
@@ -44,4 +49,5 @@
     reset();
   })();
 </script>
+{% include "_partials/scanner_scripts.html" %}
 {% endblock %}

@@ -323,3 +323,25 @@ class TestCheckoutPost:
             "outstanding+fees" in resp.headers["location"]
             or "outstanding%20fees" in resp.headers["location"]
         )
+
+
+# ── UI polish — Slice A (kiosk scan buttons) ──────────────────────────────────
+
+
+def test_kiosk_landing_has_scan_button(kiosk_client, kiosk_session):
+    """Kiosk landing page renders a Scan button targeting the card input."""
+    cookies = _login_kiosk(kiosk_client, kiosk_session, "kl_scan_landing")
+    resp = kiosk_client.get("/ui/kiosk", cookies=cookies)
+    assert resp.status_code == 200
+    assert b'data-scan-target="card-input"' in resp.content
+
+
+def test_kiosk_session_has_scan_button(kiosk_client, kiosk_session):
+    """Kiosk session page renders a Scan button targeting the barcode input."""
+    cookies = _login_kiosk(kiosk_client, kiosk_session, "kl_scan_session")
+    patron = _patron(kiosk_session)
+    resp = kiosk_client.get(
+        f"/ui/kiosk/session/{patron.library_card_number}", cookies=cookies
+    )
+    assert resp.status_code == 200
+    assert b'data-scan-target="barcode-input"' in resp.content

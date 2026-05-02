@@ -27,7 +27,7 @@
       <input type="text" id="identifier" name="identifier" placeholder="Scan or type ISBN / UPC / title" autocomplete="off" autofocus>
       <button type="button" class="outline secondary" data-scan-target="identifier">Scan</button>
     </fieldset>
-    <button type="submit">Look Up</button>
+    <button type="submit" style="width:auto">Look Up</button>
   </form>
 </article>
 
@@ -35,29 +35,9 @@
 
 <p><small>Can't find it? <a href="/ui/items/new/manual">Enter manually</a> instead.</small></p>
 
-<dialog id="scanner-dialog">
-  <article>
-    <header>
-      <button id="scanner-close" type="button" aria-label="Close" class="outline secondary" style="float:right;padding:0.2rem 0.6rem;margin:0">&#x2715;</button>
-      <strong>Scan barcode</strong>
-    </header>
-    <video id="scanner-video" autoplay playsinline muted style="width:100%;border-radius:var(--pico-border-radius)"></video>
-    <p id="scanner-error" hidden class="error-banner">
-      Camera access is unavailable or was denied. You can still type or paste the
-      barcode directly. If you have a USB scanner, plug it in and scan &mdash; it
-      enters the barcode automatically without camera access.
-    </p>
-    <footer>
-      <label>
-        <input type="checkbox" id="scanner-beep-toggle" role="switch">
-        Beep on scan
-      </label>
-    </footer>
-  </article>
-</dialog>
+{% include "_partials/scanner_dialog.html" %}
 {% endblock %}
 
 {% block scripts %}
-<script src="/ui/static/zxing/zxing-browser.min.js" nonce="{{ csp_nonce(request) }}"></script>
-<script src="/ui/static/scanner.js" nonce="{{ csp_nonce(request) }}"></script>
+{% include "_partials/scanner_scripts.html" %}
 {% endblock %}

@@ -131,12 +131,14 @@
     >
       <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
       <label for="hold-for-card">Place hold for patron</label>
-      <div role="group">
+      <fieldset role="group">
         <input type="text" id="hold-for-card" name="card_number" placeholder="Library card number" required>
+        <button type="button" class="outline secondary" data-scan-target="hold-for-card">Scan</button>
         <button type="submit">Place Hold</button>
-      </div>
+      </fieldset>
     </form>
   </div>
+  {% include "_partials/scanner_dialog.html" %}
   {% endif %}
 {% endif %}
 
@@ -174,5 +176,11 @@
   Film data provided by TMDb.
   This product uses the TMDB API but is not endorsed or certified by TMDB.
 </p>
+{% endif %}
+{% endblock %}
+
+{% block scripts %}
+{% if has_permission(user, 'hold.place.any') %}
+{% include "_partials/scanner_scripts.html" %}
 {% endif %}
 {% endblock %}
