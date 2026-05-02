@@ -50,8 +50,10 @@ def test_postgres_url_constructs_without_sqlite_pragmas():
     is registered inside the sqlite-only branch, so this just verifies the
     Postgres path doesn't fall through that branch and break construction.
 
-    No actual DB connection is attempted (no Postgres needed in CI).
+    Skipped when psycopg is not installed (SQLAlchemy imports the driver at
+    engine-construction time even before any connection is made).
     """
+    pytest.importorskip("psycopg", reason="psycopg not installed")
     eng = make_engine(Settings(database_url="postgresql+psycopg://u:p@localhost:5432/x"))
     assert eng.dialect.name == "postgresql"
 
