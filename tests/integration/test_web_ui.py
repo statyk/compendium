@@ -24,6 +24,7 @@ from compendium.repositories.sql.user_repository import SqlUserRepository
 from compendium.repositories.sql.work_repository import SqlWorkRepository
 from compendium.services.auth import hash_password
 from compendium.services.catalog import CatalogService
+import compendium.services.site_settings as ss
 from compendium.web.csrf import _COOKIE as CSRF_COOKIE
 from compendium.web.csrf import _sign, generate_token
 
@@ -248,6 +249,68 @@ def test_catalog_detail_shows_due_date_when_checked_out(web_client, work, web_se
 def test_catalog_detail_404(web_client):
     resp = web_client.get("/ui/catalog/99999")
     assert resp.status_code == 404
+
+
+# ── Catalog suggest endpoint ──────────────────────────────────────────────────
+
+_OPEN_LIB_FOUNDATION_SUGGEST = {
+    "title": "Foundation",
+    "authors": [{"name": "Isaac Asimov"}],
+    "publishers": [{"name": "Gnome Press"}],
+    "publish_date": "1951",
+    "cover": {},
+    "identifiers": {},
+}
+_ISBN_FOUNDATION_SUGGEST = "9780553293357"
+
+
+@pytest.fixture
+def foundation_work_for_suggest(web_session):
+    with patch(
+        "compendium.services.metadata.lookup_isbn",
+        return_value=_OPEN_LIB_FOUNDATION_SUGGEST,
+    ):
+        w, _ = CatalogService(
+            work_repo=SqlWorkRepository(web_session),
+            item_repo=SqlItemRepository(web_session),
+            creator_repo=SqlCreatorRepository(web_session),
+            branch_repo=SqlBranchRepository(web_session),
+            media_type_repo=SqlMediaTypeRepository(web_session),
+        ).add_from_isbn(_ISBN_FOUNDATION_SUGGEST)
+    web_session.flush()
+    return w
+
+
+def test_catalog_search_form_has_suggest_div(web_client):
+    resp = web_client.get("/ui/catalog")
+    assert resp.status_code == 200
+    assert b'id="suggest-list"' in resp.content
+    assert b'hx-get="/ui/catalog/suggest"' in resp.content
+
+
+def test_suggest_endpoint_returns_partial_with_match(web_client, foundation_work_for_suggest):
+    resp = web_client.get("/ui/catalog/suggest?q=foun")
+    assert resp.status_code == 200
+    assert b"suggest-options" in resp.content
+    assert b"Foundation" in resp.content
+
+
+def test_suggest_endpoint_short_query_returns_empty_body(web_client, foundation_work_for_suggest):
+    resp = web_client.get("/ui/catalog/suggest?q=a")
+    assert resp.status_code == 200
+    assert b"suggest-options" not in resp.content
+
+
+def test_suggest_endpoint_unauthenticated_blocked_when_guest_search_disabled(
+    web_client, monkeypatch
+):
+    monkeypatch.setenv("COMPENDIUM_GUEST_SEARCH_ENABLED", "false")
+    ss.invalidate_cache()
+    try:
+        resp = web_client.get("/ui/catalog/suggest?q=test")
+        assert b"suggest-options" not in resp.content
+    finally:
+        ss.invalidate_cache()
 
 
 # ── Auth-protected pages redirect when unauthenticated ────────────────────────

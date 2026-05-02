@@ -231,6 +231,21 @@ def catalog_search_results(
     )
 
 
+@router.get("/catalog/suggest", response_class=HTMLResponse)
+def catalog_search_suggest(
+    request: Request,
+    q: str = "",
+    user=Depends(get_web_user),
+    session: Session = Depends(get_session),
+):
+    if not (get_site_setting("guest_search_enabled") or user is not None):
+        return HTMLResponse("")
+    works = _discovery(session).suggest(q, limit=8)
+    return templates.TemplateResponse(
+        request, "_partials/suggest.html", {"works": works, "q": q}
+    )
+
+
 @router.get("/catalog/{work_id:int}")
 def work_detail(
     work_id: int,

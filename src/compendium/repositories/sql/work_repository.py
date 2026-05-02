@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import re
 from datetime import datetime
 
 from sqlalchemy import exists, func, or_, text
@@ -7,6 +8,8 @@ from sqlalchemy.orm import Session, selectinload
 
 from compendium.domain.enums import ItemStatus
 from compendium.domain.models import Branch, Creator, Item, Loan, MediaType, Work, WorkCreator
+
+_TOKEN_SANITIZE = re.compile(r"[^A-Za-z0-9'-]+")
 
 
 class SqlWorkRepository:
@@ -503,3 +506,51 @@ class SqlWorkRepository:
             ).fetchall()
             return [r[0] for r in rows]
         return None
+
+    def suggest(self, q: str, *, limit: int = 8) -> list[Work]:
+        if len(q.strip()) < 2:
+            return []
+        tokens = [_TOKEN_SANITIZE.sub("", t) for t in q.split()]
+        tokens = [t for t in tokens if t]
+        if not tokens:
+            return []
+        ids = self._fts_prefix_ids(tokens, limit)
+        if not ids:
+            return []
+        id_order = {work_id: pos for pos, work_id in enumerate(ids)}
+        works = (
+            self._s.query(Work)
+            .options(selectinload(Work.creators).selectinload(WorkCreator.creator))
+            .filter(Work.id.in_(ids))
+            .all()
+        )
+        works.sort(key=lambda w: id_order.get(w.id, len(ids)))
+        return works
+
+    def _fts_prefix_ids(self, tokens: list[str], limit: int) -> list[int]:
+        dialect = self._s.connection().dialect.name
+        if dialect == "sqlite":
+            expr = " ".join(f"{t}*" for t in tokens)
+            rows = self._s.execute(
+                text(
+                    "SELECT rowid FROM work_fts WHERE work_fts MATCH :q ORDER BY rank LIMIT :lim"
+                ),
+                {"q": expr, "lim": limit},
+            ).fetchall()
+            return [r[0] for r in rows]
+        if dialect == "postgresql":
+            expr = " & ".join(f"{t}:*" for t in tokens)
+            rows = self._s.execute(
+                text(
+                    """
+                    SELECT id FROM work
+                    WHERE to_tsvector('english', COALESCE(search_text, ''))
+                          @@ to_tsquery('english', :q)
+                    ORDER BY id DESC
+                    LIMIT :lim
+                    """
+                ),
+                {"q": expr, "lim": limit},
+            ).fetchall()
+            return [r[0] for r in rows]
+        return []

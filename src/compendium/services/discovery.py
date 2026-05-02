@@ -111,6 +111,9 @@ class DiscoveryService:
             ),
         )
 
+    def suggest(self, q: str, *, limit: int = 8) -> list[Work]:
+        return self._works.suggest(q, limit=limit)
+
     def new_arrivals(self, *, days: int = 60, limit: int = 12) -> list[Work]:
         return self._works.list_recent(days=days, limit=limit)
 

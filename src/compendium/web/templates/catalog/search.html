@@ -12,12 +12,23 @@
     <option value="publisher" {% if field == "publisher" %}selected{% endif %}>Publisher</option>
     <option value="isbn" {% if field == "isbn" %}selected{% endif %}>ISBN</option>
   </select>
-  <input type="search" name="q" placeholder="Search…" value="{{ q }}" autofocus
-         hx-get="/ui/catalog/search-results"
-         hx-trigger="input changed delay:300ms, search"
-         hx-target="#results"
-         hx-include="closest form"
-         style="flex:1; min-width:12rem; margin-bottom:0">
+  <div class="suggest-wrap">
+    <input id="q-input" type="search" name="q" placeholder="Search…" value="{{ q }}" autofocus
+           role="combobox" aria-autocomplete="list" aria-expanded="false" aria-controls="suggest-list"
+           autocomplete="off"
+           hx-get="/ui/catalog/search-results"
+           hx-trigger="input changed delay:300ms, search"
+           hx-target="#results"
+           hx-include="closest form"
+           style="width:100%; min-width:12rem; margin-bottom:0">
+    <div id="suggest-list"
+         hx-get="/ui/catalog/suggest"
+         hx-trigger="input changed delay:200ms from:#q-input"
+         hx-include="#q-input"
+         hx-target="this"
+         hx-swap="innerHTML"
+         role="listbox" aria-label="Suggestions"></div>
+  </div>
   <input type="hidden" name="media" value="{{ media|join(',') }}">
   <input type="hidden" name="decade" value="{{ decade if decade is not none else '' }}">
   <input type="hidden" name="avail" value="{% if avail %}1{% else %}{% endif %}">
@@ -179,6 +190,26 @@
     overflow:hidden; text-overflow:ellipsis; white-space:nowrap;
   }
   .pagination { display:flex; gap:0.5rem; justify-content:center; margin-top:1rem; }
+  .suggest-wrap { position: relative; flex: 1; }
+  #suggest-list { position: absolute; top: 100%; left: 0; right: 0; z-index: 10; }
+  .suggest-options {
+    list-style: none; margin: 0; padding: 0;
+    background: var(--pico-card-background-color);
+    border: 1px solid var(--pico-muted-border-color);
+    border-radius: var(--pico-border-radius);
+    box-shadow: 0 4px 12px rgba(0,0,0,0.1);
+    max-height: 24rem; overflow-y: auto;
+  }
+  .suggest-options li { margin: 0; }
+  .suggest-options a {
+    display: block; padding: 0.5rem 0.75rem;
+    text-decoration: none; color: var(--pico-color);
+  }
+  .suggest-options a:hover, .suggest-options a:focus {
+    background: var(--pico-secondary-background);
+  }
+  .suggest-title { display: block; }
+  .suggest-creator { display: block; font-size: 0.8rem; color: var(--pico-muted-color); }
 </style>
 <script nonce="{{ csp_nonce(request) }}">
   (function () {
@@ -242,5 +273,20 @@
       });
     });
   })();
+</script>
+<script nonce="{{ csp_nonce(request) }}">
+(() => {
+  const input = document.getElementById('q-input');
+  const list = document.getElementById('suggest-list');
+  if (!input || !list) return;
+  const sync = () => input.setAttribute('aria-expanded', list.children.length > 0 ? 'true' : 'false');
+  list.addEventListener('htmx:afterSwap', sync);
+  document.addEventListener('click', (e) => {
+    if (!list.contains(e.target) && e.target !== input) {
+      list.innerHTML = '';
+      sync();
+    }
+  });
+})();
 </script>
 {% endblock %}

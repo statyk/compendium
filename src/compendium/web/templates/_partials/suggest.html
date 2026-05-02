@@ -1,0 +1,12 @@
+{% if works %}
+<ul class="suggest-options">
+  {% for w in works %}
+  <li role="option">
+    <a href="/ui/catalog/{{ w.id }}">
+      <span class="suggest-title">{{ w.title }}</span>
+      {% if w.creators %}<span class="suggest-creator">{{ w.creators[0].creator.display_name }}</span>{% endif %}
+    </a>
+  </li>
+  {% endfor %}
+</ul>
+{% endif %}

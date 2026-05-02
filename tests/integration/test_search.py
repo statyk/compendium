@@ -89,3 +89,66 @@ def test_search_text_populated_on_work(session):
     assert work.search_text is not None
     assert "Dune" in work.search_text
     assert "Frank Herbert" in work.search_text
+
+
+# ── Suggest tests ─────────────────────────────────────────────────────────────
+
+
+def _add_work(session, title: str, author: str | None = None):
+    from compendium.domain.models import MediaType, Work
+
+    mt = session.query(MediaType).filter_by(code="book").first()
+    search = f"{title} {author}" if author else title
+    w = Work(title=title, search_text=search, media_type_id=mt.id)
+    session.add(w)
+    session.flush()
+    return w
+
+
+def test_suggest_returns_prefix_matches(session):
+    _add_work(session, "Foundation", "Isaac Asimov")
+    _add_work(session, "Foundation and Empire", "Isaac Asimov")
+    results = SqlWorkRepository(session).suggest("found")
+    titles = [w.title for w in results]
+    assert "Foundation" in titles
+    assert "Foundation and Empire" in titles
+
+
+def test_suggest_short_query_returns_empty(session):
+    assert SqlWorkRepository(session).suggest("a") == []
+
+
+def test_suggest_empty_query_returns_empty(session):
+    assert SqlWorkRepository(session).suggest("") == []
+
+
+def test_suggest_strips_punctuation(session):
+    _add_work(session, "Foundation", "Isaac Asimov")
+    repo = SqlWorkRepository(session)
+    clean = repo.suggest("found")
+    punct = repo.suggest("found?")
+    assert [w.title for w in clean] == [w.title for w in punct]
+
+
+def test_suggest_multi_token_anded(session):
+    _add_work(session, "Foundation", "Isaac Asimov")
+    _add_work(session, "Dune", "Frank Herbert")
+    repo = SqlWorkRepository(session)
+    # "found dune" requires both prefix tokens in the same work — no match.
+    multi = repo.suggest("found dune")
+    assert not any(w.title == "Foundation" for w in multi)
+    # Single-token prefix finds Foundation.
+    single = repo.suggest("foundation")
+    assert any(w.title == "Foundation" for w in single)
+
+
+def test_suggest_respects_limit(session):
+    from compendium.domain.models import MediaType, Work
+
+    mt = session.query(MediaType).filter_by(code="book").first()
+    for i in range(12):
+        w = Work(title=f"Foobar Book {i}", search_text=f"foobar book {i}", media_type_id=mt.id)
+        session.add(w)
+    session.flush()
+    results = SqlWorkRepository(session).suggest("foobar", limit=8)
+    assert len(results) == 8
