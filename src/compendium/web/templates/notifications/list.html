@@ -55,7 +55,7 @@
       <td style="white-space:nowrap"><code>{{ row.created_at.strftime("%Y-%m-%d %H:%M") }}</code></td>
       <td>{{ row.template_key }}</td>
       <td>{{ row.recipient_email or "—" }}</td>
-      <td>{{ row.status }}{% if row.last_error %}<br><small style="color:var(--pico-color-red-500)">{{ row.last_error }}</small>{% endif %}</td>
+      <td>{{ row.status }}{% if row.last_error %}<br><small class="error-banner">{{ row.last_error }}</small>{% endif %}</td>
       <td>{{ row.attempts }}</td>
       <td><small>{{ row.subject | truncate(60) }}</small></td>
       <td>
