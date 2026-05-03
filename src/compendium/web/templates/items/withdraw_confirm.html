@@ -24,7 +24,7 @@
 
 <form method="post" action="/ui/items/{{ item.barcode }}/withdraw">
   <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
-  <button type="submit" class="outline contrast">Confirm withdraw</button>
+  <button type="submit" class="outline contrast" style="width:auto">Confirm withdraw</button>
   <a href="/ui/items/{{ item.barcode }}" role="button" class="outline secondary">Cancel</a>
 </form>
 {% endblock %}
