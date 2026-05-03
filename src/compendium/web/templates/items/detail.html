@@ -53,13 +53,7 @@
 <a href="/ui/items/{{ item.barcode }}/edit" role="button" class="outline">Edit</a>
 {% endif %}
 {% if user and ("*" in user.role.permissions or "item.delete" in user.role.permissions) and item.status != "withdrawn" %}
-<form method="post" action="/ui/items/{{ item.barcode }}/withdraw" style="display:inline">
-  <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
-  <button type="submit" class="outline contrast"
-          onclick="return confirm('Withdraw this item? It will be removed from circulation but loan history is preserved. Cannot be undone. (Refused if currently checked out or on hold.)')">
-    Withdraw
-  </button>
-</form>
+<a href="/ui/items/{{ item.barcode }}/withdraw-confirm" role="button" class="outline contrast">Withdraw</a>
 {% endif %}
 
 {% if has_permission(user, 'fine.manage') %}

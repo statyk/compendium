@@ -1,0 +1,30 @@
+{% extends "base.html" %}
+{% block title %}Withdraw {{ item.barcode }} — {{ library_name() }}{% endblock %}
+{% block content %}
+<nav aria-label="breadcrumb">
+  <ul>
+    <li><a href="/ui/catalog/{{ item.work_id }}">{{ item.work.title }}</a></li>
+    <li><a href="/ui/items/{{ item.barcode }}">{{ item.barcode }}</a></li>
+    <li>Withdraw</li>
+  </ul>
+</nav>
+
+<hgroup>
+  <h2>Withdraw item</h2>
+  <p>{{ item.work.title }} &middot; <code>{{ item.barcode }}</code></p>
+</hgroup>
+
+<p>
+  This removes the copy from active circulation and marks it as withdrawn.
+  Loan history is preserved. <strong>This cannot be undone.</strong>
+</p>
+<p style="color:var(--pico-muted-color)">
+  The item must not be currently checked out or on hold.
+</p>
+
+<form method="post" action="/ui/items/{{ item.barcode }}/withdraw">
+  <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+  <button type="submit" class="outline contrast">Confirm withdraw</button>
+  <a href="/ui/items/{{ item.barcode }}" role="button" class="outline secondary">Cancel</a>
+</form>
+{% endblock %}

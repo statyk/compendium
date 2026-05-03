@@ -505,6 +505,30 @@ def item_loanable_submit(
     )
 
 
+@router.get("/items/{barcode}/withdraw-confirm")
+def withdraw_confirm_form(
+    barcode: str,
+    request: Request,
+    user: AppUser = Depends(require_web_permission(_PERM_MANAGE)),
+    session: Session = Depends(get_session),
+):
+    item = SqlItemRepository(session).get_by_barcode(barcode)
+    if item is None:
+        return _render(
+            "error.html",
+            request,
+            {"request": request, "user": user, "message": f"Item '{barcode}' not found"},
+            status_code=404,
+        )
+    if item.status.value == "withdrawn":
+        return RedirectResponse(f"/ui/items/{barcode}", status_code=303)
+    return _render(
+        "items/withdraw_confirm.html",
+        request,
+        {"request": request, "user": user, "item": item},
+    )
+
+
 @router.post("/items/{barcode}/withdraw")
 def withdraw_item(
     barcode: str,
