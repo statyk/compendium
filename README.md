@@ -24,8 +24,8 @@ This paragraph here is about the only part of the project written by a human.
 - **Labels** — Avery-template item labels (spine / pocket) and patron cards (full / sticker) as PDFs
 - **Auth** — five preset roles (ReadOnly, Patron, Librarian, SystemAdmin, Administrator) plus custom roles via the admin UI; JWT for API, cookie-based for web UI
 - **Audit log** — synchronous trail of administrative mutations (Librarian + system tier); queryable via web UI, CLI, or REST
-- **DB-editable settings** — most configuration knobs (library name, fines, kiosk timeout, SMTP, retention, etc.) editable from the UI / CLI / API; env vars still win as a break-glass
-- **Web UI** — HTMX + Jinja2 browser interface with catalog search, circulation desk (camera-based barcode scanning), patron self-service, light/dark/auto theme
+- **DB-editable settings** — most configuration knobs (library name, fines, kiosk timeout, SMTP, retention, configurable nav shortcuts, etc.) editable from the UI / CLI / API; env vars still win as a break-glass
+- **Web UI** — HTMX + Jinja2 browser interface with catalog search, circulation desk (camera-based barcode scanning), patron self-service, light/dark/auto theme; per-user nav shortcut overrides via browser localStorage
 - **REST API** — FastAPI; consumed by the web UI and available for integrations
 - **CLI** — full librarian + sysadmin workflow without running a server, including stdin/stdout (`-`) for backup, import/export, and labels
 

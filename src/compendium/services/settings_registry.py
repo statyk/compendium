@@ -215,6 +215,24 @@ def _all_positive_ints(v: list) -> None:
             raise ValueError(f"each entry must be a positive int, got {x!r}")
 
 
+def _shortcut_list(v: list) -> None:
+    if not isinstance(v, list):
+        raise ValueError("must be a list")
+    if len(v) > 5:
+        raise ValueError("at most 5 shortcuts allowed")
+    for entry in v:
+        if not isinstance(entry, str) or "|" not in entry:
+            raise ValueError(f"each entry must be 'Label|URL', got {entry!r}")
+        label, url = entry.split("|", 1)
+        if not label.strip() or not url.strip():
+            raise ValueError(f"label and URL must both be non-empty in {entry!r}")
+        u = url.strip()
+        if not (u.startswith("/") or u.startswith("https://") or u.startswith("http://")):
+            raise ValueError(
+                f"URL must be relative (/path) or http(s):// — got {u!r}"
+            )
+
+
 def _register_builtins() -> None:
     # ── Librarian-tier ─────────────────────────────────────────────────────
     register(
@@ -316,6 +334,22 @@ def _register_builtins() -> None:
                 "One notice per highest matching tier per loan."
             ),
             validator=_all_positive_ints,
+        )
+    )
+    register(
+        SettingDescriptor(
+            key="custom_shortcuts",
+            display_name="Nav Shortcuts",
+            type=list[str],
+            default=[],
+            scope="librarian",
+            help_text=(
+                "Up to 5 quick-access links shown in the nav bar for logged-in "
+                "users. Format each entry as 'Label|/url' (relative path or "
+                "https:// URL). Comma-separated. Each user can also override "
+                "this list locally from the pencil icon in the nav."
+            ),
+            validator=_shortcut_list,
         )
     )
     register(

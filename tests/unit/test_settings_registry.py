@@ -215,3 +215,104 @@ class TestEncoding:
         )
         raw = encode_for_storage(["a", "b"], desc.type)
         assert parse(desc, raw) == ["a", "b"]
+
+
+class TestShortcutValidator:
+    """Tests for _shortcut_list validator via custom_shortcuts descriptor."""
+
+    @pytest.fixture(autouse=True)
+    def desc(self):
+        from compendium.services.settings_registry import get_descriptor, validate
+
+        self._desc = get_descriptor("custom_shortcuts")
+        self._validate = validate
+
+    def _run(self, value):
+        self._validate(self._desc, value)
+
+    def test_empty_list_is_valid(self):
+        self._run([])
+
+    def test_valid_relative_url(self):
+        self._run(["Holds|/ui/admin/holds"])
+
+    def test_valid_https_url(self):
+        self._run(["Tickets|https://helpdesk.example.com"])
+
+    def test_valid_http_url(self):
+        self._run(["Internal|http://intranet/library"])
+
+    def test_up_to_five_entries(self):
+        self._run([f"Label{i}|/ui/path{i}" for i in range(5)])
+
+    def test_over_five_entries_rejected(self):
+        with pytest.raises(Exception):
+            self._run([f"Label{i}|/ui/path{i}" for i in range(6)])
+
+    def test_missing_pipe_rejected(self):
+        with pytest.raises(Exception):
+            self._run(["NoSeparator"])
+
+    def test_empty_label_rejected(self):
+        with pytest.raises(Exception):
+            self._run(["|/ui/path"])
+
+    def test_empty_url_rejected(self):
+        with pytest.raises(Exception):
+            self._run(["Label|"])
+
+    def test_javascript_scheme_rejected(self):
+        with pytest.raises(Exception):
+            self._run(["Bad|javascript:alert(1)"])
+
+    def test_data_scheme_rejected(self):
+        with pytest.raises(Exception):
+            self._run(["Bad|data:text/html,<h1>xss</h1>"])
+
+    def test_non_list_rejected(self):
+        with pytest.raises(Exception):
+            self._run("Holds|/ui/holds")
+
+
+class TestCustomShortcutsJinjaGlobal:
+    # jinja.py binds get_site_setting at import time — patch there, not at origin.
+
+    def test_parses_valid_entries(self, monkeypatch):
+        import compendium.web.jinja as jinja_mod
+        from compendium.web.jinja import _jinja_custom_shortcuts
+
+        monkeypatch.setattr(
+            jinja_mod, "get_site_setting", lambda key: ["Holds|/ui/admin/holds", "Items|/ui/items/new"]
+        )
+        result = _jinja_custom_shortcuts()
+        assert result == [
+            {"label": "Holds", "url": "/ui/admin/holds"},
+            {"label": "Items", "url": "/ui/items/new"},
+        ]
+
+    def test_empty_setting_returns_empty(self, monkeypatch):
+        import compendium.web.jinja as jinja_mod
+        from compendium.web.jinja import _jinja_custom_shortcuts
+
+        monkeypatch.setattr(jinja_mod, "get_site_setting", lambda key: [])
+        assert _jinja_custom_shortcuts() == []
+
+    def test_trims_whitespace(self, monkeypatch):
+        import compendium.web.jinja as jinja_mod
+        from compendium.web.jinja import _jinja_custom_shortcuts
+
+        monkeypatch.setattr(
+            jinja_mod, "get_site_setting", lambda key: ["  My Holds  |  /ui/admin/holds  "]
+        )
+        result = _jinja_custom_shortcuts()
+        assert result[0]["label"] == "My Holds"
+        assert result[0]["url"] == "/ui/admin/holds"
+
+    def test_skips_entries_without_pipe(self, monkeypatch):
+        import compendium.web.jinja as jinja_mod
+        from compendium.web.jinja import _jinja_custom_shortcuts
+
+        monkeypatch.setattr(jinja_mod, "get_site_setting", lambda key: ["NoPipe", "Good|/ui/path"])
+        result = _jinja_custom_shortcuts()
+        assert len(result) == 1
+        assert result[0]["label"] == "Good"

@@ -138,6 +138,9 @@
     .pill-staff_only     { background: #fecaca; color: #991b1b; }
     .pill-display        { background: #fbcfe8; color: #9d174d; }
     .pill-other          { background: #e5e7eb; color: #374151; }
+    #nav-shortcuts { display: flex; align-items: center; gap: 0.5rem; padding: 0; }
+    #nav-shortcuts-edit { text-decoration: none; color: var(--pico-muted-color); font-size: 0.9em; }
+    #nav-shortcuts-edit:hover { color: var(--pico-color); }
   </style>
 </head>
 <body>
@@ -157,32 +160,25 @@
       </ul>
       <ul>
         <li><a href="/ui/catalog">Catalog</a></li>
-        <li>
-          <details class="dropdown" id="theme-menu">
-            <summary aria-label="Theme">
-              <span aria-hidden="true" data-theme-icon>◐</span>
-            </summary>
-            <ul>
-              <li><a href="#" data-set-theme="auto">System</a></li>
-              <li><a href="#" data-set-theme="light">Light</a></li>
-              <li><a href="#" data-set-theme="dark">Dark</a></li>
-            </ul>
-          </details>
-        </li>
         {% if user %}
-          {% if has_permission(user, 'loan.checkout') %}<li><a href="/ui/circ">Circ Desk</a></li>{% endif %}
-          {% if has_permission(user, 'loan.checkout') %}<li><a href="/ui/kiosk">Kiosk</a></li>{% endif %}
-          {% if has_permission(user, 'item.create') %}<li><a href="/ui/items/new">Add Item</a></li>{% endif %}
-          {% set show_circulation = has_permission(user, 'patron.manage')
+          {% set _shortcuts = custom_shortcuts() %}
+          <li id="nav-shortcuts" data-defaults='{{ _shortcuts | tojson }}'>
+            {% for s in _shortcuts %}<a href="{{ s.url }}" data-shortcut>{{ s.label }}</a> {% endfor %}<a href="#" id="nav-shortcuts-edit" aria-label="Customize shortcuts" title="Customize shortcuts">✎</a>
+          </li>
+          {% set _show_circ_admin = has_permission(user, 'patron.manage')
                                      or has_permission(user, 'loan.view.any')
                                      or has_permission(user, 'fine.manage')
                                      or has_permission(user, 'hold.view.any')
                                      or has_permission(user, 'loan.checkin') %}
+          {% set show_circulation = _show_circ_admin or has_permission(user, 'loan.checkout') %}
           {% if show_circulation %}
           <li>
             <details class="dropdown">
               <summary>Circulation</summary>
               <ul>
+                {% if has_permission(user, 'loan.checkout') %}<li><a href="/ui/circ">Circ Desk</a></li>{% endif %}
+                {% if has_permission(user, 'loan.checkout') %}<li><a href="/ui/kiosk">Kiosk</a></li>{% endif %}
+                {% if has_permission(user, 'loan.checkout') and _show_circ_admin %}<li><hr></li>{% endif %}
                 {% if has_permission(user, 'patron.manage') %}<li><a href="/ui/patrons">Patrons</a></li>{% endif %}
                 {% if has_permission(user, 'loan.view.any') %}<li><a href="/ui/admin/loans">Active Loans</a></li>{% endif %}
                 {% if has_permission(user, 'fine.manage') %}<li><a href="/ui/admin/fines">Outstanding Fines</a></li>{% endif %}
@@ -192,14 +188,17 @@
             </details>
           </li>
           {% endif %}
-          {% set show_cataloging = has_permission(user, 'catalog.import')
-                                    or has_permission(user, 'item.view')
-                                    or has_permission(user, 'labels.generate') %}
+          {% set _show_catalog_admin = has_permission(user, 'catalog.import')
+                                        or has_permission(user, 'item.view')
+                                        or has_permission(user, 'labels.generate') %}
+          {% set show_cataloging = _show_catalog_admin or has_permission(user, 'item.create') %}
           {% if show_cataloging %}
           <li>
             <details class="dropdown">
               <summary>Cataloging</summary>
               <ul>
+                {% if has_permission(user, 'item.create') %}<li><a href="/ui/items/new">Add Item</a></li>{% endif %}
+                {% if has_permission(user, 'item.create') and _show_catalog_admin %}<li><hr></li>{% endif %}
                 {% if has_permission(user, 'catalog.import') %}<li><a href="/ui/admin/import">Import</a></li>{% endif %}
                 {% if has_permission(user, 'item.view') %}<li><a href="/ui/admin/export">Export</a></li>{% endif %}
                 {% if has_permission(user, 'labels.generate') %}<li><a href="/ui/labels">Labels</a></li>{% endif %}
@@ -269,6 +268,18 @@
         {% else %}
           <li><a href="/ui/login" role="button" class="outline">Login</a></li>
         {% endif %}
+        <li>
+          <details class="dropdown" id="theme-menu">
+            <summary aria-label="Theme">
+              <span aria-hidden="true" data-theme-icon>◐</span>
+            </summary>
+            <ul>
+              <li><a href="#" data-set-theme="auto">System</a></li>
+              <li><a href="#" data-set-theme="light">Light</a></li>
+              <li><a href="#" data-set-theme="dark">Dark</a></li>
+            </ul>
+          </details>
+        </li>
       </ul>
     </nav>
   </header>
@@ -280,6 +291,24 @@
   <footer class="container">
     <small>Compendium &mdash; library management system</small>
   </footer>
+  {% if user %}
+  <dialog id="shortcuts-dialog">
+    <article style="max-width:32rem">
+      <h3>Customize nav shortcuts</h3>
+      <p style="font-size:0.9em">Up to 5 quick-access links shown in the nav. Your changes are stored in this browser only.</p>
+      <div id="shortcuts-rows"></div>
+      <p style="margin-top:0.5rem">
+        <button type="button" id="shortcuts-add" class="outline" style="width:auto">+ Add row</button>
+      </p>
+      <footer style="display:flex; gap:0.5rem; flex-wrap:wrap; align-items:center">
+        <button type="button" id="shortcuts-save" style="width:auto">Save</button>
+        <button type="button" id="shortcuts-cancel" class="secondary outline" style="width:auto">Cancel</button>
+        <button type="button" id="shortcuts-reset" class="outline contrast" style="width:auto; margin-left:auto">Reset to site defaults</button>
+      </footer>
+      <p id="shortcuts-error" class="error-banner" style="display:none; margin-top:0.5rem"></p>
+    </article>
+  </dialog>
+  {% endif %}
   <script nonce="{{ csp_nonce(request) }}">
     (function () {
       var menu = document.getElementById('theme-menu');
@@ -297,6 +326,116 @@
           }
           menu.open = false;
         });
+      });
+    })();
+    (function () {
+      var strip = document.getElementById('nav-shortcuts');
+      if (!strip) return;
+      var editBtn = document.getElementById('nav-shortcuts-edit');
+      var dialog = document.getElementById('shortcuts-dialog');
+      if (!dialog) return;
+
+      function parseJSON(s) {
+        try { var v = JSON.parse(s); return Array.isArray(v) ? v : null; } catch (_) { return null; }
+      }
+
+      function renderStrip(shortcuts) {
+        Array.from(strip.querySelectorAll('[data-shortcut]')).forEach(function (a) { strip.removeChild(a); });
+        shortcuts.slice(0, 5).forEach(function (s) {
+          var a = document.createElement('a');
+          a.href = s.url;
+          a.setAttribute('data-shortcut', '');
+          a.textContent = s.label;
+          strip.insertBefore(a, editBtn);
+        });
+      }
+
+      var stored = null;
+      try { stored = parseJSON(localStorage.getItem('compendium_shortcuts')); } catch (_) {}
+      if (stored) renderStrip(stored);
+
+      var rowsDiv = document.getElementById('shortcuts-rows');
+      var addBtn = document.getElementById('shortcuts-add');
+      var saveBtn = document.getElementById('shortcuts-save');
+      var cancelBtn = document.getElementById('shortcuts-cancel');
+      var resetBtn = document.getElementById('shortcuts-reset');
+      var errEl = document.getElementById('shortcuts-error');
+
+      function makeRow(label, url) {
+        var div = document.createElement('div');
+        div.className = 'shortcut-row';
+        div.style.cssText = 'display:flex; gap:0.5rem; align-items:center; margin-bottom:0.5rem';
+        div.innerHTML =
+          '<input type="text" placeholder="Label" data-label style="flex:1; margin:0">' +
+          '<input type="text" placeholder="/path or https://..." data-url style="flex:2; margin:0">' +
+          '<button type="button" class="outline contrast" style="width:auto; padding:0.2rem 0.5rem; flex-shrink:0" data-remove>✕</button>';
+        div.querySelector('[data-label]').value = label || '';
+        div.querySelector('[data-url]').value = url || '';
+        return div;
+      }
+
+      rowsDiv.addEventListener('click', function (e) {
+        if (e.target.closest('[data-remove]')) {
+          e.target.closest('.shortcut-row').remove();
+        }
+      });
+
+      addBtn.addEventListener('click', function () {
+        if (rowsDiv.querySelectorAll('.shortcut-row').length >= 5) return;
+        rowsDiv.appendChild(makeRow('', ''));
+      });
+
+      editBtn.addEventListener('click', function (e) {
+        e.preventDefault();
+        var effective = stored || parseJSON(strip.dataset.defaults) || [];
+        rowsDiv.innerHTML = '';
+        effective.forEach(function (s) { rowsDiv.appendChild(makeRow(s.label, s.url)); });
+        errEl.style.display = 'none';
+        dialog.showModal();
+      });
+
+      function collectRows() {
+        var rows = [];
+        rowsDiv.querySelectorAll('.shortcut-row').forEach(function (div) {
+          var label = (div.querySelector('[data-label]').value || '').trim();
+          var url = (div.querySelector('[data-url]').value || '').trim();
+          if (label || url) rows.push({label: label, url: url});
+        });
+        return rows;
+      }
+
+      function validateRows(rows) {
+        for (var i = 0; i < rows.length; i++) {
+          var r = rows[i];
+          if (!r.label) return 'Row ' + (i + 1) + ': label is required.';
+          if (!r.url) return 'Row ' + (i + 1) + ': URL is required.';
+          if (!r.url.startsWith('/') && !r.url.startsWith('http://') && !r.url.startsWith('https://'))
+            return 'Row ' + (i + 1) + ': URL must start with / or http(s)://.';
+          if (r.url.toLowerCase().startsWith('javascript:') || r.url.toLowerCase().startsWith('data:'))
+            return 'Row ' + (i + 1) + ': URL scheme not allowed.';
+        }
+        if (rows.length > 5) return 'Maximum 5 shortcuts allowed.';
+        return null;
+      }
+
+      saveBtn.addEventListener('click', function () {
+        var rows = collectRows();
+        var err = validateRows(rows);
+        if (err) { errEl.textContent = err; errEl.style.display = ''; return; }
+        stored = rows;
+        try { localStorage.setItem('compendium_shortcuts', JSON.stringify(rows)); } catch (_) {}
+        renderStrip(rows);
+        dialog.close();
+      });
+
+      cancelBtn.addEventListener('click', function () { dialog.close(); });
+
+      resetBtn.addEventListener('click', function () {
+        stored = null;
+        try { localStorage.removeItem('compendium_shortcuts'); } catch (_) {}
+        var defaults = parseJSON(strip.dataset.defaults) || [];
+        renderStrip(defaults);
+        dialog.close();
       });
     })();
   </script>

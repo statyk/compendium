@@ -32,6 +32,15 @@ def _jinja_library_name() -> str:
     return get_site_setting("library_name")
 
 
+def _jinja_custom_shortcuts() -> list[dict[str, str]]:
+    raw: list[str] = get_site_setting("custom_shortcuts") or []
+    return [
+        {"label": e.split("|", 1)[0].strip(), "url": e.split("|", 1)[1].strip()}
+        for e in raw
+        if "|" in e
+    ]
+
+
 def _jinja_csp_nonce(request) -> str:
     """Return the per-request CSP nonce for inline <script> tags.
 
@@ -48,4 +57,5 @@ templates.env.globals["today_iso"] = _jinja_today_iso
 templates.env.globals["now"] = _jinja_now
 templates.env.globals["library_name"] = _jinja_library_name
 templates.env.globals["csp_nonce"] = _jinja_csp_nonce
+templates.env.globals["custom_shortcuts"] = _jinja_custom_shortcuts
 templates.env.filters["currency"] = _format_currency
