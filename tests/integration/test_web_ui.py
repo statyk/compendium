@@ -861,6 +861,34 @@ def test_item_withdraw_via_web(web_client, librarian, work):
     assert "message=" in resp.headers["location"]
 
 
+def test_withdraw_confirm_page_renders(web_client, librarian, work):
+    _, item = work
+    auth_cookies = _login(web_client, "lib01")
+    resp = web_client.get(
+        f"/ui/items/{item.barcode}/withdraw-confirm",
+        cookies=auth_cookies,
+    )
+    assert resp.status_code == 200
+    assert b"Confirm withdraw" in resp.content
+
+
+def test_withdraw_confirm_page_redirects_if_already_withdrawn(web_client, librarian, work):
+    _, item = work
+    auth_cookies = _login(web_client, "lib01")
+    raw, signed = _make_csrf_pair()
+    web_client.post(
+        f"/ui/items/{item.barcode}/withdraw",
+        data={"csrf_token": raw},
+        cookies={**auth_cookies, CSRF_COOKIE: signed},
+    )
+    resp = web_client.get(
+        f"/ui/items/{item.barcode}/withdraw-confirm",
+        cookies=auth_cookies,
+    )
+    assert resp.status_code == 303
+    assert f"/ui/items/{item.barcode}" in resp.headers["location"]
+
+
 # ── Item add (new) ────────────────────────────────────────────────────────────
 
 

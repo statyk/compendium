@@ -520,7 +520,7 @@ def withdraw_confirm_form(
             {"request": request, "user": user, "message": f"Item '{barcode}' not found"},
             status_code=404,
         )
-    if item.status.value == "withdrawn":
+    if item.status == "withdrawn":
         return RedirectResponse(f"/ui/items/{barcode}", status_code=303)
     return _render(
         "items/withdraw_confirm.html",
