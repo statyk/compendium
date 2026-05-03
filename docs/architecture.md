@@ -177,7 +177,40 @@ Guest catalog search is controlled by the `guest_search_enabled` site setting (e
 
 **Convention for inline scripts in templates.** Every `<script>...</script>` block in `web/templates/` must include `nonce="{{ csp_nonce(request) }}"`. External `<script src="/ui/static/...">` tags don't need a nonce — they match `'self'`. The `csp_nonce()` Jinja global is registered in `web/jinja.py` and reads from `request.state`.
 
-A pytest test (`tests/integration/test_csp_nonce.py::test_every_inline_script_in_templates_has_nonce`) walks the templates directory and fails if any inline script is missing a nonce. Miss one in a future template and the test catches it before the page silently breaks in a browser.
+A pytest test (`tests/integration/test_csp_nonce.py::test_every_script_in_templates_has_nonce`) walks the templates directory and fails if any inline script is missing a nonce. Miss one in a future template and the test catches it before the page silently breaks in a browser.
+
+**Inline event-handler attributes are blocked too.** Without `'unsafe-inline'`
+in script-src, the browser silently discards `onclick=`, `onchange=`,
+`onsubmit=`, `onerror=`, `javascript:` URLs, and friends — the handler
+appears to wire up but never fires. This is the same root cause as an
+un-nonced `<script>` block; the failure mode is just quieter (no console
+error, the action just runs without confirmation or the toggle just doesn't
+toggle). Canonical fixes in this codebase:
+
+- **HTMX confirmation prompts** — use `hx-confirm="..."` on the form/button.
+  HTMX intercepts the click before the browser does; CSP doesn't see it as
+  inline JS. Examples: `patrons/detail.html` (Cancel hold, Unlink user),
+  `admin/patron_categories.html` (Delete category).
+- **HTMX event handlers** — `hx-on::after-request="..."` etc. are parsed by
+  HTMX, not the browser. Example: `kiosk/session.html` (re-focus barcode
+  input after each scan).
+- **Event delegation in a nonced `<script>` block** — for behaviors that
+  aren't tied to an HTMX request (checkbox toggles, expand/collapse), drop
+  the inline attribute and add an `addEventListener` inside the existing
+  `<script nonce="{{ csp_nonce(request) }}">` block. Examples:
+  `roles/new.html`, `roles/detail.html` (full-access permission toggle).
+- **Server-side confirm page** — for one-way destructive actions where a
+  full-page guard reads better than a JS dialog. The pattern: a `GET
+  /ui/.../X-confirm` route returns a confirm template with a plain HTML
+  `<form method="post">` posting to the existing action endpoint. Examples:
+  `items/withdraw_confirm.html`, `fines/verify_returned_confirm.html`.
+
+A second pytest test
+(`tests/integration/test_csp_inline_handlers.py::test_no_inline_event_handlers_in_templates`)
+walks the templates dir and fails if any inline event-handler attribute or
+`javascript:` URL appears, with file:line offenders in the assertion message.
+Symmetric with the script-nonce test above; together they cover both halves
+of the "must not rely on `'unsafe-inline'`" promise.
 
 **Style-src** still allows `'unsafe-inline'` because templates use `style="..."` attributes throughout. CSS-based attacks (data exfil via crafted selectors) are real but much lower impact than script execution; tightening that would be a separate, larger refactor.
 

@@ -69,10 +69,16 @@
       <a href="/ui/users/{{ linked_user.username }}">{{ linked_user.username }}</a>
       <small>({{ linked_user.role.name }})</small>
       {% if patron.is_active %}
-      <form method="post" action="/ui/patrons/{{ patron.library_card_number }}/unlink-user" style="display:inline">
+      <form
+        hx-post="/ui/patrons/{{ patron.library_card_number }}/unlink-user"
+        hx-include="[name='csrf_token']"
+        hx-confirm="Unlink this user account from the patron?"
+        hx-target="body"
+        hx-swap="outerHTML"
+        style="display:inline"
+      >
         <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
-        <button type="submit" class="outline contrast" style="padding:0.2rem 0.6rem; margin-left:1rem"
-          onclick="return confirm('Unlink this user account from the patron?')">Unlink</button>
+        <button type="submit" class="outline contrast" style="padding:0.2rem 0.6rem; margin-left:1rem; width:auto">Unlink</button>
       </form>
       {% endif %}
     {% elif patron.is_active and unlinked_users %}

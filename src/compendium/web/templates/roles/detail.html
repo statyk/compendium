@@ -53,8 +53,7 @@
     <legend>Permissions</legend>
     <label>
       <input type="checkbox" id="full-access" name="full_access" value="on"
-             {% if is_full_access %}checked{% endif %}
-             onchange="togglePerms(this)">
+             {% if is_full_access %}checked{% endif %}>
       <strong>Full access</strong> — grants all permissions (stores <code>["*"]</code>)
     </label>
     <hr>
@@ -105,5 +104,7 @@ function togglePerms(cb) {
     if (cb.checked) el.checked = false;
   });
 }
+const _fa = document.getElementById('full-access');
+if (_fa) _fa.addEventListener('change', (e) => togglePerms(e.target));
 </script>
 {% endblock %}

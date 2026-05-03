@@ -33,10 +33,16 @@
       <td>{{ policy_counts.get(c.id, 0) }}</td>
       <td>
         {% if not c.is_default and counts.get(c.id, 0) == 0 and policy_counts.get(c.id, 0) == 0 %}
-        <form method="post" action="/ui/admin/patron-categories/{{ c.id }}/delete" style="margin:0">
+        <form
+          hx-post="/ui/admin/patron-categories/{{ c.id }}/delete"
+          hx-include="[name='csrf_token']"
+          hx-confirm="Delete category {{ c.code }}?"
+          hx-target="body"
+          hx-swap="outerHTML"
+          style="margin:0"
+        >
           <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
-          <button type="submit" class="outline contrast" style="padding:0.2rem 0.6rem; margin:0"
-                  onclick="return confirm('Delete category {{ c.code }}?')">Delete</button>
+          <button type="submit" class="outline contrast" style="padding:0.2rem 0.6rem; margin:0; width:auto">Delete</button>
         </form>
         {% endif %}
       </td>

@@ -20,7 +20,7 @@
   <fieldset id="perm-fieldset">
     <legend>Permissions</legend>
     <label>
-      <input type="checkbox" id="full-access" name="full_access" value="on" onchange="togglePerms(this)">
+      <input type="checkbox" id="full-access" name="full_access" value="on">
       <strong>Full access</strong> — grants all permissions (stores <code>["*"]</code>)
     </label>
     <hr>
@@ -53,5 +53,7 @@ function togglePerms(cb) {
     if (cb.checked) el.checked = false;
   });
 }
+const _fa = document.getElementById('full-access');
+if (_fa) _fa.addEventListener('change', (e) => togglePerms(e.target));
 </script>
 {% endblock %}
