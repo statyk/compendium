@@ -1,0 +1,26 @@
+{% extends "base.html" %}
+{% block title %}Verify returned — {{ item.barcode }} — {{ library_name() }}{% endblock %}
+{% block content %}
+<nav aria-label="breadcrumb">
+  <ul>
+    <li><a href="/ui/items/{{ item.barcode }}">{{ item.barcode }}</a></li>
+    <li>Verify returned</li>
+  </ul>
+</nav>
+
+<hgroup>
+  <h2>Verify returned</h2>
+  <p>{{ item.work.title }} &middot; <code>{{ item.barcode }}</code></p>
+</hgroup>
+
+<p>
+  Confirm that this item was found on the shelf. The active loan will be closed and
+  the item returned to available status.
+</p>
+
+<form method="post" action="/ui/items/{{ item.barcode }}/verify-returned">
+  <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+  <button type="submit" class="outline">Confirm — item found</button>
+  <a href="/ui/items/{{ item.barcode }}" role="button" class="outline secondary">Cancel</a>
+</form>
+{% endblock %}

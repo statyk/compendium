@@ -93,13 +93,9 @@
 <p style="color:var(--pico-muted-color)">
   A patron asserted this item was returned. Choose how to resolve:
 </p>
-<form method="post" action="/ui/items/{{ item.barcode }}/verify-returned" style="display:inline; margin-right:0.5rem">
-  <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
-  <button type="submit" class="outline"
-          onclick="return confirm('Confirm the item was returned? This closes the loan.')">
-    Verify returned (found)
-  </button>
-</form>
+<a href="/ui/items/{{ item.barcode }}/verify-returned-confirm" role="button" class="outline" style="margin-right:0.5rem">
+  Verify returned (found)
+</a>
 <a href="/ui/items/{{ item.barcode }}/write-off-claim" role="button" class="outline contrast" style="margin-right:0.5rem">
   Write off
 </a>

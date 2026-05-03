@@ -437,6 +437,28 @@ def clear_lost(
 # ── Claims-returned resolutions ─────────────────────────────────────────────
 
 
+@router.get("/items/{barcode}/verify-returned-confirm")
+def verify_returned_confirm_form(
+    barcode: str,
+    request: Request,
+    user: AppUser = Depends(require_web_permission("loan.checkin")),
+    session: Session = Depends(get_session),
+):
+    item = SqlItemRepository(session).get_by_barcode(barcode)
+    if item is None:
+        return _render(
+            "error.html",
+            request,
+            {"request": request, "user": user, "message": f"Item '{barcode}' not found"},
+            status_code=404,
+        )
+    return _render(
+        "fines/verify_returned_confirm.html",
+        request,
+        {"request": request, "user": user, "item": item},
+    )
+
+
 @router.post("/items/{barcode}/verify-returned")
 def verify_returned(
     barcode: str,
