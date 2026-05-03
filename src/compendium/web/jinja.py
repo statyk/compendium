@@ -35,10 +35,11 @@ def _jinja_library_name() -> str:
 
 def _jinja_custom_shortcuts() -> list[dict[str, str]]:
     raw: list[str] = get_site_setting("custom_shortcuts") or []
+    by_url = {p["url"]: p["label"] for p in NAV_PAGES}
     return [
-        {"label": e.split("|", 1)[0].strip(), "url": e.split("|", 1)[1].strip()}
-        for e in raw
-        if "|" in e
+        {"label": by_url[u.strip()], "url": u.strip()}
+        for u in raw
+        if u.strip() in by_url
     ]
 
 

@@ -162,7 +162,7 @@
         <li><a href="/ui/catalog">Catalog</a></li>
         {% if user %}
           {% set _shortcuts = custom_shortcuts() %}
-          <li id="nav-shortcuts" data-defaults='{{ _shortcuts | tojson }}'>
+          <li id="nav-shortcuts" data-defaults='{{ _shortcuts | map(attribute="url") | list | tojson }}'>
             {% for s in _shortcuts %}<a href="{{ s.url }}" data-shortcut>{{ s.label }}</a> {% endfor %}<a href="#" id="nav-shortcuts-edit" aria-label="Customize shortcuts" title="Customize shortcuts">✎</a>
           </li>
           {% set _show_circ_admin = has_permission(user, 'patron.manage')
@@ -340,13 +340,17 @@
         try { var v = JSON.parse(s); return Array.isArray(v) ? v : null; } catch (_) { return null; }
       }
 
-      function renderStrip(shortcuts) {
+      var pages = (typeof _SC_PAGES !== 'undefined') ? _SC_PAGES : [];
+      var pageByUrl = {};
+      pages.forEach(function (p) { pageByUrl[p.url] = p; });
+
+      function renderStrip(urls) {
         Array.from(strip.querySelectorAll('[data-shortcut]')).forEach(function (a) { strip.removeChild(a); });
-        shortcuts.slice(0, 5).forEach(function (s) {
+        urls.slice(0, 5).forEach(function (u) {
+          var p = pageByUrl[u]; if (!p) return;
           var a = document.createElement('a');
-          a.href = s.url;
+          a.href = p.url; a.textContent = p.label;
           a.setAttribute('data-shortcut', '');
-          a.textContent = s.label;
           strip.insertBefore(a, editBtn);
         });
       }
@@ -362,33 +366,28 @@
       var resetBtn = document.getElementById('shortcuts-reset');
       var errEl = document.getElementById('shortcuts-error');
 
-      var pages = (typeof _SC_PAGES !== 'undefined') ? _SC_PAGES : [];
-
       function makePageOptions(selectedUrl) {
         var html = '<option value="">— select a page —</option>';
+        var currentSection = null;
         pages.forEach(function (p) {
+          if (p.section !== currentSection) {
+            if (currentSection !== null) html += '</optgroup>';
+            html += '<optgroup label="' + p.section + '">';
+            currentSection = p.section;
+          }
           html += '<option value="' + p.url + '"' + (p.url === selectedUrl ? ' selected' : '') + '>' + p.label + '</option>';
         });
+        if (currentSection !== null) html += '</optgroup>';
         return html;
       }
 
-      function makeRow(label, url) {
+      function makeRow(url) {
         var div = document.createElement('div');
         div.className = 'shortcut-row';
         div.style.cssText = 'display:flex; gap:0.5rem; align-items:center; margin-bottom:0.5rem';
         div.innerHTML =
-          '<select data-page-select style="flex:2; margin:0">' + makePageOptions(url) + '</select>' +
-          '<input type="text" data-label placeholder="Label (uses page name if blank)" style="flex:1; margin:0">' +
+          '<select data-page-select style="flex:1; margin:0">' + makePageOptions(url) + '</select>' +
           '<button type="button" class="outline contrast" style="width:auto; padding:0.2rem 0.5rem; flex-shrink:0" data-remove>✕</button>';
-        var sel = div.querySelector('[data-page-select]');
-        var lbl = div.querySelector('[data-label]');
-        lbl.value = label || '';
-        sel.addEventListener('change', function () {
-          if (!lbl.value && sel.value) {
-            var opt = sel.options[sel.selectedIndex];
-            lbl.value = opt ? opt.text : '';
-          }
-        });
         return div;
       }
 
@@ -400,47 +399,44 @@
 
       addBtn.addEventListener('click', function () {
         if (rowsDiv.querySelectorAll('.shortcut-row').length >= 5) return;
-        rowsDiv.appendChild(makeRow('', ''));
+        rowsDiv.appendChild(makeRow(''));
       });
 
       editBtn.addEventListener('click', function (e) {
         e.preventDefault();
         var effective = stored || parseJSON(strip.dataset.defaults) || [];
         rowsDiv.innerHTML = '';
-        effective.forEach(function (s) { rowsDiv.appendChild(makeRow(s.label, s.url)); });
+        effective.forEach(function (u) { rowsDiv.appendChild(makeRow(u)); });
         errEl.style.display = 'none';
         dialog.showModal();
       });
 
-      function collectRows() {
-        var rows = [];
+      function collectUrls() {
+        var urls = [];
         rowsDiv.querySelectorAll('.shortcut-row').forEach(function (div) {
           var sel = div.querySelector('[data-page-select]');
-          var lbl = div.querySelector('[data-label]');
-          var url = sel ? sel.value : '';
-          var label = (lbl ? lbl.value.trim() : '') ||
-                      (sel && sel.value ? sel.options[sel.selectedIndex].text : '');
-          if (url) rows.push({label: label, url: url});
+          if (sel && sel.value) urls.push(sel.value);
         });
-        return rows;
+        return urls;
       }
 
-      function validateRows(rows) {
+      function validateUrls(urls) {
+        var rows = rowsDiv.querySelectorAll('.shortcut-row');
         for (var i = 0; i < rows.length; i++) {
-          if (!rows[i].url) return 'Row ' + (i + 1) + ': please select a page.';
-          if (!rows[i].label) return 'Row ' + (i + 1) + ': label is required.';
+          var sel = rows[i].querySelector('[data-page-select]');
+          if (sel && !sel.value) return 'Row ' + (i + 1) + ': please select a page.';
         }
-        if (rows.length > 5) return 'Maximum 5 shortcuts allowed.';
+        if (urls.length > 5) return 'Maximum 5 shortcuts allowed.';
         return null;
       }
 
       saveBtn.addEventListener('click', function () {
-        var rows = collectRows();
-        var err = validateRows(rows);
+        var urls = collectUrls();
+        var err = validateUrls(urls);
         if (err) { errEl.textContent = err; errEl.style.display = ''; return; }
-        stored = rows;
-        try { localStorage.setItem('compendium_shortcuts', JSON.stringify(rows)); } catch (_) {}
-        renderStrip(rows);
+        stored = urls;
+        try { localStorage.setItem('compendium_shortcuts', JSON.stringify(urls)); } catch (_) {}
+        renderStrip(urls);
         dialog.close();
       });
 

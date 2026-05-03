@@ -222,14 +222,11 @@ def _shortcut_list(v: list) -> None:
     if len(v) > 5:
         raise ValueError("at most 5 shortcuts allowed")
     for entry in v:
-        if not isinstance(entry, str) or "|" not in entry:
-            raise ValueError(f"each entry must be 'Label|URL', got {entry!r}")
-        label, url = entry.split("|", 1)
-        if not label.strip() or not url.strip():
-            raise ValueError(f"label and URL must both be non-empty in {entry!r}")
-        if not url.strip().startswith("/"):
+        if not isinstance(entry, str) or not entry.strip():
+            raise ValueError(f"each entry must be a non-empty URL string, got {entry!r}")
+        if not entry.strip().startswith("/"):
             raise ValueError(
-                f"URL must be a relative internal path starting with / — got {url.strip()!r}"
+                f"URL must be a relative internal path starting with / — got {entry.strip()!r}"
             )
 
 
@@ -345,7 +342,7 @@ def _register_builtins() -> None:
             scope="librarian",
             help_text=(
                 "Up to 5 quick-access links shown in the nav bar for logged-in "
-                "users. Select internal app pages using the picker below. "
+                "users. Select internal pages using the picker below. "
                 "Each user can also override this list locally from the pencil "
                 "icon in the nav."
             ),

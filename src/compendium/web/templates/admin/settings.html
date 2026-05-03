@@ -97,47 +97,38 @@
               var hidden = document.getElementById('sc-admin-value-{{ row.key }}');
 
               function syncHidden() {
-                var rows = collectRows();
-                hidden.value = rows.map(function (r) { return r.label + '|' + r.url; }).join(', ');
+                var urls = [];
+                rowsDiv.querySelectorAll('.shortcut-row').forEach(function (div) {
+                  var s = div.querySelector('[data-page-select]');
+                  if (s && s.value) urls.push(s.value);
+                });
+                hidden.value = urls.join(', ');
               }
 
               function makeOptions(sel) {
                 var html = '<option value="">— select a page —</option>';
+                var currentSection = null;
                 pages.forEach(function (p) {
+                  if (p.section !== currentSection) {
+                    if (currentSection !== null) html += '</optgroup>';
+                    html += '<optgroup label="' + p.section + '">';
+                    currentSection = p.section;
+                  }
                   html += '<option value="' + p.url + '"' + (p.url === sel ? ' selected' : '') + '>' + p.label + '</option>';
                 });
+                if (currentSection !== null) html += '</optgroup>';
                 return html;
               }
 
-              function makeRow(label, url) {
+              function makeRow(url) {
                 var div = document.createElement('div');
                 div.className = 'shortcut-row';
                 div.style.cssText = 'display:flex; gap:0.5rem; align-items:center; margin-bottom:0.5rem';
                 div.innerHTML =
-                  '<select data-page-select style="flex:2; margin:0">' + makeOptions(url) + '</select>' +
-                  '<input type="text" data-label placeholder="Label (uses page name if blank)" style="flex:1; margin:0">' +
+                  '<select data-page-select style="flex:1; margin:0">' + makeOptions(url) + '</select>' +
                   '<button type="button" data-remove class="outline contrast" style="width:auto; padding:0.2rem 0.5rem; flex-shrink:0">✕</button>';
-                var s = div.querySelector('[data-page-select]');
-                var l = div.querySelector('[data-label]');
-                l.value = label || '';
-                s.addEventListener('change', function () {
-                  if (!l.value && s.value) l.value = s.options[s.selectedIndex].text;
-                  syncHidden();
-                });
-                l.addEventListener('input', syncHidden);
+                div.querySelector('[data-page-select]').addEventListener('change', syncHidden);
                 return div;
-              }
-
-              function collectRows() {
-                var rows = [];
-                rowsDiv.querySelectorAll('.shortcut-row').forEach(function (div) {
-                  var s = div.querySelector('[data-page-select]');
-                  var l = div.querySelector('[data-label]');
-                  var url = s ? s.value : '';
-                  var label = (l ? l.value.trim() : '') || (s && s.value ? s.options[s.selectedIndex].text : '');
-                  if (url) rows.push({label: label, url: url});
-                });
-                return rows;
               }
 
               rowsDiv.addEventListener('click', function (e) {
@@ -149,14 +140,11 @@
 
               addBtn.addEventListener('click', function () {
                 if (rowsDiv.querySelectorAll('.shortcut-row').length >= 5) return;
-                rowsDiv.appendChild(makeRow('', ''));
+                rowsDiv.appendChild(makeRow(''));
               });
 
-              var initial = hidden.value.split(',').filter(Boolean).map(function (s) {
-                var parts = s.trim().split('|');
-                return {label: (parts[0] || '').trim(), url: (parts[1] || '').trim()};
-              });
-              initial.forEach(function (r) { rowsDiv.appendChild(makeRow(r.label, r.url)); });
+              var initial = hidden.value.split(',').map(function (s) { return s.trim(); }).filter(Boolean);
+              initial.forEach(function (u) { rowsDiv.appendChild(makeRow(u)); });
               syncHidden();
             })();
             </script>
