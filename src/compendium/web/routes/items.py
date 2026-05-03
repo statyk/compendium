@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import re
+from urllib.parse import quote
 
 from fastapi import APIRouter, Depends, Form, Query, Request
 from fastapi.responses import HTMLResponse, RedirectResponse
@@ -504,7 +505,7 @@ def item_loanable_submit(
     )
 
 
-@router.post("/items/{barcode}/withdraw", response_class=HTMLResponse)
+@router.post("/items/{barcode}/withdraw")
 def withdraw_item(
     barcode: str,
     request: Request,
@@ -515,6 +516,17 @@ def withdraw_item(
     check_csrf_form(request, csrf_token)
     try:
         _catalog_svc(session, user).withdraw_item(barcode)
-        return HTMLResponse("<span class='error-banner'>Item withdrawn.</span>")
-    except (BusinessRuleError, NotFoundError) as exc:
-        return HTMLResponse(f"<span class='error-banner'>{escape(str(exc))}</span>")
+    except NotFoundError:
+        return _render(
+            "error.html",
+            request,
+            {"request": request, "user": user, "message": f"Item '{barcode}' not found"},
+            status_code=404,
+        )
+    except BusinessRuleError as exc:
+        return RedirectResponse(
+            f"/ui/items/{barcode}?error={quote(str(exc))}", status_code=303
+        )
+    return RedirectResponse(
+        f"/ui/items/{barcode}?message=Item+withdrawn.", status_code=303
+    )

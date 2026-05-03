@@ -856,8 +856,9 @@ def test_item_withdraw_via_web(web_client, librarian, work):
         data={"csrf_token": raw},
         cookies={**auth_cookies, CSRF_COOKIE: signed},
     )
-    assert resp.status_code == 200
-    assert b"withdrawn" in resp.content.lower()
+    assert resp.status_code == 303
+    assert f"/ui/items/{item.barcode}" in resp.headers["location"]
+    assert "message=" in resp.headers["location"]
 
 
 # ── Item add (new) ────────────────────────────────────────────────────────────

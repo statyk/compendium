@@ -19,24 +19,7 @@
 
 <dl>
   <dt>Status</dt>
-  <dd id="item-status">
-    {{ status_pill(item.status) }}
-    {% if user and ("*" in user.role.permissions or "item.delete" in user.role.permissions) %}
-      {% if item.status != "withdrawn" %}
-      <form
-        style="display:inline"
-        hx-post="/ui/items/{{ item.barcode }}/withdraw"
-        hx-target="#item-status"
-        hx-swap="innerHTML"
-        hx-include="[name='csrf_token']"
-        hx-confirm="Withdraw this item? This cannot be undone."
-      >
-        <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
-        <button type="submit" class="outline contrast" style="padding:0.2rem 0.6rem; margin-left:1rem">Withdraw</button>
-      </form>
-      {% endif %}
-    {% endif %}
-  </dd>
+  <dd id="item-status">{{ status_pill(item.status) }}</dd>
   <dt>Loanable</dt>
   <dd>
     {% if item.is_loanable %}
@@ -68,6 +51,15 @@
 </a>
 {% if has_permission(user, 'item.edit') %}
 <a href="/ui/items/{{ item.barcode }}/edit" role="button" class="outline">Edit</a>
+{% endif %}
+{% if user and ("*" in user.role.permissions or "item.delete" in user.role.permissions) and item.status != "withdrawn" %}
+<form method="post" action="/ui/items/{{ item.barcode }}/withdraw" style="display:inline">
+  <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+  <button type="submit" class="outline contrast"
+          onclick="return confirm('Withdraw this item? It will be removed from circulation but loan history is preserved. Cannot be undone. (Refused if currently checked out or on hold.)')">
+    Withdraw
+  </button>
+</form>
 {% endif %}
 
 {% if has_permission(user, 'fine.manage') %}
