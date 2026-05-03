@@ -25,7 +25,7 @@
             <input type="checkbox" name="is_default" value="on"{% if c.is_default %} checked{% endif %}>
             Default
           </label>
-          <button type="submit" style="padding:0.2rem 0.6rem; margin:0">Save</button>
+          <button type="submit" style="padding:0.2rem 0.6rem; margin:0; width:auto">Save</button>
         </form>
       </td>
       <td>{% if c.is_default %}✓{% endif %}</td>
@@ -68,6 +68,6 @@
     <input type="checkbox" name="is_default" value="on">
     Default
   </label>
-  <button type="submit" style="margin-bottom:0.5rem">Add</button>
+  <button type="submit" style="margin-bottom:0.5rem;width:auto">Add</button>
 </form>
 {% endblock %}

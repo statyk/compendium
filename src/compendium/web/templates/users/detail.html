@@ -28,7 +28,7 @@
         <option value="{{ r.name }}"{% if r.id == target.role_id %} selected{% endif %}>{{ r.name }}</option>
         {% endfor %}
       </select>
-      <button type="submit" style="padding:0.2rem 0.6rem; margin:0">Change</button>
+      <button type="submit" style="padding:0.2rem 0.6rem; margin:0; width:auto">Change</button>
     </form>
     {% else %}
       {{ target.role.name }}
@@ -47,7 +47,7 @@
         hx-confirm="Deactivate this user? They will not be able to log in."
       >
         <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
-        <button type="submit" class="outline contrast" style="padding:0.2rem 0.6rem; margin-left:1rem">Deactivate</button>
+        <button type="submit" class="outline contrast" style="padding:0.2rem 0.6rem; margin-left:1rem; width:auto">Deactivate</button>
       </form>
     {% else %}
       <em>Inactive</em>

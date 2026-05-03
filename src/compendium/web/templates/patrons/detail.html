@@ -53,7 +53,7 @@
       </select>
       <input type="date" name="expires_at" style="margin:0; width:auto"
              value="{{ patron.expires_at.isoformat() if patron.expires_at else '' }}">
-      <button type="submit" style="padding:0.2rem 0.6rem; margin:0">Save</button>
+      <button type="submit" style="padding:0.2rem 0.6rem; margin:0; width:auto">Save</button>
       {% if patron.expires_at %}
         {% if patron.expires_at.isoformat() < today_iso() %}
         <small class="error-banner">Expired {{ patron.expires_at.isoformat() }}</small>
@@ -89,7 +89,7 @@
           <option value="{{ u.id }}">{{ u.username }}{% if u.email %} ({{ u.email }}){% endif %} — {{ u.role.name }}</option>
           {% endfor %}
         </select>
-        <button type="submit" style="padding:0.2rem 0.6rem; margin:0">Link</button>
+        <button type="submit" style="padding:0.2rem 0.6rem; margin:0; width:auto">Link</button>
       </form>
     {% elif patron.is_active %}
       <em>None</em> — <a href="/ui/users/new">create a user first</a>
