@@ -80,7 +80,88 @@
           {% endif %}
         </td>
         <td>
-          {% if row.is_bool %}
+          {% if row.desc.widget == 'shortcut_picker' %}
+            <input type="hidden" name="{{ row.key }}" id="sc-admin-value-{{ row.key }}"
+                   value="{{ row.value_str }}"
+                   {% if row.env_overridden %}disabled{% endif %}>
+            <div id="sc-admin-rows-{{ row.key }}"></div>
+            <button type="button" id="sc-admin-add-{{ row.key }}"
+                    class="outline" style="width:auto; margin-top:0.25rem"
+                    {% if row.env_overridden %}disabled{% endif %}>+ Add row</button>
+            {% if not row.env_overridden %}
+            <script nonce="{{ csp_nonce(request) }}">
+            (function () {
+              var pages = {{ shortcut_pages() | tojson }};
+              var rowsDiv = document.getElementById('sc-admin-rows-{{ row.key }}');
+              var addBtn = document.getElementById('sc-admin-add-{{ row.key }}');
+              var hidden = document.getElementById('sc-admin-value-{{ row.key }}');
+
+              function syncHidden() {
+                var rows = collectRows();
+                hidden.value = rows.map(function (r) { return r.label + '|' + r.url; }).join(', ');
+              }
+
+              function makeOptions(sel) {
+                var html = '<option value="">— select a page —</option>';
+                pages.forEach(function (p) {
+                  html += '<option value="' + p.url + '"' + (p.url === sel ? ' selected' : '') + '>' + p.label + '</option>';
+                });
+                return html;
+              }
+
+              function makeRow(label, url) {
+                var div = document.createElement('div');
+                div.className = 'shortcut-row';
+                div.style.cssText = 'display:flex; gap:0.5rem; align-items:center; margin-bottom:0.5rem';
+                div.innerHTML =
+                  '<select data-page-select style="flex:2; margin:0">' + makeOptions(url) + '</select>' +
+                  '<input type="text" data-label placeholder="Label (uses page name if blank)" style="flex:1; margin:0">' +
+                  '<button type="button" data-remove class="outline contrast" style="width:auto; padding:0.2rem 0.5rem; flex-shrink:0">✕</button>';
+                var s = div.querySelector('[data-page-select]');
+                var l = div.querySelector('[data-label]');
+                l.value = label || '';
+                s.addEventListener('change', function () {
+                  if (!l.value && s.value) l.value = s.options[s.selectedIndex].text;
+                  syncHidden();
+                });
+                l.addEventListener('input', syncHidden);
+                return div;
+              }
+
+              function collectRows() {
+                var rows = [];
+                rowsDiv.querySelectorAll('.shortcut-row').forEach(function (div) {
+                  var s = div.querySelector('[data-page-select]');
+                  var l = div.querySelector('[data-label]');
+                  var url = s ? s.value : '';
+                  var label = (l ? l.value.trim() : '') || (s && s.value ? s.options[s.selectedIndex].text : '');
+                  if (url) rows.push({label: label, url: url});
+                });
+                return rows;
+              }
+
+              rowsDiv.addEventListener('click', function (e) {
+                if (e.target.closest('[data-remove]')) {
+                  e.target.closest('.shortcut-row').remove();
+                  syncHidden();
+                }
+              });
+
+              addBtn.addEventListener('click', function () {
+                if (rowsDiv.querySelectorAll('.shortcut-row').length >= 5) return;
+                rowsDiv.appendChild(makeRow('', ''));
+              });
+
+              var initial = hidden.value.split(',').filter(Boolean).map(function (s) {
+                var parts = s.trim().split('|');
+                return {label: (parts[0] || '').trim(), url: (parts[1] || '').trim()};
+              });
+              initial.forEach(function (r) { rowsDiv.appendChild(makeRow(r.label, r.url)); });
+              syncHidden();
+            })();
+            </script>
+            {% endif %}
+          {% elif row.is_bool %}
             <label>
               <input type="checkbox" name="{{ row.key }}" value="true"
                      {% if row.value %}checked{% endif %}

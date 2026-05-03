@@ -236,11 +236,13 @@ class TestShortcutValidator:
     def test_valid_relative_url(self):
         self._run(["Holds|/ui/admin/holds"])
 
-    def test_valid_https_url(self):
-        self._run(["Tickets|https://helpdesk.example.com"])
+    def test_https_url_rejected(self):
+        with pytest.raises(Exception):
+            self._run(["Tickets|https://helpdesk.example.com"])
 
-    def test_valid_http_url(self):
-        self._run(["Internal|http://intranet/library"])
+    def test_http_url_rejected(self):
+        with pytest.raises(Exception):
+            self._run(["Internal|http://intranet/library"])
 
     def test_up_to_five_entries(self):
         self._run([f"Label{i}|/ui/path{i}" for i in range(5)])
@@ -316,3 +318,66 @@ class TestCustomShortcutsJinjaGlobal:
         result = _jinja_custom_shortcuts()
         assert len(result) == 1
         assert result[0]["label"] == "Good"
+
+
+class TestNavPages:
+    def test_all_pages_have_required_keys(self):
+        from compendium.web.nav_pages import NAV_PAGES
+
+        for p in NAV_PAGES:
+            assert "key" in p and "label" in p and "url" in p and "permission" in p, p
+
+    def test_all_urls_are_relative(self):
+        from compendium.web.nav_pages import NAV_PAGES
+
+        for p in NAV_PAGES:
+            assert p["url"].startswith("/"), f"{p['key']}: {p['url']}"
+
+    def test_all_keys_are_unique(self):
+        from compendium.web.nav_pages import NAV_PAGES
+
+        keys = [p["key"] for p in NAV_PAGES]
+        assert len(keys) == len(set(keys))
+
+    def test_all_urls_are_unique(self):
+        from compendium.web.nav_pages import NAV_PAGES
+
+        urls = [p["url"] for p in NAV_PAGES]
+        assert len(urls) == len(set(urls))
+
+
+class TestShortcutPageGlobals:
+    def test_shortcut_pages_returns_all(self):
+        from compendium.web.jinja import _jinja_shortcut_pages
+        from compendium.web.nav_pages import NAV_PAGES
+
+        result = _jinja_shortcut_pages()
+        assert result is NAV_PAGES
+
+    def test_shortcut_pages_for_user_filters_by_permission(self):
+        from unittest.mock import MagicMock
+        from compendium.web.jinja import _jinja_shortcut_pages_for_user
+
+        user = MagicMock()
+        user.role.permissions = ["loan.checkout"]
+        result = _jinja_shortcut_pages_for_user(user)
+        urls = [p["url"] for p in result]
+        assert "/ui/circ" in urls
+        assert "/ui/kiosk" in urls
+        assert "/ui/admin/loans" not in urls
+
+    def test_shortcut_pages_for_user_includes_no_permission_pages(self):
+        from unittest.mock import MagicMock
+        from compendium.web.jinja import _jinja_shortcut_pages_for_user
+
+        user = MagicMock()
+        user.role.permissions = []
+        result = _jinja_shortcut_pages_for_user(user)
+        urls = [p["url"] for p in result]
+        assert "/ui/catalog" in urls
+        assert "/ui/me/loans" in urls
+
+    def test_shortcut_pages_for_none_user_returns_empty(self):
+        from compendium.web.jinja import _jinja_shortcut_pages_for_user
+
+        assert _jinja_shortcut_pages_for_user(None) == []

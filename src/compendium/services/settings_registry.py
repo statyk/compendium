@@ -41,6 +41,7 @@ class SettingDescriptor:
     validator: Callable[[Any], None] | None = None
     env_var: str | None = None
     nullable: bool = False  # If True, an empty string parses to None.
+    widget: str | None = None  # Hint for custom UI rendering (e.g. "shortcut_picker").
 
     def resolved_env_var(self) -> str:
         return self.env_var or f"COMPENDIUM_{self.key.upper()}"
@@ -226,10 +227,9 @@ def _shortcut_list(v: list) -> None:
         label, url = entry.split("|", 1)
         if not label.strip() or not url.strip():
             raise ValueError(f"label and URL must both be non-empty in {entry!r}")
-        u = url.strip()
-        if not (u.startswith("/") or u.startswith("https://") or u.startswith("http://")):
+        if not url.strip().startswith("/"):
             raise ValueError(
-                f"URL must be relative (/path) or http(s):// — got {u!r}"
+                f"URL must be a relative internal path starting with / — got {url.strip()!r}"
             )
 
 
@@ -345,11 +345,12 @@ def _register_builtins() -> None:
             scope="librarian",
             help_text=(
                 "Up to 5 quick-access links shown in the nav bar for logged-in "
-                "users. Format each entry as 'Label|/url' (relative path or "
-                "https:// URL). Comma-separated. Each user can also override "
-                "this list locally from the pencil icon in the nav."
+                "users. Select internal app pages using the picker below. "
+                "Each user can also override this list locally from the pencil "
+                "icon in the nav."
             ),
             validator=_shortcut_list,
+            widget="shortcut_picker",
         )
     )
     register(

@@ -6,6 +6,7 @@ from fastapi.templating import Jinja2Templates
 from compendium.services.auth import has_permission as _has_permission
 from compendium.services.formatting import format_currency as _format_currency
 from compendium.services.site_settings import get_site_setting
+from compendium.web.nav_pages import NAV_PAGES
 
 templates = Jinja2Templates(directory=str(Path(__file__).parent / "templates"))
 
@@ -41,6 +42,22 @@ def _jinja_custom_shortcuts() -> list[dict[str, str]]:
     ]
 
 
+def _jinja_shortcut_pages() -> list[dict]:
+    """Full page list — for the admin settings picker."""
+    return NAV_PAGES
+
+
+def _jinja_shortcut_pages_for_user(user) -> list[dict]:
+    """Permission-filtered page list — for the per-user nav modal."""
+    if user is None:
+        return []
+    perms = user.role.permissions
+    return [
+        p for p in NAV_PAGES
+        if p["permission"] is None or _has_permission(perms, p["permission"])
+    ]
+
+
 def _jinja_csp_nonce(request) -> str:
     """Return the per-request CSP nonce for inline <script> tags.
 
@@ -58,4 +75,6 @@ templates.env.globals["now"] = _jinja_now
 templates.env.globals["library_name"] = _jinja_library_name
 templates.env.globals["csp_nonce"] = _jinja_csp_nonce
 templates.env.globals["custom_shortcuts"] = _jinja_custom_shortcuts
+templates.env.globals["shortcut_pages"] = _jinja_shortcut_pages
+templates.env.globals["shortcut_pages_for_user"] = _jinja_shortcut_pages_for_user
 templates.env.filters["currency"] = _format_currency

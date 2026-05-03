@@ -292,8 +292,9 @@
     <small>Compendium &mdash; library management system</small>
   </footer>
   {% if user %}
+  <script nonce="{{ csp_nonce(request) }}">var _SC_PAGES = {{ shortcut_pages_for_user(user) | tojson }};</script>
   <dialog id="shortcuts-dialog">
-    <article style="max-width:32rem">
+    <article style="max-width:36rem">
       <h3>Customize nav shortcuts</h3>
       <p style="font-size:0.9em">Up to 5 quick-access links shown in the nav. Your changes are stored in this browser only.</p>
       <div id="shortcuts-rows"></div>
@@ -361,16 +362,33 @@
       var resetBtn = document.getElementById('shortcuts-reset');
       var errEl = document.getElementById('shortcuts-error');
 
+      var pages = (typeof _SC_PAGES !== 'undefined') ? _SC_PAGES : [];
+
+      function makePageOptions(selectedUrl) {
+        var html = '<option value="">— select a page —</option>';
+        pages.forEach(function (p) {
+          html += '<option value="' + p.url + '"' + (p.url === selectedUrl ? ' selected' : '') + '>' + p.label + '</option>';
+        });
+        return html;
+      }
+
       function makeRow(label, url) {
         var div = document.createElement('div');
         div.className = 'shortcut-row';
         div.style.cssText = 'display:flex; gap:0.5rem; align-items:center; margin-bottom:0.5rem';
         div.innerHTML =
-          '<input type="text" placeholder="Label" data-label style="flex:1; margin:0">' +
-          '<input type="text" placeholder="/path or https://..." data-url style="flex:2; margin:0">' +
+          '<select data-page-select style="flex:2; margin:0">' + makePageOptions(url) + '</select>' +
+          '<input type="text" data-label placeholder="Label (uses page name if blank)" style="flex:1; margin:0">' +
           '<button type="button" class="outline contrast" style="width:auto; padding:0.2rem 0.5rem; flex-shrink:0" data-remove>✕</button>';
-        div.querySelector('[data-label]').value = label || '';
-        div.querySelector('[data-url]').value = url || '';
+        var sel = div.querySelector('[data-page-select]');
+        var lbl = div.querySelector('[data-label]');
+        lbl.value = label || '';
+        sel.addEventListener('change', function () {
+          if (!lbl.value && sel.value) {
+            var opt = sel.options[sel.selectedIndex];
+            lbl.value = opt ? opt.text : '';
+          }
+        });
         return div;
       }
 
@@ -397,22 +415,20 @@
       function collectRows() {
         var rows = [];
         rowsDiv.querySelectorAll('.shortcut-row').forEach(function (div) {
-          var label = (div.querySelector('[data-label]').value || '').trim();
-          var url = (div.querySelector('[data-url]').value || '').trim();
-          if (label || url) rows.push({label: label, url: url});
+          var sel = div.querySelector('[data-page-select]');
+          var lbl = div.querySelector('[data-label]');
+          var url = sel ? sel.value : '';
+          var label = (lbl ? lbl.value.trim() : '') ||
+                      (sel && sel.value ? sel.options[sel.selectedIndex].text : '');
+          if (url) rows.push({label: label, url: url});
         });
         return rows;
       }
 
       function validateRows(rows) {
         for (var i = 0; i < rows.length; i++) {
-          var r = rows[i];
-          if (!r.label) return 'Row ' + (i + 1) + ': label is required.';
-          if (!r.url) return 'Row ' + (i + 1) + ': URL is required.';
-          if (!r.url.startsWith('/') && !r.url.startsWith('http://') && !r.url.startsWith('https://'))
-            return 'Row ' + (i + 1) + ': URL must start with / or http(s)://.';
-          if (r.url.toLowerCase().startsWith('javascript:') || r.url.toLowerCase().startsWith('data:'))
-            return 'Row ' + (i + 1) + ': URL scheme not allowed.';
+          if (!rows[i].url) return 'Row ' + (i + 1) + ': please select a page.';
+          if (!rows[i].label) return 'Row ' + (i + 1) + ': label is required.';
         }
         if (rows.length > 5) return 'Maximum 5 shortcuts allowed.';
         return null;
