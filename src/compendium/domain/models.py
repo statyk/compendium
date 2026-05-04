@@ -3,7 +3,7 @@ from __future__ import annotations
 from datetime import date, datetime
 from typing import Any
 
-from sqlalchemy import Boolean, Date, ForeignKey, Index, Integer, String, Text, func, text
+from sqlalchemy import BigInteger, Boolean, Date, ForeignKey, Index, Integer, String, Text, func, text
 from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column, relationship
 from sqlalchemy.types import JSON
 
@@ -34,6 +34,7 @@ class Branch(Base):
     default_classification_scheme: Mapped[str] = mapped_column(
         String(8), default="none", server_default="none"
     )
+    location_code: Mapped[str | None] = mapped_column(String(4), unique=True, nullable=True)
     created_at: Mapped[datetime] = mapped_column(UtcDateTime, server_default=func.now())
 
 
@@ -385,6 +386,13 @@ class SiteSetting(Base):
     )
 
     updated_by: Mapped[AppUser | None] = relationship()
+
+
+class Counter(Base):
+    __tablename__ = "counters"
+
+    key: Mapped[str] = mapped_column(String(64), primary_key=True)
+    value: Mapped[int] = mapped_column(BigInteger, nullable=False)
 
 
 class FailedLogin(Base):

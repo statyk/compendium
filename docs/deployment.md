@@ -307,6 +307,36 @@ compendium db init   # applies any new Alembic migrations
 compendium serve
 ```
 
+### Upgrading to the identifier-revamp release (migration `c3d4e5f6a7b8`)
+
+This migration regenerates every item barcode, accession number, and patron
+library card number in the new 10/14-digit format. Physical labels printed
+before the migration will no longer scan; plan a relabeling window.
+
+**Before running `compendium db init`**, drain any queued notification
+messages. Queued messages may contain legacy barcodes in their rendered
+bodies; draining first ensures patrons receive legible messages:
+
+```bash
+compendium maintenance send-queued-notifications
+compendium db init
+```
+
+If you intentionally skip the drain step (e.g., no patrons are configured or
+SMTP is not yet set up), the outbox rows will remain and will eventually be
+sent with the old barcode values in the body text — harmless, but potentially
+confusing. Delete them with `compendium maintenance prune-notifications
+--older-than-days 0` if needed.
+
+The migration's `downgrade()` is not implemented — regenerated codes cannot
+be reversed. Take a backup before upgrading:
+
+```bash
+compendium backup --output compendium-pre-revamp.tar.gz
+compendium maintenance send-queued-notifications
+compendium db init
+```
+
 ---
 
 ## Backup and restore

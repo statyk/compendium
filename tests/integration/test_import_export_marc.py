@@ -7,6 +7,7 @@ import io
 import pytest
 from pymarc import Field, MARCWriter, Record, Subfield
 
+from compendium.domain.identifiers import ITEM_TYPE, validate_barcode
 from compendium.repositories.sql.audit_log_repository import SqlAuditLogRepository
 from compendium.repositories.sql.branch_repository import SqlBranchRepository
 from compendium.repositories.sql.creator_repository import SqlCreatorRepository
@@ -187,13 +188,14 @@ def test_marc_import_missing_title_is_row_error(session):
     assert "245" in report.errors[0].message
 
 
-def test_marc_import_barcode_prefix_applies(session):
+def test_marc_import_barcode_prefix_deprecated(session):
+    # barcode_prefix is deprecated and ignored; barcodes are auto-minted.
     importer, _, _ = _services(session)
     stream = _bytes_from([_mk_book_record()])
     importer.import_marc(stream, ImportOptions(barcode_prefix="IMP-"))
     w = SqlWorkRepository(session).get_by_isbn("9780441013593")
-    assert w.items[0].barcode.startswith("IMP-")
-    assert not w.items[0].accession_number.startswith("IMP-")
+    assert validate_barcode(w.items[0].barcode, expected_type=ITEM_TYPE) is not None
+    assert len(w.items[0].accession_number) == 8
 
 
 def test_marc_round_trip_preserves_core_fields(session):

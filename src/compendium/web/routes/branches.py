@@ -66,6 +66,7 @@ def branch_edit(
     branch_id: int,
     request: Request,
     default_classification_scheme: str = Form(default="none"),
+    location_code: str = Form(default=""),
     csrf_token: str = Form(default=""),
     user: AppUser = Depends(require_web_permission(_PERM)),
     session: Session = Depends(get_session),
@@ -83,6 +84,15 @@ def branch_edit(
             {"request": request, "user": user, "branch": branch, "error": f"Invalid scheme '{scheme}'."},
             422,
         )
+    loc = location_code.strip() or None
+    if loc is not None and (len(loc) != 4 or not loc.isdigit()):
+        return _render(
+            "branches/edit.html",
+            request,
+            {"request": request, "user": user, "branch": branch, "error": "Location code must be exactly 4 decimal digits (e.g. 0001)."},
+            422,
+        )
     branch.default_classification_scheme = scheme
+    branch.location_code = loc
     repo.update(branch)
     return RedirectResponse("/ui/branches?message=Branch+updated.", status_code=303)

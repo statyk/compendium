@@ -62,6 +62,14 @@
     keep off for fast bulk imports.
   </label>
 
+  <label>
+    <input type="checkbox" name="preserve_barcodes" value="1">
+    Preserve barcodes — use the barcode and accession number from each CSV
+    row instead of minting new codes. Supplied barcodes must be valid
+    Compendium 10 or 14-digit format; rows with invalid barcodes are
+    rejected. Use when re-importing a catalog export to the same system.
+  </label>
+
   <button type="submit">Upload</button>
 </form>
 

@@ -18,6 +18,21 @@
     <input type="text" value="{{ branch.name }}" disabled>
   </label>
 
+  <label for="location_code">Barcode Location Code (4 digits, optional)</label>
+  <input
+    id="location_code"
+    type="text"
+    name="location_code"
+    value="{{ branch.location_code or '' }}"
+    maxlength="4"
+    pattern="\d{4}"
+    placeholder="e.g. 0001"
+  >
+  <small>
+    Embedded in 14-digit barcodes when "Embed Branch Location in Barcode" is enabled.
+    Must be unique across all branches. Leave empty to use the deployment default.
+  </small>
+
   <label for="scheme">Classification scheme for auto-population</label>
   <select id="scheme" name="default_classification_scheme">
     <option value="none" {% if branch.default_classification_scheme == "none" %}selected{% endif %}>

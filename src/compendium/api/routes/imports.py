@@ -27,6 +27,7 @@ from compendium.repositories.sql.item_repository import SqlItemRepository
 from compendium.repositories.sql.media_type_repository import SqlMediaTypeRepository
 from compendium.repositories.sql.work_repository import SqlWorkRepository
 from compendium.services.audit import AuditService
+from compendium.repositories.sql.counters import SqlCounterRepository
 from compendium.services.catalog import CatalogService
 from compendium.services.import_export import (
     ExportFilters,
@@ -49,6 +50,7 @@ def _make_importer(session: Session, actor: AppUser | None) -> ImportService:
         branch_repo=SqlBranchRepository(session),
         media_type_repo=SqlMediaTypeRepository(session),
         audit_svc=None,
+        counter_repo=SqlCounterRepository(session),
     )
     return ImportService(
         session=session,
@@ -98,6 +100,7 @@ def _options(
     default_media_type: str | None,
     barcode_prefix: str | None,
     enrich: bool = False,
+    preserve_barcodes: bool = False,
 ) -> ImportOptions:
     return ImportOptions(
         mode=_mode(mode),
@@ -106,6 +109,7 @@ def _options(
         default_media_type=default_media_type,
         barcode_prefix=barcode_prefix,
         enrich_from_external=enrich,
+        preserve_barcodes=preserve_barcodes,
     )
 
 
@@ -118,6 +122,14 @@ async def import_csv(
     default_media_type: str | None = Query(None),
     barcode_prefix: str | None = Query(None),
     enrich: bool = Query(False, description="Fill missing fields from the external metadata source per row."),
+    preserve_barcodes: bool = Query(
+        False,
+        description=(
+            "Preserve barcode/accession_number from CSV rows rather than minting fresh codes. "
+            "Supplied barcodes must be valid 10/14-digit Compendium format; "
+            "non-conformant rows are rejected. Use for round-tripping a CSV export."
+        ),
+    ),
     content_length: int | None = Header(default=None, alias="content-length"),
     settings: Settings = Depends(get_settings),
     session: Session = Depends(get_session),
@@ -134,7 +146,7 @@ async def import_csv(
         raise HTTPException(
             status_code=422, detail=f"CSV must be UTF-8 encoded: {exc}"
         ) from exc
-    options = _options(dry_run, mode, default_branch, default_media_type, barcode_prefix, enrich)
+    options = _options(dry_run, mode, default_branch, default_media_type, barcode_prefix, enrich, preserve_barcodes)
     importer = _make_importer(session, user)
     try:
         report = importer.import_csv(text_stream, options, filename=file.filename)

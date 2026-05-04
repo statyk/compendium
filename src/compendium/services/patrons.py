@@ -1,10 +1,11 @@
 from __future__ import annotations
 
-import random
+import secrets
 from datetime import date
 
 from compendium.domain.enums import HoldStatus
 from compendium.domain.errors import BusinessRuleError, NotFoundError
+from compendium.domain.identifiers import format_patron_card
 from compendium.domain.models import AppUser, Patron
 from compendium.repositories.base import HoldRepository, LoanRepository, PatronRepository
 from compendium.services.audit import AuditAction, AuditEntityType, AuditService
@@ -44,10 +45,21 @@ class PatronService:
             existing = self._patrons.get_by_user_id(user_id)
             if existing is not None:
                 raise BusinessRuleError("This user account is already linked to another patron.")
-        for _ in range(10):
-            card = f"{random.randint(0, 99_999_999):08d}"
+        from compendium.services.site_settings import get_site_setting
+
+        if get_site_setting("barcode_location_enabled"):
+            location_code: str | None = get_site_setting("barcode_default_location_code")
+        else:
+            location_code = None
+        for _ in range(100):
+            slug = f"{secrets.randbelow(10 ** 8):08d}"
+            card = format_patron_card(slug, location_code=location_code)
             if self._patrons.get_by_card_number(card) is None:
                 break
+        else:
+            raise BusinessRuleError(
+                "Could not allocate a unique library card number after 100 attempts."
+            )
         patron = Patron(
             library_card_number=card,
             full_name=full_name,

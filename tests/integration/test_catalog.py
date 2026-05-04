@@ -3,6 +3,7 @@ from unittest.mock import patch
 import pytest
 
 from compendium.domain.errors import ExternalLookupError, NotFoundError, ValidationError
+from compendium.domain.identifiers import ITEM_TYPE, validate_barcode
 from compendium.repositories.sql.audit_log_repository import SqlAuditLogRepository
 from compendium.repositories.sql.branch_repository import SqlBranchRepository
 from compendium.repositories.sql.creator_repository import SqlCreatorRepository
@@ -45,8 +46,8 @@ def test_add_from_isbn_creates_work_and_item(_, session):
     assert len(work.creators) == 1
     assert work.creators[0].creator.display_name == "Frank Herbert"
 
-    assert item.barcode == "000001"
-    assert item.accession_number == "000001"
+    assert validate_barcode(item.barcode, expected_type=ITEM_TYPE) is not None
+    assert len(item.accession_number) == 8
     assert item.status == "available"
     assert item.work_id == work.id
 
@@ -58,7 +59,8 @@ def test_add_same_isbn_twice_reuses_work(_, session):
 
     assert work1.id == work2.id
     assert item1.id != item2.id
-    assert item2.barcode == "000002"
+    assert validate_barcode(item2.barcode, expected_type=ITEM_TYPE) is not None
+    assert item2.barcode != item1.barcode
 
 
 @patch("compendium.services.metadata.lookup_isbn", return_value={})

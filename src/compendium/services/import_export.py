@@ -33,6 +33,7 @@ from sqlalchemy.orm import Session
 
 from compendium.domain.enums import LoanRestrictionReason
 from compendium.domain.errors import BusinessRuleError, ValidationError
+from compendium.domain.identifiers import ITEM_TYPE, validate_barcode
 from compendium.domain.models import AppUser, Work
 from compendium.repositories.base import ItemRepository, WorkRepository
 from compendium.services.audit import AuditAction, AuditEntityType, AuditService
@@ -51,12 +52,19 @@ class ImportOptions:
     dry_run: bool = False
     default_branch_code: str | None = None
     default_media_type: str | None = None
+    # Deprecated: barcode_prefix is ignored; barcodes are now auto-minted in
+    # the standard 10/14-digit format. Kept to avoid breaking callers.
     barcode_prefix: str | None = None
     # When True, rows with an ISBN/UPC and at least one missing metadata
     # field will be enriched from the appropriate external source
     # (Open Library / MusicBrainz / TMDb) at import time. Disabled by
     # default — bulk imports of clean data shouldn't pay one HTTP per row.
     enrich_from_external: bool = False
+    # When False (default): any barcode/accession_number supplied in the CSV
+    # row is discarded and a fresh conformant code is minted. When True: the
+    # supplied barcode must be a valid 10/14-digit Compendium barcode; rows
+    # with non-conformant barcodes are rejected. Enables CSV round-tripping.
+    preserve_barcodes: bool = False
 
 
 @dataclass
@@ -683,26 +691,37 @@ class ImportService:
             reason = None
             note = None
 
-        # Pre-validate barcode/accession uniqueness so we never raise IntegrityError
-        # on flush (which would require a session rollback that loses prior rows).
+        # Barcode/accession handling depends on preserve_barcodes mode.
         barcode = _strip(row.get("barcode"))
         accession = _strip(row.get("accession_number"))
-        if barcode:
-            if barcode in seen_barcodes:
+        if options.preserve_barcodes:
+            # Validate format; reject non-conformant rows rather than polluting the catalog.
+            if barcode and validate_barcode(barcode, expected_type=ITEM_TYPE) is None:
                 raise ValidationError(
-                    f"barcode '{barcode}' appears more than once in this import"
+                    f"barcode '{barcode}' is not a valid Compendium item barcode "
+                    f"(expected 10 or 14 digits with Luhn check, type prefix 3)"
                 )
-            if self._items.get_by_barcode(barcode) is not None:
-                raise ValidationError(
-                    f"barcode '{barcode}' already exists in the catalog"
-                )
-            seen_barcodes.add(barcode)
-        if accession:
-            if accession in seen_accessions:
-                raise ValidationError(
-                    f"accession_number '{accession}' appears more than once in this import"
-                )
-            seen_accessions.add(accession)
+            # Pre-validate uniqueness to avoid IntegrityError on flush.
+            if barcode:
+                if barcode in seen_barcodes:
+                    raise ValidationError(
+                        f"barcode '{barcode}' appears more than once in this import"
+                    )
+                if self._items.get_by_barcode(barcode) is not None:
+                    raise ValidationError(
+                        f"barcode '{barcode}' already exists in the catalog"
+                    )
+                seen_barcodes.add(barcode)
+            if accession:
+                if accession in seen_accessions:
+                    raise ValidationError(
+                        f"accession_number '{accession}' appears more than once in this import"
+                    )
+                seen_accessions.add(accession)
+        else:
+            # Default: discard supplied barcode/accession; mint fresh conformant codes.
+            barcode = None
+            accession = None
 
         meta = {
             "title": title,

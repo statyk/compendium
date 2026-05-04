@@ -23,6 +23,7 @@ from compendium.repositories.sql.item_repository import SqlItemRepository
 from compendium.repositories.sql.media_type_repository import SqlMediaTypeRepository
 from compendium.repositories.sql.work_repository import SqlWorkRepository
 from compendium.services.audit import AuditService
+from compendium.repositories.sql.counters import SqlCounterRepository
 from compendium.services.catalog import CatalogService
 from compendium.services.import_export import (
     ExportFilters,
@@ -44,6 +45,7 @@ def _make_importer(session):
         branch_repo=SqlBranchRepository(session),
         media_type_repo=SqlMediaTypeRepository(session),
         audit_svc=None,
+        counter_repo=SqlCounterRepository(session),
     )
     return ImportService(
         session=session,
@@ -94,6 +96,7 @@ def _common_import_options(
     default_media_type: str | None,
     barcode_prefix: str | None,
     enrich: bool = False,
+    preserve_barcodes: bool = False,
 ) -> ImportOptions:
     return ImportOptions(
         mode=_resolve_mode(mode),
@@ -102,6 +105,7 @@ def _common_import_options(
         default_media_type=default_media_type,
         barcode_prefix=barcode_prefix,
         enrich_from_external=enrich,
+        preserve_barcodes=preserve_barcodes,
     )
 
 
@@ -137,10 +141,20 @@ def import_csv_cmd(
             "per-row HTTP call."
         ),
     ),
+    preserve_barcodes: bool = typer.Option(
+        False,
+        "--preserve-barcodes",
+        help=(
+            "Preserve barcode and accession_number from the CSV rather than "
+            "minting fresh codes. Supplied barcodes must be valid 10/14-digit "
+            "Compendium format; non-conformant rows are rejected. "
+            "Use for round-tripping a CSV export back into the same catalog."
+        ),
+    ),
 ) -> None:
     """Import catalog rows from a CSV file."""
     options = _common_import_options(
-        dry_run, mode, default_branch, default_media_type, barcode_prefix, enrich
+        dry_run, mode, default_branch, default_media_type, barcode_prefix, enrich, preserve_barcodes
     )
     label = "stdin" if is_stdio(file) else Path(file).name
     try:

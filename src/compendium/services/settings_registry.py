@@ -216,6 +216,11 @@ def _all_positive_ints(v: list) -> None:
             raise ValueError(f"each entry must be a positive int, got {x!r}")
 
 
+def _four_digit_code(v: str) -> None:
+    if not isinstance(v, str) or len(v) != 4 or not v.isdigit():
+        raise ValueError("must be exactly 4 decimal digits (e.g. 0000, 0001)")
+
+
 def _shortcut_list(v: list) -> None:
     if not isinstance(v, list):
         raise ValueError("must be a list")
@@ -412,6 +417,53 @@ def _register_builtins() -> None:
                 "shelf) sits before auto-cancelling."
             ),
             validator=_positive_int,
+        )
+    )
+
+    # ── Identifiers & barcodes ─────────────────────────────────────────────
+    register(
+        SettingDescriptor(
+            key="barcode_length",
+            display_name="Barcode Length",
+            type=Literal["10", "14"],
+            default="10",
+            scope="librarian",
+            help_text=(
+                "Number of digits in minted barcodes. '10' omits the branch "
+                "location prefix; '14' embeds the 4-digit branch location code. "
+                "Both lengths remain readable in any deployment — this setting "
+                "controls only newly minted codes."
+            ),
+        )
+    )
+    register(
+        SettingDescriptor(
+            key="barcode_location_enabled",
+            display_name="Embed Branch Location in Barcode",
+            type=bool,
+            default=False,
+            scope="librarian",
+            help_text=(
+                "When enabled, the 4-digit branch location code is embedded in "
+                "newly minted 14-digit barcodes. Requires Barcode Length to be "
+                "set to '14' and each branch to have a Location Code configured. "
+                "Items with no branch use the Default Location Code."
+            ),
+        )
+    )
+    register(
+        SettingDescriptor(
+            key="barcode_default_location_code",
+            display_name="Default Location Code",
+            type=str,
+            default="0000",
+            scope="librarian",
+            help_text=(
+                "Four-digit fallback location code used when minting barcodes for "
+                "items with no assigned branch, or branches with no Location Code "
+                "set. Must be exactly 4 decimal digits (e.g. 0000, 0001)."
+            ),
+            validator=_four_digit_code,
         )
     )
 

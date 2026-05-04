@@ -9,6 +9,7 @@ from sqlalchemy.orm import Session, sessionmaker
 from sqlalchemy.pool import StaticPool
 
 from compendium.api.app import create_app
+from compendium.domain.identifiers import PATRON_TYPE, validate_barcode
 from tests.helpers import setup_sqlite_fts
 from compendium.config.seed import seed_defaults
 from compendium.config.settings import Settings
@@ -185,4 +186,4 @@ class TestPatronsEndpoint:
         assert resp.status_code == 201
         data = resp.json()
         assert data["full_name"] == "Jane Doe"
-        assert len(data["library_card_number"]) == 8
+        assert validate_barcode(data["library_card_number"], expected_type=PATRON_TYPE) is not None

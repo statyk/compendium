@@ -11,6 +11,7 @@ from compendium.repositories.sql.creator_repository import SqlCreatorRepository
 from compendium.repositories.sql.item_repository import SqlItemRepository
 from compendium.repositories.sql.media_type_repository import SqlMediaTypeRepository
 from compendium.repositories.sql.work_repository import SqlWorkRepository
+from compendium.repositories.sql.counters import SqlCounterRepository
 from compendium.services.catalog import CatalogService
 
 router = APIRouter()
@@ -31,6 +32,7 @@ def _catalog(session: Session, actor: AppUser | None = None) -> CatalogService:
         actor=actor,
         source="api",
         hold_repo=SqlHoldRepository(session),
+        counter_repo=SqlCounterRepository(session),
     )
 
 

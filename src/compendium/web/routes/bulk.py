@@ -22,6 +22,7 @@ from compendium.repositories.sql.item_repository import SqlItemRepository
 from compendium.repositories.sql.media_type_repository import SqlMediaTypeRepository
 from compendium.repositories.sql.work_repository import SqlWorkRepository
 from compendium.services.audit import AuditService
+from compendium.repositories.sql.counters import SqlCounterRepository
 from compendium.services.catalog import CatalogService
 from compendium.services.import_export import (
     ExportFilters,
@@ -45,6 +46,7 @@ def _make_importer(session: Session, user: AppUser) -> ImportService:
         branch_repo=SqlBranchRepository(session),
         media_type_repo=SqlMediaTypeRepository(session),
         audit_svc=None,
+        counter_repo=SqlCounterRepository(session),
     )
     return ImportService(
         session=session,
@@ -104,6 +106,7 @@ async def import_submit(
     default_media_type: str | None = Form(None),
     barcode_prefix: str | None = Form(None),
     enrich: str | None = Form(None),
+    preserve_barcodes: str | None = Form(None),
     csrf_token: str = Form(...),
     content_length: int | None = Header(default=None, alias="content-length"),
     settings: Settings = Depends(get_settings),
@@ -136,6 +139,7 @@ async def import_submit(
         default_media_type=default_media_type or None,
         barcode_prefix=barcode_prefix or None,
         enrich_from_external=bool(enrich),
+        preserve_barcodes=bool(preserve_barcodes),
     )
 
     try:

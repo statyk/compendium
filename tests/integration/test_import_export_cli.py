@@ -9,6 +9,7 @@ from pymarc import Field, MARCWriter, Record, Subfield
 from typer.testing import CliRunner
 
 from compendium.cli.commands.bulk_ops import export_app, import_app
+from compendium.domain.identifiers import ITEM_TYPE, validate_barcode
 from compendium.repositories.sql.work_repository import SqlWorkRepository
 
 
@@ -84,12 +85,13 @@ def test_cli_import_csv_dry_run(session, tmp_path):
 
 
 def test_cli_import_csv_barcode_prefix(session, tmp_path):
+    # barcode_prefix is deprecated and ignored; barcodes are auto-minted.
     f = _minimal_csv(tmp_path)
     result = _run(session, import_app, ["csv", str(f), "--barcode-prefix", "IMP-"])
     assert result.exit_code == 0
     for w in SqlWorkRepository(session).list():
         for item in w.items:
-            assert item.barcode.startswith("IMP-")
+            assert validate_barcode(item.barcode, expected_type=ITEM_TYPE) is not None
 
 
 def test_cli_import_csv_invalid_mode(session, tmp_path):

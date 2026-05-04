@@ -7,6 +7,7 @@ from compendium.repositories.sql.creator_repository import SqlCreatorRepository
 from compendium.repositories.sql.item_repository import SqlItemRepository
 from compendium.repositories.sql.media_type_repository import SqlMediaTypeRepository
 from compendium.repositories.sql.work_repository import SqlWorkRepository
+from compendium.repositories.sql.counters import SqlCounterRepository
 from compendium.services.catalog import CatalogService
 
 app = typer.Typer(help="Creator (author/director/artist) commands.")
@@ -19,6 +20,7 @@ def _catalog(session):
         creator_repo=SqlCreatorRepository(session),
         branch_repo=SqlBranchRepository(session),
         media_type_repo=SqlMediaTypeRepository(session),
+        counter_repo=SqlCounterRepository(session),
     )
 
 

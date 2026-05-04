@@ -1,3 +1,4 @@
+import warnings
 from dataclasses import dataclass, field
 from datetime import UTC, datetime
 from typing import Any
@@ -10,9 +11,11 @@ from compendium.domain.errors import (
     NotFoundError,
     ValidationError,
 )
+from compendium.domain.identifiers import format_item_barcode
 from compendium.domain.models import AppUser, Creator, Item, Work, WorkCreator
 from compendium.repositories.base import (
     BranchRepository,
+    CounterRepository,
     CreatorRepository,
     HoldRepository,
     ItemRepository,
@@ -99,6 +102,7 @@ class CatalogService:
         actor_label: str | None = None,
         source: str = "system",
         hold_repo: HoldRepository | None = None,
+        counter_repo: CounterRepository | None = None,
     ) -> None:
         self._works = work_repo
         self._items = item_repo
@@ -110,6 +114,7 @@ class CatalogService:
         self._actor_label = actor_label
         self._source = source
         self._holds = hold_repo
+        self._counters = counter_repo
 
     # ------------------------------------------------------------------
     # Public API
@@ -964,9 +969,15 @@ class CatalogService:
         if accession_number is None:
             accession_number = self._next_accession()
         if barcode is None:
-            barcode = (
-                f"{barcode_prefix}{accession_number}" if barcode_prefix else accession_number
-            )
+            if barcode_prefix is not None:
+                warnings.warn(
+                    "barcode_prefix is deprecated and ignored; barcodes are now auto-minted "
+                    "in the standard 10/14-digit format.",
+                    DeprecationWarning,
+                    stacklevel=3,
+                )
+            loc = self._resolve_location_code(branch)
+            barcode = format_item_barcode(accession_number, location_code=loc)
         item = Item(
             work_id=work.id,
             branch_id=branch.id,  # type: ignore[union-attr]
@@ -982,8 +993,56 @@ class CatalogService:
         return self._items.add(item)
 
     def _next_accession(self) -> str:
-        n = self._items.count_all() + 1
-        return f"{n:06d}"
+        if self._counters is not None:
+            n = self._counters.next("catalog.accession")
+        else:
+            # Fallback for test fixtures that don't inject a CounterRepository.
+            # Production call sites always pass one.
+            n = self._items.count_all() + 1
+        return f"{n:08d}"
+
+    def _resolve_location_code(self, branch) -> str | None:
+        # Read settings through the current session (via the item repo) to avoid
+        # opening a second DB connection, which would interfere with StaticPool
+        # sessions used in tests.
+        db = getattr(self._items, "_s", None)
+        if db is not None:
+            return self._resolve_location_via_session(db, branch)
+        from compendium.services.site_settings import get_site_setting
+
+        if not get_site_setting("barcode_location_enabled"):
+            return None
+        if branch is not None and getattr(branch, "location_code", None):
+            return branch.location_code
+        return get_site_setting("barcode_default_location_code")
+
+    @staticmethod
+    def _resolve_location_via_session(session, branch) -> str | None:
+        import os
+
+        from compendium.repositories.sql.site_setting_repository import (
+            SqlSiteSettingRepository,
+        )
+        from compendium.services.settings_registry import get_descriptor
+        from compendium.services.settings_registry import parse as parse_setting
+
+        repo = SqlSiteSettingRepository(session)
+
+        def _read(key: str):
+            desc = get_descriptor(key)
+            env_val = os.environ.get(desc.resolved_env_var())
+            if env_val is not None:
+                return parse_setting(desc, env_val)
+            row = repo.get(key)
+            if row is not None:
+                return parse_setting(desc, row.value)
+            return desc.default
+
+        if not _read("barcode_location_enabled"):
+            return None
+        if branch is not None and getattr(branch, "location_code", None):
+            return branch.location_code
+        return _read("barcode_default_location_code")
 
     def _record(
         self,

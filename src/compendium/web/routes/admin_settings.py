@@ -85,6 +85,22 @@ _PAGES: dict[str, dict[str, Any]] = {
         "intro": "Behavior of the public-facing /ui/kiosk self-checkout UI.",
         "keys": ["kiosk_idle_timeout_seconds"],
     },
+    "identifiers": {
+        "title": "Identifiers & barcodes",
+        "scope_perm": "branch.edit",
+        "intro": (
+            "Barcode format for newly minted item barcodes and patron cards. "
+            "Existing codes are not affected — both 10-digit and 14-digit "
+            "barcodes remain readable in any deployment. Set a Location Code "
+            "on each branch (under Admin → Branches) before enabling "
+            "'Embed Branch Location in Barcode'."
+        ),
+        "keys": [
+            "barcode_length",
+            "barcode_location_enabled",
+            "barcode_default_location_code",
+        ],
+    },
 }
 
 _SYSTEM_PAGES: dict[str, dict[str, Any]] = {
@@ -431,6 +447,39 @@ async def kiosk_post(
     form_values = {k: v for k, v in form.items() if k not in ("csrf_token", "reset")}
     return _post_handler(
         "kiosk", _PAGES["kiosk"], request, form_values, reset_keys, session, user
+    )
+
+
+@router.get("/admin/settings/identifiers")
+def identifiers_get(
+    request: Request,
+    message: str | None = Query(default=None),
+    error: str | None = Query(default=None),
+    user: AppUser = Depends(require_web_permission("branch.edit")),
+):
+    return _show_page(
+        "identifiers", _PAGES["identifiers"], request, message, error, user
+    )
+
+
+@router.post("/admin/settings/identifiers")
+async def identifiers_post(
+    request: Request,
+    user: AppUser = Depends(require_web_permission("branch.edit")),
+    session: Session = Depends(get_session),
+):
+    form = await request.form()
+    check_csrf_form(request, form.get("csrf_token", ""))
+    reset_keys = form.getlist("reset")
+    form_values = {k: v for k, v in form.items() if k not in ("csrf_token", "reset")}
+    return _post_handler(
+        "identifiers",
+        _PAGES["identifiers"],
+        request,
+        form_values,
+        reset_keys,
+        session,
+        user,
     )
 
 

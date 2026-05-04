@@ -8,6 +8,7 @@ import pytest
 
 from compendium.domain.enums import LoanRestrictionReason
 from compendium.domain.errors import ValidationError
+from compendium.domain.identifiers import ITEM_TYPE, validate_barcode
 from compendium.repositories.sql.audit_log_repository import SqlAuditLogRepository
 from compendium.repositories.sql.branch_repository import SqlBranchRepository
 from compendium.repositories.sql.creator_repository import SqlCreatorRepository
@@ -147,7 +148,9 @@ def test_csv_import_dry_run_does_not_persist(session):
     assert SqlWorkRepository(session).list() == []
 
 
-def test_csv_import_applies_barcode_prefix(session):
+def test_csv_import_barcode_prefix_deprecated(session):
+    # barcode_prefix is deprecated and ignored; barcodes are auto-minted in the
+    # standard 10/14-digit format.
     importer, _, _ = _make_services(session)
     importer.import_csv(
         io.StringIO(_MINIMAL_CSV),
@@ -156,18 +159,21 @@ def test_csv_import_applies_barcode_prefix(session):
     works = SqlWorkRepository(session).list()
     for w in works:
         for item in w.items:
-            assert item.barcode.startswith("IMP-")
-            assert not item.accession_number.startswith("IMP-")
+            assert validate_barcode(item.barcode, expected_type=ITEM_TYPE) is not None
+            assert len(item.accession_number) == 8
 
 
-def test_csv_import_accepts_explicit_barcode(session):
+def test_csv_import_discards_explicit_barcode_by_default(session):
+    """Default mode discards supplied non-conformant barcodes and mints fresh codes."""
     importer, _, _ = _make_services(session)
     csv_text = """media_type,title,authors,isbn,barcode
 book,Dune,Frank Herbert,9780441013593,LIB-00001
 """
     importer.import_csv(io.StringIO(csv_text), ImportOptions())
     dune = SqlWorkRepository(session).get_by_isbn("9780441013593")
-    assert dune.items[0].barcode == "LIB-00001"
+    barcode = dune.items[0].barcode
+    assert barcode != "LIB-00001"
+    assert validate_barcode(barcode, expected_type=ITEM_TYPE) is not None
 
 
 def test_csv_import_loanable_fields(session):
@@ -232,7 +238,8 @@ dvd,Blade Runner,The Final Cut,Ridley Scott:director,Warner Bros,2007,,012569810
     dune = next(r for r in rows if r["title"] == "Dune")
     assert dune["isbn"] == "9780441013593"
     assert dune["classification_code"] == "PS3558.E63 D8"
-    assert dune["barcode"] == "DUNE-001"
+    # Supplied legacy barcode was discarded; exported barcode is a fresh conformant code.
+    assert validate_barcode(dune["barcode"], expected_type=ITEM_TYPE) is not None
     assert dune["authors"] == "Frank Herbert:author"
 
     bld = next(r for r in rows if r["title"] == "Blade Runner")
