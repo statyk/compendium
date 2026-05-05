@@ -410,15 +410,55 @@ nav details.dropdown form.dropdown-form button:hover {
 
 /* ── Work list ────────────────────────────────────────────────── */
 .work-list { list-style: none; padding: 0; margin: 0; }
-.work-list > li {
-  display: flex;
-  gap: 1rem;
-  align-items: flex-start;
-  padding: 0.75rem 0;
-  border-top: 1px solid var(--pico-muted-border-color);
+.work-list > li { margin-bottom: 0.5rem; }
+
+.work-card-link {
+  display: flex; gap: 1.1rem; align-items: stretch;
+  padding: 0.9rem 1rem; border-radius: 8px;
+  border: 1px solid var(--pico-muted-border-color);
+  background: var(--pico-card-background-color);
+  text-decoration: none; color: inherit;
+  transition: box-shadow 150ms ease, border-color 150ms ease;
 }
-.work-list > li:first-child { border-top: none; }
-.work-list .work-entry { flex: 1; min-width: 0; }
+@media (prefers-reduced-motion: no-preference) {
+  .work-card-link { transition: box-shadow 150ms ease, border-color 150ms ease; }
+}
+.work-card-link:hover {
+  box-shadow: 0 3px 14px rgba(0,0,0,0.1);
+  border-color: var(--pico-primary-border);
+}
+[data-theme="dark"] .work-card-link:hover { box-shadow: 0 3px 14px rgba(0,0,0,0.35); }
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme]) .work-card-link:hover { box-shadow: 0 3px 14px rgba(0,0,0,0.35); }
+}
+
+.work-card-link .cover-thumb { width: 90px; flex-shrink: 0; }
+
+.work-entry {
+  flex: 1; min-width: 0;
+  display: flex; flex-direction: column; justify-content: space-between;
+  gap: 0.2rem;
+}
+.work-entry-title {
+  font-family: var(--cmp-font-display);
+  font-variation-settings: 'opsz' 24;
+  font-size: 1.05rem; font-weight: 600; line-height: 1.25;
+  color: var(--pico-primary);
+}
+.work-entry-creators {
+  font-size: 0.9rem;
+  color: var(--pico-color);
+}
+.work-entry-meta {
+  font-size: 0.78rem;
+  color: var(--pico-muted-color);
+  font-style: italic;
+}
+.work-entry-pills {
+  display: flex; gap: 0.4rem; flex-wrap: wrap;
+  margin-top: 0.4rem;
+}
+
 .work-header { display: flex; gap: 1.5rem; align-items: flex-start; margin-bottom: 1rem; }
 .work-header .work-header-text { flex: 1; min-width: 0; }
 

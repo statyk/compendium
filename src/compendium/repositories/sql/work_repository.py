@@ -3,7 +3,7 @@ from __future__ import annotations
 import re
 from datetime import datetime
 
-from sqlalchemy import exists, func, or_, text
+from sqlalchemy import case, exists, func, or_, text
 from sqlalchemy.orm import Session, selectinload
 
 from compendium.domain.enums import ItemStatus
@@ -55,6 +55,43 @@ class SqlWorkRepository:
             .first()
             is not None
         )
+
+    def availability_for_works(self, work_ids: list[int]) -> dict[int, str]:
+        """Return {work_id: 'available'|'checked_out'} for works with loanable copies.
+
+        Works with no loanable items are omitted from the result.
+        'available'    — ≥1 loanable item with status AVAILABLE
+        'checked_out'  — 0 available but ≥1 in [checked_out, on_hold, claims_returned]
+        """
+        if not work_ids:
+            return {}
+        recoverable = [
+            ItemStatus.CHECKED_OUT.value,
+            ItemStatus.ON_HOLD.value,
+            ItemStatus.CLAIMS_RETURNED.value,
+        ]
+        rows = (
+            self._s.query(
+                Item.work_id,
+                func.max(
+                    case(
+                        (Item.status == ItemStatus.AVAILABLE.value, 2),
+                        (Item.status.in_(recoverable), 1),
+                        else_=0,
+                    )
+                ).label("score"),
+            )
+            .filter(Item.work_id.in_(work_ids), Item.is_loanable.is_(True))
+            .group_by(Item.work_id)
+            .all()
+        )
+        result: dict[int, str] = {}
+        for work_id, score in rows:
+            if score >= 2:
+                result[work_id] = "available"
+            elif score >= 1:
+                result[work_id] = "checked_out"
+        return result
 
     def first_available_loanable_copy(self, work_id: int) -> Item | None:
         """Pick the earliest-accessioned AVAILABLE loanable copy, if any."""

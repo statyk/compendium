@@ -12,6 +12,12 @@
 /ui/covers?url={{ raw | urlencode }}{% if version %}&v={{ version | string | urlencode }}{% endif %}
 {%- endmacro %}
 
+{% macro availability_pill(status) -%}
+{% if status == 'available' %}<span class="pill pill-available">Available</span>
+{%- elif status == 'checked_out' %}<span class="pill pill-checked-out">Checked Out</span>
+{%- endif %}
+{%- endmacro %}
+
 {% macro loan_pill(item) -%}
   {% if not item.is_loanable %}
     <span class="pill pill-{{ item.loan_restriction_reason or 'other' }}"

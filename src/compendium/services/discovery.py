@@ -22,6 +22,7 @@ class SearchPage:
     facets: FacetCounts
     page: int
     page_size: int
+    availability: dict[int, str] = field(default_factory=dict)
 
     @property
     def has_prev(self) -> bool:
@@ -78,8 +79,14 @@ class DiscoveryService:
             decade=decade,
             available_only=available_only,
         )
+        availability = self._works.availability_for_works([w.id for w in works])
         return SearchPage(
-            works=works, total=total, facets=facets, page=page, page_size=page_size
+            works=works,
+            total=total,
+            facets=facets,
+            page=page,
+            page_size=page_size,
+            availability=availability,
         )
 
     def facet_counts(

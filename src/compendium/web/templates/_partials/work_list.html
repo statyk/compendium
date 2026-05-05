@@ -1,5 +1,6 @@
-{% from "_macros.html" import media_pill, cover_url %}
+{% from "_macros.html" import media_pill, cover_url, availability_pill %}
 {% set works = page.works if page else [] %}
+{% set avail = page.availability if page else {} %}
 {% if not works %}
   <p><em>{% if q %}No results for "{{ q }}".{% else %}No works in catalog yet.{% endif %}</em></p>
 {% else %}
@@ -9,22 +10,34 @@
 <ul class="work-list">
   {% for work in works %}
   <li>
-    <div class="cover-thumb{% if not work.cover_image_url %} cover-thumb-empty{% endif %}"
-         {% if not work.cover_image_url %}data-media-type="{{ work.media_type.code if work.media_type else 'book' }}"{% endif %}
-         aria-hidden="true">
-      {% if work.cover_image_url %}
-      <img src="{{ cover_url(work.cover_image_url, work.updated_at) }}" alt="" loading="lazy">
-      {% endif %}
-    </div>
-    <div class="work-entry">
-      <a href="/ui/catalog/{{ work.id }}">{{ work.title }}</a>
-      {% if work.creators %}
-        &mdash;
-        {% for wc in work.creators %}{{ wc.creator.display_name }}{% if not loop.last %}, {% endif %}{% endfor %}
-      {% endif %}
-      {% if work.publication_year %}({{ work.publication_year }}){% endif %}
-      {{ media_pill(work.media_type) }}
-    </div>
+    <a class="work-card-link" href="/ui/catalog/{{ work.id }}">
+      <div class="cover-thumb{% if not work.cover_image_url %} cover-thumb-empty{% endif %}"
+           {% if not work.cover_image_url %}data-media-type="{{ work.media_type.code if work.media_type else 'book' }}"{% endif %}
+           aria-hidden="true">
+        {% if work.cover_image_url %}
+        <img src="{{ cover_url(work.cover_image_url, work.updated_at) }}" alt="" loading="lazy">
+        {% endif %}
+      </div>
+      <div class="work-entry">
+        <div class="work-entry-title">{{ work.title }}</div>
+        {% if work.creators %}
+        <div class="work-entry-creators">
+          {% for wc in work.creators %}{{ wc.creator.display_name }}{% if not loop.last %}, {% endif %}{% endfor %}
+        </div>
+        {% endif %}
+        {% if work.publisher or work.publication_year %}
+        <div class="work-entry-meta">
+          {% if work.publisher %}{{ work.publisher }}{% endif %}
+          {% if work.publisher and work.publication_year %} · {% endif %}
+          {% if work.publication_year %}{{ work.publication_year }}{% endif %}
+        </div>
+        {% endif %}
+        <div class="work-entry-pills">
+          {{ availability_pill(avail.get(work.id, '')) }}
+          {{ media_pill(work.media_type) }}
+        </div>
+      </div>
+    </a>
   </li>
   {% endfor %}
 </ul>
