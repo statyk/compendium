@@ -525,6 +525,25 @@ body.kiosk-page { max-width: none; }
 .checkout-list li:first-child { border-top: none; }
 .kiosk-footer { margin-top: 2rem; text-align: center; }
 
+/* ── Catalog hero (landing page) ─────────────────────────────── */
+.catalog-hero {
+  display: flex; flex-direction: column; align-items: center;
+  gap: 0.4rem; padding: 2.5rem 1rem 2rem; text-align: center;
+}
+.catalog-hero-name {
+  font-family: var(--cmp-font-display);
+  font-variation-settings: 'opsz' 72;
+  font-size: 2rem; font-weight: 700;
+  color: var(--pico-color); margin: 0; line-height: 1.15;
+}
+.catalog-hero-tagline {
+  font-size: 1rem; color: var(--pico-muted-color); margin: 0;
+}
+.catalog-search-form {
+  display: flex; gap: 0.5rem; flex-wrap: wrap;
+  align-items: flex-end; margin-bottom: 1rem;
+}
+
 /* ── Catalog layout & facets ──────────────────────────────────── */
 .catalog-layout { display: flex; gap: 1.5rem; align-items: flex-start; }
 .catalog-facets { flex: 0 0 11rem; }

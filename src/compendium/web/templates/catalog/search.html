@@ -1,10 +1,18 @@
 {% extends "base.html" %}
 {% from "_macros.html" import cover_url %}
+{% from "_partials/brand_glyph.html" import brand_glyph %}
 {% block title %}Catalog — {{ library_name() }}{% endblock %}
 {% block content %}
-<h2>Catalog</h2>
 
-<form method="get" action="/ui/catalog" id="catalog-form" style="display:flex; gap:0.5rem; flex-wrap:wrap; align-items:flex-end; margin-bottom:1rem">
+{% if show_landing %}
+<div class="catalog-hero">
+  {{ brand_glyph('4.5rem', label=library_name() ~ ' logo') }}
+  <div class="catalog-hero-name">{{ library_name() }}</div>
+  <div class="catalog-hero-tagline">Search your collection</div>
+</div>
+{% endif %}
+
+<form method="get" action="/ui/catalog" id="catalog-form" class="catalog-search-form">
   <select name="field" style="max-width:10rem; flex-shrink:0; margin-bottom:0">
     <option value="all" {% if field == "all" %}selected{% endif %}>All fields</option>
     <option value="title" {% if field == "title" %}selected{% endif %}>Title</option>
@@ -13,7 +21,8 @@
     <option value="isbn" {% if field == "isbn" %}selected{% endif %}>ISBN</option>
   </select>
   <div class="suggest-wrap">
-    <input id="q-input" type="search" name="q" placeholder="Search…" value="{{ q }}" autofocus
+    <input id="q-input" type="search" name="q" placeholder="Search…" value="{{ q }}"
+           {% if show_landing %}autofocus{% endif %}
            role="combobox" aria-autocomplete="list" aria-expanded="false" aria-controls="suggest-list"
            autocomplete="off"
            hx-get="/ui/catalog/search-results"
@@ -35,115 +44,125 @@
   <button type="submit" style="margin-bottom:0;width:auto">Search</button>
 </form>
 
-<div class="catalog-layout">
-  <aside class="catalog-facets">
-    <details class="facet-drawer" open>
-    <summary>Filter</summary>
-    {% if page %}
-    {% if page.facets.media_type %}
-    <details open>
-      <summary><strong>Media type</strong></summary>
-      <ul class="facet-list">
-        {% for code, name, count in page.facets.media_type %}
-        <li>
-          <label>
-            <input type="checkbox" data-facet="media" value="{{ code }}"
-                   {% if code in media %}checked{% endif %}>
-            {{ name }} <small>({{ count }})</small>
-          </label>
-        </li>
-        {% endfor %}
-      </ul>
-    </details>
-    {% endif %}
-    {% if page.facets.decade %}
-    <details open>
-      <summary><strong>Decade</strong></summary>
-      <ul class="facet-list">
-        {% for d, count in page.facets.decade %}
-        <li>
-          <label>
-            <input type="radio" name="facet-decade" data-facet="decade" value="{{ d }}"
-                   {% if decade == d %}checked{% endif %}>
-            {{ d }}s <small>({{ count }})</small>
-          </label>
-        </li>
-        {% endfor %}
-        {% if decade is not none %}
-        <li><a href="#" data-clear="decade"><small>Clear</small></a></li>
-        {% endif %}
-      </ul>
-    </details>
-    {% endif %}
-    <details open>
-      <summary><strong>Availability</strong></summary>
-      <ul class="facet-list">
-        <li>
-          <label>
-            <input type="checkbox" data-facet="avail" value="1"
-                   {% if avail %}checked{% endif %}>
-            Available now <small>({{ page.facets.available_now }})</small>
-          </label>
-        </li>
-      </ul>
-    </details>
-    {% if media or decade is not none or avail %}
-    <p><a href="/ui/catalog?q={{ q }}&field={{ field }}"><small>Clear all filters</small></a></p>
-    {% endif %}
-    {% endif %}
-    </details>
-  </aside>
+{% if show_landing %}
 
-  <section class="catalog-main">
-    {% if show_landing %}
-      {% if new_arrivals or recently_returned %}
-      <div class="discovery-shelves">
-        {% if new_arrivals %}
-        <h3>New arrivals</h3>
-        <ul class="cover-shelf">
-          {% for w in new_arrivals %}
+  {% if new_arrivals %}
+  <div class="discovery-shelves">
+    <h3>New arrivals</h3>
+    <ul class="cover-shelf">
+      {% for w in new_arrivals %}
+      <li>
+        <a href="/ui/catalog/{{ w.id }}" title="{{ w.title }}">
+          <div class="cover-thumb cover-thumb-shelf{% if not w.cover_image_url %} cover-thumb-empty{% endif %}"
+               {% if not w.cover_image_url %}data-media-type="{{ w.media_type.code if w.media_type else 'book' }}"{% endif %}
+               aria-hidden="true">
+            {% if w.cover_image_url %}<img src="{{ cover_url(w.cover_image_url, w.updated_at) }}" alt="" loading="lazy">{% endif %}
+          </div>
+          <small class="shelf-title">{{ w.title }}</small>
+          {% if w.creators %}<small class="shelf-creator">{{ w.creators[0].creator.display_name }}</small>{% endif %}
+        </a>
+      </li>
+      {% endfor %}
+    </ul>
+  </div>
+  {% endif %}
+
+  {% if recently_returned %}
+  <div class="discovery-shelves">
+    <h3>Recently returned</h3>
+    <ul class="cover-shelf">
+      {% for w in recently_returned %}
+      <li>
+        <a href="/ui/catalog/{{ w.id }}" title="{{ w.title }}">
+          <div class="cover-thumb cover-thumb-shelf{% if not w.cover_image_url %} cover-thumb-empty{% endif %}"
+               {% if not w.cover_image_url %}data-media-type="{{ w.media_type.code if w.media_type else 'book' }}"{% endif %}
+               aria-hidden="true">
+            {% if w.cover_image_url %}<img src="{{ cover_url(w.cover_image_url, w.updated_at) }}" alt="" loading="lazy">{% endif %}
+          </div>
+          <small class="shelf-title">{{ w.title }}</small>
+          {% if w.creators %}<small class="shelf-creator">{{ w.creators[0].creator.display_name }}</small>{% endif %}
+        </a>
+      </li>
+      {% endfor %}
+    </ul>
+  </div>
+  {% endif %}
+
+  {% if new_arrivals or recently_returned %}<h3>All works</h3>{% endif %}
+  <div id="results">
+    {% include "_partials/work_list.html" %}
+  </div>
+
+{% else %}
+
+  <div class="catalog-layout">
+    <aside class="catalog-facets">
+      <details class="facet-drawer" open>
+      <summary>Filter</summary>
+      {% if page %}
+      {% if page.facets.media_type %}
+      <details open>
+        <summary><strong>Media type</strong></summary>
+        <ul class="facet-list">
+          {% for code, name, count in page.facets.media_type %}
           <li>
-            <a href="/ui/catalog/{{ w.id }}" title="{{ w.title }}">
-              <div class="cover-thumb cover-thumb-shelf{% if not w.cover_image_url %} cover-thumb-empty{% endif %}"
-                   {% if not w.cover_image_url %}data-media-type="{{ w.media_type.code if w.media_type else 'book' }}"{% endif %}
-                   aria-hidden="true">
-                {% if w.cover_image_url %}<img src="{{ cover_url(w.cover_image_url, w.updated_at) }}" alt="" loading="lazy">{% endif %}
-              </div>
-              <small class="shelf-title">{{ w.title }}</small>
-              {% if w.creators %}<small class="shelf-creator">{{ w.creators[0].creator.display_name }}</small>{% endif %}
-            </a>
+            <label>
+              <input type="checkbox" data-facet="media" value="{{ code }}"
+                     {% if code in media %}checked{% endif %}>
+              {{ name }} <small>({{ count }})</small>
+            </label>
           </li>
           {% endfor %}
         </ul>
-        {% endif %}
-        {% if recently_returned %}
-        <h3>Recently returned</h3>
-        <ul class="cover-shelf">
-          {% for w in recently_returned %}
-          <li>
-            <a href="/ui/catalog/{{ w.id }}" title="{{ w.title }}">
-              <div class="cover-thumb cover-thumb-shelf{% if not w.cover_image_url %} cover-thumb-empty{% endif %}"
-                   {% if not w.cover_image_url %}data-media-type="{{ w.media_type.code if w.media_type else 'book' }}"{% endif %}
-                   aria-hidden="true">
-                {% if w.cover_image_url %}<img src="{{ cover_url(w.cover_image_url, w.updated_at) }}" alt="" loading="lazy">{% endif %}
-              </div>
-              <small class="shelf-title">{{ w.title }}</small>
-              {% if w.creators %}<small class="shelf-creator">{{ w.creators[0].creator.display_name }}</small>{% endif %}
-            </a>
-          </li>
-          {% endfor %}
-        </ul>
-        {% endif %}
-      </div>
-      <hr>
-      <h3>All works</h3>
+      </details>
       {% endif %}
-    {% endif %}
-    <div id="results">
-      {% include "_partials/work_list.html" %}
-    </div>
-  </section>
-</div>
+      {% if page.facets.decade %}
+      <details open>
+        <summary><strong>Decade</strong></summary>
+        <ul class="facet-list">
+          {% for d, count in page.facets.decade %}
+          <li>
+            <label>
+              <input type="radio" name="facet-decade" data-facet="decade" value="{{ d }}"
+                     {% if decade == d %}checked{% endif %}>
+              {{ d }}s <small>({{ count }})</small>
+            </label>
+          </li>
+          {% endfor %}
+          {% if decade is not none %}
+          <li><a href="#" data-clear="decade"><small>Clear</small></a></li>
+          {% endif %}
+        </ul>
+      </details>
+      {% endif %}
+      <details open>
+        <summary><strong>Availability</strong></summary>
+        <ul class="facet-list">
+          <li>
+            <label>
+              <input type="checkbox" data-facet="avail" value="1"
+                     {% if avail %}checked{% endif %}>
+              Available now <small>({{ page.facets.available_now }})</small>
+            </label>
+          </li>
+        </ul>
+      </details>
+      {% if media or decade is not none or avail %}
+      <p><a href="/ui/catalog?q={{ q }}&field={{ field }}"><small>Clear all filters</small></a></p>
+      {% endif %}
+      {% endif %}
+      </details>
+    </aside>
+
+    <section class="catalog-main">
+      <div id="results">
+        {% include "_partials/work_list.html" %}
+      </div>
+    </section>
+  </div>
+
+{% endif %}
+
 {% endblock %}
 
 {% block scripts %}
@@ -161,23 +180,23 @@
       document.querySelectorAll('input[data-facet="media"]').forEach(function (cb) {
         cb.checked = media.indexOf(cb.value) !== -1;
       });
-      form.elements.media.value = media.join(',');
+      if (form.elements.media) form.elements.media.value = media.join(',');
       var decade = params.get('decade') || '';
       document.querySelectorAll('input[data-facet="decade"]').forEach(function (rb) {
         rb.checked = rb.value === decade;
       });
-      form.elements.decade.value = decade;
+      if (form.elements.decade) form.elements.decade.value = decade;
       var avail = params.get('avail') === '1';
       document.querySelectorAll('input[data-facet="avail"]').forEach(function (cb) {
         cb.checked = avail;
       });
-      form.elements.avail.value = avail ? '1' : '';
+      if (form.elements.avail) form.elements.avail.value = avail ? '1' : '';
     }
     window.addEventListener('pageshow', syncFromUrl);
 
-    var media = (form.elements.media.value || '').split(',').filter(Boolean);
+    var media = (form.elements.media ? form.elements.media.value || '' : '').split(',').filter(Boolean);
     var setMediaInput = function () {
-      form.elements.media.value = media.join(',');
+      if (form.elements.media) form.elements.media.value = media.join(',');
     };
     document.querySelectorAll('input[data-facet="media"]').forEach(function (cb) {
       cb.addEventListener('change', function () {
@@ -191,20 +210,20 @@
     });
     document.querySelectorAll('input[data-facet="decade"]').forEach(function (rb) {
       rb.addEventListener('change', function () {
-        form.elements.decade.value = rb.value;
+        if (form.elements.decade) form.elements.decade.value = rb.value;
         form.submit();
       });
     });
     document.querySelectorAll('[data-clear="decade"]').forEach(function (a) {
       a.addEventListener('click', function (e) {
         e.preventDefault();
-        form.elements.decade.value = '';
+        if (form.elements.decade) form.elements.decade.value = '';
         form.submit();
       });
     });
     document.querySelectorAll('input[data-facet="avail"]').forEach(function (cb) {
       cb.addEventListener('change', function () {
-        form.elements.avail.value = cb.checked ? '1' : '';
+        if (form.elements.avail) form.elements.avail.value = cb.checked ? '1' : '';
         form.submit();
       });
     });

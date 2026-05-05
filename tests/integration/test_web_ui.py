@@ -1876,7 +1876,7 @@ def test_search_landing_marks_coverless_thumbs_empty(web_client, work):
 
 
 def test_facet_drawer_summary_present(web_client, work):
-    """The catalog landing renders <summary>Filter</summary> for the mobile facet toggle."""
-    resp = web_client.get("/ui/catalog")
+    """The catalog search-results page renders <summary>Filter</summary> for the mobile facet toggle."""
+    resp = web_client.get("/ui/catalog?q=the")
     assert resp.status_code == 200
     assert b"<summary>Filter</summary>" in resp.content
