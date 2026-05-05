@@ -1,6 +1,10 @@
 {% extends "kiosk_base.html" %}
+{% from "_partials/brand_glyph.html" import brand_glyph %}
 {% block title %}Self-Checkout — {{ library_name() }}{% endblock %}
 {% block content %}
+<div style="text-align:center; margin-bottom:1.5rem">
+  {{ brand_glyph('6rem', label=library_name() ~ ' logo') }}
+</div>
 <h1 class="kiosk-title">Self-Checkout</h1>
 <p class="kiosk-sub">Please scan or enter your library card number to begin.</p>
 

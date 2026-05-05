@@ -1,0 +1,12 @@
+{% from "_partials/brand_glyph.html" import brand_glyph %}
+
+{% macro empty_state(headline, sub='', cta_href='', cta_label='') %}
+<div class="empty-state">
+  {{ brand_glyph('4rem') }}
+  <p class="empty-state-headline">{{ headline }}</p>
+  {% if sub %}<p class="empty-state-sub">{{ sub }}</p>{% endif %}
+  {% if cta_href and cta_label %}
+  <a href="{{ cta_href }}" role="button" class="outline" style="width:auto">{{ cta_label }}</a>
+  {% endif %}
+</div>
+{% endmacro %}

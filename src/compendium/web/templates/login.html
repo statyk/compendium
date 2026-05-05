@@ -1,7 +1,12 @@
 {% extends "base.html" %}
+{% from "_partials/brand_glyph.html" import brand_glyph %}
 {% block title %}Login — {{ library_name() }}{% endblock %}
 {% block content %}
 <article style="max-width: 400px; margin: 4rem auto">
+  <div class="login-brand">
+    {{ brand_glyph('5rem', label=library_name() ~ ' logo') }}
+    <p class="login-brand-name">{{ library_name() }}</p>
+  </div>
   <h2>Login</h2>
   {% if message %}
     <p class="success-banner">{{ message }}</p>

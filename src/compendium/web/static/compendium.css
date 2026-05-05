@@ -101,6 +101,12 @@
   /* Nav */
   --cmp-nav-bg: #7a5230;
   --cmp-nav-fg: #fdf6ec;
+
+  /* Brand glyph (B2 card-catalog drawer) — fill/stroke via vars so it themes */
+  --cmp-glyph-body:   #a56a3e;
+  --cmp-glyph-stroke: #5e3a1d;
+  --cmp-glyph-label:  #f4e5c3;
+  --cmp-glyph-pull:   #d4a24a;
 }
 
 /* Pico sets its primary vars on :root:not([data-theme=dark]) (specificity 0,2,0)
@@ -178,6 +184,12 @@
   --cmp-pill-other-bg:          #282820; --cmp-pill-other-fg:          #a0a098;
 
   --cmp-env-warning-fg: #d4b858;
+
+  /* Brand glyph — warm walnut reads well on dark bg without changes */
+  --cmp-glyph-body:   #bf7e4e;
+  --cmp-glyph-stroke: #7a4a28;
+  --cmp-glyph-label:  #f8efd8;
+  --cmp-glyph-pull:   #e8bc60;
 }
 
 /* ── Headings & typography ───────────────────────────────────── */
@@ -494,3 +506,37 @@ body.kiosk-page { max-width: none; }
   display: inline-flex; align-items: center; gap: 0.35em; margin: 0; cursor: pointer;
 }
 .settings-table .reset-cell input[type=checkbox] { margin: 0; }
+
+/* ── Brand glyph (nav) ────────────────────────────────────────── */
+.brand-logo {
+  width: 2em; height: 2em;
+  display: inline-block; vertical-align: middle;
+  flex-shrink: 0;
+}
+
+/* ── Empty state ─────────────────────────────────────────────── */
+.empty-state {
+  display: flex; flex-direction: column; align-items: center;
+  gap: 0.75rem; padding: 3rem 1rem; text-align: center;
+  color: var(--pico-muted-color);
+}
+.empty-state .brand-glyph { opacity: 0.55; }
+.empty-state-headline {
+  font-family: var(--cmp-font-display);
+  font-variation-settings: 'opsz' 24;
+  font-size: 1.25rem; font-weight: 600;
+  color: var(--pico-color); margin: 0;
+}
+.empty-state-sub { margin: 0; font-size: 0.9rem; }
+
+/* ── Login page branding ─────────────────────────────────────── */
+.login-brand {
+  display: flex; flex-direction: column; align-items: center;
+  gap: 0.5rem; margin-bottom: 1.5rem; text-align: center;
+}
+.login-brand-name {
+  font-family: var(--cmp-font-display);
+  font-variation-settings: 'opsz' 36;
+  font-size: 1.6rem; font-weight: 700;
+  color: var(--pico-color); margin: 0; line-height: 1.2;
+}
