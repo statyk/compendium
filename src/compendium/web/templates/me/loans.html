@@ -1,9 +1,10 @@
 {% extends "base.html" %}
+{% from "_partials/empty_state.html" import empty_state %}
 {% block title %}My Loans — {{ library_name() }}{% endblock %}
 {% block content %}
 <h2>My Loans</h2>
 {% if not loans %}
-  <p><em>You have no active loans.</em></p>
+  {{ empty_state("No active loans", "When you check out items they will appear here.", cta_href="/ui/catalog", cta_label="Browse catalog") }}
 {% else %}
 <table>
   <thead>

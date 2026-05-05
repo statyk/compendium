@@ -1,4 +1,5 @@
 {% extends "base.html" %}
+{% from "_partials/empty_state.html" import empty_state %}
 {% block title %}Patrons — {{ library_name() }}{% endblock %}
 {% block content %}
 <div style="display:flex; align-items:baseline; gap:1rem; margin-bottom:1rem">
@@ -6,7 +7,7 @@
   <a href="/ui/patrons/new" role="button" class="outline" style="padding:0.25rem 0.75rem">+ New Patron</a>
 </div>
 {% if not patrons %}
-  <p><em>No patrons on record.</em></p>
+  {{ empty_state("No patrons on record", "Add patrons to start tracking checkouts and holds.", cta_href="/ui/patrons/new", cta_label="Add patron") }}
 {% else %}
 <table>
   <thead>

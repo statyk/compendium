@@ -1,5 +1,6 @@
 {% extends "base.html" %}
 {% from "_macros.html" import status_pill %}
+{% from "_partials/empty_state.html" import empty_state %}
 {% block title %}My Holds — {{ library_name() }}{% endblock %}
 {% block content %}
 <h2>My Holds</h2>
@@ -11,7 +12,7 @@
 </p>
 {% endif %}
 {% if not holds %}
-  <p><em>You have no active holds.</em></p>
+  {{ empty_state("No active holds", "Reserve items from the catalog and they will appear here.", cta_href="/ui/catalog", cta_label="Browse catalog") }}
 {% else %}
 <table>
   <thead>

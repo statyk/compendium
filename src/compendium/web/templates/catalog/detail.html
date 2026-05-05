@@ -90,7 +90,7 @@
   </tbody>
 </table>
 {% else %}
-  <p><em>No copies on record.</em></p>
+  <p class="empty-inline">No copies on record.</p>
 {% endif %}
 
 {% if user and ("*" in user.role.permissions or "item.delete" in user.role.permissions) %}
@@ -99,7 +99,7 @@
 
 {% if not has_loanable %}
 <hr>
-<p><em>No loanable copies of this work are available — holds are disabled.</em></p>
+<p class="empty-inline">No loanable copies of this work are available — holds are disabled.</p>
 {% else %}
   {% if patron %}
   <hr>
@@ -115,7 +115,7 @@
     </form>
   </div>
   {% elif user %}
-    <p><em>Your account has no patron record — contact a librarian to place holds.</em></p>
+    <p class="empty-inline">Your account has no patron record — contact a librarian to place holds.</p>
   {% else %}
     <p><a href="/ui/login?next=/ui/catalog/{{ work.id }}">Log in</a> to place a hold.</p>
   {% endif %}
@@ -166,7 +166,7 @@
   </tbody>
 </table>
 {% else %}
-<p><em>No active holds.</em></p>
+<p class="empty-inline">No active holds.</p>
 {% endif %}
 {% endif %}
 

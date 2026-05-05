@@ -1,4 +1,5 @@
 {% extends "base.html" %}
+{% from "_partials/empty_state.html" import empty_state %}
 {% block title %}Branches — {{ library_name() }}{% endblock %}
 {% block content %}
 <div style="display:flex; align-items:baseline; gap:1rem; margin-bottom:1rem">
@@ -9,7 +10,7 @@
 {% if error %}<p class="error-banner">{{ error }}</p>{% endif %}
 
 {% if not branches %}
-  <p><em>No branches configured.</em></p>
+  {{ empty_state("No branches configured") }}
 {% else %}
 <table>
   <thead>

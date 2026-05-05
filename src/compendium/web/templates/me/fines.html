@@ -1,11 +1,12 @@
 {% extends "base.html" %}
+{% from "_partials/empty_state.html" import empty_state %}
 {% block title %}My Fines — {{ library_name() }}{% endblock %}
 {% block content %}
 <h2>My Fines</h2>
 <p>Outstanding balance: <strong>{{ outstanding_cents | currency }}</strong></p>
 
 {% if not fines %}
-<p><em>You have no fines on record.</em></p>
+{{ empty_state("No fines on record", "Your account is in good standing.") }}
 {% else %}
 <table>
   <thead>
