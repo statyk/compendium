@@ -390,6 +390,22 @@ nav .brand-logo { width: 2em; height: 2em; flex-shrink: 0; display: block; }
   }
 }
 
+/* ── HTMX loading indicators ─────────────────────────────────── */
+.htmx-indicator { display: none; vertical-align: middle; }
+.htmx-indicator.htmx-request {
+  display: inline-block;
+  width: 1em; height: 1em;
+  border: 0.15em solid var(--pico-muted-color);
+  border-top-color: var(--cmp-color-brand);
+  border-radius: 50%;
+  animation: cmp-spin 0.6s linear infinite;
+  margin-left: 0.5em;
+}
+@keyframes cmp-spin { to { transform: rotate(360deg); } }
+
+/* Dim the submit button while its form request is in flight */
+form.htmx-request button[type="submit"] { opacity: 0.6; cursor: wait; }
+
 /* ── Banners ─────────────────────────────────────────────────── */
 .error-banner { color: var(--cmp-banner-error-fg); }
 p.error-banner {

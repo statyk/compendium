@@ -117,9 +117,11 @@
         hx-target="#hold-action"
         hx-swap="innerHTML"
         hx-include="[name='csrf_token']"
+        hx-indicator="#hold-ind"
       >
         <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
         <button type="submit" style="width:auto">Place Hold</button>
+        <span id="hold-ind" class="htmx-indicator" aria-label="Placing hold…"></span>
       </form>
     </div>
   </div>
@@ -137,9 +139,10 @@
       hx-target="#hold-for-action"
       hx-swap="innerHTML"
       hx-include="[name='csrf_token']"
+      hx-indicator="#hold-for-ind"
     >
       <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
-      <label for="hold-for-card">Place hold for patron</label>
+      <label for="hold-for-card">Place hold for patron <span id="hold-for-ind" class="htmx-indicator" aria-label="Placing hold…"></span></label>
       <fieldset role="group">
         <input type="text" id="hold-for-card" name="card_number" placeholder="Library card number" required>
         <button type="button" class="outline secondary" data-scan-target="hold-for-card">Scan</button>

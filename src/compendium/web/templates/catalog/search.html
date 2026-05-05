@@ -29,6 +29,7 @@
            hx-trigger="input changed delay:300ms, search"
            hx-target="#results"
            hx-include="closest form"
+           hx-indicator="#search-ind"
            style="width:100%; min-width:12rem; margin-bottom:0">
     <div id="suggest-list"
          hx-get="/ui/catalog/suggest"
@@ -42,6 +43,7 @@
   <input type="hidden" name="decade" value="{{ decade if decade is not none else '' }}">
   <input type="hidden" name="avail" value="{% if avail %}1{% else %}{% endif %}">
   <button type="submit" style="margin-bottom:0;width:auto">Search</button>
+  <span id="search-ind" class="htmx-indicator" aria-label="Loading…"></span>
 </form>
 
 {% if show_landing %}
