@@ -1,4 +1,3 @@
-import warnings
 from dataclasses import dataclass, field
 from datetime import UTC, datetime
 from typing import Any
@@ -810,7 +809,6 @@ class CatalogService:
         conflict_mode: str = "append",
         barcode: str | None = None,
         accession_number: str | None = None,
-        barcode_prefix: str | None = None,
         call_number: str | None = None,
         condition: str | None = None,
         location: str | None = None,
@@ -821,7 +819,7 @@ class CatalogService:
     ) -> tuple[Work | None, Item | None, str]:
         """Import-dedicated entry point. Dedups by ISBN/UPC, honours conflict_mode
         ('append' | 'skip-duplicates' | 'error-on-conflict'), and propagates
-        import-specific item fields (pre-set barcode, prefix, loanable state).
+        import-specific item fields (pre-set barcode, loanable state).
         Does NOT emit per-row audits — the caller records a summary BULK_IMPORT
         entry. Returns (work, item, outcome) where outcome is one of:
         'created_work', 'added_copy', 'skipped_duplicate', 'errored_on_conflict'."""
@@ -845,7 +843,6 @@ class CatalogService:
         item_kwargs = {
             "barcode": barcode,
             "accession_number": accession_number,
-            "barcode_prefix": barcode_prefix,
             "call_number": call_number,
             "condition": condition,
             "location": location,
@@ -957,7 +954,6 @@ class CatalogService:
         *,
         barcode: str | None = None,
         accession_number: str | None = None,
-        barcode_prefix: str | None = None,
         call_number: str | None = None,
         condition: str | None = None,
         is_loanable: bool = True,
@@ -969,13 +965,6 @@ class CatalogService:
         if accession_number is None:
             accession_number = self._next_accession()
         if barcode is None:
-            if barcode_prefix is not None:
-                warnings.warn(
-                    "barcode_prefix is deprecated and ignored; barcodes are now auto-minted "
-                    "in the standard 10/14-digit format.",
-                    DeprecationWarning,
-                    stacklevel=3,
-                )
             loc = self._resolve_location_code(branch)
             barcode = format_item_barcode(accession_number, location_code=loc)
         item = Item(

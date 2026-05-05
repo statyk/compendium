@@ -84,16 +84,6 @@ def test_cli_import_csv_dry_run(session, tmp_path):
     assert SqlWorkRepository(session).list() == []
 
 
-def test_cli_import_csv_barcode_prefix(session, tmp_path):
-    # barcode_prefix is deprecated and ignored; barcodes are auto-minted.
-    f = _minimal_csv(tmp_path)
-    result = _run(session, import_app, ["csv", str(f), "--barcode-prefix", "IMP-"])
-    assert result.exit_code == 0
-    for w in SqlWorkRepository(session).list():
-        for item in w.items:
-            assert validate_barcode(item.barcode, expected_type=ITEM_TYPE) is not None
-
-
 def test_cli_import_csv_invalid_mode(session, tmp_path):
     f = _minimal_csv(tmp_path)
     result = _run(session, import_app, ["csv", str(f), "--mode", "bogus"])

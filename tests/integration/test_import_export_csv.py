@@ -148,21 +148,6 @@ def test_csv_import_dry_run_does_not_persist(session):
     assert SqlWorkRepository(session).list() == []
 
 
-def test_csv_import_barcode_prefix_deprecated(session):
-    # barcode_prefix is deprecated and ignored; barcodes are auto-minted in the
-    # standard 10/14-digit format.
-    importer, _, _ = _make_services(session)
-    importer.import_csv(
-        io.StringIO(_MINIMAL_CSV),
-        ImportOptions(barcode_prefix="IMP-"),
-    )
-    works = SqlWorkRepository(session).list()
-    for w in works:
-        for item in w.items:
-            assert validate_barcode(item.barcode, expected_type=ITEM_TYPE) is not None
-            assert len(item.accession_number) == 8
-
-
 def test_csv_import_discards_explicit_barcode_by_default(session):
     """Default mode discards supplied non-conformant barcodes and mints fresh codes."""
     importer, _, _ = _make_services(session)

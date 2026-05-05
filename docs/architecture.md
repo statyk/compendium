@@ -253,7 +253,7 @@ Optional. If the key is not configured the behavior is unchanged (no cover store
 **Semantics:**
 
 - **Dedup** by ISBN/UPC only; no fuzzy title matching. Conflict modes: `append` (add a copy to the existing work — default), `skip-duplicates`, `error-on-conflict`.
-- **Barcode generation** uses the same sequential `_next_accession()` as regular adds; an optional `--barcode-prefix` tags auto-generated barcodes for a batch (prefix applies only to barcode, not accession_number).
+- **Barcode generation**: by default, any barcode/accession_number supplied in a CSV row is discarded and a fresh conformant 10/14-digit code is minted via `format_item_barcode()`. Pass `--preserve-barcodes` (CLI/API) or check the web checkbox to instead validate and keep the supplied codes (requires valid Compendium 10/14-digit format with Luhn check).
 - **Transaction ownership**: the importer flushes but never commits — the caller's session scope (or test fixture) controls commit/rollback. Dry-run rolls back. Per-row errors are collected into an `ImportReport`; barcode/accession uniqueness is pre-validated at the application layer to avoid IntegrityError rollbacks mid-batch.
 - **Audit**: one summary `BULK_IMPORT` AuditLog entry per run (not per row), carrying counts and filename.
 

@@ -98,7 +98,6 @@ def _options(
     mode: str,
     default_branch: str | None,
     default_media_type: str | None,
-    barcode_prefix: str | None,
     enrich: bool = False,
     preserve_barcodes: bool = False,
 ) -> ImportOptions:
@@ -107,7 +106,6 @@ def _options(
         dry_run=dry_run,
         default_branch_code=default_branch,
         default_media_type=default_media_type,
-        barcode_prefix=barcode_prefix,
         enrich_from_external=enrich,
         preserve_barcodes=preserve_barcodes,
     )
@@ -120,7 +118,6 @@ async def import_csv(
     mode: str = Query("append"),
     default_branch: str | None = Query(None),
     default_media_type: str | None = Query(None),
-    barcode_prefix: str | None = Query(None),
     enrich: bool = Query(False, description="Fill missing fields from the external metadata source per row."),
     preserve_barcodes: bool = Query(
         False,
@@ -146,7 +143,7 @@ async def import_csv(
         raise HTTPException(
             status_code=422, detail=f"CSV must be UTF-8 encoded: {exc}"
         ) from exc
-    options = _options(dry_run, mode, default_branch, default_media_type, barcode_prefix, enrich, preserve_barcodes)
+    options = _options(dry_run, mode, default_branch, default_media_type, enrich, preserve_barcodes)
     importer = _make_importer(session, user)
     try:
         report = importer.import_csv(text_stream, options, filename=file.filename)
@@ -162,7 +159,6 @@ async def import_marc(
     mode: str = Query("append"),
     default_branch: str | None = Query(None),
     default_media_type: str | None = Query(None),
-    barcode_prefix: str | None = Query(None),
     is_xml: bool = Query(
         False,
         alias="xml",
@@ -184,7 +180,7 @@ async def import_marc(
         file.filename is not None
         and file.filename.lower().endswith((".xml", ".marcxml"))
     )
-    options = _options(dry_run, mode, default_branch, default_media_type, barcode_prefix, enrich)
+    options = _options(dry_run, mode, default_branch, default_media_type, enrich)
     importer = _make_importer(session, user)
     try:
         if auto_xml:

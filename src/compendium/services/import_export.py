@@ -14,7 +14,7 @@ Design notes:
 - MARC export is standards-compliant; item-level fields (barcode, branch,
   loanable) are not included — they would require non-standard local fields.
   MARC import creates one Item per record using the catalog's accession
-  generator (or the --barcode-prefix, if given).
+  generator (barcodes are always auto-minted in the standard 10/14-digit format).
 """
 
 from __future__ import annotations
@@ -52,9 +52,6 @@ class ImportOptions:
     dry_run: bool = False
     default_branch_code: str | None = None
     default_media_type: str | None = None
-    # Deprecated: barcode_prefix is ignored; barcodes are now auto-minted in
-    # the standard 10/14-digit format. Kept to avoid breaking callers.
-    barcode_prefix: str | None = None
     # When True, rows with an ISBN/UPC and at least one missing metadata
     # field will be enriched from the appropriate external source
     # (Open Library / MusicBrainz / TMDb) at import time. Disabled by
@@ -567,7 +564,6 @@ class ImportService:
                 media_type_code=mt,
                 meta=meta,
                 conflict_mode=options.mode.value,
-                barcode_prefix=options.barcode_prefix,
                 branch_code=options.default_branch_code,
             )
         except (ValidationError, BusinessRuleError) as exc:
@@ -751,7 +747,6 @@ class ImportService:
             conflict_mode=options.mode.value,
             barcode=barcode,
             accession_number=accession,
-            barcode_prefix=options.barcode_prefix,
             call_number=_strip(row.get("call_number")),
             condition=_strip(row.get("condition")),
             location=_strip(row.get("location")),

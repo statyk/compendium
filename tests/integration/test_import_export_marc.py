@@ -188,16 +188,6 @@ def test_marc_import_missing_title_is_row_error(session):
     assert "245" in report.errors[0].message
 
 
-def test_marc_import_barcode_prefix_deprecated(session):
-    # barcode_prefix is deprecated and ignored; barcodes are auto-minted.
-    importer, _, _ = _services(session)
-    stream = _bytes_from([_mk_book_record()])
-    importer.import_marc(stream, ImportOptions(barcode_prefix="IMP-"))
-    w = SqlWorkRepository(session).get_by_isbn("9780441013593")
-    assert validate_barcode(w.items[0].barcode, expected_type=ITEM_TYPE) is not None
-    assert len(w.items[0].accession_number) == 8
-
-
 def test_marc_round_trip_preserves_core_fields(session):
     importer, exporter, _ = _services(session)
     stream = _bytes_from([_mk_book_record(), _mk_dvd_record()])

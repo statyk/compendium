@@ -104,7 +104,6 @@ async def import_submit(
     dry_run: str | None = Form(None),
     default_branch: str | None = Form(None),
     default_media_type: str | None = Form(None),
-    barcode_prefix: str | None = Form(None),
     enrich: str | None = Form(None),
     preserve_barcodes: str | None = Form(None),
     csrf_token: str = Form(...),
@@ -137,7 +136,6 @@ async def import_submit(
         dry_run=bool(dry_run),
         default_branch_code=default_branch or None,
         default_media_type=default_media_type or None,
-        barcode_prefix=barcode_prefix or None,
         enrich_from_external=bool(enrich),
         preserve_barcodes=bool(preserve_barcodes),
     )

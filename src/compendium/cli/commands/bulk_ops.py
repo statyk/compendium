@@ -94,7 +94,6 @@ def _common_import_options(
     mode: str,
     default_branch: str | None,
     default_media_type: str | None,
-    barcode_prefix: str | None,
     enrich: bool = False,
     preserve_barcodes: bool = False,
 ) -> ImportOptions:
@@ -103,7 +102,6 @@ def _common_import_options(
         dry_run=dry_run,
         default_branch_code=default_branch,
         default_media_type=default_media_type,
-        barcode_prefix=barcode_prefix,
         enrich_from_external=enrich,
         preserve_barcodes=preserve_barcodes,
     )
@@ -125,11 +123,6 @@ def import_csv_cmd(
         None,
         "--default-media-type",
         help="Media type code applied to rows without one.",
-    ),
-    barcode_prefix: str | None = typer.Option(
-        None,
-        "--barcode-prefix",
-        help="Prefix for auto-generated barcodes in this batch (e.g. 'IMP-').",
     ),
     enrich: bool = typer.Option(
         False,
@@ -154,7 +147,7 @@ def import_csv_cmd(
 ) -> None:
     """Import catalog rows from a CSV file."""
     options = _common_import_options(
-        dry_run, mode, default_branch, default_media_type, barcode_prefix, enrich, preserve_barcodes
+        dry_run, mode, default_branch, default_media_type, enrich, preserve_barcodes
     )
     label = "stdin" if is_stdio(file) else Path(file).name
     try:
@@ -180,7 +173,6 @@ def import_marc_cmd(
     mode: str = typer.Option("append", "--mode"),
     default_branch: str | None = typer.Option(None, "--default-branch"),
     default_media_type: str | None = typer.Option(None, "--default-media-type"),
-    barcode_prefix: str | None = typer.Option(None, "--barcode-prefix"),
     xml: bool = typer.Option(
         False,
         "--xml",
@@ -198,7 +190,7 @@ def import_marc_cmd(
 ) -> None:
     """Import catalog records from a MARC21 binary (.mrc) or MARCXML (.xml) file."""
     options = _common_import_options(
-        dry_run, mode, default_branch, default_media_type, barcode_prefix, enrich
+        dry_run, mode, default_branch, default_media_type, enrich
     )
     if is_stdio(file):
         is_xml = xml  # extension-sniffing isn't possible for stdin; explicit flag wins
