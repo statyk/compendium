@@ -10,7 +10,13 @@ from compendium.repositories.sql.work_repository import SqlWorkRepository
 from compendium.repositories.sql.counters import SqlCounterRepository
 from compendium.services.catalog import CatalogService
 
-app = typer.Typer(help="Creator (author/director/artist) commands.")
+app = typer.Typer(
+    help=(
+        "Creator (author/director/artist) commands. "
+        "Operates on the global Creator table. "
+        "For per-work add/remove/reorder, see 'compendium work creator'."
+    )
+)
 
 
 def _catalog(session):

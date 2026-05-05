@@ -14,7 +14,12 @@ from compendium.services.audit import AuditService
 from compendium.services.catalog import CatalogService
 
 app = typer.Typer(help="Work (catalog title) commands.")
-creator_app = typer.Typer(help="Manage creators on a specific work.")
+creator_app = typer.Typer(
+    help=(
+        "Manage creators on a specific work (add/remove/reorder). "
+        "To rename a Creator globally, see 'compendium creator rename'."
+    )
+)
 app.add_typer(creator_app, name="creator")
 
 
