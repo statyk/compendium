@@ -52,9 +52,121 @@
 
   /* Display typeface — placeholder until Slice 1.3 sets a real font */
   --cmp-font-display: inherit;
+
+  /* Nav */
+  --cmp-nav-bg: #7a5230;
+  --cmp-nav-fg: #fdf6ec;
+}
+
+/* Pico sets its primary vars on :root:not([data-theme=dark]) (specificity 0,2,0)
+   which beats a plain :root (0,1,0). Match the selector to win. */
+:root:not([data-theme=dark]),
+[data-theme=light] {
+  --pico-primary:                  #7a5230;
+  --pico-primary-hover:            #9a6840;
+  --pico-primary-background:       #7a5230;
+  --pico-primary-hover-background: #9a6840;
+  --pico-primary-border:           #7a5230;
+  --pico-primary-hover-border:     #9a6840;
+  --pico-primary-underline:        rgba(122, 82, 48, 0.5);
+  --pico-primary-hover-underline:  rgba(154, 104, 64, 0.7);
+  --pico-primary-focus:            rgba(122, 82, 48, 0.25);
+  --pico-primary-inverse:          #fdf6ec;
+}
+
+/* ── Dark-mode token overrides ───────────────────────────────── */
+[data-theme="dark"] {
+  /* Nav — same walnut as light mode so it reads clearly against dark body */
+  --cmp-nav-bg: #7a5230;
+  --cmp-nav-fg: #f5e8d5;
+
+  /* Pico primary → lighter for contrast on dark bg */
+  --pico-primary:                  #c8916a;
+  --pico-primary-hover:            #d4a47c;
+  --pico-primary-background:       #c8916a;
+  --pico-primary-hover-background: #d4a47c;
+  --pico-primary-border:           #c8916a;
+  --pico-primary-hover-border:     #d4a47c;
+  --pico-primary-underline:        rgba(200, 145, 106, 0.5);
+  --pico-primary-hover-underline:  rgba(212, 164, 124, 0.7);
+  --pico-primary-focus:            rgba(200, 145, 106, 0.25);
+  --pico-primary-inverse:          #1e140c;
+
+  /* Banners */
+  --cmp-banner-error-fg:       #e07070;
+  --cmp-banner-error-bg:       #2e0c0c;
+  --cmp-banner-error-border:   #902020;
+  --cmp-banner-success-fg:     #5ad090;
+  --cmp-banner-success-bg:     #0c2418;
+  --cmp-banner-success-border: #2a8c50;
+  --cmp-banner-warn-fg:        #e0b050;
+  --cmp-banner-warn-bg:        #2e1e08;
+  --cmp-banner-warn-border:    #c08020;
+
+  /* Status pills */
+  --cmp-pill-available-bg:       #1a3d28; --cmp-pill-available-fg:       #5ad090;
+  --cmp-pill-checked-out-bg:     #3d2e08; --cmp-pill-checked-out-fg:     #e0b840;
+  --cmp-pill-on-hold-bg:         #0e2040; --cmp-pill-on-hold-fg:         #6aacf0;
+  --cmp-pill-lost-bg:            #2e0c0c; --cmp-pill-lost-fg:            #e07070;
+  --cmp-pill-damaged-bg:         #3a1808; --cmp-pill-damaged-fg:         #e09060;
+  --cmp-pill-claims-returned-bg: #2e2008; --cmp-pill-claims-returned-fg: #d4b050;
+  --cmp-pill-withdrawn-bg:       #282820; --cmp-pill-withdrawn-fg:       #a0a098;
+  --cmp-pill-waiting-bg:         #3d2e08; --cmp-pill-waiting-fg:         #e0b840;
+  --cmp-pill-fulfilled-bg:       #282820; --cmp-pill-fulfilled-fg:       #a0a098;
+  --cmp-pill-cancelled-bg:       #282820; --cmp-pill-cancelled-fg:       #a0a098;
+  --cmp-pill-expired-bg:         #2e0c0c; --cmp-pill-expired-fg:         #e07070;
+
+  /* Media-type pills */
+  --cmp-pill-book-bg:   #0e2040; --cmp-pill-book-fg:   #6aacf0;
+  --cmp-pill-vinyl-bg:  #1e1030; --cmp-pill-vinyl-fg:  #c090f0;
+  --cmp-pill-cd-bg:     #082028; --cmp-pill-cd-fg:     #60d8f8;
+  --cmp-pill-dvd-bg:    #2e1008; --cmp-pill-dvd-fg:    #e09060;
+  --cmp-pill-bluray-bg: #101430; --cmp-pill-bluray-fg: #8090e8;
+  --cmp-pill-vhs-bg:    #282820; --cmp-pill-vhs-fg:    #a0a098;
+
+  /* Location pills */
+  --cmp-pill-reference-bg:      #301808; --cmp-pill-reference-fg:      #d8b050;
+  --cmp-pill-in-library-use-bg: #301808; --cmp-pill-in-library-use-fg: #d8b050;
+  --cmp-pill-archive-bg:        #101430; --cmp-pill-archive-fg:        #8090e8;
+  --cmp-pill-staff-only-bg:     #2e0c0c; --cmp-pill-staff-only-fg:     #e07070;
+  --cmp-pill-display-bg:        #2a0818; --cmp-pill-display-fg:        #e080b0;
+  --cmp-pill-other-bg:          #282820; --cmp-pill-other-fg:          #a0a098;
+
+  --cmp-env-warning-fg: #d4b858;
 }
 
 /* ── Brand & nav ─────────────────────────────────────────────── */
+header.container {
+  background: var(--cmp-nav-bg);
+  color: var(--cmp-nav-fg);
+}
+/* Top-level nav links and dropdown summaries take nav-fg color */
+header.container a,
+header.container nav summary {
+  color: var(--cmp-nav-fg);
+  text-decoration: none;
+}
+header.container a:hover,
+header.container nav summary:hover { opacity: 0.85; }
+/* Dropdown popup menus revert to page surface colors */
+header.container nav details.dropdown summary + ul {
+  color: var(--pico-color);
+}
+header.container nav details.dropdown summary + ul a,
+header.container nav details.dropdown form.dropdown-form button {
+  color: var(--pico-color);
+}
+header.container nav details.dropdown summary + ul a:hover { opacity: 1; }
+/* Login outline button — visible on walnut background */
+header.container a[role="button"].outline {
+  border-color: var(--cmp-nav-fg);
+  color: var(--cmp-nav-fg);
+}
+header.container a[role="button"].outline:hover {
+  background: rgba(253, 246, 236, 0.12);
+  opacity: 1;
+}
+
 nav .brand {
   font-weight: bold; font-size: 1.25rem; text-decoration: none; color: inherit;
   display: inline-flex; align-items: center; gap: 0.5rem;
@@ -86,6 +198,25 @@ p.success-banner::before { content: "✓ "; }
 }
 
 /* ── Nav dropdown fixes ──────────────────────────────────────── */
+/* Pico gives details.dropdown a card background; strip it inside the nav
+   so nothing boxes over the walnut header. */
+header.container nav details.dropdown,
+header.container nav details.dropdown > summary {
+  background: transparent;
+  border: none;
+  box-shadow: none;
+  padding: 0;
+  color: var(--cmp-nav-fg);
+}
+/* Pico controls summary text via --pico-accordion-*-summary-color, which
+   overrides a generic color rule. Override in the nav scope so all
+   dropdown summaries (theme picker, Circulation, etc.) stay cream. */
+header.container nav {
+  --pico-accordion-close-summary-color: var(--cmp-nav-fg);
+  --pico-accordion-open-summary-color:  var(--cmp-nav-fg);
+  --pico-dropdown-color: var(--cmp-nav-fg);
+}
+
 /* Pico v2 sets nav details.dropdown to display:inline, which Firefox
    treats as zero-width when sizing the absolutely-positioned menu,
    causing the menu to stretch the full page width. inline-block gives
