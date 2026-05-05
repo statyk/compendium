@@ -9,16 +9,16 @@
 {% if not patrons %}
   {{ empty_state("No patrons on record", "Add patrons to start tracking checkouts and holds.", cta_href="/ui/patrons/new", cta_label="Add patron") }}
 {% else %}
-<table>
+<table class="responsive-table">
   <thead>
     <tr><th>Name</th><th>Card #</th><th>Status</th></tr>
   </thead>
   <tbody>
     {% for patron in patrons %}
     <tr>
-      <td><a href="/ui/patrons/{{ patron.library_card_number }}">{{ patron.full_name }}</a></td>
-      <td><code>{{ patron.library_card_number }}</code></td>
-      <td>{% if patron.is_active %}Active{% else %}<em>Inactive</em>{% endif %}</td>
+      <td data-label="Name"><a href="/ui/patrons/{{ patron.library_card_number }}">{{ patron.full_name }}</a></td>
+      <td data-label="Card #"><code>{{ patron.library_card_number }}</code></td>
+      <td data-label="Status">{% if patron.is_active %}Active{% else %}<em>Inactive</em>{% endif %}</td>
     </tr>
     {% endfor %}
   </tbody>

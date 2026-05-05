@@ -109,14 +109,14 @@
 
 <h3>Active Loans <small><a href="/ui/patrons/{{ patron.library_card_number }}/loans">(view all)</a></small></h3>
 {% if loans %}
-<table>
+<table class="responsive-table">
   <thead><tr><th>Barcode</th><th>Title</th><th>Due</th></tr></thead>
   <tbody>
     {% for loan in loans %}
     <tr>
-      <td><code>{{ loan.item.barcode }}</code></td>
-      <td><a href="/ui/catalog/{{ loan.item.work_id }}">{{ loan.item.work.title }}</a></td>
-      <td>{{ loan.due_at.strftime("%Y-%m-%d") if loan.due_at else "—" }}</td>
+      <td data-label="Barcode"><code>{{ loan.item.barcode }}</code></td>
+      <td data-label="Title"><a href="/ui/catalog/{{ loan.item.work_id }}">{{ loan.item.work.title }}</a></td>
+      <td data-label="Due">{{ loan.due_at.strftime("%Y-%m-%d") if loan.due_at else "—" }}</td>
     </tr>
     {% endfor %}
   </tbody>
@@ -127,16 +127,16 @@
 
 <h3>Active Holds</h3>
 {% if holds %}
-<table>
+<table class="responsive-table">
   <thead><tr><th>Title</th><th>Status</th><th>Expires</th>{% if has_permission(user, 'hold.place.any') %}<th></th>{% endif %}</tr></thead>
   <tbody>
     {% for hold in holds %}
     <tr id="hold-row-{{ hold.id }}">
-      <td><a href="/ui/catalog/{{ hold.work_id }}">{{ hold.work.title }}</a></td>
-      <td>{{ status_pill(hold.status) }}</td>
-      <td>{{ hold.expires_at.strftime("%Y-%m-%d") if hold.expires_at else "—" }}</td>
+      <td data-label="Title"><a href="/ui/catalog/{{ hold.work_id }}">{{ hold.work.title }}</a></td>
+      <td data-label="Status">{{ status_pill(hold.status) }}</td>
+      <td data-label="Expires">{{ hold.expires_at.strftime("%Y-%m-%d") if hold.expires_at else "—" }}</td>
       {% if has_permission(user, 'hold.place.any') %}
-      <td>
+      <td data-label="">
         <form
           hx-post="/ui/patrons/{{ patron.library_card_number }}/holds/{{ hold.id }}/cancel"
           hx-target="closest tr"

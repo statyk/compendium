@@ -33,7 +33,7 @@
 <p><strong>{{ total }}</strong> active loan{{ '' if total == 1 else 's' }}</p>
 
 {% if loans %}
-<table>
+<table class="responsive-table">
   <thead>
     <tr>
       <th>Patron</th>
@@ -48,18 +48,18 @@
     {% for loan in loans %}
     {% set overdue = loan.due_at < now() %}
     <tr>
-      <td>
+      <td data-label="Patron">
         <a href="/ui/patrons/{{ loan.patron.library_card_number }}">{{ loan.patron.full_name }}</a>
         <br><small><code>{{ loan.patron.library_card_number }}</code></small>
       </td>
-      <td><a href="/ui/items/{{ loan.item.barcode }}"><code>{{ loan.item.barcode }}</code></a></td>
-      <td><a href="/ui/catalog/{{ loan.item.work.id }}">{{ loan.item.work.title }}</a></td>
-      <td><small>{{ loan.checked_out_at.strftime("%Y-%m-%d") }}</small></td>
-      <td>
+      <td data-label="Item"><a href="/ui/items/{{ loan.item.barcode }}"><code>{{ loan.item.barcode }}</code></a></td>
+      <td data-label="Title"><a href="/ui/catalog/{{ loan.item.work.id }}">{{ loan.item.work.title }}</a></td>
+      <td data-label="Out"><small>{{ loan.checked_out_at.strftime("%Y-%m-%d") }}</small></td>
+      <td data-label="Due">
         <small>{{ loan.due_at.strftime("%Y-%m-%d") }}</small>
         {% if overdue %}<br><span class="pill pill-damaged">overdue</span>{% endif %}
       </td>
-      <td><small>{{ loan.branch.code if loan.branch else "—" }}</small></td>
+      <td data-label="Branch"><small>{{ loan.branch.code if loan.branch else "—" }}</small></td>
     </tr>
     {% endfor %}
   </tbody>

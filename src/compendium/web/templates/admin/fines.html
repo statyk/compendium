@@ -27,7 +27,7 @@
 </p>
 
 {% if fines %}
-<table>
+<table class="responsive-table">
   <thead>
     <tr>
       <th>Patron</th>
@@ -41,19 +41,19 @@
   <tbody>
     {% for fine in fines %}
     <tr>
-      <td>
+      <td data-label="Patron">
         <a href="/ui/patrons/{{ fine.patron.library_card_number }}">{{ fine.patron.full_name }}</a>
         <br><small><code>{{ fine.patron.library_card_number }}</code></small>
       </td>
-      <td><strong>{{ fine.amount_cents | currency }}</strong></td>
-      <td><span class="pill pill-{{ fine.kind }}">{{ fine.kind }}</span></td>
-      <td><small>{{ fine.assessed_at.strftime("%Y-%m-%d") }}</small></td>
-      <td>
+      <td data-label="Amount"><strong>{{ fine.amount_cents | currency }}</strong></td>
+      <td data-label="Kind"><span class="pill pill-{{ fine.kind }}">{{ fine.kind }}</span></td>
+      <td data-label="Assessed"><small>{{ fine.assessed_at.strftime("%Y-%m-%d") }}</small></td>
+      <td data-label="Item">
         {% if fine.item %}
           <a href="/ui/items/{{ fine.item.barcode }}"><code>{{ fine.item.barcode }}</code></a>
         {% else %}—{% endif %}
       </td>
-      <td>
+      <td data-label="">
         <a href="/ui/patrons/{{ fine.patron.library_card_number }}/fines" role="button" class="outline" style="padding:0.2rem 0.6rem">Resolve</a>
       </td>
     </tr>

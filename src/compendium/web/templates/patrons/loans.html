@@ -23,7 +23,7 @@
 <p><strong>{{ total }}</strong> {{ status }} loan{{ '' if total == 1 else 's' }}</p>
 
 {% if loans %}
-<table>
+<table class="responsive-table">
   <thead>
     <tr>
       <th>Barcode</th>
@@ -37,13 +37,13 @@
   <tbody>
     {% for loan in loans %}
     <tr>
-      <td><a href="/ui/items/{{ loan.item.barcode }}"><code>{{ loan.item.barcode }}</code></a></td>
-      <td><a href="/ui/catalog/{{ loan.item.work_id }}">{{ loan.item.work.title }}</a></td>
-      <td>{{ loan.item.branch.name if loan.item.branch else "—" }}</td>
-      <td>{{ loan.checked_out_at.strftime("%Y-%m-%d") if loan.checked_out_at else "—" }}</td>
-      <td>{{ loan.due_at.strftime("%Y-%m-%d") if loan.due_at else "—" }}</td>
+      <td data-label="Barcode"><a href="/ui/items/{{ loan.item.barcode }}"><code>{{ loan.item.barcode }}</code></a></td>
+      <td data-label="Title"><a href="/ui/catalog/{{ loan.item.work_id }}">{{ loan.item.work.title }}</a></td>
+      <td data-label="Branch">{{ loan.item.branch.name if loan.item.branch else "—" }}</td>
+      <td data-label="Out">{{ loan.checked_out_at.strftime("%Y-%m-%d") if loan.checked_out_at else "—" }}</td>
+      <td data-label="Due">{{ loan.due_at.strftime("%Y-%m-%d") if loan.due_at else "—" }}</td>
       {% if status != 'active' %}
-      <td>{{ loan.returned_at.strftime("%Y-%m-%d") if loan.returned_at else "—" }}</td>
+      <td data-label="Returned">{{ loan.returned_at.strftime("%Y-%m-%d") if loan.returned_at else "—" }}</td>
       {% endif %}
     </tr>
     {% endfor %}

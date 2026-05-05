@@ -43,7 +43,7 @@
 <p><strong>{{ total }}</strong> matching hold{{ '' if total == 1 else 's' }}{% if status == 'available' %} · on the pickup shelf now{% endif %}</p>
 
 {% if holds %}
-<table>
+<table class="responsive-table">
   <thead>
     <tr>
       <th>#</th>
@@ -59,18 +59,18 @@
   <tbody>
     {% for h in holds %}
     <tr>
-      <td>{{ positions.get(h.id) or "—" }}</td>
-      <td><small>{{ h.placed_at.strftime("%Y-%m-%d") }}</small></td>
-      <td>
+      <td data-label="#">{{ positions.get(h.id) or "—" }}</td>
+      <td data-label="Placed"><small>{{ h.placed_at.strftime("%Y-%m-%d") }}</small></td>
+      <td data-label="Patron">
         <a href="/ui/patrons/{{ h.patron.library_card_number }}">{{ h.patron.full_name }}</a>
         <br><small><code>{{ h.patron.library_card_number }}</code></small>
       </td>
-      <td>
+      <td data-label="Work">
         <a href="/ui/catalog/{{ h.work.id }}">{{ h.work.title }}</a>
       </td>
-      <td>{{ status_pill(h.status) }}</td>
-      <td><small>{{ h.branch.code if h.branch else "—" }}</small></td>
-      <td><small>
+      <td data-label="Status">{{ status_pill(h.status) }}</td>
+      <td data-label="Branch"><small>{{ h.branch.code if h.branch else "—" }}</small></td>
+      <td data-label="Suspended"><small>
         {% if h.suspended_until %}
           Until {{ h.suspended_until.isoformat() }}
           {% if h.suspended_reason %}<br><em>{{ h.suspended_reason }}</em>{% endif %}
@@ -78,7 +78,7 @@
           —
         {% endif %}
       </small></td>
-      <td><small>{{ h.expires_at.strftime("%Y-%m-%d") if h.expires_at else "—" }}</small></td>
+      <td data-label="Expires"><small>{{ h.expires_at.strftime("%Y-%m-%d") if h.expires_at else "—" }}</small></td>
     </tr>
     {% endfor %}
   </tbody>

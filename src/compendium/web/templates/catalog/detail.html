@@ -81,21 +81,21 @@
     {% endif %}
   </div>
   {% if work.items %}
-  <table>
+  <table class="responsive-table">
     <thead><tr><th>Barcode</th><th>Branch</th><th>Status</th><th>Call #</th></tr></thead>
     <tbody>
       {% for item in work.items %}
       <tr>
-        <td><a href="/ui/items/{{ item.barcode }}"><code>{{ item.barcode }}</code></a></td>
-        <td>{{ item.branch.name }}</td>
-        <td>
+        <td data-label="Barcode"><a href="/ui/items/{{ item.barcode }}"><code>{{ item.barcode }}</code></a></td>
+        <td data-label="Branch">{{ item.branch.name }}</td>
+        <td data-label="Status">
           {{ status_pill(item.status) }}
           {{ loan_pill(item) }}
           {% if item.status == "checked_out" and item_due.get(item.id) %}
           <br><small style="color:var(--pico-muted-color)">due {{ item_due[item.id].strftime("%Y-%m-%d") }}</small>
           {% endif %}
         </td>
-        <td>{{ item.call_number or "—" }}</td>
+        <td data-label="Call #">{{ item.call_number or "—" }}</td>
       </tr>
       {% endfor %}
     </tbody>
@@ -155,21 +155,21 @@
 <hr>
 <h3>Hold queue</h3>
 {% if queue %}
-<table>
+<table class="responsive-table">
   <thead>
     <tr><th>#</th><th>Patron</th><th>Placed</th><th>Status</th><th>Suspended</th></tr>
   </thead>
   <tbody>
     {% for h in queue %}
     <tr>
-      <td>{{ loop.index }}</td>
-      <td>
+      <td data-label="#">{{ loop.index }}</td>
+      <td data-label="Patron">
         <a href="/ui/patrons/{{ h.patron.library_card_number }}">{{ h.patron.full_name }}</a>
         <br><small><code>{{ h.patron.library_card_number }}</code></small>
       </td>
-      <td><small>{{ h.placed_at.strftime("%Y-%m-%d") }}</small></td>
-      <td>{{ status_pill(h.status) }}</td>
-      <td><small>{% if h.suspended_until %}Until {{ h.suspended_until.isoformat() }}{% else %}—{% endif %}</small></td>
+      <td data-label="Placed"><small>{{ h.placed_at.strftime("%Y-%m-%d") }}</small></td>
+      <td data-label="Status">{{ status_pill(h.status) }}</td>
+      <td data-label="Suspended"><small>{% if h.suspended_until %}Until {{ h.suspended_until.isoformat() }}{% else %}—{% endif %}</small></td>
     </tr>
     {% endfor %}
   </tbody>

@@ -5,19 +5,19 @@
 <p><small>Items a patron has claimed to have returned, but which haven't been located. Resolve each by verifying (found on shelf), writing off (trust the patron), or declaring lost.</small></p>
 
 {% if rows %}
-<table>
+<table class="responsive-table">
   <thead>
     <tr><th>Loan #</th><th>Barcode</th><th>Title</th><th>Patron</th><th>Card</th><th></th></tr>
   </thead>
   <tbody>
     {% for loan, item, work, patron in rows %}
     <tr>
-      <td>{{ loan.id }}</td>
-      <td><a href="/ui/items/{{ item.barcode }}"><code>{{ item.barcode }}</code></a></td>
-      <td><a href="/ui/catalog/{{ work.id }}">{{ work.title }}</a></td>
-      <td>{{ patron.full_name }}</td>
-      <td><a href="/ui/patrons/{{ patron.library_card_number }}"><code>{{ patron.library_card_number }}</code></a></td>
-      <td><a href="/ui/items/{{ item.barcode }}" role="button" class="outline" style="padding:0.2rem 0.6rem">Resolve</a></td>
+      <td data-label="Loan #">{{ loan.id }}</td>
+      <td data-label="Barcode"><a href="/ui/items/{{ item.barcode }}"><code>{{ item.barcode }}</code></a></td>
+      <td data-label="Title"><a href="/ui/catalog/{{ work.id }}">{{ work.title }}</a></td>
+      <td data-label="Patron">{{ patron.full_name }}</td>
+      <td data-label="Card"><a href="/ui/patrons/{{ patron.library_card_number }}"><code>{{ patron.library_card_number }}</code></a></td>
+      <td data-label=""><a href="/ui/items/{{ item.barcode }}" role="button" class="outline" style="padding:0.2rem 0.6rem">Resolve</a></td>
     </tr>
     {% endfor %}
   </tbody>

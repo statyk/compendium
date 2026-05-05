@@ -9,17 +9,17 @@
 {% if not users %}
   {{ empty_state("No users on record", "Add a user account to grant access to the system.", cta_href="/ui/users/new", cta_label="Add user") }}
 {% else %}
-<table>
+<table class="responsive-table">
   <thead>
     <tr><th>Username</th><th>Email</th><th>Role</th><th>Status</th></tr>
   </thead>
   <tbody>
     {% for u in users %}
     <tr>
-      <td><a href="/ui/users/{{ u.username }}">{{ u.username }}</a></td>
-      <td>{{ u.email or "—" }}</td>
-      <td>{{ u.role.name }}</td>
-      <td>{% if u.is_active %}Active{% else %}<em>Inactive</em>{% endif %}</td>
+      <td data-label="Username"><a href="/ui/users/{{ u.username }}">{{ u.username }}</a></td>
+      <td data-label="Email">{{ u.email or "—" }}</td>
+      <td data-label="Role">{{ u.role.name }}</td>
+      <td data-label="Status">{% if u.is_active %}Active{% else %}<em>Inactive</em>{% endif %}</td>
     </tr>
     {% endfor %}
   </tbody>

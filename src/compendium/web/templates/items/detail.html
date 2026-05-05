@@ -108,21 +108,21 @@
 <hr>
 <h3>Loan history</h3>
 {% if loan_history %}
-<table>
+<table class="responsive-table">
   <thead>
     <tr><th>Patron</th><th>Checked out</th><th>Due</th><th>Returned</th><th>Renewals</th></tr>
   </thead>
   <tbody>
     {% for loan in loan_history %}
     <tr>
-      <td>
+      <td data-label="Patron">
         <a href="/ui/patrons/{{ loan.patron.library_card_number }}">{{ loan.patron.full_name }}</a>
         <br><small><code>{{ loan.patron.library_card_number }}</code></small>
       </td>
-      <td><small>{{ loan.checked_out_at.strftime("%Y-%m-%d") }}</small></td>
-      <td><small>{{ loan.due_at.strftime("%Y-%m-%d") }}</small></td>
-      <td><small>{{ loan.returned_at.strftime("%Y-%m-%d") if loan.returned_at else "—" }}</small></td>
-      <td>{{ loan.renewal_count }}</td>
+      <td data-label="Out"><small>{{ loan.checked_out_at.strftime("%Y-%m-%d") }}</small></td>
+      <td data-label="Due"><small>{{ loan.due_at.strftime("%Y-%m-%d") }}</small></td>
+      <td data-label="Returned"><small>{{ loan.returned_at.strftime("%Y-%m-%d") if loan.returned_at else "—" }}</small></td>
+      <td data-label="Renewals">{{ loan.renewal_count }}</td>
     </tr>
     {% endfor %}
   </tbody>

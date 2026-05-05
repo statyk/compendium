@@ -8,18 +8,18 @@
 {% if not fines %}
 {{ empty_state("No fines on record", "Your account is in good standing.") }}
 {% else %}
-<table>
+<table class="responsive-table">
   <thead>
     <tr><th>Kind</th><th>Amount</th><th>Status</th><th>Assessed</th><th>Note</th></tr>
   </thead>
   <tbody>
     {% for fine in fines %}
     <tr>
-      <td>{{ fine.kind | replace("_", " ") }}</td>
-      <td>{{ fine.amount_cents | currency }}</td>
-      <td>{{ fine.status }}</td>
-      <td>{{ fine.assessed_at.strftime("%Y-%m-%d") }}</td>
-      <td>{{ fine.note or "—" }}</td>
+      <td data-label="Kind">{{ fine.kind | replace("_", " ") }}</td>
+      <td data-label="Amount">{{ fine.amount_cents | currency }}</td>
+      <td data-label="Status">{{ fine.status }}</td>
+      <td data-label="Assessed">{{ fine.assessed_at.strftime("%Y-%m-%d") }}</td>
+      <td data-label="Note">{{ fine.note or "—" }}</td>
     </tr>
     {% endfor %}
   </tbody>

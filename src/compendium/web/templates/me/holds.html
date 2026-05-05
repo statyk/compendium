@@ -14,29 +14,29 @@
 {% if not holds %}
   {{ empty_state("No active holds", "Reserve items from the catalog and they will appear here.", cta_href="/ui/catalog", cta_label="Browse catalog") }}
 {% else %}
-<table>
+<table class="responsive-table">
   <thead>
     <tr><th>Title</th><th>Status</th><th>Queue</th><th>Expires</th><th>Action</th></tr>
   </thead>
   <tbody>
     {% for hold in holds %}
     <tr id="hold-{{ hold.id }}">
-      <td><a href="/ui/catalog/{{ hold.work_id }}">{{ hold.work.title }}</a></td>
-      <td>
+      <td data-label="Title"><a href="/ui/catalog/{{ hold.work_id }}">{{ hold.work.title }}</a></td>
+      <td data-label="Status">
         {{ status_pill(hold.status) }}
         {% if hold.suspended_until %}
           <br><small><em>Suspended until {{ hold.suspended_until.isoformat() }}</em></small>
           {% if hold.suspended_reason %}<br><small>{{ hold.suspended_reason }}</small>{% endif %}
         {% endif %}
       </td>
-      <td>
+      <td data-label="Queue">
         {% set pos = queue_positions.get(hold.id) %}
         {% if pos %}
           #{{ pos }}
         {% else %}—{% endif %}
       </td>
-      <td>{{ hold.expires_at.strftime("%Y-%m-%d") if hold.expires_at else "—" }}</td>
-      <td style="display:flex; gap:0.5rem; flex-wrap:wrap">
+      <td data-label="Expires">{{ hold.expires_at.strftime("%Y-%m-%d") if hold.expires_at else "—" }}</td>
+      <td data-label="" style="display:flex; gap:0.5rem; flex-wrap:wrap">
         {% if hold.status == "waiting" and not hold.suspended_until %}
         <form
           action="/ui/me/holds/{{ hold.id }}/suspend"

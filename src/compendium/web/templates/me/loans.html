@@ -6,17 +6,17 @@
 {% if not loans %}
   {{ empty_state("No active loans", "When you check out items they will appear here.", cta_href="/ui/catalog", cta_label="Browse catalog") }}
 {% else %}
-<table>
+<table class="responsive-table">
   <thead>
     <tr><th>Barcode</th><th>Title</th><th>Due</th><th>Action</th></tr>
   </thead>
   <tbody>
     {% for loan in loans %}
     <tr id="loan-{{ loan.id }}">
-      <td><code>{{ loan.item.barcode }}</code></td>
-      <td><a href="/ui/catalog/{{ loan.item.work_id }}">{{ loan.item.work.title }}</a></td>
-      <td>{{ loan.due_at.strftime("%Y-%m-%d") if loan.due_at else "—" }}</td>
-      <td style="display:flex; gap:0.5rem; flex-wrap:wrap">
+      <td data-label="Barcode"><code>{{ loan.item.barcode }}</code></td>
+      <td data-label="Title"><a href="/ui/catalog/{{ loan.item.work_id }}">{{ loan.item.work.title }}</a></td>
+      <td data-label="Due">{{ loan.due_at.strftime("%Y-%m-%d") if loan.due_at else "—" }}</td>
+      <td data-label="" style="display:flex; gap:0.5rem; flex-wrap:wrap">
         <form
           hx-post="/ui/me/loans/{{ loan.id }}/renew"
           hx-target="#loan-{{ loan.id }}"
