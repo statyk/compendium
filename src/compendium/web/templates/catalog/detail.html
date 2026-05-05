@@ -20,6 +20,11 @@
       <h2>{{ work.title }}</h2>
       {% if work.subtitle %}<p>{{ work.subtitle }}</p>{% endif %}
     </hgroup>
+    {% if work.creators %}
+    <p class="work-detail-byline">
+      {% for wc in work.creators %}{{ wc.creator.display_name }}{% if not loop.last %}, {% endif %}{% endfor %}
+    </p>
+    {% endif %}
   </div>
 </div>
 
@@ -68,56 +73,60 @@
   {% endif %}
 </dl>
 
-<h3>Copies</h3>
-{% if work.items %}
-<table>
-  <thead><tr><th>Barcode</th><th>Branch</th><th>Status</th><th>Call #</th></tr></thead>
-  <tbody>
-    {% for item in work.items %}
-    <tr>
-      <td><a href="/ui/items/{{ item.barcode }}"><code>{{ item.barcode }}</code></a></td>
-      <td>{{ item.branch.name }}</td>
-      <td>
-        {{ status_pill(item.status) }}
-        {{ loan_pill(item) }}
-        {% if item.status == "checked_out" and item_due.get(item.id) %}
-        <br><small style="color:var(--pico-muted-color)">due {{ item_due[item.id].strftime("%Y-%m-%d") }}</small>
-        {% endif %}
-      </td>
-      <td>{{ item.call_number or "—" }}</td>
-    </tr>
-    {% endfor %}
-  </tbody>
-</table>
-{% else %}
-  <p class="empty-inline">No copies on record.</p>
-{% endif %}
-
-{% if user and ("*" in user.role.permissions or "item.delete" in user.role.permissions) %}
-<p><a href="/ui/items/new" role="button" class="outline secondary">+ Add another copy</a></p>
-{% endif %}
+<div class="copies-card">
+  <div class="copies-card-head">
+    <h3>Copies</h3>
+    {% if user and ("*" in user.role.permissions or "item.create" in user.role.permissions) %}
+    <a href="/ui/items/new" role="button" class="outline secondary" style="padding:0.2rem 0.6rem;font-size:0.85rem">+ Add copy</a>
+    {% endif %}
+  </div>
+  {% if work.items %}
+  <table>
+    <thead><tr><th>Barcode</th><th>Branch</th><th>Status</th><th>Call #</th></tr></thead>
+    <tbody>
+      {% for item in work.items %}
+      <tr>
+        <td><a href="/ui/items/{{ item.barcode }}"><code>{{ item.barcode }}</code></a></td>
+        <td>{{ item.branch.name }}</td>
+        <td>
+          {{ status_pill(item.status) }}
+          {{ loan_pill(item) }}
+          {% if item.status == "checked_out" and item_due.get(item.id) %}
+          <br><small style="color:var(--pico-muted-color)">due {{ item_due[item.id].strftime("%Y-%m-%d") }}</small>
+          {% endif %}
+        </td>
+        <td>{{ item.call_number or "—" }}</td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+  {% else %}
+    <p class="empty-inline">No copies on record.</p>
+  {% endif %}
+</div>
 
 {% if not has_loanable %}
-<hr>
-<p class="empty-inline">No loanable copies of this work are available — holds are disabled.</p>
+<p class="empty-inline" style="margin-top:1rem">No loanable copies of this work are available — holds are disabled.</p>
 {% else %}
   {% if patron %}
-  <hr>
-  <div id="hold-action">
-    <form
-      hx-post="/ui/catalog/{{ work.id }}/hold"
-      hx-target="#hold-action"
-      hx-swap="innerHTML"
-      hx-include="[name='csrf_token']"
-    >
-      <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
-      <button type="submit">Place Hold</button>
-    </form>
+  <div class="hold-cta">
+    <p class="hold-cta-title">Reserve this work</p>
+    <div id="hold-action">
+      <form
+        hx-post="/ui/catalog/{{ work.id }}/hold"
+        hx-target="#hold-action"
+        hx-swap="innerHTML"
+        hx-include="[name='csrf_token']"
+      >
+        <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+        <button type="submit" style="width:auto">Place Hold</button>
+      </form>
+    </div>
   </div>
   {% elif user %}
-    <p class="empty-inline">Your account has no patron record — contact a librarian to place holds.</p>
+    <p class="empty-inline" style="margin-top:1rem">Your account has no patron record — contact a librarian to place holds.</p>
   {% else %}
-    <p><a href="/ui/login?next=/ui/catalog/{{ work.id }}">Log in</a> to place a hold.</p>
+    <p style="margin-top:1rem"><a href="/ui/login?next=/ui/catalog/{{ work.id }}">Log in</a> to place a hold.</p>
   {% endif %}
 
   {% if has_permission(user, 'hold.place.any') %}
