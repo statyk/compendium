@@ -406,6 +406,47 @@ nav .brand-logo { width: 2em; height: 2em; flex-shrink: 0; display: block; }
 /* Dim the submit button while its form request is in flight */
 form.htmx-request button[type="submit"] { opacity: 0.6; cursor: wait; }
 
+/* ── Hover / focus / active states ───────────────────────────── */
+
+/* Focus-visible rings — accessible keyboard nav indicator */
+button:focus-visible,
+[role="button"]:focus-visible,
+a:focus-visible,
+summary:focus-visible,
+input:focus-visible,
+select:focus-visible,
+textarea:focus-visible {
+  outline: 2px solid var(--cmp-color-brand);
+  outline-offset: 2px;
+}
+
+@media (prefers-reduced-motion: no-preference) {
+  /* Subtle press effect on all interactive controls */
+  button:active,
+  [role="button"]:active {
+    transform: translateY(1px);
+  }
+  /* Cover thumbnails lift on hover */
+  .cover-thumb {
+    transition: transform 150ms ease, box-shadow 150ms ease;
+  }
+  a:hover > .cover-thumb,
+  a:focus-visible > .cover-thumb {
+    transform: translateY(-3px);
+    box-shadow: 0 6px 16px rgba(0,0,0,0.14);
+  }
+  /* Work card link — already has transition; add focus state */
+  .work-card-link:focus-visible {
+    box-shadow: 0 0 0 3px var(--cmp-color-brand);
+    border-color: var(--cmp-color-brand);
+    outline: none;
+  }
+  /* Table row highlight */
+  .responsive-table tbody tr:hover {
+    background: var(--pico-table-row-stripped-background-color, rgba(0,0,0,0.03));
+  }
+}
+
 /* ── Banners ─────────────────────────────────────────────────── */
 .error-banner { color: var(--cmp-banner-error-fg); }
 p.error-banner {
