@@ -285,6 +285,79 @@ nav .brand {
 }
 nav .brand-logo { width: 2em; height: 2em; flex-shrink: 0; display: block; }
 
+/* ── Mobile hamburger nav ────────────────────────────────────── */
+/* Desktop: details is display:contents — its <ul> renders as a nav flex
+   child. Pico's "nav > ul" selector won't match through it, so re-apply. */
+@media (min-width: 721px) {
+  details.nav-wrap { display: contents; }
+  details.nav-wrap > summary { display: none; }
+  details.nav-wrap > ul {
+    display: flex; flex-direction: row; align-items: center;
+    flex-wrap: wrap; gap: 0 0.5rem;
+    margin: 0; padding: 0; list-style: none;
+  }
+}
+
+/* Mobile: hamburger button + dropdown panel */
+@media (max-width: 720px) {
+  details.nav-wrap { position: relative; }
+  details.nav-wrap > summary {
+    list-style: none; cursor: pointer; user-select: none;
+    padding: 0.4rem 0.5rem; line-height: 1; font-size: 1.4rem;
+    color: var(--cmp-nav-fg);
+  }
+  details.nav-wrap > summary::-webkit-details-marker { display: none; }
+  details.nav-wrap > summary::marker { content: ''; }
+
+  details.nav-wrap > ul { display: none; }
+  details.nav-wrap[open] > ul {
+    display: block;
+    position: absolute; right: 0; top: calc(100% + 0.4rem);
+    min-width: 240px; z-index: 999;
+    background: var(--pico-card-background-color);
+    border: 1px solid var(--pico-border-color);
+    border-radius: var(--pico-border-radius);
+    box-shadow: 0 6px 20px rgba(0,0,0,0.12);
+    padding: 0.4rem 0; list-style: none; margin: 0;
+  }
+  details.nav-wrap[open] > ul > li { display: block; }
+  details.nav-wrap[open] > ul > li > a {
+    display: block; padding: 0.6rem 1rem;
+    color: var(--pico-color) !important; text-decoration: none;
+  }
+  details.nav-wrap[open] > ul > li > a[role="button"] { border: none; background: transparent; }
+  details.nav-wrap[open] > ul > li > a:hover { background: var(--pico-dropdown-hover-background-color); }
+
+  /* Shortcuts strip → vertical stack */
+  details.nav-wrap #nav-shortcuts { display: flex; flex-direction: column; gap: 0; }
+  details.nav-wrap #nav-shortcuts a {
+    display: block; padding: 0.5rem 1rem;
+    color: var(--pico-color) !important; text-decoration: none;
+  }
+  details.nav-wrap #nav-shortcuts a:hover { background: var(--pico-dropdown-hover-background-color); }
+
+  /* Nested dropdowns → inline accordion (no absolute popup) */
+  details.nav-wrap > ul details.dropdown {
+    display: block; background: transparent; border: none; box-shadow: none; padding: 0;
+  }
+  details.nav-wrap > ul details.dropdown > summary {
+    display: block; padding: 0.6rem 1rem;
+    color: var(--pico-color) !important; background: transparent;
+  }
+  details.nav-wrap > ul details.dropdown > summary:hover {
+    background: var(--pico-dropdown-hover-background-color);
+    opacity: 1;
+  }
+  details.nav-wrap > ul details.dropdown > summary + ul {
+    position: static !important; width: auto !important;
+    background: transparent; border: none; box-shadow: none;
+    padding: 0 0 0.25rem 1rem;
+  }
+  details.nav-wrap > ul details.dropdown > summary + ul a {
+    color: var(--pico-color) !important;
+  }
+}
+
 /* ── Banners ─────────────────────────────────────────────────── */
 .error-banner { color: var(--cmp-banner-error-fg); }
 p.error-banner {

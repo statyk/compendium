@@ -33,6 +33,8 @@
           </a>
         </li>
       </ul>
+      <details class="nav-wrap" open>
+      <summary aria-label="Menu">☰</summary>
       <ul>
         <li><a href="/ui/catalog">Catalog</a></li>
         {% if user %}
@@ -157,6 +159,7 @@
           </details>
         </li>
       </ul>
+      </details>
     </nav>
   </header>
 
@@ -187,6 +190,18 @@
   </dialog>
   {% endif %}
   <script nonce="{{ csp_nonce(request) }}">
+    (function () {
+      var navWrap = document.querySelector('details.nav-wrap');
+      if (navWrap) {
+        var mq = window.matchMedia('(max-width: 720px)');
+        function closeOnMobile() { if (mq.matches) navWrap.open = false; }
+        closeOnMobile();
+        mq.addEventListener('change', closeOnMobile);
+        document.addEventListener('click', function (e) {
+          if (mq.matches && navWrap.open && !navWrap.contains(e.target)) navWrap.open = false;
+        });
+      }
+    })();
     (function () {
       var menu = document.getElementById('theme-menu');
       if (!menu) return;
