@@ -348,13 +348,27 @@ nav .brand-logo { width: 2em; height: 2em; flex-shrink: 0; display: block; }
     background: var(--pico-dropdown-hover-background-color);
     opacity: 1;
   }
+  /* Remove Pico's full-viewport overlay (position:fixed; z-index:1) that Pico
+     puts on summary::before as its "click outside to close" mechanism.
+     Inside our z-index:999 hamburger stacking context, that overlay lands at
+     z-index:1 which is ABOVE the static sub-menu items (z-index:auto), so it
+     intercepts every tap before it can reach a link. */
+  details.nav-wrap > ul details.dropdown[open] > summary::before {
+    display: none !important;
+  }
   details.nav-wrap > ul details.dropdown > summary + ul {
     position: static !important; width: auto !important;
     background: transparent; border: none; box-shadow: none;
     padding: 0 0 0.25rem 1rem;
+    opacity: 1 !important;
   }
   details.nav-wrap > ul details.dropdown > summary + ul a {
+    display: block; padding: 0.4rem 1rem;
     color: var(--pico-color) !important;
+    text-decoration: none;
+  }
+  details.nav-wrap > ul details.dropdown > summary + ul a:hover {
+    background: var(--pico-dropdown-hover-background-color);
   }
 }
 
