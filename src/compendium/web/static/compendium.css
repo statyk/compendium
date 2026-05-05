@@ -406,6 +406,14 @@ nav .brand-logo { width: 2em; height: 2em; flex-shrink: 0; display: block; }
 /* Dim the submit button while its form request is in flight */
 form.htmx-request button[type="submit"] { opacity: 0.6; cursor: wait; }
 
+/* Fade-in for freshly swapped-in content (prefers-reduced-motion safe) */
+@media (prefers-reduced-motion: no-preference) {
+  .htmx-settling {
+    opacity: 0;
+    transition: opacity 150ms ease;
+  }
+}
+
 /* ── Hover / focus / active states ───────────────────────────── */
 
 /* Focus-visible rings — accessible keyboard nav indicator */
