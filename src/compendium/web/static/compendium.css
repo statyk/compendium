@@ -1,0 +1,309 @@
+/* =============================================================
+   Compendium – custom stylesheet
+   Loaded after pico.min.css in base.html and kiosk_base.html.
+   All project-specific styles live here; no hard-coded hex in
+   templates. Update tokens in Slice 1.2 to change the palette.
+   ============================================================= */
+
+/* ── Design tokens ──────────────────────────────────────────── */
+:root {
+  /* Banner colors */
+  --cmp-banner-error-fg:      #b91c1c;
+  --cmp-banner-error-bg:      #fef2f2;
+  --cmp-banner-error-border:  #dc2626;
+  --cmp-banner-success-fg:    #15803d;
+  --cmp-banner-success-bg:    #f0fdf4;
+  --cmp-banner-success-border: #16a34a;
+  --cmp-banner-warn-fg:       #92400e;
+  --cmp-banner-warn-bg:       #fef3c7;
+  --cmp-banner-warn-border:   #f59e0b;
+
+  /* Status pills */
+  --cmp-pill-available-bg:       #d1fadf; --cmp-pill-available-fg:       #036b44;
+  --cmp-pill-checked-out-bg:     #fef3c7; --cmp-pill-checked-out-fg:     #92400e;
+  --cmp-pill-on-hold-bg:         #d6ecff; --cmp-pill-on-hold-fg:         #0353a4;
+  --cmp-pill-lost-bg:            #fecaca; --cmp-pill-lost-fg:            #991b1b;
+  --cmp-pill-damaged-bg:         #fed7aa; --cmp-pill-damaged-fg:         #9a3412;
+  --cmp-pill-claims-returned-bg: #fef08a; --cmp-pill-claims-returned-fg: #713f12;
+  --cmp-pill-withdrawn-bg:       #e5e7eb; --cmp-pill-withdrawn-fg:       #374151;
+  --cmp-pill-waiting-bg:         #fef3c7; --cmp-pill-waiting-fg:         #92400e;
+  --cmp-pill-fulfilled-bg:       #e5e7eb; --cmp-pill-fulfilled-fg:       #374151;
+  --cmp-pill-cancelled-bg:       #e5e7eb; --cmp-pill-cancelled-fg:       #374151;
+  --cmp-pill-expired-bg:         #fee2e2; --cmp-pill-expired-fg:         #991b1b;
+
+  /* Media-type pills */
+  --cmp-pill-book-bg:   #d6ecff; --cmp-pill-book-fg:   #0353a4;
+  --cmp-pill-vinyl-bg:  #ede9fe; --cmp-pill-vinyl-fg:  #5b21b6;
+  --cmp-pill-cd-bg:     #cffafe; --cmp-pill-cd-fg:     #0e7490;
+  --cmp-pill-dvd-bg:    #ffedd5; --cmp-pill-dvd-fg:    #9a3412;
+  --cmp-pill-bluray-bg: #e0e7ff; --cmp-pill-bluray-fg: #3730a3;
+  --cmp-pill-vhs-bg:    #e5e7eb; --cmp-pill-vhs-fg:    #374151;
+
+  /* Location pills */
+  --cmp-pill-reference-bg:      #fde68a; --cmp-pill-reference-fg:      #78350f;
+  --cmp-pill-in-library-use-bg: #fde68a; --cmp-pill-in-library-use-fg: #78350f;
+  --cmp-pill-archive-bg:        #e0e7ff; --cmp-pill-archive-fg:        #3730a3;
+  --cmp-pill-staff-only-bg:     #fecaca; --cmp-pill-staff-only-fg:     #991b1b;
+  --cmp-pill-display-bg:        #fbcfe8; --cmp-pill-display-fg:        #9d174d;
+  --cmp-pill-other-bg:          #e5e7eb; --cmp-pill-other-fg:          #374151;
+
+  /* Env-override warning (settings page) */
+  --cmp-env-warning-fg: #b86e00;
+
+  /* Display typeface — placeholder until Slice 1.3 sets a real font */
+  --cmp-font-display: inherit;
+}
+
+/* ── Brand & nav ─────────────────────────────────────────────── */
+nav .brand {
+  font-weight: bold; font-size: 1.25rem; text-decoration: none; color: inherit;
+  display: inline-flex; align-items: center; gap: 0.5rem;
+}
+nav .brand-logo { width: 2em; height: 2em; flex-shrink: 0; display: block; }
+
+/* ── Banners ─────────────────────────────────────────────────── */
+.error-banner { color: var(--cmp-banner-error-fg); }
+p.error-banner {
+  background: var(--cmp-banner-error-bg);
+  border-left: 3px solid var(--cmp-banner-error-border);
+  padding: 0.75em 1em; border-radius: 0.4em; font-weight: 500;
+}
+p.error-banner::before { content: "⚠ "; }
+
+.success-banner { color: var(--cmp-banner-success-fg); }
+p.success-banner {
+  background: var(--cmp-banner-success-bg);
+  border-left: 3px solid var(--cmp-banner-success-border);
+  padding: 0.75em 1em; border-radius: 0.4em;
+}
+p.success-banner::before { content: "✓ "; }
+
+.warning-banner {
+  color: var(--cmp-banner-warn-fg);
+  background: var(--cmp-banner-warn-bg);
+  border-left: 3px solid var(--cmp-banner-warn-border);
+  padding: 0.75em 1em; border-radius: 0.5em;
+}
+
+/* ── Nav dropdown fixes ──────────────────────────────────────── */
+/* Pico v2 sets nav details.dropdown to display:inline, which Firefox
+   treats as zero-width when sizing the absolutely-positioned menu,
+   causing the menu to stretch the full page width. inline-block gives
+   it a proper containing block in all three browsers. */
+nav details.dropdown { display: inline-block; }
+
+/* Size the menu to its content and anchor it to the right edge of its
+   summary so right-side nav dropdowns don't overflow the viewport. */
+nav details.dropdown summary + ul {
+  width: max-content;
+  left: auto;
+  right: 0;
+}
+
+/* The Logout form inside the username dropdown should look like the
+   surrounding anchor items. */
+nav details.dropdown form.dropdown-form { margin: 0; }
+nav details.dropdown form.dropdown-form button {
+  width: 100%;
+  text-align: left;
+  background: transparent;
+  color: inherit;
+  border: none;
+  padding: var(--pico-form-element-spacing-vertical) var(--pico-form-element-spacing-horizontal);
+  font-size: 1rem;
+  cursor: pointer;
+}
+nav details.dropdown form.dropdown-form button:hover {
+  background: var(--pico-dropdown-hover-background-color);
+}
+
+/* ── Cover thumbnails ─────────────────────────────────────────── */
+.cover-thumb {
+  width: 60px;
+  aspect-ratio: 2 / 3;
+  flex-shrink: 0;
+  border-radius: 4px;
+  background: var(--pico-muted-border-color);
+  overflow: hidden;
+}
+.cover-thumb img { width: 100%; height: 100%; object-fit: cover; display: block; }
+.cover-thumb-lg { width: 180px; }
+.cover-thumb-empty {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: var(--pico-card-background-color);
+  border: 1px dashed var(--pico-muted-border-color);
+  opacity: 0.55;
+  container-type: inline-size;
+}
+.cover-thumb-empty::before {
+  content: '📦';
+  font-size: 45cqw;
+  line-height: 1;
+}
+.cover-thumb-empty[data-media-type="book"]::before { content: '📖'; }
+.cover-thumb-empty[data-media-type="vinyl"]::before,
+.cover-thumb-empty[data-media-type="cd"]::before   { content: '💿'; }
+.cover-thumb-empty[data-media-type="dvd"]::before,
+.cover-thumb-empty[data-media-type="bluray"]::before,
+.cover-thumb-empty[data-media-type="vhs"]::before  { content: '🎬'; }
+
+/* ── Work list ────────────────────────────────────────────────── */
+.work-list { list-style: none; padding: 0; margin: 0; }
+.work-list > li {
+  display: flex;
+  gap: 1rem;
+  align-items: flex-start;
+  padding: 0.75rem 0;
+  border-top: 1px solid var(--pico-muted-border-color);
+}
+.work-list > li:first-child { border-top: none; }
+.work-list .work-entry { flex: 1; min-width: 0; }
+.work-header { display: flex; gap: 1.5rem; align-items: flex-start; margin-bottom: 1rem; }
+.work-header .work-header-text { flex: 1; min-width: 0; }
+
+/* ── Pills ────────────────────────────────────────────────────── */
+/* Pastel bg + dark fg pairs chosen to stay readable on both light and
+   dark page backgrounds — the pill is an island, so contrast is between
+   its own bg and fg, not the surrounding page. */
+.pill {
+  display: inline-block;
+  padding: 0.1rem 0.55rem;
+  border-radius: 999px;
+  font-size: 0.75rem;
+  font-weight: 500;
+  line-height: 1.5;
+  white-space: nowrap;
+  vertical-align: middle;
+  background: var(--pico-muted-border-color);
+  color: var(--pico-color);
+  text-transform: capitalize;
+}
+.pill-available       { background: var(--cmp-pill-available-bg);       color: var(--cmp-pill-available-fg); }
+.pill-checked_out     { background: var(--cmp-pill-checked-out-bg);     color: var(--cmp-pill-checked-out-fg); }
+.pill-on_hold         { background: var(--cmp-pill-on-hold-bg);         color: var(--cmp-pill-on-hold-fg); }
+.pill-lost            { background: var(--cmp-pill-lost-bg);            color: var(--cmp-pill-lost-fg); }
+.pill-damaged         { background: var(--cmp-pill-damaged-bg);         color: var(--cmp-pill-damaged-fg); }
+.pill-claims_returned { background: var(--cmp-pill-claims-returned-bg); color: var(--cmp-pill-claims-returned-fg); }
+.pill-withdrawn       { background: var(--cmp-pill-withdrawn-bg);       color: var(--cmp-pill-withdrawn-fg); }
+.pill-waiting         { background: var(--cmp-pill-waiting-bg);         color: var(--cmp-pill-waiting-fg); }
+.pill-fulfilled       { background: var(--cmp-pill-fulfilled-bg);       color: var(--cmp-pill-fulfilled-fg); }
+.pill-cancelled       { background: var(--cmp-pill-cancelled-bg);       color: var(--cmp-pill-cancelled-fg); }
+.pill-expired         { background: var(--cmp-pill-expired-bg);         color: var(--cmp-pill-expired-fg); }
+.pill-book            { background: var(--cmp-pill-book-bg);            color: var(--cmp-pill-book-fg); }
+.pill-vinyl           { background: var(--cmp-pill-vinyl-bg);           color: var(--cmp-pill-vinyl-fg); }
+.pill-cd              { background: var(--cmp-pill-cd-bg);              color: var(--cmp-pill-cd-fg); }
+.pill-dvd             { background: var(--cmp-pill-dvd-bg);             color: var(--cmp-pill-dvd-fg); }
+.pill-bluray          { background: var(--cmp-pill-bluray-bg);          color: var(--cmp-pill-bluray-fg); }
+.pill-vhs             { background: var(--cmp-pill-vhs-bg);             color: var(--cmp-pill-vhs-fg); }
+.pill-reference       { background: var(--cmp-pill-reference-bg);       color: var(--cmp-pill-reference-fg); }
+.pill-in_library_use  { background: var(--cmp-pill-in-library-use-bg);  color: var(--cmp-pill-in-library-use-fg); }
+.pill-archive         { background: var(--cmp-pill-archive-bg);         color: var(--cmp-pill-archive-fg); }
+.pill-staff_only      { background: var(--cmp-pill-staff-only-bg);      color: var(--cmp-pill-staff-only-fg); }
+.pill-display         { background: var(--cmp-pill-display-bg);         color: var(--cmp-pill-display-fg); }
+.pill-other           { background: var(--cmp-pill-other-bg);           color: var(--cmp-pill-other-fg); }
+
+/* ── Nav shortcuts ────────────────────────────────────────────── */
+#nav-shortcuts { display: flex; align-items: center; gap: 0.5rem; padding: 0; }
+#nav-shortcuts-edit { text-decoration: none; color: var(--pico-muted-color); font-size: 0.9em; }
+#nav-shortcuts-edit:hover { color: var(--pico-color); }
+
+/* ── Kiosk layout ─────────────────────────────────────────────── */
+body.kiosk-page { max-width: none; }
+.kiosk-shell { max-width: 44rem; margin: 0 auto; padding: 2rem 1.5rem; }
+.kiosk-title { font-size: 2rem; margin-bottom: 0.25rem; }
+.kiosk-sub { color: var(--pico-muted-color); margin-bottom: 2rem; }
+.kiosk-card-input { font-size: 1.5rem; padding: 1rem; text-align: center; }
+.kiosk-scanner-input { font-size: 1.25rem; padding: 0.75rem; }
+.kiosk-big-button { font-size: 1.15rem; padding: 0.75rem 1.5rem; width: 100%; }
+.checkout-list { list-style: none; padding: 0; margin: 1.5rem 0; }
+.checkout-list li {
+  padding: 0.75rem 1rem;
+  border-top: 1px solid var(--pico-muted-border-color);
+  font-size: 1.1rem;
+}
+.checkout-list li:first-child { border-top: none; }
+.kiosk-footer { margin-top: 2rem; text-align: center; }
+
+/* ── Catalog layout & facets ──────────────────────────────────── */
+.catalog-layout { display: flex; gap: 1.5rem; align-items: flex-start; }
+.catalog-facets { flex: 0 0 11rem; }
+.catalog-main { flex: 1; min-width: 0; }
+.facet-list { list-style: none; padding: 0; margin: 0.25rem 0 0.75rem 0; }
+.facet-list li { padding: 0.1rem 0; }
+.facet-list label { display: flex; align-items: baseline; gap: 0.4rem; cursor: pointer; }
+.facet-list label input[type="checkbox"],
+.facet-list label input[type="radio"] { flex: 0 0 auto; margin: 0; }
+.facet-list label small { margin-left: auto; color: var(--pico-muted-color); white-space: nowrap; }
+.facet-drawer > summary { display: none; }
+
+@media (max-width: 720px) {
+  .catalog-layout { flex-direction: column; }
+  .catalog-main { order: 1; }
+  .catalog-facets { order: 2; flex: 0 0 auto; }
+  .facet-drawer > summary { display: list-item; cursor: pointer; padding: 0.5rem 0; font-weight: bold; }
+}
+
+/* ── Discovery shelves ────────────────────────────────────────── */
+.discovery-shelves h3 { margin-bottom: 0.5rem; }
+.cover-shelf {
+  list-style: none; padding: 0; margin: 0 0 1.5rem 0;
+  display: flex; gap: 0.75rem; overflow-x: auto;
+}
+.cover-shelf li { flex: 0 0 auto; max-width: 5.1rem; }
+.cover-shelf a { color: inherit; text-decoration: none; display: block; }
+.cover-thumb-shelf { width: 5.1rem; }
+.shelf-title {
+  display: block; margin-top: 0.25rem;
+  overflow: hidden; text-overflow: ellipsis;
+  display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical;
+}
+.shelf-creator {
+  display: block; color: var(--pico-muted-color); font-size: 0.75rem;
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+}
+
+/* ── Catalog pagination & suggestions ────────────────────────── */
+.pagination { display: flex; gap: 0.5rem; justify-content: center; margin-top: 1rem; }
+.suggest-wrap { position: relative; flex: 1; }
+#suggest-list { position: absolute; top: 100%; left: 0; right: 0; z-index: 10; }
+.suggest-options {
+  list-style: none; margin: 0; padding: 0;
+  background: var(--pico-card-background-color);
+  border: 1px solid var(--pico-muted-border-color);
+  border-radius: var(--pico-border-radius);
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
+  max-height: 24rem; overflow-y: auto;
+}
+.suggest-options li { margin: 0; }
+.suggest-options a {
+  display: block; padding: 0.5rem 0.75rem;
+  text-decoration: none; color: var(--pico-color);
+}
+.suggest-options a:hover,
+.suggest-options a:focus { background: var(--pico-secondary-background); }
+.suggest-title { display: block; }
+.suggest-creator { display: block; font-size: 0.8rem; color: var(--pico-muted-color); }
+
+/* ── Circulation desk ─────────────────────────────────────────── */
+.circ-grid > article { display: flex; flex-direction: column; }
+.circ-form { flex: 1; display: flex; flex-direction: column; }
+.circ-form > button[type="submit"] { margin-top: auto; }
+
+/* ── Settings table ───────────────────────────────────────────── */
+.settings-table .setting-name { font-size: 1rem; font-weight: 600; margin: 0; }
+.settings-table .setting-key {
+  font-size: 0.8em; opacity: 0.65;
+  font-family: var(--pico-font-family-monospace, monospace);
+}
+.settings-table .setting-help { display: block; margin-top: 0.25rem; }
+.settings-table .env-warning {
+  display: block; margin-top: 0.4rem;
+  color: var(--cmp-env-warning-fg); font-size: 0.85em;
+}
+.settings-table .reset-cell { text-align: center; white-space: nowrap; }
+.settings-table .reset-cell label {
+  display: inline-flex; align-items: center; gap: 0.35em; margin: 0; cursor: pointer;
+}
+.settings-table .reset-cell input[type=checkbox] { margin: 0; }

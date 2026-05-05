@@ -14,35 +14,10 @@
     } catch (_) {}
   </script>
   <link rel="stylesheet" href="/ui/static/pico.min.css">
+  <link rel="stylesheet" href="/ui/static/compendium.css">
   <script src="/ui/static/htmx.min.js" nonce="{{ csp_nonce(request) }}" defer></script>
-  <style>
-    body { max-width: none; }
-    .kiosk-shell { max-width: 44rem; margin: 0 auto; padding: 2rem 1.5rem; }
-    .kiosk-title { font-size: 2rem; margin-bottom: 0.25rem; }
-    .kiosk-sub { color: var(--pico-muted-color); margin-bottom: 2rem; }
-    .kiosk-card-input { font-size: 1.5rem; padding: 1rem; text-align: center; }
-    .kiosk-scanner-input { font-size: 1.25rem; padding: 0.75rem; }
-    .kiosk-big-button {
-      font-size: 1.15rem;
-      padding: 0.75rem 1.5rem;
-      width: 100%;
-    }
-    .error-banner { color: #b91c1c; }
-    p.error-banner { background: #fef2f2; border-left: 3px solid #dc2626; padding: 0.75em 1em; border-radius: 0.4em; font-weight: 500; }
-    p.error-banner::before { content: "⚠ "; }
-    .success-banner { color: #15803d; font-weight: 500; }
-    p.success-banner { background: #f0fdf4; border-left: 3px solid #16a34a; padding: 0.75em 1em; border-radius: 0.4em; }
-    .checkout-list { list-style: none; padding: 0; margin: 1.5rem 0; }
-    .checkout-list li {
-      padding: 0.75rem 1rem;
-      border-top: 1px solid var(--pico-muted-border-color);
-      font-size: 1.1rem;
-    }
-    .checkout-list li:first-child { border-top: none; }
-    .kiosk-footer { margin-top: 2rem; text-align: center; }
-  </style>
 </head>
-<body>
+<body class="kiosk-page">
   <main class="kiosk-shell">
     {% block content %}{% endblock %}
   </main>

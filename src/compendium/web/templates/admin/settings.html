@@ -16,43 +16,6 @@
 {% if message %}<p class="success-banner">{{ message }}</p>{% endif %}
 {% if error %}<p class="error-banner">{{ error }}</p>{% endif %}
 
-<style>
-  .settings-table .setting-name {
-    font-size: 1rem;
-    font-weight: 600;
-    margin: 0;
-  }
-  .settings-table .setting-key {
-    font-size: 0.8em;
-    opacity: 0.65;
-    font-family: var(--pico-font-family-monospace, monospace);
-  }
-  .settings-table .setting-help {
-    display: block;
-    margin-top: 0.25rem;
-  }
-  .settings-table .env-warning {
-    display: block;
-    margin-top: 0.4rem;
-    color: var(--pico-color-amber-600, #b86e00);
-    font-size: 0.85em;
-  }
-  .settings-table .reset-cell {
-    text-align: center;
-    white-space: nowrap;
-  }
-  .settings-table .reset-cell label {
-    display: inline-flex;
-    align-items: center;
-    gap: 0.35em;
-    margin: 0;
-    cursor: pointer;
-  }
-  .settings-table .reset-cell input[type=checkbox] {
-    margin: 0;
-  }
-</style>
-
 <form method="post">
   <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
 
