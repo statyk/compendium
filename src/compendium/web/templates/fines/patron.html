@@ -38,7 +38,7 @@
 </table>
 <form method="post" action="/ui/patrons/{{ patron.library_card_number }}/fines/assess-overdue" style="margin:1rem 0">
   <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
-  <button type="submit">Book overdue fines</button>
+  <button type="submit" style="width:auto">Book overdue fines</button>
 </form>
 {% endif %}
 
@@ -78,7 +78,7 @@
             <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
             <input type="hidden" name="patron_card" value="{{ patron.library_card_number }}">
             <input type="text" name="note" placeholder="Waive reason (required)" required>
-            <button type="submit" class="contrast">Confirm waive</button>
+            <button type="submit" class="contrast" style="width:auto">Confirm waive</button>
           </form>
         </details>
         {% else %}

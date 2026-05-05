@@ -358,6 +358,38 @@ nav .brand-logo { width: 2em; height: 2em; flex-shrink: 0; display: block; }
   }
 }
 
+/* ── Tap targets (≥ 44px at mobile widths) ───────────────────── */
+@media (max-width: 720px) {
+  button,
+  [role="button"],
+  input[type="submit"],
+  input[type="reset"],
+  select,
+  input[type="text"],
+  input[type="date"],
+  input[type="email"],
+  input[type="password"],
+  input[type="search"],
+  input[type="number"],
+  input[type="url"],
+  textarea {
+    min-height: 44px;
+  }
+  /* Facet drawer toggle */
+  .facet-drawer > summary {
+    min-height: 44px;
+    display: flex;
+    align-items: center;
+  }
+  /* Nav shortcut links + dropdown summaries inside hamburger panel */
+  details.nav-wrap[open] > ul > li > a,
+  details.nav-wrap > ul details.dropdown > summary {
+    min-height: 44px;
+    display: flex;
+    align-items: center;
+  }
+}
+
 /* ── Banners ─────────────────────────────────────────────────── */
 .error-banner { color: var(--cmp-banner-error-fg); }
 p.error-banner {
