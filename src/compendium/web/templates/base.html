@@ -342,6 +342,16 @@
       });
     })();
   </script>
+  <script nonce="{{ csp_nonce(request) }}">
+    document.body.addEventListener('htmx:beforeRequest', function (e) {
+      var t = e.detail.target;
+      if (t) t.setAttribute('aria-busy', 'true');
+    });
+    document.body.addEventListener('htmx:afterRequest', function (e) {
+      var t = e.detail.target;
+      if (t) t.removeAttribute('aria-busy');
+    });
+  </script>
   {% block scripts %}{% endblock %}
 </body>
 </html>

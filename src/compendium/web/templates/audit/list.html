@@ -29,7 +29,7 @@
 
 {% if entries %}
 <figure>
-  <table>
+  <table class="responsive-table">
     <thead>
       <tr>
         <th>Time (UTC)</th>
@@ -43,12 +43,12 @@
     <tbody>
       {% for e in entries %}
       <tr>
-        <td style="white-space:nowrap"><code>{{ e.occurred_at.strftime("%Y-%m-%d %H:%M") }}</code></td>
-        <td>{{ e.actor_label or "—" }}</td>
-        <td>{{ e.entity_type }}</td>
-        <td>{{ e.entity_id if e.entity_id is not none else "—" }}</td>
-        <td>{{ e.action }}</td>
-        <td><small><code>{% if e.details %}{{ e.details | tojson }}{% else %}—{% endif %}</code></small></td>
+        <td data-label="Time (UTC)" style="white-space:nowrap"><code>{{ e.occurred_at.strftime("%Y-%m-%d %H:%M") }}</code></td>
+        <td data-label="Actor">{{ e.actor_label or "—" }}</td>
+        <td data-label="Type">{{ e.entity_type }}</td>
+        <td data-label="ID">{{ e.entity_id if e.entity_id is not none else "—" }}</td>
+        <td data-label="Action">{{ e.action }}</td>
+        <td data-label="Details"><small><code>{% if e.details %}{{ e.details | tojson }}{% else %}—{% endif %}</code></small></td>
       </tr>
       {% endfor %}
     </tbody>
