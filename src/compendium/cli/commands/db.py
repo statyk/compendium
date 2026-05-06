@@ -1,3 +1,4 @@
+from importlib.resources import files as _pkg_files
 from pathlib import Path
 
 import typer
@@ -10,8 +11,7 @@ from compendium.db.session import session_scope
 
 app = typer.Typer(help="Database management commands.")
 
-_PROJECT_ROOT = Path(__file__).parents[4]
-_MIGRATIONS_DIR = _PROJECT_ROOT / "migrations"
+_MIGRATIONS_DIR = Path(str(_pkg_files("compendium") / "migrations"))
 
 
 def _alembic_cfg() -> AlembicConfig:

@@ -457,6 +457,40 @@ class TestSafeExtract:
         assert (dest / "data" / "ok.txt").read_bytes() == b"hello"
 
 
+class TestBackupServiceMigrationsDirSeam:
+    """Unit tests for the migrations_dir constructor argument."""
+
+    def test_default_migrations_dir_is_inside_package(self):
+        from compendium.services.backup import _MIGRATIONS_DIR
+        assert _MIGRATIONS_DIR.is_dir(), f"Expected migrations dir to exist: {_MIGRATIONS_DIR}"
+        assert (
+            "compendium" in _MIGRATIONS_DIR.parts
+        ), f"Expected migrations dir inside the compendium package: {_MIGRATIONS_DIR}"
+
+    def test_custom_migrations_dir_is_stored(self, tmp_path):
+        from unittest.mock import MagicMock
+        from compendium.config.settings import Settings
+        from compendium.services.backup import BackupService
+
+        session = MagicMock()
+        settings = MagicMock(spec=Settings)
+        custom_dir = tmp_path / "my_migrations"
+
+        svc = BackupService(session, settings, migrations_dir=custom_dir)
+        assert svc._migrations_dir == custom_dir
+
+    def test_none_migrations_dir_falls_back_to_default(self, tmp_path):
+        from unittest.mock import MagicMock
+        from compendium.config.settings import Settings
+        from compendium.services.backup import BackupService, _MIGRATIONS_DIR
+
+        session = MagicMock()
+        settings = MagicMock(spec=Settings)
+
+        svc = BackupService(session, settings, migrations_dir=None)
+        assert svc._migrations_dir == _MIGRATIONS_DIR
+
+
 def _rewrite_manifest_revision(archive: Path, new_revision: str) -> None:
     """Open a tar.gz backup, rewrite meta.json's alembic_head, and repack."""
     import shutil

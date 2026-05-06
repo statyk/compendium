@@ -13,6 +13,7 @@ import shutil
 import tarfile
 import tempfile
 from datetime import date, datetime, timezone
+from importlib.resources import files as _pkg_files
 from pathlib import Path
 from typing import Any, Iterator
 
@@ -30,8 +31,7 @@ from compendium.config.settings import Settings
 from compendium.domain.models import Base
 from compendium.services.covers import cache_dir as cover_cache_dir
 
-_PROJECT_ROOT = Path(__file__).resolve().parents[3]
-_MIGRATIONS_DIR = _PROJECT_ROOT / "migrations"
+_MIGRATIONS_DIR = Path(str(_pkg_files("compendium") / "migrations"))
 
 _MANIFEST_NAME = "meta.json"
 _DATA_DIR = "data"
@@ -47,15 +47,15 @@ class BackupError(Exception):
     """Backup or restore cannot proceed."""
 
 
-def _alembic_cfg(db_url: str) -> AlembicConfig:
+def _alembic_cfg(db_url: str, migrations_dir: Path = _MIGRATIONS_DIR) -> AlembicConfig:
     cfg = AlembicConfig()
-    cfg.set_main_option("script_location", str(_MIGRATIONS_DIR))
+    cfg.set_main_option("script_location", str(migrations_dir))
     cfg.set_main_option("sqlalchemy.url", db_url)
     return cfg
 
 
-def _current_code_head() -> str:
-    script = ScriptDirectory.from_config(_alembic_cfg("sqlite://"))
+def _current_code_head(migrations_dir: Path = _MIGRATIONS_DIR) -> str:
+    script = ScriptDirectory.from_config(_alembic_cfg("sqlite://", migrations_dir))
     heads = script.get_heads()
     if len(heads) != 1:
         raise BackupError(f"Expected one Alembic head, got {heads}")
@@ -186,9 +186,15 @@ def _rebuild_sqlite_fts(engine: Engine) -> None:
 
 
 class BackupService:
-    def __init__(self, session: Session, settings: Settings):
+    def __init__(
+        self,
+        session: Session,
+        settings: Settings,
+        migrations_dir: Path | None = None,
+    ):
         self._session = session
         self._settings = settings
+        self._migrations_dir = migrations_dir if migrations_dir is not None else _MIGRATIONS_DIR
 
     # ----- create -------------------------------------------------------------
 
@@ -206,7 +212,7 @@ class BackupService:
             )
         engine = self._session.get_bind()
         revision = _db_revision(engine)
-        head = _current_code_head()
+        head = _current_code_head(self._migrations_dir)
         if revision is None:
             raise BackupError(
                 "Target database has no alembic_version row. "
@@ -316,9 +322,9 @@ class BackupService:
             if not source_head:
                 raise BackupError("Backup manifest has no alembic_head.")
 
-            current_head = _current_code_head()
+            current_head = _current_code_head(self._migrations_dir)
             if source_head != current_head:
-                if not _is_ancestor(source_head, current_head, _alembic_cfg(db_url)):
+                if not _is_ancestor(source_head, current_head, _alembic_cfg(db_url, self._migrations_dir)):
                     raise BackupError(
                         f"Backup was taken at revision {source_head}, which is not "
                         f"an ancestor of this code's head ({current_head}). Upgrade "
@@ -336,7 +342,7 @@ class BackupService:
             self._session.close()
 
             _clear_target(engine)
-            alembic_command.upgrade(_alembic_cfg(db_url), source_head)
+            alembic_command.upgrade(_alembic_cfg(db_url, self._migrations_dir), source_head)
             # Migrations sometimes seed reference data (e.g. patron_category
             # rows added by b8c9d0e1f2a3). The backup already contains those
             # rows with their original PKs; wipe anything the migrations
@@ -350,7 +356,7 @@ class BackupService:
                     _reset_postgres_sequences_conn(conn)
 
             if source_head != current_head:
-                alembic_command.upgrade(_alembic_cfg(db_url), "head")
+                alembic_command.upgrade(_alembic_cfg(db_url, self._migrations_dir), "head")
 
             _rebuild_sqlite_fts(engine)
 
