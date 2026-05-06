@@ -36,6 +36,7 @@ from compendium.services.import_export import (
     ImportOptions,
     ImportReport,
     ImportService,
+    decode_text_bytes,
 )
 
 import_router = APIRouter()
@@ -89,6 +90,7 @@ def _report_to_response(report: ImportReport) -> ImportReportResponse:
             )
             for e in report.errors
         ],
+        warnings=list(report.warnings),
         dry_run=report.dry_run,
     )
 
@@ -100,6 +102,7 @@ def _options(
     default_media_type: str | None,
     enrich: bool = False,
     preserve_barcodes: bool = False,
+    strict_encoding: bool = False,
 ) -> ImportOptions:
     return ImportOptions(
         mode=_mode(mode),
@@ -108,7 +111,18 @@ def _options(
         default_media_type=default_media_type,
         enrich_from_external=enrich,
         preserve_barcodes=preserve_barcodes,
+        strict_encoding=strict_encoding,
     )
+
+
+def _decode_or_422(data: bytes, *, strict: bool) -> tuple[str, int]:
+    try:
+        return decode_text_bytes(data, strict=strict)
+    except UnicodeDecodeError as exc:
+        raise HTTPException(
+            status_code=422,
+            detail=f"File is not valid UTF-8 (use strict_encoding=false to import lossy): {exc}",
+        ) from exc
 
 
 @import_router.post("/csv", response_model=ImportReportResponse)
@@ -127,6 +141,14 @@ async def import_csv(
             "non-conformant rows are rejected. Use for round-tripping a CSV export."
         ),
     ),
+    strict_encoding: bool = Query(
+        False,
+        description=(
+            "Reject the file on any non-UTF-8 byte. Default is lenient: "
+            "invalid bytes are replaced with U+FFFD and a warning is added "
+            "to the report."
+        ),
+    ),
     content_length: int | None = Header(default=None, alias="content-length"),
     settings: Settings = Depends(get_settings),
     session: Session = Depends(get_session),
@@ -137,18 +159,93 @@ async def import_csv(
     data = await read_upload_bounded(
         file, cap=settings.max_upload_bytes, content_length=content_length
     )
-    try:
-        text_stream = _io.StringIO(data.decode("utf-8"))
-    except UnicodeDecodeError as exc:
-        raise HTTPException(
-            status_code=422, detail=f"CSV must be UTF-8 encoded: {exc}"
-        ) from exc
-    options = _options(dry_run, mode, default_branch, default_media_type, enrich, preserve_barcodes)
+    text, replaced = _decode_or_422(data, strict=strict_encoding)
+    text_stream = _io.StringIO(text)
+    options = _options(
+        dry_run,
+        mode,
+        default_branch,
+        default_media_type,
+        enrich,
+        preserve_barcodes,
+        strict_encoding,
+    )
     importer = _make_importer(session, user)
     try:
         report = importer.import_csv(text_stream, options, filename=file.filename)
     except ValidationError as exc:
         raise HTTPException(status_code=422, detail=str(exc)) from exc
+    if replaced:
+        report.warnings.insert(
+            0,
+            f"Decoded with {replaced} byte replacement(s); "
+            "file is not clean UTF-8.",
+        )
+    return _report_to_response(report)
+
+
+@import_router.post("/librarything", response_model=ImportReportResponse)
+async def import_librarything(
+    file: UploadFile = File(..., description="LibraryThing TSV export."),
+    dry_run: bool = Query(False),
+    mode: str = Query("append"),
+    default_branch: str | None = Query(None),
+    default_media_type: str | None = Query(
+        None,
+        description=(
+            "Media type code used when LibraryThing's Media field doesn't "
+            "map to a known compendium type."
+        ),
+    ),
+    enrich: bool = Query(False, description="Fill missing fields from external metadata sources per row."),
+    preserve_barcodes: bool = Query(
+        False,
+        description=(
+            "Preserve LibraryThing's Barcode column. Most LT exports leave "
+            "Barcode empty; fresh codes are minted in that case."
+        ),
+    ),
+    strict_encoding: bool = Query(
+        False,
+        description=(
+            "Reject the file on any non-UTF-8 byte. Default is lenient — real "
+            "LibraryThing exports often contain stray non-UTF-8 bytes."
+        ),
+    ),
+    content_length: int | None = Header(default=None, alias="content-length"),
+    settings: Settings = Depends(get_settings),
+    session: Session = Depends(get_session),
+    user: AppUser = Depends(require_permission("catalog.import")),
+) -> ImportReportResponse:
+    import io as _io
+
+    data = await read_upload_bounded(
+        file, cap=settings.max_upload_bytes, content_length=content_length
+    )
+    text, replaced = _decode_or_422(data, strict=strict_encoding)
+    text_stream = _io.StringIO(text)
+    options = _options(
+        dry_run,
+        mode,
+        default_branch,
+        default_media_type,
+        enrich,
+        preserve_barcodes,
+        strict_encoding,
+    )
+    importer = _make_importer(session, user)
+    try:
+        report = importer.import_librarything(
+            text_stream, options, filename=file.filename
+        )
+    except ValidationError as exc:
+        raise HTTPException(status_code=422, detail=str(exc)) from exc
+    if replaced:
+        report.warnings.insert(
+            0,
+            f"Decoded with {replaced} byte replacement(s); "
+            "file is not clean UTF-8.",
+        )
     return _report_to_response(report)
 
 

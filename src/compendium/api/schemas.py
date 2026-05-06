@@ -272,6 +272,7 @@ class ImportReportResponse(BaseModel):
     skipped_duplicates: int
     enriched_rows: int = 0
     errors: list[ImportRowErrorResponse]
+    warnings: list[str] = []
     dry_run: bool
 
 

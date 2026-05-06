@@ -7,6 +7,7 @@ apps below are registered at the top level as ``import`` and ``export``.
 from __future__ import annotations
 
 import getpass
+import io
 import sys
 from datetime import datetime
 from pathlib import Path
@@ -31,6 +32,7 @@ from compendium.services.import_export import (
     ImportMode,
     ImportOptions,
     ImportService,
+    decode_text_bytes,
 )
 
 import_app = typer.Typer(help="Bulk import catalog data from MARC or CSV.")
@@ -71,12 +73,28 @@ def _print_report(report) -> None:
     typer.echo(f"  errors      : {len(report.errors)}")
     if report.dry_run:
         typer.echo("  (dry-run — no changes persisted)")
+    if report.warnings:
+        typer.echo("\nWarnings:")
+        for w in report.warnings[:20]:
+            typer.echo(f"  - {w}")
+        if len(report.warnings) > 20:
+            typer.echo(f"  … and {len(report.warnings) - 20} more")
     if report.errors:
         typer.echo("\nErrors:")
         for e in report.errors[:20]:
             typer.echo(f"  row {e.row_number} [{e.identifier}]: {e.message}")
         if len(report.errors) > 20:
             typer.echo(f"  … and {len(report.errors) - 20} more")
+
+
+def _read_text_input(file: str, *, strict_encoding: bool) -> tuple[io.StringIO, int]:
+    """Read a text file (or stdin) as bytes, decode with the project's
+    encoding policy, and return a StringIO plus the number of bytes that had
+    to be replaced. ``strict_encoding=True`` raises on any decode error."""
+    with open_input(file, binary=True) as raw:
+        data = raw.read()
+    text, replaced = decode_text_bytes(data, strict=strict_encoding)
+    return io.StringIO(text), replaced
 
 
 def _resolve_mode(value: str) -> ImportMode:
@@ -96,6 +114,7 @@ def _common_import_options(
     default_media_type: str | None,
     enrich: bool = False,
     preserve_barcodes: bool = False,
+    strict_encoding: bool = False,
 ) -> ImportOptions:
     return ImportOptions(
         mode=_resolve_mode(mode),
@@ -104,6 +123,7 @@ def _common_import_options(
         default_media_type=default_media_type,
         enrich_from_external=enrich,
         preserve_barcodes=preserve_barcodes,
+        strict_encoding=strict_encoding,
     )
 
 
@@ -144,17 +164,129 @@ def import_csv_cmd(
             "Use for round-tripping a CSV export back into the same catalog."
         ),
     ),
+    strict_encoding: bool = typer.Option(
+        False,
+        "--strict-encoding",
+        help=(
+            "Reject the file on any non-UTF-8 byte. Default is lenient: "
+            "invalid bytes are replaced with U+FFFD and a warning is "
+            "added to the report."
+        ),
+    ),
 ) -> None:
     """Import catalog rows from a CSV file."""
     options = _common_import_options(
-        dry_run, mode, default_branch, default_media_type, enrich, preserve_barcodes
+        dry_run,
+        mode,
+        default_branch,
+        default_media_type,
+        enrich,
+        preserve_barcodes,
+        strict_encoding,
     )
     label = "stdin" if is_stdio(file) else Path(file).name
     try:
         with session_scope() as session:
             importer = _make_importer(session)
-            with open_input(file, binary=False) as stream:
-                report = importer.import_csv(stream, options, filename=label)
+            try:
+                stream, replaced = _read_text_input(
+                    file, strict_encoding=strict_encoding
+                )
+            except UnicodeDecodeError as exc:
+                typer.echo(f"Error: file is not valid UTF-8: {exc}", err=True)
+                raise typer.Exit(1) from exc
+            report = importer.import_csv(stream, options, filename=label)
+            if replaced:
+                report.warnings.insert(
+                    0,
+                    f"Decoded with {replaced} byte replacement(s); "
+                    "file is not clean UTF-8.",
+                )
+            _print_report(report)
+    except DomainError as exc:
+        typer.echo(f"Error: {exc}", err=True)
+        raise typer.Exit(1) from exc
+    if report.errors and not dry_run:
+        raise typer.Exit(1 if report.created_works + report.added_copies == 0 else 0)
+
+
+@import_app.command("librarything")
+def import_librarything_cmd(
+    file: str = typer.Argument(
+        ..., help="LibraryThing TSV export to import. Use '-' for stdin."
+    ),
+    dry_run: bool = typer.Option(False, "--dry-run", help="Parse and validate without writing."),
+    mode: str = typer.Option(
+        "append",
+        "--mode",
+        help="Dedup behavior: append | skip-duplicates | error-on-conflict",
+    ),
+    default_branch: str | None = typer.Option(
+        None, "--default-branch", help="Branch code applied to rows without one."
+    ),
+    default_media_type: str | None = typer.Option(
+        None,
+        "--default-media-type",
+        help=(
+            "Media type code used when LibraryThing's Media field doesn't map "
+            "to a known compendium type (and the row needs a fallback)."
+        ),
+    ),
+    enrich: bool = typer.Option(
+        False,
+        "--enrich",
+        help=(
+            "When a row has an ISBN, fill missing fields from the relevant "
+            "external source (Open Library for books). Default off."
+        ),
+    ),
+    preserve_barcodes: bool = typer.Option(
+        False,
+        "--preserve-barcodes",
+        help=(
+            "Preserve LibraryThing's Barcode column when present. Most LT "
+            "exports leave Barcode empty, in which case fresh codes are minted."
+        ),
+    ),
+    strict_encoding: bool = typer.Option(
+        False,
+        "--strict-encoding",
+        help=(
+            "Reject the file on any non-UTF-8 byte. Default is lenient: "
+            "invalid bytes are replaced with U+FFFD and a warning is added "
+            "to the report. Real LibraryThing exports often contain a few "
+            "stray non-UTF-8 bytes."
+        ),
+    ),
+) -> None:
+    """Import catalog rows from a LibraryThing TSV export."""
+    options = _common_import_options(
+        dry_run,
+        mode,
+        default_branch,
+        default_media_type,
+        enrich,
+        preserve_barcodes,
+        strict_encoding,
+    )
+    label = "stdin" if is_stdio(file) else Path(file).name
+    try:
+        with session_scope() as session:
+            importer = _make_importer(session)
+            try:
+                stream, replaced = _read_text_input(
+                    file, strict_encoding=strict_encoding
+                )
+            except UnicodeDecodeError as exc:
+                typer.echo(f"Error: file is not valid UTF-8: {exc}", err=True)
+                raise typer.Exit(1) from exc
+            report = importer.import_librarything(stream, options, filename=label)
+            if replaced:
+                report.warnings.insert(
+                    0,
+                    f"Decoded with {replaced} byte replacement(s); "
+                    "file is not clean UTF-8.",
+                )
             _print_report(report)
     except DomainError as exc:
         typer.echo(f"Error: {exc}", err=True)

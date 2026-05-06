@@ -244,16 +244,17 @@ Optional. If the key is not configured the behavior is unchanged (no cover store
 
 ## Bulk import & export
 
-`services/import_export.py` provides bulk ingest and extract for CSV, MARC21 binary (`.mrc`), and MARCXML. Surfaced on all three interfaces:
+`services/import_export.py` provides bulk ingest and extract for CSV, MARC21 binary (`.mrc`), MARCXML, and LibraryThing TSV exports. Surfaced on all three interfaces:
 
-- CLI: `compendium import {csv|marc} <file>` and `compendium export {csv|marc} <out>` (with `--xml` for MARCXML on export).
-- API: `POST /import/{csv,marc}` (multipart) and `GET /export/{csv,marc}?xml=…` (streaming). Import requires the `catalog.import` permission; export is gated on `item.view`.
-- Web: `/ui/admin/import` (upload with dry-run preview + apply) and `/ui/admin/export` (filter form → download).
+- CLI: `compendium import {csv|librarything|marc} <file>` and `compendium export {csv|marc} <out>` (with `--xml` for MARCXML on export).
+- API: `POST /import/{csv,librarything,marc}` (multipart) and `GET /export/{csv,marc}?xml=…` (streaming). Import requires the `catalog.import` permission; export is gated on `item.view`.
+- Web: `/ui/admin/import` (upload with dry-run preview + apply; format dropdown selects CSV / LibraryThing TSV / MARC21 / MARCXML) and `/ui/admin/export` (filter form → download).
 
 **Semantics:**
 
 - **Dedup** by ISBN/UPC only; no fuzzy title matching. Conflict modes: `append` (add a copy to the existing work — default), `skip-duplicates`, `error-on-conflict`.
 - **Barcode generation**: by default, any barcode/accession_number supplied in a CSV row is discarded and a fresh conformant 10/14-digit code is minted via `format_item_barcode()`. Pass `--preserve-barcodes` (CLI/API) or check the web checkbox to instead validate and keep the supplied codes (requires valid Compendium 10/14-digit format with Luhn check).
+- **Encoding** (CSV + LibraryThing TSV): UTF-8 is preferred, but stray non-UTF-8 bytes are tolerated by default — invalid bytes are replaced with U+FFFD and a warning is added to the report. Pass `--strict-encoding` (CLI), `strict_encoding=true` (API), or check "strict encoding" (Web) to fail the whole import on any bad byte. MARC has its own encoding semantics in the leader and is unaffected. Real-world LibraryThing exports often contain a handful of stray Latin-1/cp1252 bytes — the lenient default lets them in.
 - **Transaction ownership**: the importer flushes but never commits — the caller's session scope (or test fixture) controls commit/rollback. Dry-run rolls back. Per-row errors are collected into an `ImportReport`; barcode/accession uniqueness is pre-validated at the application layer to avoid IntegrityError rollbacks mid-batch.
 - **Audit**: one summary `BULK_IMPORT` AuditLog entry per run (not per row), carrying counts and filename.
 
@@ -280,6 +281,25 @@ Only `title` is required on import. `media_type` is required unless `--default-m
 - `001/003` round-trip through `work.external_ids["marc_control"]` and `marc_agency`.
 
 **MARC export is standards-compliant**: item-level fields (barcode, branch, loanable state, notes) are **not** written to MARC records. Round-tripping through MARC discards those fields by design; use CSV for lossless round-trip.
+
+### LibraryThing TSV mapping
+
+LibraryThing exports a 53-column tab-separated file. The importer translates each row into the Compendium CSV-row contract and runs it through the same `_process_csv_row` pipeline (so dedup, barcode mint, branch defaults, and enrichment all behave the same):
+
+- `Title` → `title`. No automatic title/subtitle split.
+- `Primary Author` + `Secondary Author` → `authors`, semicolon-joined; LT's "Last, First" format is preserved.
+- `Publication` is parsed for publisher and (fallback) year via `^(.+?)\s*\((\d{4})\)`. `Date` wins for the year if it's a clean 4-digit value; LT's `?` placeholder and partial dates fall back to the Publication-derived year.
+- `Media` maps Hardcover/Paperback/Mass Market Paperback/Library Binding/Trade Paperback/Ebook → `book`; CD/Audiobook (CD) → `cd`; Vinyl/LP → `vinyl`; DVD/Blu-ray → `dvd`. Unrecognized values fall back to `--default-media-type`. Many LT exports have rows with empty Media — pass `--default-media-type book` for typical book-heavy libraries.
+- `Languages` (English-language names) → ISO 639-1 via a small lookup; the first comma-separated value wins. Unknown ≤8-char values pass through; longer unknowns are dropped.
+- `LC Classification` → `classification_scheme="LCC"`. `Dewey Decimal` is used only when LCC is empty (CLAUDE.md note: storing DDC values is fine; shipping DDC reference data is not).
+- `ISBN` is unwrapped from LT's `[…]` brackets; `[]` decodes to no ISBN. Normalized to ISBN-13 by `normalize_isbn`.
+- `Other Call Number` → item-level `call_number`.
+- `Barcode` is honored when `--preserve-barcodes` is set. Most LT exports leave it blank.
+- `Book Id`, `Work id`, `OCLC`, `LCCN`, `BCID` round-trip through `Work.external_ids["librarything"]`.
+- User-attached fields with no Compendium home today (`Tags`, `Collections`, `Rating`, `Review`, `Comment`, `Private Comment`, `Page Count`, `Physical Description`, `Original Languages`, `Subjects`) are preserved in `Work.extra_metadata["librarything"]` so a future tags slice can lift them out — they aren't silently dropped.
+- `Copies > 1` mints additional Items via the same Work. Copies 2..N always run in `append` mode and skip enrichment regardless of the user-selected mode (warnings surface this).
+
+Fields not listed above (LT's `Sort Character`, `Acquired`, `Date Started`, `Date Read`, `Source`, `Entry Date`, `From Where`, lending history, etc.) are dropped.
 
 ---
 

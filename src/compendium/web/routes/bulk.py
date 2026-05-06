@@ -30,6 +30,7 @@ from compendium.services.import_export import (
     ImportMode,
     ImportOptions,
     ImportService,
+    decode_text_bytes,
 )
 from compendium.web.csrf import check_csrf_form, ensure_csrf, set_csrf_cookie
 from compendium.web.deps import require_web_permission
@@ -106,6 +107,7 @@ async def import_submit(
     default_media_type: str | None = Form(None),
     enrich: str | None = Form(None),
     preserve_barcodes: str | None = Form(None),
+    strict_encoding: str | None = Form(None),
     csrf_token: str = Form(...),
     content_length: int | None = Header(default=None, alias="content-length"),
     settings: Settings = Depends(get_settings),
@@ -131,6 +133,7 @@ async def import_submit(
         ctx["error"] = f"Unknown mode '{mode}'. Valid: {_MODE_CHOICES}"
         return _render("admin/import.html", request, ctx, status_code=400)
 
+    strict_encoding_bool = bool(strict_encoding)
     options = ImportOptions(
         mode=mode_enum,
         dry_run=bool(dry_run),
@@ -138,6 +141,7 @@ async def import_submit(
         default_media_type=default_media_type or None,
         enrich_from_external=bool(enrich),
         preserve_barcodes=bool(preserve_barcodes),
+        strict_encoding=strict_encoding_bool,
     )
 
     try:
@@ -150,10 +154,24 @@ async def import_submit(
             return _render("admin/import.html", request, ctx, status_code=413)
         raise
     importer = _make_importer(session, user)
+    replaced = 0
     try:
-        if format == "csv":
-            stream = io.StringIO(data.decode("utf-8"))
-            report = importer.import_csv(stream, options, filename=file.filename)
+        if format in ("csv", "librarything"):
+            try:
+                text, replaced = decode_text_bytes(data, strict=strict_encoding_bool)
+            except UnicodeDecodeError as exc:
+                ctx["error"] = (
+                    f"File is not valid UTF-8: {exc}. Uncheck "
+                    "'strict encoding' to import anyway."
+                )
+                return _render("admin/import.html", request, ctx, status_code=400)
+            stream = io.StringIO(text)
+            if format == "csv":
+                report = importer.import_csv(stream, options, filename=file.filename)
+            else:
+                report = importer.import_librarything(
+                    stream, options, filename=file.filename
+                )
         elif format == "marcxml" or (
             format == "marc"
             and file.filename
@@ -167,15 +185,20 @@ async def import_submit(
                 io.BytesIO(data), options, filename=file.filename
             )
         else:
-            ctx["error"] = f"Unknown format '{format}'. Valid: csv, marc, marcxml"
+            ctx["error"] = (
+                f"Unknown format '{format}'. Valid: csv, librarything, marc, marcxml"
+            )
             return _render("admin/import.html", request, ctx, status_code=400)
     except ValidationError as exc:
         ctx["error"] = str(exc)
         return _render("admin/import.html", request, ctx, status_code=400)
-    except UnicodeDecodeError as exc:
-        ctx["error"] = f"File is not valid UTF-8: {exc}"
-        return _render("admin/import.html", request, ctx, status_code=400)
 
+    if replaced:
+        report.warnings.insert(
+            0,
+            f"Decoded with {replaced} byte replacement(s); "
+            "file is not clean UTF-8.",
+        )
     ctx["report"] = report
     return _render("admin/import.html", request, ctx)
 

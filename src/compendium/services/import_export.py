@@ -22,7 +22,7 @@ from __future__ import annotations
 import csv
 import io
 import re
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, replace
 from datetime import datetime
 from enum import Enum
 from typing import IO
@@ -62,6 +62,30 @@ class ImportOptions:
     # supplied barcode must be a valid 10/14-digit Compendium barcode; rows
     # with non-conformant barcodes are rejected. Enables CSV round-tripping.
     preserve_barcodes: bool = False
+    # When False (default): non-UTF-8 bytes are replaced with U+FFFD and the
+    # import proceeds with a warning on the report. When True: any decoding
+    # error fails the entire import. Affects CSV and LibraryThing TSV reads;
+    # MARC has its own encoding rules and ignores this flag.
+    strict_encoding: bool = False
+
+
+def decode_text_bytes(data: bytes, *, strict: bool) -> tuple[str, int]:
+    """Decode a text upload to a Python string.
+
+    Returns ``(text, replaced_count)``. When ``strict=False`` and the bytes
+    aren't clean UTF-8, falls back to ``errors="replace"`` (each invalid byte
+    becomes U+FFFD) and reports how many replacements happened. Real-world
+    third-party exports (notably LibraryThing) sometimes emit a handful of
+    stray Latin-1/cp1252 bytes inside an otherwise-UTF-8 file; lossy decode
+    is the only sensible recovery.
+    """
+    try:
+        return data.decode("utf-8"), 0
+    except UnicodeDecodeError:
+        if strict:
+            raise
+    text = data.decode("utf-8", errors="replace")
+    return text, text.count("�")
 
 
 @dataclass
@@ -81,6 +105,7 @@ class ImportReport:
     skipped_duplicates: int = 0
     enriched_rows: int = 0  # rows where external lookup contributed metadata
     errors: list[ImportRowError] = field(default_factory=list)
+    warnings: list[str] = field(default_factory=list)
     dry_run: bool = False
 
 
@@ -474,6 +499,108 @@ class ImportService:
 
         return self._finalize(report, options)
 
+    def import_librarything(
+        self,
+        stream: IO[str],
+        options: ImportOptions,
+        filename: str | None = None,
+    ) -> ImportReport:
+        """Import a LibraryThing TSV export.
+
+        Translates LT's 53-column tab-delimited schema into the Compendium
+        CSV row contract (lowercase keys + private ``_external_ids`` /
+        ``_extra_metadata`` synthetic keys) and delegates per copy to
+        ``_process_csv_row``. The MARC importer goes direct to
+        ``add_from_import``; this importer reuses the CSV pipeline so it
+        inherits dedup, preserve-barcodes, branch defaults, and enrichment.
+        """
+        reader = csv.DictReader(stream, delimiter="\t")
+        if not reader.fieldnames:
+            raise ValidationError("LibraryThing TSV is empty or missing header row.")
+        header = {h.strip() for h in reader.fieldnames if h}
+        if "Title" not in header:
+            raise ValidationError(
+                "LibraryThing TSV header is missing required column 'Title'. "
+                "Got columns: " + ", ".join(sorted(header))
+            )
+
+        report = ImportReport(
+            source="librarything", filename=filename, dry_run=options.dry_run
+        )
+        seen_barcodes: set[str] = set()
+        seen_accessions: set[str] = set()
+        copies_options = replace(
+            options, mode=ImportMode.APPEND, enrich_from_external=False
+        )
+
+        for row_num, raw in enumerate(reader, start=2):
+            report.total_rows += 1
+            try:
+                compendium_row, copies = _lt_to_compendium(raw)
+            except (ValidationError, BusinessRuleError) as exc:
+                report.errors.append(
+                    ImportRowError(
+                        row_number=row_num,
+                        identifier=_strip(raw.get("Title")) or "(row)",
+                        message=str(exc),
+                    )
+                )
+                continue
+
+            if copies > 1 and options.mode != ImportMode.APPEND:
+                report.warnings.append(
+                    f"Row {row_num}: forced append mode for copies 2..{copies} "
+                    f"because Copies={copies} > 1"
+                )
+            if copies > 1 and options.enrich_from_external:
+                report.warnings.append(
+                    f"Row {row_num}: enriched copy 1 only; copies 2..{copies} "
+                    "reuse that result without a new external lookup"
+                )
+
+            for copy_idx in range(copies):
+                if copy_idx == 0:
+                    row_for_copy = compendium_row
+                    opts_for_copy = options
+                else:
+                    row_for_copy = dict(compendium_row)
+                    row_for_copy["barcode"] = ""
+                    opts_for_copy = copies_options
+                try:
+                    _, _, outcome, enriched = self._process_csv_row(
+                        row_for_copy, opts_for_copy, seen_barcodes, seen_accessions
+                    )
+                    if enriched:
+                        report.enriched_rows += 1
+                    if outcome == "created_work":
+                        report.created_works += 1
+                    elif outcome == "added_copy":
+                        report.added_copies += 1
+                    elif outcome == "skipped_duplicate":
+                        report.skipped_duplicates += 1
+                    elif outcome == "errored_on_conflict":
+                        report.errors.append(
+                            ImportRowError(
+                                row_number=row_num,
+                                identifier=compendium_row.get("title") or "(row)",
+                                message=(
+                                    "Duplicate ISBN/UPC rejected "
+                                    "(mode=error-on-conflict)"
+                                ),
+                            )
+                        )
+                except (ValidationError, BusinessRuleError) as exc:
+                    report.errors.append(
+                        ImportRowError(
+                            row_number=row_num,
+                            identifier=compendium_row.get("title") or "(row)",
+                            message=str(exc),
+                        )
+                    )
+                    break
+
+        return self._finalize(report, options)
+
     def import_marc(
         self,
         stream: IO[bytes],
@@ -625,6 +752,13 @@ class ImportService:
         seen_barcodes: set[str],
         seen_accessions: set[str],
     ):
+        # The row dict is the public CSV contract (lowercase column names from
+        # _REQUIRED_CSV_COLUMNS). Two private synthetic keys are accepted for
+        # programmatic callers (e.g. import_librarything) to inject Work-level
+        # metadata that has no CSV column today: ``_external_ids`` (foreign
+        # system IDs → Work.external_ids) and ``_extra_metadata`` (publication
+        # facts and source-specific blobs → Work.extra_metadata). Both default
+        # to {} when absent, so plain CSV imports are unaffected.
         mt = _strip(row.get("media_type")) or options.default_media_type
         if not mt:
             raise ValidationError(
@@ -733,8 +867,8 @@ class ImportService:
             "upc": upc,
             "classification_scheme": _strip(row.get("classification_scheme")),
             "classification_code": _strip(row.get("classification_code")),
-            "external_ids": {},
-            "extra_metadata": {},
+            "external_ids": dict(row.get("_external_ids") or {}),
+            "extra_metadata": dict(row.get("_extra_metadata") or {}),
         }
 
         enriched = False
@@ -927,3 +1061,211 @@ def _row_identifier(row: dict) -> str:
         if val:
             return val
     return "(unidentified row)"
+
+
+# LibraryThing's "Media" field uses human labels; map them to compendium codes.
+_LT_MEDIA_TO_TYPE: dict[str, str] = {
+    "hardcover": "book",
+    "paperback": "book",
+    "mass market paperback": "book",
+    "library binding": "book",
+    "trade paperback": "book",
+    "softcover": "book",
+    "ebook": "book",
+    "audiobook": "cd",
+    "audiobook (cd)": "cd",
+    "audio cd": "cd",
+    "music cd": "cd",
+    "cd": "cd",
+    "vinyl": "vinyl",
+    "vinyl record": "vinyl",
+    "lp": "vinyl",
+    "dvd": "dvd",
+    "dvd video": "dvd",
+    "blu-ray": "dvd",
+    "blu-ray disc": "dvd",
+}
+
+# LibraryThing's "Languages" field uses English names; map common ones to ISO
+# 639-1 to fit Work.language (String(8)). Anything unmapped ≤ 8 chars passes
+# through (caller may already have an ISO code); longer unmapped values are
+# dropped so _process_csv_row applies its "en" default.
+_LT_LANGUAGE_TO_ISO: dict[str, str] = {
+    "english": "en",
+    "french": "fr",
+    "german": "de",
+    "spanish": "es",
+    "italian": "it",
+    "portuguese": "pt",
+    "dutch": "nl",
+    "polish": "pl",
+    "swedish": "sv",
+    "norwegian": "no",
+    "danish": "da",
+    "finnish": "fi",
+    "russian": "ru",
+    "japanese": "ja",
+    "chinese": "zh",
+    "korean": "ko",
+    "arabic": "ar",
+    "hebrew": "he",
+    "greek": "el",
+    "turkish": "tr",
+    "latin": "la",
+    "czech": "cs",
+    "hungarian": "hu",
+    "romanian": "ro",
+}
+
+# "Random House (2011), Edition: 1, Hardcover, 448 pages" → ("Random House", "2011")
+_LT_PUBLICATION_RE = re.compile(r"^\s*(.+?)\s*\((\d{4})\)")
+
+# LibraryThing wraps ISBNs in square brackets, e.g. "[0940450070]". Empty
+# brackets "[]" are emitted for records without an ISBN — those decode to "".
+_LT_ISBN_BRACKET_RE = re.compile(r"^\[(.*)\]$")
+
+
+def _lt_to_compendium(row: dict) -> tuple[dict, int]:
+    """Translate one LibraryThing TSV row into a Compendium CSV row dict.
+
+    Returns ``(row, copies)`` where ``copies`` is the LT ``Copies`` count
+    (defaults to 1; values < 1 are clamped). The returned row uses
+    Compendium's lowercase column names plus the synthetic ``_external_ids``
+    and ``_extra_metadata`` keys consumed by ``_process_csv_row``. Caller
+    loops over ``copies`` to mint multiple Items.
+
+    Drops user-attached fields with no Compendium home today (Tags,
+    Collections, Rating, Review, Comment, Page Count, etc.) into
+    ``extra_metadata["librarything"]`` so a future tags slice can lift them
+    out, rather than discarding silently.
+    """
+    title = _strip(row.get("Title"))
+    if not title:
+        raise ValidationError("Row is missing required column 'Title'")
+
+    primary = _strip(row.get("Primary Author"))
+    secondary = _strip(row.get("Secondary Author"))
+    authors_parts = [a for a in (primary, secondary) if a]
+    authors = "; ".join(authors_parts) if authors_parts else None
+
+    # Publication string carries publisher + fallback year; "Date" wins for year.
+    publisher: str | None = None
+    pub_year_from_publication: str | None = None
+    publication_raw = _strip(row.get("Publication"))
+    if publication_raw:
+        match = _LT_PUBLICATION_RE.match(publication_raw)
+        if match:
+            publisher = match.group(1).strip() or None
+            pub_year_from_publication = match.group(2)
+    date_raw = _strip(row.get("Date"))
+    # LibraryThing emits "?" or partial dates ("1850-?") for unknown years.
+    # Only forward 4-digit numeric strings; otherwise fall back to the
+    # year extracted from the Publication string.
+    if date_raw and date_raw.isdigit() and len(date_raw) == 4:
+        publication_year = date_raw
+    else:
+        publication_year = pub_year_from_publication
+
+    media_raw = _strip(row.get("Media"))
+    media_type: str | None = None
+    if media_raw:
+        media_type = _LT_MEDIA_TO_TYPE.get(media_raw.lower())
+
+    language_raw = _strip(row.get("Languages"))
+    language: str | None = None
+    if language_raw:
+        first = language_raw.split(",")[0].strip()
+        mapped = _LT_LANGUAGE_TO_ISO.get(first.lower())
+        if mapped:
+            language = mapped
+        elif len(first) <= 8:
+            language = first
+
+    isbn_raw = _strip(row.get("ISBN"))
+    isbn: str | None = None
+    if isbn_raw:
+        bracket = _LT_ISBN_BRACKET_RE.match(isbn_raw)
+        isbn = bracket.group(1).strip() if bracket else isbn_raw
+        if not isbn:
+            isbn = None
+
+    # LCC wins over DDC (per project's recommended scheme; CLAUDE.md).
+    lcc = _strip(row.get("LC Classification"))
+    ddc = _strip(row.get("Dewey Decimal"))
+    classification_scheme: str | None = None
+    classification_code: str | None = None
+    if lcc:
+        classification_scheme, classification_code = "LCC", lcc
+    elif ddc:
+        classification_scheme, classification_code = "DDC", ddc
+
+    copies_raw = _strip(row.get("Copies"))
+    copies = 1
+    if copies_raw:
+        try:
+            copies = max(1, int(copies_raw))
+        except ValueError:
+            copies = 1
+
+    # Foreign-system identifiers → Work.external_ids (small, structured).
+    external_ids: dict = {}
+    lt_ids = {
+        k: v
+        for k, v in {
+            "book_id": _strip(row.get("Book Id")),
+            "work_id": _strip(row.get("Work id")),
+            "oclc": _strip(row.get("OCLC")),
+            "lccn": _strip(row.get("LCCN")),
+            "bcid": _strip(row.get("BCID")),
+        }.items()
+        if v
+    }
+    if lt_ids:
+        external_ids["librarything"] = lt_ids
+
+    # User-attached + publication-fact fields with no Compendium home →
+    # Work.extra_metadata. Preserve as a "librarything" sub-dict so a future
+    # slice can promote tags/collections/rating to first-class entities.
+    lt_extra: dict = {}
+    for src_key, dest_key in [
+        ("Tags", "tags"),
+        ("Collections", "collections"),
+    ]:
+        raw = _strip(row.get(src_key))
+        if raw:
+            lt_extra[dest_key] = [p.strip() for p in raw.split(",") if p.strip()]
+    for src_key, dest_key in [
+        ("Rating", "rating"),
+        ("Review", "review"),
+        ("Comment", "comment"),
+        ("Private Comment", "private_comment"),
+        ("Page Count", "page_count"),
+        ("Physical Description", "physical_description"),
+        ("Original Languages", "original_languages"),
+        ("Subjects", "subjects"),
+    ]:
+        raw = _strip(row.get(src_key))
+        if raw:
+            lt_extra[dest_key] = raw
+    extra_metadata: dict = {}
+    if lt_extra:
+        extra_metadata["librarything"] = lt_extra
+
+    return (
+        {
+            "title": title,
+            "authors": authors or "",
+            "publisher": publisher or "",
+            "publication_year": publication_year or "",
+            "media_type": media_type or "",
+            "language": language or "",
+            "isbn": isbn or "",
+            "classification_scheme": classification_scheme or "",
+            "classification_code": classification_code or "",
+            "call_number": _strip(row.get("Other Call Number")) or "",
+            "barcode": _strip(row.get("Barcode")) or "",
+            "_external_ids": external_ids,
+            "_extra_metadata": extra_metadata,
+        },
+        copies,
+    )

@@ -17,6 +17,7 @@
   <label for="format">Format</label>
   <select name="format" id="format" required>
     <option value="csv">CSV</option>
+    <option value="librarything">LibraryThing TSV</option>
     <option value="marc">MARC21 (.mrc binary)</option>
     <option value="marcxml">MARCXML (.xml)</option>
   </select>
@@ -67,6 +68,13 @@
     rejected. Use when re-importing a catalog export to the same system.
   </label>
 
+  <label>
+    <input type="checkbox" name="strict_encoding" value="1">
+    Strict encoding — reject the file on any non-UTF-8 byte (CSV /
+    LibraryThing only). Default is lenient: invalid bytes are replaced and a
+    warning is shown. Real LibraryThing exports often contain stray bytes.
+  </label>
+
   <button type="submit">Upload</button>
 </form>
 
@@ -84,6 +92,18 @@
   <a href="/ui/catalog" role="button" class="outline" style="margin-left:.75rem">Browse catalog</a>
   {% endif %}
 </p>
+{% endif %}
+
+{% if report.warnings %}
+<div class="warning-banner">
+  <strong>Warnings ({{ report.warnings | length }}):</strong>
+  <ul style="margin:.4rem 0 0 1.2rem">
+    {% for w in report.warnings[:50] %}<li>{{ w }}</li>{% endfor %}
+    {% if report.warnings | length > 50 %}
+    <li>… and {{ report.warnings | length - 50 }} more</li>
+    {% endif %}
+  </ul>
+</div>
 {% endif %}
 
 <dl>

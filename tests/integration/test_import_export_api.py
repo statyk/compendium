@@ -102,6 +102,13 @@ def _minimal_csv_bytes(isbn="9780441013593") -> bytes:
     ).encode("utf-8")
 
 
+def _minimal_lt_tsv_bytes(isbn="9780441013593") -> bytes:
+    return (
+        "Title\tPrimary Author\tPublication\tDate\tMedia\tLanguages\tISBN\tCopies\n"
+        f"Dune\tHerbert, Frank\tAce (1965), Paperback\t1965\tPaperback\tEnglish\t[{isbn}]\t1\n"
+    ).encode("utf-8")
+
+
 def _marc_bytes(isbn="9780441013601") -> bytes:
     r = Record()
     leader = list(r.leader)
@@ -184,6 +191,61 @@ def test_api_import_csv_invalid_mode_returns_422(client, db_session):
     )
     assert resp.status_code == 422
     assert "mode" in resp.json()["detail"].lower()
+
+
+def test_api_import_librarything_happy_path(client, db_session):
+    _, token = _make_user(db_session, "Librarian", "api_imp_lt")
+    db_session.commit()
+
+    resp = client.post(
+        "/import/librarything",
+        files={
+            "file": (
+                "books.tsv",
+                _minimal_lt_tsv_bytes("9780441013700"),
+                "text/tab-separated-values",
+            )
+        },
+        headers=_bearer(token),
+    )
+    assert resp.status_code == 200, resp.text
+    body = resp.json()
+    assert body["source"] == "librarything"
+    assert body["errors"] == []
+    assert body["warnings"] == []
+    # The module-scoped engine accumulates rows; assert at least one work
+    # came from this call (created or added_copy of an earlier ISBN).
+    assert body["created_works"] + body["added_copies"] >= 1
+
+
+def test_api_import_librarything_strict_encoding_rejects_stray_byte(client, db_session):
+    _, token = _make_user(db_session, "Librarian", "api_imp_lt_strict")
+    db_session.commit()
+
+    raw = _minimal_lt_tsv_bytes("9780441013594").replace(b"Dune", b"D\xe8ne")
+    resp = client.post(
+        "/import/librarything?strict_encoding=true",
+        files={"file": ("messy.tsv", raw, "text/tab-separated-values")},
+        headers=_bearer(token),
+    )
+    assert resp.status_code == 422
+    assert "utf-8" in resp.json()["detail"].lower()
+
+
+def test_api_import_librarything_lenient_imports_with_warning(client, db_session):
+    _, token = _make_user(db_session, "Librarian", "api_imp_lt_lenient")
+    db_session.commit()
+
+    raw = _minimal_lt_tsv_bytes("9780441013595").replace(b"Dune", b"D\xe8ne")
+    resp = client.post(
+        "/import/librarything",
+        files={"file": ("messy.tsv", raw, "text/tab-separated-values")},
+        headers=_bearer(token),
+    )
+    assert resp.status_code == 200, resp.text
+    body = resp.json()
+    assert body["created_works"] == 1
+    assert any("byte replacement" in w.lower() for w in body["warnings"])
 
 
 def test_api_import_marc_happy_path(client, db_session):

@@ -19,7 +19,7 @@ This paragraph here is about the only part of the project written by a human.
 - **Notifications** — outbox-pattern email delivery (hold-ready, due-soon, overdue) drained by a cron-invoked CLI; admin viewer + retry; per-patron opt-out; configurable retention
 - **Reports** — checkouts/month, popular works, dormant items (weeding list), current overdues; CSV export; Chart.js trendlines
 - **Patrons & cards** — patron categories (Adult/Child/Staff/Teacher seeded), card expiry with maintenance auto-deactivation, optional 1:1 patron↔user link for self-service
-- **Bulk import/export** — round-trippable CSV; MARC21 binary + MARCXML import/export
+- **Bulk import/export** — round-trippable CSV; MARC21 binary + MARCXML import/export; LibraryThing TSV import (with lenient encoding for messy real-world exports)
 - **Backup/restore** — portable JSONL tarballs; backend-agnostic (SQLite ↔ Postgres); doubles as a DB migration path
 - **Labels** — Avery-template item labels (spine / pocket) and patron cards (full / sticker) as PDFs
 - **Auth** — five preset roles (ReadOnly, Patron, Librarian, SystemAdmin, Administrator) plus custom roles via the admin UI; JWT for API, cookie-based for web UI
@@ -157,7 +157,7 @@ Start the server with `compendium serve` and open your browser to `http://localh
 | `/ui/admin/holds` | Librarian | All active holds with status/branch/work filters |
 | `/ui/admin/claims` | Librarian | Outstanding claims-returned investigations |
 | `/ui/admin/notifications` | Librarian | Notification log + manual retry |
-| `/ui/admin/import` | Librarian | Bulk CSV/MARC import |
+| `/ui/admin/import` | Librarian | Bulk CSV / LibraryThing TSV / MARC import |
 | `/ui/admin/export` | Librarian | Bulk CSV/MARC export |
 | `/ui/admin/patron-categories` | Librarian | Manage patron categories |
 | `/ui/admin/settings/general` | Librarian | Library name, default theme, guest search |
@@ -198,7 +198,7 @@ Below is a high-level inventory grouped by concern; the OpenAPI document is the 
 | **Self-service** | `GET /me/loans`, `/me/holds`; `POST /me/holds`, `/me/holds/{id}/{suspend,resume}`; `DELETE /me/holds/{id}`; `POST /me/loans/{id}/{renew,claim-returned}` | `*.self` permissions |
 | **Notifications** | `GET /notifications`, `POST /notifications/{id}/retry` | `notification.manage` |
 | **Reports** | `GET /reports/{checkouts,popular,dormant,overdues}` | `report.view` |
-| **Bulk import/export** | `POST /import/{csv,marc}` (multipart), `GET /export/{csv,marc}` (streaming) | `catalog.import` / `item.view` |
+| **Bulk import/export** | `POST /import/{csv,librarything,marc}` (multipart), `GET /export/{csv,marc}` (streaming) | `catalog.import` / `item.view` |
 | **Labels** | `GET /labels/items`, `/labels/patrons` (PDF) | `labels.generate` |
 | **Policies** | `GET/POST /policies` | `item.view` / `policy.edit` |
 | **Users** | `POST /users/{username}/deactivate` | `user.manage` |
