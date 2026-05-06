@@ -488,7 +488,12 @@ p.success-banner::before { content: "✓ "; }
 /* Pico gives details.dropdown a card background; strip it inside the nav
    so nothing boxes over the walnut header. */
 header.container nav details.dropdown,
-header.container nav details.dropdown > summary {
+header.container nav details.dropdown > summary,
+header.container nav details.dropdown > summary:hover,
+header.container nav details.dropdown > summary:focus,
+header.container nav details.dropdown > summary:focus-visible,
+header.container nav details.dropdown > summary:active,
+header.container nav details.dropdown[open] > summary {
   background: transparent;
   border: none;
   box-shadow: none;
@@ -499,8 +504,9 @@ header.container nav details.dropdown > summary {
    overrides a generic color rule. Override in the nav scope so all
    dropdown summaries (theme picker, Circulation, etc.) stay cream. */
 header.container nav {
-  --pico-accordion-close-summary-color: var(--cmp-nav-fg);
-  --pico-accordion-open-summary-color:  var(--cmp-nav-fg);
+  --pico-accordion-close-summary-color:  var(--cmp-nav-fg);
+  --pico-accordion-open-summary-color:   var(--cmp-nav-fg);
+  --pico-accordion-active-summary-color: var(--cmp-nav-fg);
   --pico-dropdown-color: var(--cmp-nav-fg);
 }
 
