@@ -3,8 +3,11 @@
 Framework-free: takes already-materialized rows, returns bytes. The CLI and
 web/API routes are responsible for fetching rows and handing them in.
 
-reportlab is a hard dependency. `reportlab.graphics.barcode` provides the
-Code128 and EAN-13 renderers we need, so there's no additional barcode lib.
+reportlab is a hard dependency for page layout. ``python-barcode`` supplies
+the bar/space module patterns for Codabar / Code 39 / Code 128 (reportlab
+doesn't ship a Codabar renderer); we read the patterns and draw rectangles
+directly onto the reportlab canvas to avoid a PIL/SVG transitive dep. EAN-13
+(used for the optional ISBN-as-barcode flow) still goes through reportlab.
 """
 
 from __future__ import annotations
@@ -15,12 +18,15 @@ from datetime import date
 from io import BytesIO
 from typing import Iterable, Literal
 
-from reportlab.graphics.barcode import code128, eanbc
+from reportlab.graphics.barcode import eanbc
 from reportlab.graphics.shapes import Drawing
 from reportlab.lib.pagesizes import letter
 from reportlab.lib.units import inch
 from reportlab.pdfgen import canvas
 from reportlab.pdfbase.pdfmetrics import stringWidth
+
+
+BarcodeSymbology = Literal["codabar", "code39", "code128"]
 
 
 ItemFormat = Literal["spine", "pocket", "barcode-only"]
@@ -208,23 +214,96 @@ def _iter_label_positions(template: LabelTemplate, start_label: int = 0):
         page_idx += 1
 
 
-def _draw_barcode_code128(c: canvas.Canvas, x: float, y: float, value: str,
-                          width: float, height: float, human_readable: bool = True) -> None:
-    bc = code128.Code128(value, barHeight=height, humanReadable=human_readable,
-                         fontName="Helvetica", fontSize=7)
-    # reportlab barcode widgets have their own coordinate system; scale the
-    # drawn width to the allotted space.
-    natural = bc.width
-    scale = width / natural if natural > 0 else 1.0
+_PYBARCODE_CLASS_NAMES: dict[str, str] = {
+    "codabar": "codabar",
+    "code39": "code39",
+    "code128": "code128",
+}
+
+
+def _module_pattern(value: str, symbology: str) -> str:
+    """Return the bar/space module pattern for ``value`` under the given
+    symbology, as a string of '0' / '1' characters where '1' is a bar.
+
+    ``python-barcode``'s ``Codabar`` class requires the caller to supply
+    explicit start/stop characters around the data — we use 'A' on both
+    ends, the most common library default. Code 39 and Code 128 don't need
+    wrapping. The returned pattern is encoding-only; the human-readable
+    text is rendered separately so it shows the unwrapped digits.
+
+    Fallback: Compendium-minted barcodes are always decimal digits, but a
+    catalog may carry non-digit barcodes from a legacy import. If the
+    chosen symbology can't encode the value (Codabar rejects letters,
+    Code 39 rejects most punctuation), we silently fall back to Code 128
+    rather than blow up the whole PDF render.
+    """
+    import barcode
+
+    cls = barcode.get_barcode_class(_PYBARCODE_CLASS_NAMES[symbology])
+    encoded = f"A{value}A" if symbology == "codabar" else value
+    try:
+        return "".join(cls(encoded, writer=None).build())
+    except barcode.errors.BarcodeError:
+        if symbology == "code128":
+            raise  # already at the most permissive symbology — surface it
+        fallback = barcode.get_barcode_class("code128")
+        return "".join(fallback(value, writer=None).build())
+
+
+def _human_readable_text(value: str, symbology: str) -> str:
+    """Text printed below the bars. Compendium's barcode value is the same
+    across symbologies — Codabar's start/stop chars are an encoding detail,
+    not user-visible — so this is a thin wrapper for symmetry with
+    ``_module_pattern`` and to keep symbology-specific stripping in one
+    place if more symbologies arrive later."""
+    return value
+
+
+def _draw_barcode(
+    c: canvas.Canvas,
+    x: float,
+    y: float,
+    value: str,
+    width: float,
+    height: float,
+    *,
+    symbology: BarcodeSymbology,
+    human_readable: bool = True,
+) -> None:
+    """Render a barcode for ``value`` at the canvas position ``(x, y)``,
+    using the requested symbology. Bars and spaces are emitted as
+    rectangles directly onto the canvas — no PIL / SVG dep, no reportlab
+    barcode widget."""
+    pattern = _module_pattern(value, symbology)
+    if not pattern:
+        return
+    module_width = width / len(pattern)
     c.saveState()
-    c.translate(x, y)
-    c.scale(scale, 1.0)
-    bc.drawOn(c, 0, 0)
+    for i, bit in enumerate(pattern):
+        if bit == "1":
+            c.rect(x + i * module_width, y, module_width, height,
+                   fill=1, stroke=0)
+    if human_readable:
+        c.setFont("Helvetica", 7)
+        c.drawCentredString(
+            x + width / 2.0,
+            y - 8,
+            _human_readable_text(value, symbology),
+        )
     c.restoreState()
 
 
-def _draw_barcode_ean13(c: canvas.Canvas, x: float, y: float, isbn: str,
-                        width: float, height: float, human_readable: bool = True) -> None:
+def _draw_barcode_ean13(
+    c: canvas.Canvas,
+    x: float,
+    y: float,
+    isbn: str,
+    width: float,
+    height: float,
+    *,
+    fallback_symbology: BarcodeSymbology,
+    human_readable: bool = True,
+) -> None:
     # Strip non-digits; Ean13BarcodeWidget validates length and check digit.
     digits = "".join(ch for ch in isbn if ch.isdigit())
     if len(digits) == 13:
@@ -232,8 +311,13 @@ def _draw_barcode_ean13(c: canvas.Canvas, x: float, y: float, isbn: str,
     elif len(digits) == 12:
         value = digits  # widget will compute check digit
     else:
-        # fall back to Code128 if ISBN is malformed
-        _draw_barcode_code128(c, x, y, isbn, width, height, human_readable)
+        # Malformed ISBN — fall back to the operator's chosen symbology so
+        # their scanner can still read whatever digits we encode.
+        _draw_barcode(
+            c, x, y, isbn, width, height,
+            symbology=fallback_symbology,
+            human_readable=human_readable,
+        )
         return
     bw = eanbc.Ean13BarcodeWidget(value, humanReadable=human_readable,
                                    fontName="Helvetica", fontSize=7, barHeight=height)
@@ -262,15 +346,24 @@ def generate_item_labels(
     """Render item labels to PDF bytes.
 
     ``format`` defaults based on template size:
-      - narrow templates (≤2") → 'barcode-only' (just a scannable Code128 +
+      - narrow templates (≤2") → 'barcode-only' (just a scannable barcode +
         human-readable number; good for small stickers affixed to spines/pockets)
       - larger templates → 'pocket' (title + call number + cutter/year + barcode)
     Caller may override. 'spine' format is text-only (no barcode), matching
     traditional shelving-label convention.
 
     ``use_isbn_barcode`` makes the generator draw an EAN-13 for rows that
-    carry a valid ISBN; falls back to Code128 over the internal barcode.
+    carry a valid ISBN; falls back to the configured symbology over the
+    internal barcode.
+
+    Symbology (Codabar / Code 39 / Code 128) is read from the
+    ``barcode_symbology`` site setting, not threaded as a parameter — it's
+    a "set once for your scanner hardware" decision, not a per-render one.
     """
+    from compendium.services.site_settings import get_site_setting
+
+    symbology: BarcodeSymbology = get_site_setting("barcode_symbology")
+
     template = TEMPLATES[template_key]
     if format is None:
         format = "barcode-only" if template.label_width <= 2.0 else "pocket"
@@ -285,7 +378,7 @@ def generate_item_labels(
         if page_idx != current_page:
             c.showPage()
             current_page = page_idx
-        _draw_item_label(c, row, x, y, template, format, use_isbn_barcode)
+        _draw_item_label(c, row, x, y, template, format, use_isbn_barcode, symbology)
 
     c.showPage()
     c.save()
@@ -300,6 +393,7 @@ def _draw_item_label(
     t: LabelTemplate,
     fmt: ItemFormat,
     use_isbn: bool,
+    symbology: BarcodeSymbology,
 ) -> None:
     lw = t.label_width * inch
     lh = t.label_height * inch
@@ -317,9 +411,15 @@ def _draw_item_label(
         # Barcode fills most of the label; human-readable digits sit beneath.
         bc_h = max(8.0, lh - 2 * pad - 2)
         if use_isbn and row.isbn:
-            _draw_barcode_ean13(c, x + pad, y + pad, row.isbn, inner_w, bc_h)
+            _draw_barcode_ean13(
+                c, x + pad, y + pad, row.isbn, inner_w, bc_h,
+                fallback_symbology=symbology,
+            )
         else:
-            _draw_barcode_code128(c, x + pad, y + pad, row.barcode, inner_w, bc_h)
+            _draw_barcode(
+                c, x + pad, y + pad, row.barcode, inner_w, bc_h,
+                symbology=symbology,
+            )
         return
 
     if fmt == "spine":
@@ -388,9 +488,15 @@ def _draw_item_label(
     bc_h = 20
     bc_y = y + pad
     if use_isbn and row.isbn:
-        _draw_barcode_ean13(c, x + pad, bc_y, row.isbn, inner_w, bc_h)
+        _draw_barcode_ean13(
+            c, x + pad, bc_y, row.isbn, inner_w, bc_h,
+            fallback_symbology=symbology,
+        )
     else:
-        _draw_barcode_code128(c, x + pad, bc_y, row.barcode, inner_w, bc_h)
+        _draw_barcode(
+            c, x + pad, bc_y, row.barcode, inner_w, bc_h,
+            symbology=symbology,
+        )
 
 
 # ──────────────────────────────────────────────────────────────────────
@@ -416,6 +522,10 @@ def generate_patron_cards(
     Raises ``ValueError`` if ``full`` is requested on a template too small to
     render it without content overlap — use ``sticker`` instead.
     """
+    from compendium.services.site_settings import get_site_setting
+
+    symbology: BarcodeSymbology = get_site_setting("barcode_symbology")
+
     template = TEMPLATES[template_key]
     if format == "full" and not template.supports_full_card:
         raise ValueError(
@@ -435,9 +545,9 @@ def generate_patron_cards(
             c.showPage()
             current_page = page_idx
         if format == "full":
-            _draw_patron_full(c, row, x, y, template, library_name)
+            _draw_patron_full(c, row, x, y, template, library_name, symbology)
         else:
-            _draw_patron_sticker(c, row, x, y, template)
+            _draw_patron_sticker(c, row, x, y, template, symbology)
 
     c.showPage()
     c.save()
@@ -451,6 +561,7 @@ def _draw_patron_full(
     y: float,
     t: LabelTemplate,
     library_name: str,
+    symbology: BarcodeSymbology,
 ) -> None:
     lw = t.label_width * inch
     lh = t.label_height * inch
@@ -473,7 +584,10 @@ def _draw_patron_full(
     bc_h = 28
     bc_y = y + pad + 12
     bc_w = inner_w
-    _draw_barcode_code128(c, x + pad, bc_y, row.card_number, bc_w, bc_h, human_readable=True)
+    _draw_barcode(
+        c, x + pad, bc_y, row.card_number, bc_w, bc_h,
+        symbology=symbology, human_readable=True,
+    )
 
     # Expiry (bottom-right corner)
     if row.expires_at:
@@ -488,6 +602,7 @@ def _draw_patron_sticker(
     x: float,
     y: float,
     t: LabelTemplate,
+    symbology: BarcodeSymbology,
 ) -> None:
     lw = t.label_width * inch
     lh = t.label_height * inch
@@ -496,5 +611,7 @@ def _draw_patron_sticker(
 
     # Barcode fills most of the label; human-readable text below bars.
     bc_h = lh - 2 * pad - 2
-    _draw_barcode_code128(c, x + pad, y + pad, row.card_number,
-                          inner_w, bc_h, human_readable=True)
+    _draw_barcode(
+        c, x + pad, y + pad, row.card_number, inner_w, bc_h,
+        symbology=symbology, human_readable=True,
+    )

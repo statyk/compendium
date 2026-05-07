@@ -54,7 +54,7 @@ Business logic. Services are plain classes whose constructors accept repository 
 | `AuditService` | Append audit log entries; queryable via web/CLI/API |
 | `NotificationService` | Outbox-pattern email queue + drainer (hold-ready/due-soon/overdue) |
 | `ReportsService` | Checkouts/popular/dormant/overdues queries with CSV + chart data shaping |
-| `LabelsService` | PDF generation (Avery item labels + patron cards via reportlab) |
+| `LabelsService` | PDF generation (Avery item labels + patron cards via reportlab; Codabar / Code 39 / Code 128 barcodes via python-barcode) |
 | `BackupService` | Portable JSONL tarballs, backend-agnostic restore (SQLite ↔ Postgres) |
 | `CoversService` | On-disk cover proxy cache with allowlist + LRU eviction |
 | `SettingsRegistry` + `site_settings` | DB-editable settings with env-wins-on-read overrides |
@@ -312,6 +312,18 @@ Per-Work refresh has surfaces on CLI / API / Web (`compendium work refresh-metad
 - One `BULK_REFRESH_METADATA` audit entry per apply-mode run (counts + filters).
 
 Why CLI-only: a synchronous HTTP request that loops Open Library / TMDb lookups for hundreds of Works would either reproduce the original 504-from-nginx problem or block a request thread for minutes. A Web/API surface for bulk refresh waits until the codebase has a generic background-jobs framework.
+
+---
+
+## Label barcode symbology
+
+Item labels and patron cards encode the Compendium barcode value in one of three symbologies, chosen via the `barcode_symbology` site setting (Codabar / Code 39 / Code 128, default Codabar). The setting is read once per render call inside `generate_item_labels` / `generate_patron_cards` — there's no per-render override, on the assumption that operators set it once to match their scanner hardware and don't toggle per batch.
+
+`reportlab.graphics.barcode` doesn't ship a Codabar renderer, so the bar/space module pattern comes from `python-barcode` (MIT) and the bars are drawn directly onto the reportlab canvas with `Canvas.rect`. Codabar requires explicit start/stop characters around the data; the helper wraps the value with `A...A` and strips them from the human-readable text below the bars.
+
+If the chosen symbology can't encode a value (Codabar rejects letters, Code 39 rejects most punctuation), the renderer silently falls back to Code 128 for that label. Compendium-minted barcodes are always decimal digits and encode cleanly under all three; the fallback handles legacy / imported barcodes that contain other characters. Switching the setting affects only newly rendered PDFs — the underlying barcode string in the DB is symbology-neutral.
+
+The optional ISBN-as-barcode flow (`--use-isbn-barcode` / `?use_isbn_barcode=true`) renders EAN-13 (still via reportlab) when the row has a valid 12- or 13-digit ISBN; on a malformed ISBN it falls through to the operator's chosen symbology.
 
 ---
 

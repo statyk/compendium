@@ -466,6 +466,20 @@ def _register_builtins() -> None:
             validator=_four_digit_code,
         )
     )
+    register(
+        SettingDescriptor(
+            key="barcode_symbology",
+            display_name="Barcode Symbology",
+            type=Literal["codabar", "code39", "code128"],
+            default="codabar",
+            scope="librarian",
+            help_text=(
+                "Visual encoding used when rendering item and patron barcodes "
+                "on printed labels. Pick the symbology your scanner is "
+                "configured to read. Does not affect the stored barcode value."
+            ),
+        )
+    )
 
     # ── System-tier (infrastructure) ───────────────────────────────────────
     register(

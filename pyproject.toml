@@ -22,6 +22,7 @@ dependencies = [
     "python-multipart>=0.0.9",
     "pymarc>=5.2",
     "reportlab>=4.0",
+    "python-barcode>=0.16.1",
 ]
 
 [project.optional-dependencies]
