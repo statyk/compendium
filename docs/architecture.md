@@ -301,6 +301,18 @@ LibraryThing exports a 53-column tab-separated file. The importer translates eac
 
 Fields not listed above (LT's `Sort Character`, `Acquired`, `Date Started`, `Date Read`, `Source`, `Entry Date`, `From Where`, lending history, etc.) are dropped.
 
+### Bulk metadata enrichment
+
+Per-Work refresh has surfaces on CLI / API / Web (`compendium work refresh-metadata <id>`, `POST /works/{id}/refresh-metadata`, `/ui/works/{id}/refresh-metadata`). For catch-up after a bulk import — or as a low-cadence cron task — there's also `compendium maintenance refresh-metadata`, which loops `CatalogService.refresh_metadata_bulk` over Works with an ISBN/UPC and (by default) at least one missing core field (description / cover_image_url / publisher / language).
+
+- `--missing-only` (default) keeps cron runs cheap once the catalog is clean. `--all` re-fetches every eligible Work (use after an upstream data improvement).
+- `--limit N` caps the batch — combined with `--missing-only` and the `Work.id` ascending scan, repeat runs make forward progress without revisiting completed Works.
+- `--media-type` and `--branch` scope the run.
+- Errors are counted, not raised — exit code is always 0 so cron schedules don't break.
+- One `BULK_REFRESH_METADATA` audit entry per apply-mode run (counts + filters).
+
+Why CLI-only: a synchronous HTTP request that loops Open Library / TMDb lookups for hundreds of Works would either reproduce the original 504-from-nginx problem or block a request thread for minutes. A Web/API surface for bulk refresh waits until the codebase has a generic background-jobs framework.
+
 ---
 
 ## Fines & fees

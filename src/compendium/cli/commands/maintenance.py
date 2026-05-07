@@ -348,6 +348,78 @@ def prune_notifications_cmd(
     typer.echo(f"{verb} {count} notification(s) [{filter_desc or 'all'}].")
 
 
+@app.command("refresh-metadata")
+def refresh_metadata_cmd(
+    media_type: str | None = typer.Option(
+        None, "--media-type", help="Restrict to a single media_type code."
+    ),
+    branch: str | None = typer.Option(
+        None, "--branch", help="Restrict to Works with at least one copy in this branch."
+    ),
+    missing_only: bool = typer.Option(
+        True,
+        "--missing-only/--all",
+        help=(
+            "Default: only Works missing core fields (description, cover, "
+            "publisher, language). --all re-fetches every Work with a "
+            "lookup key."
+        ),
+    ),
+    limit: int | None = typer.Option(
+        None, "--limit", help="Stop after this many Works processed."
+    ),
+    dry_run: bool = typer.Option(
+        False, "--dry-run", help="Preview planned changes without writing."
+    ),
+) -> None:
+    """Bulk-fill missing metadata from external sources for existing Works.
+
+    Iterates Works with an ISBN/UPC and (by default) at least one missing
+    core field, calls the appropriate external adapter per Work
+    (Open Library / MusicBrainz / TMDb), and applies fill-missing updates.
+    Cover-image URLs replace when upstream differs. Errors are counted, not
+    raised — exit code is always 0 so cron schedules don't break.
+    """
+    import getpass
+
+    from compendium.repositories.sql.creator_repository import SqlCreatorRepository
+    from compendium.repositories.sql.media_type_repository import SqlMediaTypeRepository
+    from compendium.services.catalog import CatalogService
+
+    with session_scope() as session:
+        catalog = CatalogService(
+            work_repo=SqlWorkRepository(session),
+            item_repo=SqlItemRepository(session),
+            creator_repo=SqlCreatorRepository(session),
+            branch_repo=SqlBranchRepository(session),
+            media_type_repo=SqlMediaTypeRepository(session),
+            audit_svc=AuditService(SqlAuditLogRepository(session)),
+            actor_label=f"cli:{getpass.getuser()}",
+            source="cli",
+        )
+        report = catalog.refresh_metadata_bulk(
+            media_type_code=media_type,
+            branch_code=branch,
+            missing_only=missing_only,
+            limit=limit,
+            dry_run=dry_run,
+        )
+
+    typer.echo("\nRefresh-metadata report:")
+    typer.echo(f"  considered  : {report.total_considered}")
+    typer.echo(f"  refreshed   : {report.refreshed}")
+    typer.echo(f"  no change   : {report.no_change}")
+    typer.echo(f"  not found   : {report.not_found}")
+    typer.echo(f"  skipped     : {report.skipped_no_key}")
+    typer.echo(f"  errored     : {report.errored}")
+    if dry_run:
+        typer.echo("  (dry-run — no changes persisted)")
+    if report.sample_errors:
+        typer.echo("\nSample errors:")
+        for line in report.sample_errors:
+            typer.echo(f"  - {line}")
+
+
 @app.command("prune-cover-cache")
 def prune_cover_cache(
     max_mb: int = typer.Option(

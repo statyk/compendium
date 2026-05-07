@@ -122,7 +122,7 @@ Run `compendium --help` for the full command tree, or `compendium <group> --help
 | `compendium backup --output <path-or->` | Write a portable JSONL tarball backup |
 | `compendium restore <path-or->` | Restore from a backup tarball (lenient — auto-migrates) |
 | `compendium settings list/get/set/reset` | Inspect & edit DB-backed site settings |
-| `compendium maintenance ...` | Cron-invoked tasks: `expire-holds`, `resume-expired-suspends`, `assess-overdue-fines`, `queue-due-soon-notices`, `queue-overdue-notices`, `send-queued-notifications`, `prune-notifications`, `prune-audit-log`, `deactivate-expired-patrons`, `prune-cover-cache` |
+| `compendium maintenance ...` | Cron-invoked tasks: `expire-holds`, `resume-expired-suspends`, `assess-overdue-fines`, `queue-due-soon-notices`, `queue-overdue-notices`, `send-queued-notifications`, `prune-notifications`, `prune-audit-log`, `deactivate-expired-patrons`, `prune-cover-cache`, `refresh-metadata` |
 
 File-argument commands (`backup`, `restore`, `import`, `export`, `labels items/patrons`) accept `-` for stdin/stdout. Status messages are routed to stderr in stdio mode so they don't corrupt binary output.
 

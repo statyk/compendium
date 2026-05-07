@@ -93,6 +93,14 @@ class WorkRepository(Protocol):
         branch_code: str | None = None,
         since: "datetime | None" = None,
     ) -> list[Work]: ...
+    def iter_for_refresh(
+        self,
+        *,
+        media_type_code: str | None = None,
+        branch_code: str | None = None,
+        missing_only: bool = True,
+        limit: int | None = None,
+    ) -> list[Work]: ...
 
 
 @runtime_checkable

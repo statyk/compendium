@@ -130,6 +130,50 @@ class SqlWorkRepository:
             q = q.filter(Work.created_at >= since)
         return q.order_by(Work.id).all()
 
+    def iter_for_refresh(
+        self,
+        *,
+        media_type_code: str | None = None,
+        branch_code: str | None = None,
+        missing_only: bool = True,
+        limit: int | None = None,
+    ) -> list[Work]:
+        # Bulk metadata refresh requires *some* lookup key. v1 covers the
+        # common case (post-import Works carry ISBN or UPC); Works whose only
+        # key is in external_ids (mbid / tmdb_id) need per-work refresh until
+        # we add JSON-portable filtering here.
+        q = self._s.query(Work).filter(
+            or_(Work.isbn.isnot(None), Work.upc.isnot(None))
+        )
+        if media_type_code:
+            q = q.join(Work.media_type).filter(MediaType.code == media_type_code)
+        if branch_code:
+            q = (
+                q.join(Work.items)
+                .join(Item.branch)
+                .filter(Branch.code == branch_code)
+                .distinct()
+            )
+        if missing_only:
+            # Match the fields _compute_refresh_diff actually fills.
+            q = q.filter(
+                or_(
+                    Work.description.is_(None),
+                    Work.description == "",
+                    Work.cover_image_url.is_(None),
+                    Work.cover_image_url == "",
+                    Work.publisher.is_(None),
+                    Work.publisher == "",
+                    Work.language.is_(None),
+                    Work.language == "",
+                )
+            )
+        # Stable ascending order so cron --limit runs make forward progress.
+        q = q.order_by(Work.id)
+        if limit is not None:
+            q = q.limit(limit)
+        return q.all()
+
     def search(
         self,
         q: str,

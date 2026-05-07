@@ -67,6 +67,28 @@ class RefreshReport:
     applied: bool = False
     cover_cache_busted: bool = False
 
+
+@dataclass
+class BulkRefreshReport:
+    """Aggregated result of a bulk metadata-refresh run.
+
+    ``refreshed`` is "found upstream + at least one field changed" (apply
+    mode) or "would have changed" (dry run). ``no_change`` means upstream
+    returned data but the Work was already complete. ``not_found`` covers
+    upstream misses + adapter errors. ``skipped_no_key`` is the count of
+    Works that had no usable lookup identifier (rare with the repo filter
+    but possible if a Work loses its ISBN between the query and the loop).
+    """
+
+    total_considered: int = 0
+    refreshed: int = 0
+    no_change: int = 0
+    not_found: int = 0
+    skipped_no_key: int = 0
+    errored: int = 0
+    sample_errors: list[str] = field(default_factory=list)
+    dry_run: bool = False
+
 _DEFAULT_CREATOR_ROLE: dict[str, str] = {
     "book": "author",
     "vinyl": "artist",
@@ -488,6 +510,81 @@ class CatalogService:
             applied=True,
             cover_cache_busted=cover_cache_busted,
         )
+
+    def refresh_metadata_bulk(
+        self,
+        *,
+        media_type_code: str | None = None,
+        branch_code: str | None = None,
+        missing_only: bool = True,
+        limit: int | None = None,
+        dry_run: bool = True,
+    ) -> BulkRefreshReport:
+        """Iterate Works that need metadata enrichment and refresh each one.
+
+        Delegates per-Work work to ``refresh_metadata``; aggregates outcomes.
+        Errors are caught and counted — the loop never aborts mid-batch so a
+        cron run survives a flaky upstream. Emits one ``BULK_REFRESH_METADATA``
+        audit entry on completion (apply mode only).
+        """
+        report = BulkRefreshReport(dry_run=dry_run)
+        candidates = self._works.iter_for_refresh(
+            media_type_code=media_type_code,
+            branch_code=branch_code,
+            missing_only=missing_only,
+            limit=limit,
+        )
+        for work in candidates:
+            report.total_considered += 1
+            try:
+                per = self.refresh_metadata(work.id, dry_run=dry_run)
+            except Exception as exc:  # defensive — refresh_metadata returns errors in-band
+                report.errored += 1
+                if len(report.sample_errors) < 20:
+                    report.sample_errors.append(f"work {work.id}: {exc}")
+                continue
+            if per.error:
+                # refresh_metadata folds upstream errors and missing-key cases
+                # into RefreshReport(found=False, error=...). Bucket them.
+                if "no ISBN/UPC" in per.error or "no media type" in per.error:
+                    report.skipped_no_key += 1
+                else:
+                    report.not_found += 1
+                continue
+            if not per.found:
+                report.not_found += 1
+                continue
+            if per.planned:
+                report.refreshed += 1
+            else:
+                report.no_change += 1
+
+        if not dry_run and self._audit is not None:
+            self._audit.record(
+                actor=self._actor,
+                actor_label=self._actor_label,
+                source=self._source,
+                entity_type=AuditEntityType.WORK,
+                entity_id=None,
+                action=AuditAction.BULK_REFRESH_METADATA,
+                details={
+                    "filters": {
+                        "media_type_code": media_type_code,
+                        "branch_code": branch_code,
+                        "missing_only": missing_only,
+                        "limit": limit,
+                    },
+                    "counts": {
+                        "total_considered": report.total_considered,
+                        "refreshed": report.refreshed,
+                        "no_change": report.no_change,
+                        "not_found": report.not_found,
+                        "skipped_no_key": report.skipped_no_key,
+                        "errored": report.errored,
+                    },
+                },
+            )
+        return report
 
     @staticmethod
     def _pick_refresh_lookup_key(

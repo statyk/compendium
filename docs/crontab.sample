@@ -46,3 +46,8 @@
 # Optional: prune old failed-login rows (weekly — any row older than 1 day is
 # already outside the 5-minute throttle window, so this is just housekeeping).
 # 30 3 * * 0 cd COMPENDIUM_DIR && uv run compendium maintenance prune-failed-logins --older-than-days 7 LOG_REDIRECT
+
+# Optional: fill missing metadata for newly-imported Works (description,
+# cover, publisher, language) from external sources. --limit caps the
+# nightly batch; the eligible-set drains to 0 once the catalog is clean.
+# 45 3 * * * cd COMPENDIUM_DIR && uv run compendium maintenance refresh-metadata --limit 200 LOG_REDIRECT

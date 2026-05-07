@@ -27,6 +27,7 @@ class AuditAction:
     REACTIVATE = "reactivate"
     SET_LOANABLE = "set_loanable"
     BULK_IMPORT = "bulk_import"
+    BULK_REFRESH_METADATA = "bulk_refresh_metadata"
     ASSESS_FINE = "assess_fine"
     PAY_FINE = "pay_fine"
     WAIVE_FINE = "waive_fine"
