@@ -118,6 +118,62 @@ def test_cli_refresh_metadata_zero_eligible_is_clean_exit(session):
     assert "considered  : 0" in result.output
 
 
+def test_cli_refresh_metadata_emits_per_work_progress_lines(session):
+    """Default (verbose) output includes one [n/N] line per Work."""
+    _seed_incomplete(session, isbn="9780441013700")
+    _seed_incomplete(session, isbn="9780441013701")
+    fixture = dict(_DUNE)
+
+    def fake_lookup(_media_type, _kind, value):
+        return {**fixture, "isbn": value, "description": "filled"}
+
+    with patch(
+        "compendium.services.catalog.lookup_metadata", side_effect=fake_lookup
+    ):
+        result = _run_cli(session, ["refresh-metadata", "--dry-run"])
+
+    assert result.exit_code == 0, result.output
+    # Width-padded counter — total has 1 digit, so width=2 → "[ 1/2]".
+    assert "[ 1/2] refreshed:" in result.output
+    assert "[ 2/2] refreshed:" in result.output
+    # Summary block still present.
+    assert "considered  : 2" in result.output
+
+
+def test_cli_refresh_metadata_quiet_suppresses_per_work_lines(session):
+    """--quiet drops the per-Work progress but keeps the summary."""
+    _seed_incomplete(session, isbn="9780441013702")
+    fixture = dict(_DUNE)
+
+    def fake_lookup(_media_type, _kind, value):
+        return {**fixture, "isbn": value, "description": "filled"}
+
+    with patch(
+        "compendium.services.catalog.lookup_metadata", side_effect=fake_lookup
+    ):
+        result = _run_cli(session, ["refresh-metadata", "--dry-run", "--quiet"])
+
+    assert result.exit_code == 0, result.output
+    assert "refreshed:" not in result.output  # no per-Work refreshed line
+    assert "considered  : 1" in result.output
+    assert "refreshed   : 1" in result.output
+
+
+def test_cli_refresh_metadata_quiet_still_prints_errored_lines(session):
+    """--quiet keeps lines for actual errors (per-Work refresh raised)."""
+    _seed_incomplete(session, isbn="9780441013703")
+
+    def boom(_media_type, _kind, _value):
+        raise RuntimeError("boom — adapter blew up")
+
+    with patch("compendium.services.catalog.lookup_metadata", side_effect=boom):
+        result = _run_cli(session, ["refresh-metadata", "--dry-run", "--quiet"])
+
+    assert result.exit_code == 0, result.output
+    assert "errored:" in result.output
+    assert "errored     : 1" in result.output
+
+
 def test_cli_refresh_metadata_all_flag_includes_complete_works(session):
     # Seed one fully complete Work.
     isbn = "9780441013597"

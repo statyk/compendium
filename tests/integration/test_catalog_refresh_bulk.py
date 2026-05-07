@@ -242,3 +242,85 @@ def test_refresh_metadata_bulk_respects_limit(session):
     with patch("compendium.services.catalog.lookup_metadata", side_effect=fake_lookup):
         report = _catalog(session).refresh_metadata_bulk(limit=2, dry_run=True)
     assert report.total_considered == 2
+
+
+# ── on_progress callback ─────────────────────────────────────────────────────
+
+
+def test_refresh_metadata_bulk_on_progress_fires_per_iteration_with_indices(session):
+    """Callback receives (index, total, work, per_report) once per Work,
+    with index counting from 1 and total matching the candidate count."""
+    id_a = _seed(session, description="")
+    id_b = _seed(session, description="")
+
+    fixture = dict(_DUNE)
+
+    def fake_lookup(_media_type, _kind, value):
+        return {**fixture, "isbn": value, "description": "filled"}
+
+    calls: list[tuple[int, int, int, bool]] = []
+
+    def on_progress(index, total, work, per):
+        # Capture (index, total, work_id, planned-was-set) — keep the test
+        # tuple JSON-friendly so failures print readably.
+        calls.append((index, total, work.id, bool(per and per.planned)))
+
+    with patch("compendium.services.catalog.lookup_metadata", side_effect=fake_lookup):
+        _catalog(session).refresh_metadata_bulk(
+            dry_run=True, on_progress=on_progress
+        )
+
+    assert calls == [(1, 2, id_a, True), (2, 2, id_b, True)]
+
+
+def test_refresh_metadata_bulk_on_progress_buckets_match_report(session):
+    """Each callback invocation's per_report aligns with the bucket the
+    aggregate report counted that work into."""
+    id_refreshed = _seed(session, description="")
+    id_no_change = _seed(session)
+    id_not_found = _seed(session, description="")
+
+    fixture = dict(_DUNE)
+    refresh_isbn = SqlWorkRepository(session).get(id_refreshed).isbn
+    not_found_isbn = SqlWorkRepository(session).get(id_not_found).isbn
+
+    def fake_lookup(_media_type, _kind, value):
+        if value == refresh_isbn:
+            return {**fixture, "isbn": value, "description": "filled"}
+        if value == not_found_isbn:
+            return None
+        # complete work — return same data as already stored, no diff
+        return {**fixture, "isbn": value}
+
+    seen: dict[int, str] = {}
+
+    def on_progress(index, total, work, per):
+        # Mirror the bucketing in refresh_metadata_bulk: upstream-miss errors
+        # ("Upstream returned no data...") bucket as not_found, missing-key
+        # errors as skipped, and a successful refresh with planned changes
+        # as refreshed.
+        if per is None:
+            seen[work.id] = "exception"
+        elif per.error:
+            if "no ISBN/UPC" in per.error or "no media type" in per.error:
+                seen[work.id] = "skipped"
+            else:
+                seen[work.id] = "not_found"
+        elif not per.found:
+            seen[work.id] = "not_found"
+        elif per.planned:
+            seen[work.id] = "refreshed"
+        else:
+            seen[work.id] = "no_change"
+
+    with patch("compendium.services.catalog.lookup_metadata", side_effect=fake_lookup):
+        report = _catalog(session).refresh_metadata_bulk(
+            missing_only=False, dry_run=True, on_progress=on_progress
+        )
+
+    assert seen[id_refreshed] == "refreshed"
+    assert seen[id_no_change] == "no_change"
+    assert seen[id_not_found] == "not_found"
+    assert report.refreshed == 1
+    assert report.no_change == 1
+    assert report.not_found == 1

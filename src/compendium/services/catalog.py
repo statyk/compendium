@@ -1,6 +1,6 @@
 from dataclasses import dataclass, field
 from datetime import UTC, datetime
-from typing import Any
+from typing import Any, Callable
 
 from compendium.db.engine import get_settings
 from compendium.domain.enums import CreatorRole, HoldStatus, ItemStatus, LoanRestrictionReason
@@ -519,6 +519,7 @@ class CatalogService:
         missing_only: bool = True,
         limit: int | None = None,
         dry_run: bool = True,
+        on_progress: Callable[[int, int, Work, "RefreshReport | None"], None] | None = None,
     ) -> BulkRefreshReport:
         """Iterate Works that need metadata enrichment and refresh each one.
 
@@ -526,6 +527,13 @@ class CatalogService:
         Errors are caught and counted — the loop never aborts mid-batch so a
         cron run survives a flaky upstream. Emits one ``BULK_REFRESH_METADATA``
         audit entry on completion (apply mode only).
+
+        ``on_progress`` (optional) is called once per iteration *after*
+        bucketing, with ``(index, total, work, per_report)``. ``per_report``
+        is the ``RefreshReport`` from ``refresh_metadata`` — or ``None`` if
+        ``refresh_metadata`` raised (rare; existing path returns errors
+        in-band). Service stays UI-free; the CLI uses this to stream live
+        progress.
         """
         report = BulkRefreshReport(dry_run=dry_run)
         candidates = self._works.iter_for_refresh(
@@ -534,14 +542,18 @@ class CatalogService:
             missing_only=missing_only,
             limit=limit,
         )
-        for work in candidates:
+        total = len(candidates)
+        for index, work in enumerate(candidates, start=1):
             report.total_considered += 1
+            per: "RefreshReport | None" = None
             try:
                 per = self.refresh_metadata(work.id, dry_run=dry_run)
             except Exception as exc:  # defensive — refresh_metadata returns errors in-band
                 report.errored += 1
                 if len(report.sample_errors) < 20:
                     report.sample_errors.append(f"work {work.id}: {exc}")
+                if on_progress is not None:
+                    on_progress(index, total, work, None)
                 continue
             if per.error:
                 # refresh_metadata folds upstream errors and missing-key cases
@@ -550,14 +562,14 @@ class CatalogService:
                     report.skipped_no_key += 1
                 else:
                     report.not_found += 1
-                continue
-            if not per.found:
+            elif not per.found:
                 report.not_found += 1
-                continue
-            if per.planned:
+            elif per.planned:
                 report.refreshed += 1
             else:
                 report.no_change += 1
+            if on_progress is not None:
+                on_progress(index, total, work, per)
 
         if not dry_run and self._audit is not None:
             self._audit.record(

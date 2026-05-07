@@ -348,6 +348,34 @@ def prune_notifications_cmd(
     typer.echo(f"{verb} {count} notification(s) [{filter_desc or 'all'}].")
 
 
+def _format_progress_line(
+    index: int,
+    total: int,
+    work,
+    per,
+) -> str:
+    """One-line progress entry for refresh-metadata. See refresh_metadata_cmd."""
+    width = max(2, len(str(total)))
+    counter = f"[{index:>{width}}/{total}]"
+    identifier = work.isbn or work.upc or f"id={work.id}"
+    label = f"{work.title} ({identifier})"
+    if per is None:
+        return f"{counter} errored:   {label} — refresh raised an exception"
+    if per.error:
+        verb = (
+            "skipped"
+            if ("no ISBN/UPC" in per.error or "no media type" in per.error)
+            else "not found"
+        )
+        return f"{counter} {verb}: {label} — {per.error}"
+    if not per.found:
+        return f"{counter} not found: {label}"
+    if per.planned:
+        fields = ", ".join(f"+{name}" for name in sorted(per.planned.keys()))
+        return f"{counter} refreshed: {label} [{fields}]"
+    return f"{counter} no change: {label}"
+
+
 @app.command("refresh-metadata")
 def refresh_metadata_cmd(
     media_type: str | None = typer.Option(
@@ -371,6 +399,14 @@ def refresh_metadata_cmd(
     dry_run: bool = typer.Option(
         False, "--dry-run", help="Preview planned changes without writing."
     ),
+    quiet: bool = typer.Option(
+        False,
+        "--quiet",
+        help=(
+            "Suppress the per-Work progress line. Errored lines and the "
+            "end-of-run summary still print."
+        ),
+    ),
 ) -> None:
     """Bulk-fill missing metadata from external sources for existing Works.
 
@@ -385,6 +421,20 @@ def refresh_metadata_cmd(
     from compendium.repositories.sql.creator_repository import SqlCreatorRepository
     from compendium.repositories.sql.media_type_repository import SqlMediaTypeRepository
     from compendium.services.catalog import CatalogService
+
+    def _on_progress(index, total, work, per) -> None:
+        # Verbose: print every line. Quiet: only print actual errors
+        # (per is None, or upstream / adapter error — not "no ISBN/UPC"
+        # missing-key cases, those are bucketed as skipped and quiet).
+        if quiet:
+            is_error = per is None or (
+                per.error is not None
+                and "no ISBN/UPC" not in per.error
+                and "no media type" not in per.error
+            )
+            if not is_error:
+                return
+        typer.echo(_format_progress_line(index, total, work, per))
 
     with session_scope() as session:
         catalog = CatalogService(
@@ -403,6 +453,7 @@ def refresh_metadata_cmd(
             missing_only=missing_only,
             limit=limit,
             dry_run=dry_run,
+            on_progress=_on_progress,
         )
 
     typer.echo("\nRefresh-metadata report:")
