@@ -60,7 +60,7 @@ def _make_importer(session):
     )
 
 
-def _print_report(report) -> None:
+def _print_report(report, *, quiet: bool = False) -> None:
     typer.echo(f"\nImport report ({report.source}):")
     if report.filename:
         typer.echo(f"  file        : {report.filename}")
@@ -73,6 +73,11 @@ def _print_report(report) -> None:
     typer.echo(f"  errors      : {len(report.errors)}")
     if report.dry_run:
         typer.echo("  (dry-run — no changes persisted)")
+    # Per-warning and per-error detail blocks are suppressed under --quiet;
+    # the count line `errors: N` above always prints, so cron logs still
+    # carry the signal that something needs attention.
+    if quiet:
+        return
     if report.warnings:
         typer.echo("\nWarnings:")
         for w in report.warnings[:20]:
@@ -173,6 +178,14 @@ def import_csv_cmd(
             "added to the report."
         ),
     ),
+    quiet: bool = typer.Option(
+        False,
+        "--quiet",
+        help=(
+            "Suppress per-warning and per-error detail in the import report. "
+            "Summary block (counts, file, dry-run note) still prints."
+        ),
+    ),
 ) -> None:
     """Import catalog rows from a CSV file."""
     options = _common_import_options(
@@ -202,7 +215,7 @@ def import_csv_cmd(
                     f"Decoded with {replaced} byte replacement(s); "
                     "file is not clean UTF-8.",
                 )
-            _print_report(report)
+            _print_report(report, quiet=quiet)
     except DomainError as exc:
         typer.echo(f"Error: {exc}", err=True)
         raise typer.Exit(1) from exc
@@ -258,6 +271,14 @@ def import_librarything_cmd(
             "stray non-UTF-8 bytes."
         ),
     ),
+    quiet: bool = typer.Option(
+        False,
+        "--quiet",
+        help=(
+            "Suppress per-warning and per-error detail in the import report. "
+            "Summary block (counts, file, dry-run note) still prints."
+        ),
+    ),
 ) -> None:
     """Import catalog rows from a LibraryThing TSV export."""
     options = _common_import_options(
@@ -287,7 +308,7 @@ def import_librarything_cmd(
                     f"Decoded with {replaced} byte replacement(s); "
                     "file is not clean UTF-8.",
                 )
-            _print_report(report)
+            _print_report(report, quiet=quiet)
     except DomainError as exc:
         typer.echo(f"Error: {exc}", err=True)
         raise typer.Exit(1) from exc
@@ -319,6 +340,14 @@ def import_marc_cmd(
             "Default off."
         ),
     ),
+    quiet: bool = typer.Option(
+        False,
+        "--quiet",
+        help=(
+            "Suppress per-warning and per-error detail in the import report. "
+            "Summary block (counts, file, dry-run note) still prints."
+        ),
+    ),
 ) -> None:
     """Import catalog records from a MARC21 binary (.mrc) or MARCXML (.xml) file."""
     options = _common_import_options(
@@ -338,7 +367,7 @@ def import_marc_cmd(
                     report = importer.import_marcxml(stream, options, filename=label)
                 else:
                     report = importer.import_marc(stream, options, filename=label)
-            _print_report(report)
+            _print_report(report, quiet=quiet)
     except DomainError as exc:
         typer.echo(f"Error: {exc}", err=True)
         raise typer.Exit(1) from exc

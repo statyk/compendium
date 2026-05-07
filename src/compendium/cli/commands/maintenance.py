@@ -26,6 +26,11 @@ def deactivate_expired_patrons(
     dry_run: bool = typer.Option(
         False, "--dry-run", help="Report what would be deactivated without changing data."
     ),
+    quiet: bool = typer.Option(
+        False,
+        "--quiet",
+        help="Suppress the per-patron list. Count summary still prints.",
+    ),
 ) -> None:
     """Deactivate active patrons whose card expiry date has passed."""
     with session_scope() as session:
@@ -42,6 +47,9 @@ def deactivate_expired_patrons(
             typer.echo("No expired patrons to deactivate.")
             return
         verb = "Would deactivate" if dry_run else "Deactivated"
+        if quiet:
+            typer.echo(f"{verb} {len(matches)} patron(s).")
+            return
         typer.echo(f"{verb} {len(matches)} patron(s):")
         for p in matches:
             typer.echo(
@@ -78,6 +86,11 @@ def resume_expired_suspends(
     dry_run: bool = typer.Option(
         False, "--dry-run", help="Report what would be resumed without changing data."
     ),
+    quiet: bool = typer.Option(
+        False,
+        "--quiet",
+        help="Suppress the per-hold list. Count summary still prints.",
+    ),
 ) -> None:
     """Auto-resume holds whose suspension end-date has passed."""
     with session_scope() as session:
@@ -86,6 +99,9 @@ def resume_expired_suspends(
             typer.echo("No suspended holds are ready to resume.")
             return
         verb = "Would resume" if dry_run else "Resumed"
+        if quiet:
+            typer.echo(f"{verb} {len(resumed)} hold(s).")
+            return
         typer.echo(f"{verb} {len(resumed)} hold(s):")
         for hold in resumed:
             note = ""

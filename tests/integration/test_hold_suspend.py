@@ -288,3 +288,54 @@ class TestMaintenanceResume:
 
         resumed = _holds(session).resume_expired_suspends()
         assert all(h.id != hold.id for h in resumed)
+
+
+class TestMaintenanceResumeCli:
+    """CLI-level coverage for `--quiet` on resume-expired-suspends.
+
+    Exercises the same seed pattern as TestMaintenanceResume, but invokes the
+    Typer command (with session_scope patched to share the test session) so
+    we verify the flag plumbing end-to-end.
+    """
+
+    @staticmethod
+    def _seed_one_expired_suspend(session):
+        work, _ = _seed_work_with_copies(session, n_copies=1, isbn="9780441013700")
+        _patron(session, "QR0001")
+        _circ(session).checkout(work.items[0].barcode, "QR0001")
+        _patron(session, "QR0002")
+        hold = _holds(session).place(work.id, "QR0002")
+        hold.suspended_until = date.today() - timedelta(days=1)
+        session.flush()
+        return hold
+
+    @staticmethod
+    def _run(session, args):
+        from contextlib import contextmanager
+        from typer.testing import CliRunner
+        from compendium.cli.main import app
+
+        @contextmanager
+        def _scope():
+            yield session
+
+        runner = CliRunner()
+        with patch("compendium.cli.commands.maintenance.session_scope", _scope):
+            return runner.invoke(app, args)
+
+    def test_default_includes_per_hold_detail(self, session):
+        self._seed_one_expired_suspend(session)
+        r = self._run(session, ["maintenance", "resume-expired-suspends", "--dry-run"])
+        assert r.exit_code == 0, r.output
+        assert "Would resume 1 hold(s):" in r.output
+        assert "patron_id=" in r.output  # detail line present
+
+    def test_quiet_suppresses_per_hold_detail(self, session):
+        self._seed_one_expired_suspend(session)
+        r = self._run(
+            session,
+            ["maintenance", "resume-expired-suspends", "--dry-run", "--quiet"],
+        )
+        assert r.exit_code == 0, r.output
+        assert "Would resume 1 hold(s)." in r.output  # period, not colon
+        assert "patron_id=" not in r.output  # detail line suppressed

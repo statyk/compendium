@@ -1092,6 +1092,48 @@ class TestMaintenanceDeactivateExpired:
         assert r.exit_code == 0
         assert "No expired" in r.output
 
+    @staticmethod
+    def _seed_expired_patron(session, name: str = "Expired Test"):
+        from datetime import date, timedelta
+        from compendium.repositories.sql.audit_log_repository import (
+            SqlAuditLogRepository,
+        )
+        from compendium.repositories.sql.hold_repository import SqlHoldRepository
+        from compendium.repositories.sql.loan_repository import SqlLoanRepository
+        from compendium.services.audit import AuditService
+        from compendium.services.patrons import PatronService
+
+        svc = PatronService(
+            patron_repo=SqlPatronRepository(session),
+            loan_repo=SqlLoanRepository(session),
+            hold_repo=SqlHoldRepository(session),
+            audit_svc=AuditService(SqlAuditLogRepository(session)),
+            source="test",
+        )
+        return svc.create(full_name=name, expires_at=date.today() - timedelta(days=1))
+
+    def test_default_includes_per_patron_detail_line(self, session):
+        self._seed_expired_patron(session, name="Detail Patron")
+        r = _invoke(
+            session,
+            ["maintenance", "deactivate-expired-patrons", "--dry-run"],
+            "compendium.cli.commands.maintenance",
+        )
+        assert r.exit_code == 0, r.output
+        assert "Would deactivate 1 patron(s):" in r.output
+        assert "Detail Patron" in r.output  # per-patron line printed by default
+
+    def test_quiet_suppresses_per_patron_detail_but_keeps_count(self, session):
+        self._seed_expired_patron(session, name="Quiet Patron")
+        r = _invoke(
+            session,
+            ["maintenance", "deactivate-expired-patrons", "--dry-run", "--quiet"],
+            "compendium.cli.commands.maintenance",
+        )
+        assert r.exit_code == 0, r.output
+        assert "Would deactivate 1 patron(s)." in r.output  # period, not colon
+        assert "Quiet Patron" not in r.output  # detail line suppressed
+
 
 # ──────────────────────────────────────────────────────────────────────────────
 # reports

@@ -172,6 +172,77 @@ def test_cli_import_csv_lenient_default_imports_with_warning(session, tmp_path):
     assert "byte replacement" in result.output.lower()
 
 
+# ── --quiet on import commands ────────────────────────────────────────────────
+
+_BAD_CSV = b"""media_type,title,authors,isbn
+book,Dune,Frank Herbert,bad-isbn-1
+book,Foundation,Isaac Asimov,bad-isbn-2
+"""
+
+
+def test_cli_import_csv_default_includes_error_detail_lines(session, tmp_path):
+    """Sanity baseline: per-row Errors block prints by default."""
+    f = tmp_path / "bad.csv"
+    f.write_bytes(_BAD_CSV)
+    result = _run(session, import_app, ["csv", str(f), "--dry-run"])
+    assert result.exit_code == 0, result.output
+    assert "errors      : 2" in result.output
+    assert "Errors:" in result.output
+    assert "bad-isbn-1" in result.output
+
+
+def test_cli_import_csv_quiet_keeps_summary_drops_error_detail(session, tmp_path):
+    """--quiet keeps the count summary; the per-row Errors detail is gone."""
+    f = tmp_path / "bad.csv"
+    f.write_bytes(_BAD_CSV)
+    result = _run(session, import_app, ["csv", str(f), "--dry-run", "--quiet"])
+    assert result.exit_code == 0, result.output
+    # Summary block still printed — the count is the cron-log signal.
+    assert "errors      : 2" in result.output
+    # Per-row detail block suppressed.
+    assert "Errors:" not in result.output
+    assert "bad-isbn-1" not in result.output
+
+
+def test_cli_import_csv_quiet_drops_warnings_block(session, tmp_path):
+    """A messy-byte file emits a warnings detail block; --quiet drops it."""
+    raw = b"media_type,title,authors,isbn\nbook,D\xe8ne,Frank Herbert,9780441013593\n"
+    f = tmp_path / "messy.csv"
+    f.write_bytes(raw)
+    result = _run(session, import_app, ["csv", str(f), "--dry-run", "--quiet"])
+    assert result.exit_code == 0, result.output
+    # The block header is gone.
+    assert "Warnings:" not in result.output
+    # The per-warning bullet line is gone too.
+    assert "byte replacement" not in result.output.lower()
+    # But the summary is still there.
+    assert "total rows  : 1" in result.output
+
+
+def test_cli_import_librarything_quiet_keeps_summary(session, tmp_path):
+    """LibraryThing import shares _print_report, so --quiet behaves the same."""
+    f = _lt_tsv(tmp_path)
+    result = _run(
+        session,
+        import_app,
+        ["librarything", str(f), "--dry-run", "--quiet"],
+    )
+    assert result.exit_code == 0, result.output
+    assert "Import report (librarything):" in result.output
+    assert "Errors:" not in result.output
+    assert "Warnings:" not in result.output
+
+
+def test_cli_import_marc_quiet_keeps_summary(session, tmp_path):
+    """MARC import also shares _print_report; smoke test the flag is wired."""
+    f = _mk_marc_bytes(tmp_path)
+    result = _run(session, import_app, ["marc", str(f), "--dry-run", "--quiet"])
+    assert result.exit_code == 0, result.output
+    assert "Import report (marc):" in result.output
+    assert "Errors:" not in result.output
+    assert "Warnings:" not in result.output
+
+
 def test_cli_export_csv_roundtrip(session, tmp_path):
     fin = _minimal_csv(tmp_path, "in.csv")
     _run(session, import_app, ["csv", str(fin)])
