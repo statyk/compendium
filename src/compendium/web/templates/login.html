@@ -27,6 +27,9 @@
       </label>
       <button type="submit">Login</button>
     </form>
+    {% if guest_search_enabled() %}
+    <p class="login-cover-browse"><a href="/ui/catalog">Browse catalog without logging in →</a></p>
+    {% endif %}
   </div>
 </main>
 {% endblock %}

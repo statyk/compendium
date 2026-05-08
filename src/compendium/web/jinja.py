@@ -59,6 +59,10 @@ def _jinja_shortcut_pages_for_user(user) -> list[dict]:
     ]
 
 
+def _jinja_guest_search_enabled() -> bool:
+    return bool(get_site_setting("guest_search_enabled"))
+
+
 def _jinja_csp_nonce(request) -> str:
     """Return the per-request CSP nonce for inline <script> tags.
 
@@ -78,4 +82,5 @@ templates.env.globals["csp_nonce"] = _jinja_csp_nonce
 templates.env.globals["custom_shortcuts"] = _jinja_custom_shortcuts
 templates.env.globals["shortcut_pages"] = _jinja_shortcut_pages
 templates.env.globals["shortcut_pages_for_user"] = _jinja_shortcut_pages_for_user
+templates.env.globals["guest_search_enabled"] = _jinja_guest_search_enabled
 templates.env.filters["currency"] = _format_currency

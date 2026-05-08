@@ -720,8 +720,8 @@ nav details.dropdown form.dropdown-form button:hover {
 /* Work detail editorial body split */
 .work-detail-body {
   display: grid;
-  grid-template-columns: 1fr 18rem;
-  gap: 2.5rem;
+  grid-template-columns: 1fr 1fr;
+  gap: 2rem;
   margin-top: 0;
 }
 .work-detail-narrative > * + * { margin-top: 1rem; }
@@ -1026,6 +1026,10 @@ body.kiosk-page { max-width: none; }
   padding-bottom: 0.75rem; width: 100%;
 }
 .login-cover-card form { width: 100%; }
+.login-cover-browse {
+  margin: 0; font-size: 0.85rem; text-align: center;
+  color: var(--cmp-color-muted);
+}
 
 /* ── Tooltips ────────────────────────────────────────────────── */
 
