@@ -127,7 +127,7 @@ def test_marc_import_creates_book(session):
     assert w.publisher == "Chilton Books"
     assert w.publication_year == 1965
     assert w.media_type.code == "book"
-    assert [c.creator.display_name for c in w.creators] == ["Herbert, Frank"]
+    assert [c.creator.display_name for c in w.creators] == ["Frank Herbert"]
 
 
 def test_marc_import_infers_dvd_from_leader_and_007(session):

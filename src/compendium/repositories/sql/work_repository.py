@@ -107,7 +107,7 @@ class SqlWorkRepository:
         )
 
     def list(self, limit: int = 50, offset: int = 0) -> list[Work]:
-        return self._s.query(Work).order_by(Work.title).offset(offset).limit(limit).all()
+        return self._s.query(Work).order_by(Work.sort_title, Work.title).offset(offset).limit(limit).all()
 
     def iter_for_export(
         self,
@@ -204,13 +204,13 @@ class SqlWorkRepository:
             available_only=available_only,
         )
         if not q:
-            return base.order_by(Work.title).offset(offset).limit(limit).all()
+            return base.order_by(Work.sort_title, Work.title).offset(offset).limit(limit).all()
 
         pattern = f"%{q}%"
         if field == "title":
             return (
                 base.filter(Work.title.ilike(pattern))
-                .order_by(Work.title)
+                .order_by(Work.sort_title, Work.title)
                 .offset(offset)
                 .limit(limit)
                 .all()
@@ -220,7 +220,7 @@ class SqlWorkRepository:
                 base.join(Work.creators)
                 .join(WorkCreator.creator)
                 .filter(Creator.display_name.ilike(pattern))
-                .order_by(Work.title)
+                .order_by(Work.sort_title, Work.title)
                 .distinct()
                 .offset(offset)
                 .limit(limit)
@@ -229,7 +229,7 @@ class SqlWorkRepository:
         if field == "publisher":
             return (
                 base.filter(Work.publisher.ilike(pattern))
-                .order_by(Work.title)
+                .order_by(Work.sort_title, Work.title)
                 .offset(offset)
                 .limit(limit)
                 .all()
@@ -237,7 +237,7 @@ class SqlWorkRepository:
         if field == "isbn":
             return (
                 base.filter(Work.isbn.ilike(pattern))
-                .order_by(Work.title)
+                .order_by(Work.sort_title, Work.title)
                 .offset(offset)
                 .limit(limit)
                 .all()
@@ -254,7 +254,7 @@ class SqlWorkRepository:
                     Creator.display_name.ilike(pattern),
                 )
             )
-            .order_by(Work.title)
+            .order_by(Work.sort_title, Work.title)
             .distinct()
             .offset(offset)
             .limit(limit)

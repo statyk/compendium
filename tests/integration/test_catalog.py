@@ -584,3 +584,62 @@ def test_update_creator_unknown_raises(session):
     svc = _audited_service(session)
     with pytest.raises(NotFoundError):
         svc.update_creator(99999, display_name="X")
+
+
+# ---------------------------------------------------------------------------
+# sort_title: catalog ordering ignores leading articles
+# ---------------------------------------------------------------------------
+
+
+def test_catalog_list_ignores_leading_articles_in_sort(session):
+    svc = _service(session)
+    svc.add_manual("book", "Zebra")
+    svc.add_manual("book", "The Great Gatsby")
+    svc.add_manual("book", "Apple")
+    svc.add_manual("book", "An Odd Story")
+
+    works = SqlWorkRepository(session).list(limit=10)
+    titles = [w.title for w in works]
+
+    # "An Odd Story" sorts as "Odd Story", "Apple" as "Apple",
+    # "The Great Gatsby" as "Great Gatsby", "Zebra" as "Zebra"
+    assert titles == ["Apple", "The Great Gatsby", "An Odd Story", "Zebra"]
+
+
+def test_sort_title_set_on_creation(session):
+    svc = _service(session)
+    svc.add_manual("book", "The Great Gatsby")
+
+    works = SqlWorkRepository(session).list()
+    assert works[0].sort_title == "Great Gatsby"
+
+
+def test_sort_title_updated_on_title_change(session):
+    svc = _audited_service(session)
+    work, _ = svc.add_manual("book", "Foundation")
+    assert work.sort_title == "Foundation"
+
+    svc.update_work(work.id, title="The Foundation")
+    updated = SqlWorkRepository(session).get(work.id)
+    assert updated.title == "The Foundation"
+    assert updated.sort_title == "Foundation"
+
+
+def test_creator_name_normalized_on_creation(session):
+    svc = _service(session)
+    svc.add_manual("book", "Some Book", authors=["Brooks, David"])
+
+    works = SqlWorkRepository(session).list()
+    creator = works[0].creators[0].creator
+    assert creator.display_name == "David Brooks"
+    assert creator.sort_name == "Brooks, David"
+
+
+def test_creator_deduped_across_name_formats(session):
+    svc = _service(session)
+    svc.add_manual("book", "Book One", authors=["Brooks, David"])
+    svc.add_manual("book", "Book Two", authors=["David Brooks"])
+
+    works = SqlWorkRepository(session).list(limit=10)
+    creator_ids = {wc.creator_id for w in works for wc in w.creators}
+    assert len(creator_ids) == 1

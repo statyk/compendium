@@ -21,6 +21,7 @@ from compendium.repositories.base import (
     MediaTypeRepository,
     WorkRepository,
 )
+from compendium.services._normalization import compute_sort_title, normalize_creator_name
 from compendium.services.audit import AuditAction, AuditEntityType, AuditService
 from compendium.services.metadata import (
     lookup_cover_fallbacks,
@@ -309,6 +310,7 @@ class CatalogService:
                 raise ValidationError("Title is required.")
             if new != work.title:
                 work.title = new
+                work.sort_title = compute_sort_title(new)
                 changes["title"] = new
                 search_text_dirty = True
         if subtitle is not _MISSING:
@@ -990,6 +992,7 @@ class CatalogService:
 
         work = Work(
             title=meta["title"],
+            sort_title=compute_sort_title(meta["title"]),
             subtitle=meta.get("subtitle"),
             media_type_id=mt.id,
             publisher=meta.get("publisher"),
@@ -1048,6 +1051,7 @@ class CatalogService:
         work.search_text = " ".join(p.strip() for p in parts if p and p.strip())
 
     def _get_or_create_creator(self, display_name: str) -> Creator:
+        display_name = normalize_creator_name(display_name.strip())
         sort_name = _to_sort_name(display_name)
         creator = self._creators.get_by_sort_name(sort_name)
         if creator is None:

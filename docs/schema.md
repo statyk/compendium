@@ -76,12 +76,14 @@ Abstract title — one row per ISBN or UPC. Collapses FRBR Work/Expression/Manif
 | extra_metadata | JSON | Media-specific extras (tracks, runtime, cast, …) |
 | external_ids | JSON | `{"openlibrary": "...", "musicbrainz": "...", "tmdb": "..."}` |
 | search_text | text | Denormalized FTS document (title + creators + description); maintained by service layer |
+| sort_title | varchar(512) INDEX | Title with leading English article stripped ("The Great Gatsby" → "Great Gatsby"); used for catalog ordering |
 | created_at | timestamptz | |
 | updated_at | timestamptz | Set on update |
 
 **Indexes:**
 - `ix_work_isbn` on `isbn`
 - `ix_work_upc` on `upc`
+- `ix_work_sort_title` on `sort_title`
 - SQLite: `work_fts` FTS5 virtual table (external content on `search_text`) + triggers
 - Postgres: `ix_work_search_gin` GIN index on `to_tsvector('english', search_text)`
 
@@ -391,3 +393,8 @@ Writes go through `services/site_settings.set_site_setting()`, which also emits 
 | `c9d0e1f2a3b4` | Add hold.suspended_until / suspended_reason |
 | `d0e1f2a3b4c5` | Add site_setting (env→DB→default settings) |
 | `e1f2a3b4c5d6` | Split admin roles (Administrator + SystemAdmin presets, slim Librarian) |
+| `f2a3b4c5d6e7` | Add failed_login table |
+| `a8b9c0d1e2f3` | Add branch.location_code |
+| `b2c3d4e5f6a7` | Add counters table (auto-sequence for accession numbers) |
+| `c3d4e5f6a7b8` | Revamp identifiers (barcode format + external ID normalization) |
+| `d7e8f9a0b1c2` | Add work.sort_title (article-ignoring catalog sort key) |

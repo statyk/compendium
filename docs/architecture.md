@@ -141,6 +141,14 @@ The catalog search box has two modes, and they match differently:
 
 If a partial-word query returns nothing from the default box, switch to a field-scoped search. This asymmetry is a known quirk; we're leaving it as-is until real-world feedback says otherwise.
 
+**Catalog ordering** uses `Work.sort_title` (indexed), which strips leading English articles (A, An, The) from the title. "The Great Gatsby" sorts under G, "An Odd Story" under O. The displayed title is unchanged; only the sort key is different. `sort_title` is set automatically on creation and title updates.
+
+**Import normalization:** LibraryThing TSV (and any source that calls `CatalogService`) normalizes two conventions on the way in:
+- *Trailing-article titles* — `"Information, The"` is stored as `"The Information"` with `sort_title = "Information"`.
+- *Last, First author names* — `"Brooks, David"` is stored as `"David Brooks"` (conservative heuristic: exactly one comma, no recognized name suffix like Jr./Sr./II). This ensures deduplification works across sources that use different conventions for the same author.
+
+Existing records already in the database are not rewritten by these rules; only newly imported records are affected.
+
 ### Migrating from SQLite to Postgres
 
 Use `compendium backup --output backup.tar.gz` on the SQLite source, then `compendium restore backup.tar.gz` against a fresh Postgres instance — the JSONL backup format is backend-agnostic, so this doubles as the official SQLite→Postgres migration path. (Or stream directly: `compendium backup -o - | COMPENDIUM_DATABASE_URL=postgresql://... compendium restore -`.)

@@ -82,6 +82,7 @@ class Work(Base):
     extra_metadata: Mapped[dict[str, Any]] = mapped_column(JSON, default=dict)
     external_ids: Mapped[dict[str, Any]] = mapped_column(JSON, default=dict)
     search_text: Mapped[str | None] = mapped_column(Text)
+    sort_title: Mapped[str] = mapped_column(String(512), index=True, default="", server_default="")
     created_at: Mapped[datetime] = mapped_column(UtcDateTime, server_default=func.now())
     updated_at: Mapped[datetime | None] = mapped_column(
         UtcDateTime, onupdate=func.now()

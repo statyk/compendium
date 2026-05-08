@@ -239,3 +239,80 @@ def test_lt_decode_strict_rejects_stray_byte():
     raw = b"Title\nLun Y\xe8u\n"
     with pytest.raises(UnicodeDecodeError):
         decode_text_bytes(raw, strict=True)
+
+
+# ---------------------------------------------------------------------------
+# Name/title normalization on import
+# ---------------------------------------------------------------------------
+
+
+def test_lt_import_normalizes_trailing_article_title(session):
+    importer, _ = _make_importer(session)
+    tsv = _tsv(
+        _row(
+            **{"Title": "Information, The"},
+            **{"Primary Author": "Gleick, James"},
+            Date="2011",
+            Media="Hardcover",
+            ISBN="[9780375423727]",
+            Copies="1",
+        ),
+    )
+    report = importer.import_librarything(io.StringIO(tsv), ImportOptions())
+    assert report.errors == []
+    work = SqlWorkRepository(session).get_by_isbn("9780375423727")
+    assert work is not None
+    assert work.title == "The Information"
+    assert work.sort_title == "Information"
+    creator = work.creators[0].creator
+    assert creator.display_name == "James Gleick"
+    assert creator.sort_name == "Gleick, James"
+
+
+def test_lt_import_normalizes_last_first_author(session):
+    importer, _ = _make_importer(session)
+    tsv = _tsv(
+        _row(
+            Title="The Social Animal",
+            **{"Primary Author": "Brooks, David"},
+            Date="2011",
+            Media="Hardcover",
+            ISBN="[9781400067602]",
+            Copies="1",
+        ),
+    )
+    report = importer.import_librarything(io.StringIO(tsv), ImportOptions())
+    assert report.errors == []
+    work = SqlWorkRepository(session).get_by_isbn("9781400067602")
+    assert work is not None
+    creator = work.creators[0].creator
+    assert creator.display_name == "David Brooks"
+    assert creator.sort_name == "Brooks, David"
+
+
+def test_lt_import_dedupes_author_across_name_formats(session):
+    importer, _ = _make_importer(session)
+    tsv = _tsv(
+        _row(
+            Title="Book One",
+            **{"Primary Author": "Brooks, David"},
+            Media="Paperback",
+            ISBN="[9780000000001]",
+            Copies="1",
+        ),
+        _row(
+            Title="Book Two",
+            **{"Primary Author": "David Brooks"},
+            Media="Paperback",
+            ISBN="[9780000000002]",
+            Copies="1",
+        ),
+    )
+    report = importer.import_librarything(io.StringIO(tsv), ImportOptions())
+    assert report.errors == []
+    assert report.created_works == 2
+
+    repo = SqlWorkRepository(session)
+    all_works = repo.list(limit=10)
+    creator_ids = {wc.creator_id for w in all_works for wc in w.creators}
+    assert len(creator_ids) == 1

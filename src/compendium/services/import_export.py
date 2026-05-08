@@ -37,6 +37,7 @@ from compendium.domain.identifiers import ITEM_TYPE, validate_barcode
 from compendium.domain.models import AppUser, Work
 from compendium.repositories.base import ItemRepository, WorkRepository
 from compendium.services.audit import AuditAction, AuditEntityType, AuditService
+from compendium.services._normalization import normalize_title
 from compendium.services.catalog import _DEFAULT_CREATOR_ROLE, CatalogService
 from compendium.services.metadata import normalize_isbn, normalize_upc
 
@@ -1139,7 +1140,7 @@ def _lt_to_compendium(row: dict) -> tuple[dict, int]:
     ``extra_metadata["librarything"]`` so a future tags slice can lift them
     out, rather than discarding silently.
     """
-    title = _strip(row.get("Title"))
+    title = normalize_title(_strip(row.get("Title")) or "")
     if not title:
         raise ValidationError("Row is missing required column 'Title'")
 
