@@ -66,7 +66,7 @@
           <input type="checkbox" name="permissions" value="{{ perm }}" class="perm-check"
                  {% if perm in role.permissions %}checked{% endif %}
                  {% if is_full_access %}disabled{% endif %}>
-          <code>{{ perm }}</code>
+          <code>{{ perm }}</code>{% if permission_descriptions.get(perm) %}<span class="field-hint" data-tooltip="{{ permission_descriptions[perm] }}">ⓘ</span>{% endif %}
         </label>
         {% endfor %}
       </fieldset>

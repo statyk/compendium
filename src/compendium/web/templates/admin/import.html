@@ -32,7 +32,7 @@
     {% endfor %}
   </select>
 
-  <label for="default-media-type">Default media type <small>(for rows/records with none)</small></label>
+  <label for="default-media-type">Default media type <span class="field-hint" data-tooltip="Used for rows or records that don't specify a media type. Leave blank to skip those rows.">ⓘ</span></label>
   <select name="default_media_type" id="default-media-type">
     <option value="">(none)</option>
     {% for mt in media_types %}

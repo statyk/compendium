@@ -19,7 +19,7 @@
 <form method="post" action="/ui/catalog/{{ work.id }}/edit">
   <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
 
-  <label for="title">Title <small>(required)</small></label>
+  <label for="title">Title <span class="required-marker" aria-hidden="true">*</span></label>
   <input type="text" id="title" name="title" value="{{ work.title }}" required>
 
   <label for="subtitle">Subtitle</label>
@@ -42,7 +42,7 @@
       <input type="text" id="edition" name="edition" value="{{ work.edition or '' }}">
     </div>
     <div>
-      <label for="language">Language <small>(2-letter code)</small></label>
+      <label for="language">Language <span class="field-hint" data-tooltip="2-letter ISO 639-1 code, e.g. 'en', 'fr', 'de', 'es'">ⓘ</span></label>
       <input type="text" id="language" name="language" value="{{ work.language or '' }}" maxlength="8">
     </div>
   </div>
@@ -52,7 +52,7 @@
 
   <div class="grid">
     <div>
-      <label for="classification_scheme">Classification scheme <small>(e.g. lcc, ddc)</small></label>
+      <label for="classification_scheme">Classification scheme <span class="field-hint" data-tooltip="Use 'lcc' for Library of Congress, 'ddc' for Dewey Decimal, or any custom scheme code.">ⓘ</span></label>
       <input type="text" id="classification_scheme" name="classification_scheme" value="{{ work.classification_scheme or '' }}">
     </div>
     <div>

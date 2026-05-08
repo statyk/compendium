@@ -40,7 +40,7 @@
         {% if user %}
           {% set _shortcuts = custom_shortcuts() %}
           <li id="nav-shortcuts" data-defaults='{{ _shortcuts | map(attribute="url") | list | tojson }}'>
-            {% for s in _shortcuts %}<a href="{{ s.url }}" data-shortcut>{{ s.label }}</a> {% endfor %}<a href="#" id="nav-shortcuts-edit" aria-label="Customize shortcuts" title="Customize shortcuts">✎</a>
+            {% for s in _shortcuts %}<a href="{{ s.url }}" data-shortcut>{{ s.label }}</a> {% endfor %}<a href="#" id="nav-shortcuts-edit" aria-label="Customize shortcuts" data-tooltip="Customize nav shortcuts">✎</a>
           </li>
           {% set _show_circ_admin = has_permission(user, 'patron.manage')
                                      or has_permission(user, 'loan.view.any')

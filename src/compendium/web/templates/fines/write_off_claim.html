@@ -15,7 +15,7 @@
 </p>
 <form method="post" action="/ui/items/{{ item.barcode }}/write-off-claim">
   <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
-  <label for="note">Reason for write-off <small>(required)</small></label>
+  <label for="note">Reason for write-off <span class="required-marker" aria-hidden="true">*</span></label>
   <textarea id="note" name="note" rows="3" required autofocus></textarea>
   <button type="submit" style="width:auto">Write off claim</button>
   <a href="/ui/items/{{ item.barcode }}" role="button" class="outline secondary">Cancel</a>

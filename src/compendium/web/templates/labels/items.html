@@ -51,15 +51,15 @@
         {% for mt in media_types %}<option value="{{ mt.code }}">{{ mt.display_name }}</option>{% endfor %}
       </select>
     </label>
-    <label>Items added since <small>(YYYY-MM-DD, optional)</small>
+    <label>Items added since
       <input type="date" name="since">
     </label>
-    <label>Or, exact barcodes <small>(comma-separated — overrides other filters)</small>
+    <label>Or, exact barcodes <span class="field-hint" data-tooltip="Enter barcodes separated by commas. When provided, all other filters above are ignored.">ⓘ</span>
       <textarea name="barcodes" rows="3" placeholder="BC000001, BC000002, ..."></textarea>
     </label>
   </details>
 
-  <label>Start at label # <small>(skip this many positions on the first sheet — use for partial sheets)</small>
+  <label>Start at label # <span class="field-hint" data-tooltip="Skip this many label positions on the first sheet — useful when printing on a partially-used sheet.">ⓘ</span>
     <input type="number" name="start_label" min="0" value="0" style="max-width:6rem">
   </label>
 

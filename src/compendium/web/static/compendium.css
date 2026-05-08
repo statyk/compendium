@@ -913,3 +913,49 @@ body.kiosk-page { max-width: none; }
   font-size: 1.6rem; font-weight: 700;
   color: var(--pico-color); margin: 0; line-height: 1.2;
 }
+
+/* ── Tooltips ────────────────────────────────────────────────── */
+
+/* Allow Pico tooltip bubbles to wrap long text. Pico defaults to
+   overflow:hidden which clips anything beyond one line. */
+[data-tooltip]::before {
+  overflow: visible;
+  white-space: normal;
+  max-width: 22rem;
+  text-align: left;
+  line-height: 1.4;
+}
+
+/* ⓘ field-hint icon — appears inside a label next to a field that
+   has contextual help. Uses data-tooltip for the bubble. */
+.field-hint {
+  display: inline-flex;
+  align-items: center;
+  margin-left: 0.3em;
+  font-size: 0.8em;
+  color: var(--pico-muted-color);
+  cursor: help;
+  line-height: 1;
+  user-select: none;
+  /* Pico adds a dotted underline to all [data-tooltip]:not(a,button,input).
+     Suppress it on the icon so it doesn't underline the character itself. */
+  border-bottom: none !important;
+}
+
+/* Standalone form helper text — use instead of bare <small> for
+   context that applies to the form but not a single field. */
+.form-help {
+  font-size: 0.875em;
+  color: var(--pico-muted-color);
+  margin-top: -0.5rem;
+  margin-bottom: 0.75rem;
+}
+
+/* Required-field asterisk (*) — appears in labels after the field name. */
+.required-marker {
+  margin-left: 0.2em;
+  color: var(--cmp-banner-error-fg);
+  font-size: 0.85em;
+  font-weight: 700;
+  line-height: 1;
+}

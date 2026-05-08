@@ -47,12 +47,12 @@
       <input type="checkbox" name="active_only">
       Active patrons only
     </label>
-    <label>Or, exact card numbers <small>(comma-separated — overrides other filters)</small>
+    <label>Or, exact card numbers <span class="field-hint" data-tooltip="Enter library card numbers separated by commas. When provided, all other filters above are ignored.">ⓘ</span>
       <textarea name="cards" rows="3" placeholder="00000001, 00000002, ..."></textarea>
     </label>
   </details>
 
-  <label>Start at label # <small>(skip this many positions on the first sheet)</small>
+  <label>Start at label # <span class="field-hint" data-tooltip="Skip this many label positions on the first sheet — useful when printing on a partially-used sheet.">ⓘ</span>
     <input type="number" name="start_label" min="0" value="0" style="max-width:6rem">
   </label>
 

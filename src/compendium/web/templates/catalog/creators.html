@@ -32,8 +32,8 @@
           <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
           <input type="hidden" name="creator_id" value="{{ wc.creator_id }}">
           <input type="hidden" name="role" value="{{ wc.role }}">
-          <button type="submit" name="direction" value="up" class="outline" {% if loop.first %}disabled{% endif %}>&uarr;</button>
-          <button type="submit" name="direction" value="down" class="outline" {% if loop.last %}disabled{% endif %}>&darr;</button>
+          <button type="submit" name="direction" value="up" class="outline" aria-label="Move up" data-tooltip="Move up" {% if loop.first %}disabled{% endif %}>&uarr;</button>
+          <button type="submit" name="direction" value="down" class="outline" aria-label="Move down" data-tooltip="Move down" {% if loop.last %}disabled{% endif %}>&darr;</button>
         </form>
       </td>
       <td>

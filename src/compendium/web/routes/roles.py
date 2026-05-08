@@ -35,6 +35,46 @@ PERMISSION_GROUPS = [
     ("System", ["system.manage", "user.manage", "role.manage"]),
 ]
 
+PERMISSION_DESCRIPTIONS: dict[str, str] = {
+    # Catalog
+    "work.view":      "View work titles, metadata, and cover images in the catalog.",
+    "work.edit":      "Edit work metadata: title, publisher, description, cover URL, and more.",
+    "item.view":      "View item details: barcode, location, condition, and loan status.",
+    "item.create":    "Add new items and works to the catalog.",
+    "item.edit":      "Edit item fields: location, condition, call number, and loanable flag.",
+    "item.delete":    "Delete items from the catalog permanently.",
+    "catalog.import": "Bulk-import works and items from CSV, LibraryThing TSV, MARC, or MARCXML files.",
+    # Loans
+    "loan.checkout":    "Check items out to patrons at the circulation desk.",
+    "loan.checkin":     "Check in (return) items.",
+    "loan.renew.any":   "Renew any patron's active loan, regardless of who placed it.",
+    "loan.renew.self":  "Renew the signed-in patron's own loans only (patron self-service).",
+    "loan.view.self":   "View the signed-in patron's own loan and return history.",
+    "loan.view.any":    "View active and historical loans for any patron.",
+    "loan.claim.self":  "File a claim-returned dispute on the signed-in patron's own loans.",
+    # Holds
+    "hold.place.self": "Place and cancel holds for the signed-in patron only (patron self-service).",
+    "hold.place.any":  "Place, cancel, suspend, and manage holds for any patron.",
+    "hold.view.self":  "View the signed-in patron's own holds queue.",
+    "hold.view.any":   "View the holds queue for any patron or work.",
+    # Fines
+    "fine.manage":   "Assess, adjust, waive, and view fines for any patron.",
+    "fine.view.self": "View the signed-in patron's own outstanding fines.",
+    # Other
+    "notification.manage": "Configure notification templates and view delivery logs.",
+    "report.view":         "Access circulation, collection, overdue, and inventory reports.",
+    "labels.generate":     "Generate printable barcode label and patron-card sheets.",
+    "audit.view":          "View the audit log of librarian-level changes to catalog and patron records.",
+    # Administration
+    "patron.manage": "Create, edit, and deactivate patron records.",
+    "policy.edit":   "Create and edit loan policies (loan period, renewal limits, media/category rules).",
+    "branch.edit":   "Edit branch settings: name, location code, and classification defaults.",
+    # System
+    "system.manage": "Edit system-wide settings: library name, guest search, email, and more.",
+    "user.manage":   "Create, edit, and deactivate user (staff) accounts.",
+    "role.manage":   "Create and edit roles and their permission sets.",
+}
+
 
 def _role_svc(session: Session, actor: AppUser) -> RoleService:
     return RoleService(
@@ -82,6 +122,7 @@ def role_new_form(
             "request": request,
             "user": user,
             "permission_groups": PERMISSION_GROUPS,
+            "permission_descriptions": PERMISSION_DESCRIPTIONS,
             "error": None,
         },
     )
@@ -109,6 +150,7 @@ def role_create(
                 "request": request,
                 "user": user,
                 "permission_groups": PERMISSION_GROUPS,
+            "permission_descriptions": PERMISSION_DESCRIPTIONS,
                 "error": str(exc),
             },
         )
@@ -140,6 +182,7 @@ def role_detail(
             "user": user,
             "role": role,
             "permission_groups": PERMISSION_GROUPS,
+            "permission_descriptions": PERMISSION_DESCRIPTIONS,
             "message": message,
             "error": error,
         },

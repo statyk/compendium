@@ -16,21 +16,20 @@
   <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
   <label for="name">Name</label>
   <input type="text" id="name" name="name" required autofocus autocomplete="off">
-  <label for="media_type_id">Applies to media <small>(optional — leave blank for any media)</small></label>
+  <label for="media_type_id">Applies to media <span class="field-hint" data-tooltip="Leave blank to match all media types.">ⓘ</span></label>
   <select id="media_type_id" name="media_type_id">
     <option value="">All media</option>
     {% for mt in media_types %}
     <option value="{{ mt.id }}">{{ mt.display_name }}</option>
     {% endfor %}
   </select>
-  <label for="patron_category_id">Applies to patron category <small>(optional — leave blank for any patron)</small></label>
+  <label for="patron_category_id">Applies to patron category <span class="field-hint" data-tooltip="Leave blank to match all patron categories. Specificity order: media+category wins over media-only, category-only, or default.">ⓘ</span></label>
   <select id="patron_category_id" name="patron_category_id">
     <option value="">All patrons</option>
     {% for c in categories %}
     <option value="{{ c.id }}">{{ c.display_name }}</option>
     {% endfor %}
   </select>
-  <small>Resolution precedence: (media + category) &gt; (media) &gt; (category) &gt; default.</small>
   <label for="loan_period_days">Loan period (days)</label>
   <input type="number" id="loan_period_days" name="loan_period_days" min="1" value="14" required>
   <label for="max_renewals">Maximum renewals</label>

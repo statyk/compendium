@@ -19,10 +19,10 @@
     <label><input type="radio" name="media_type" value="vhs" {% if form.media_type == 'vhs' %}checked{% endif %}> VHS</label>
   </fieldset>
 
-  <label for="title">Title <small>(required)</small></label>
+  <label for="title">Title <span class="required-marker" aria-hidden="true">*</span></label>
   <input type="text" id="title" name="title" value="{{ form.title or '' }}" required autofocus>
 
-  <label for="authors">Author / artist / director <small>(comma-separated)</small></label>
+  <label for="authors">Author / artist / director <span class="field-hint" data-tooltip="Separate multiple names with commas, e.g. 'Jane Doe, John Roe'">ⓘ</span></label>
   <input type="text" id="authors" name="authors" value="{{ form.authors or '' }}" placeholder="e.g. Jane Doe, John Roe">
 
   <div class="grid">
@@ -38,11 +38,11 @@
 
   <div class="grid">
     <div>
-      <label for="isbn">ISBN <small>(optional)</small></label>
+      <label for="isbn">ISBN</label>
       <input type="text" id="isbn" name="isbn" value="{{ form.isbn or '' }}" autocomplete="off">
     </div>
     <div>
-      <label for="upc">UPC <small>(optional)</small></label>
+      <label for="upc">UPC</label>
       <input type="text" id="upc" name="upc" value="{{ form.upc or '' }}" autocomplete="off">
     </div>
   </div>

@@ -31,7 +31,7 @@
         {% for perm in perms %}
         <label>
           <input type="checkbox" name="permissions" value="{{ perm }}" class="perm-check">
-          <code>{{ perm }}</code>
+          <code>{{ perm }}</code>{% if permission_descriptions.get(perm) %}<span class="field-hint" data-tooltip="{{ permission_descriptions[perm] }}">ⓘ</span>{% endif %}
         </label>
         {% endfor %}
       </fieldset>
