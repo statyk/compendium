@@ -27,11 +27,35 @@ router = APIRouter()
 
 _PERM = "labels.generate"
 
+_SYMBOLOGY_LABELS = {
+    "codabar": "Codabar",
+    "code39": "Code 39",
+    "code128": "Code 128",
+}
+
+
+def _symbology_ctx() -> dict:
+    """Render context for the active barcode symbology, surfaced as a
+    banner on the label-form pages so operators see what their PDFs
+    will use without having to navigate to the settings page first."""
+    code = get_site_setting("barcode_symbology")
+    return {
+        "barcode_symbology": code,
+        "barcode_symbology_label": _SYMBOLOGY_LABELS.get(code, code),
+    }
+
 
 def _render(name: str, request: Request, ctx: dict, status_code: int = 200):
     token, fresh = ensure_csrf(request)
     ctx_clean = {k: v for k, v in ctx.items() if k != "request"}
     ctx_clean["csrf_token"] = token
+    # Every label-form page renders the active-symbology banner; inject
+    # the values here so each render-call site doesn't have to remember.
+    ctx_clean.setdefault("barcode_symbology", None)
+    ctx_clean.setdefault("barcode_symbology_label", None)
+    sym = _symbology_ctx()
+    ctx_clean["barcode_symbology"] = sym["barcode_symbology"]
+    ctx_clean["barcode_symbology_label"] = sym["barcode_symbology_label"]
     resp = templates.TemplateResponse(request, name, ctx_clean, status_code=status_code)
     if fresh:
         set_csrf_cookie(resp, fresh, get_settings().jwt_secret_key)

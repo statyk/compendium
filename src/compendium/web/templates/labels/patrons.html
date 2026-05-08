@@ -8,6 +8,8 @@
 
 {% if error %}<p class="error-banner">{{ error }}</p>{% endif %}
 
+{% include "labels/_symbology_banner.html" %}
+
 <form method="post" action="/ui/labels/patrons">
   <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
 

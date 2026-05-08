@@ -396,6 +396,21 @@ class TestSettingsWeb:
         assert r.status_code == 200
         assert b"kiosk_idle_timeout_seconds" in r.content
 
+    def test_identifiers_page_includes_barcode_symbology(self, client, s_session):
+        """The Identifiers & Barcodes settings page must surface the new
+        barcode_symbology setting registered in the same slice — registering
+        it isn't enough; it has to appear in _PAGES["identifiers"]["keys"].
+        """
+        _make_user(s_session, role_name="Librarian", username="lib_web_i")
+        cookies = _login_cookies(client, "lib_web_i")
+        r = client.get("/ui/admin/settings/identifiers", cookies=cookies)
+        assert r.status_code == 200
+        assert b'name="barcode_symbology"' in r.content
+        # All three Literal options should be present as <option> values.
+        assert b'value="codabar"' in r.content
+        assert b'value="code39"' in r.content
+        assert b'value="code128"' in r.content
+
     def test_smtp_page_denied_to_librarian(self, client, s_session):
         _make_user(s_session, role_name="Librarian", username="lib_smtp_denied")
         cookies = _login_cookies(client, "lib_smtp_denied")

@@ -4,10 +4,12 @@
 <h2>Printable Labels</h2>
 <p><small>Generate PDFs for item spine/pocket labels and patron library cards. Print on pre-cut label sheets you already own.</small></p>
 
+{% include "labels/_symbology_banner.html" %}
+
 <div class="grid">
   <article>
     <header><strong>Item labels</strong></header>
-    <p>Call number, author indicator, and (on larger templates) a Code 128 barcode. Filter by branch, media type, or explicit barcodes.</p>
+    <p>Call number, author indicator, and (on larger templates) a scannable barcode. Filter by branch, media type, or explicit barcodes.</p>
     <a href="/ui/labels/items" role="button" class="outline">Open</a>
   </article>
   <article>

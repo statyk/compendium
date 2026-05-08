@@ -99,6 +99,7 @@ _PAGES: dict[str, dict[str, Any]] = {
             "barcode_length",
             "barcode_location_enabled",
             "barcode_default_location_code",
+            "barcode_symbology",
         ],
     },
 }

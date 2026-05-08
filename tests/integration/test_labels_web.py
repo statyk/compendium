@@ -212,3 +212,69 @@ class TestPatronForm:
         assert resp.status_code == 200
         assert resp.headers["content-type"] == "application/pdf"
         assert resp.content.startswith(b"%PDF-")
+
+
+class TestSymbologyBanner:
+    """The label-form pages surface the active barcode_symbology setting
+    so an operator sees which encoding their PDF will use without
+    leaving the page. Cover all three pages plus the stale-copy
+    regression."""
+
+    @staticmethod
+    def _patch_symbology(value: str):
+        """Return a context manager that makes get_site_setting return
+        ``value`` for the symbology key inside the labels web routes."""
+        real_get = __import__(
+            "compendium.services.site_settings", fromlist=["get_site_setting"]
+        ).get_site_setting
+
+        def fake(key, *args, **kwargs):
+            if key == "barcode_symbology":
+                return value
+            return real_get(key, *args, **kwargs)
+
+        return patch(
+            "compendium.web.routes.labels.get_site_setting", side_effect=fake
+        )
+
+    @pytest.mark.parametrize(
+        "url", ["/ui/labels", "/ui/labels/items", "/ui/labels/patrons"]
+    )
+    def test_default_codabar_banner_present(self, url, lw_client, lw_session):
+        cookies = _login(lw_client, lw_session, f"lwsym{_next()}")
+        resp = lw_client.get(url, cookies=cookies)
+        assert resp.status_code == 200, resp.text
+        body = resp.content.decode()
+        assert "Codabar" in body
+        # Banner links to the settings page where the setting lives.
+        assert "/ui/admin/settings/identifiers" in body
+
+    @pytest.mark.parametrize(
+        "url", ["/ui/labels", "/ui/labels/items", "/ui/labels/patrons"]
+    )
+    def test_code39_setting_reflected_in_banner(self, url, lw_client, lw_session):
+        cookies = _login(lw_client, lw_session, f"lwsym{_next()}")
+        with self._patch_symbology("code39"):
+            resp = lw_client.get(url, cookies=cookies)
+        assert resp.status_code == 200, resp.text
+        body = resp.content.decode()
+        assert "Code 39" in body
+        # Other symbology names should NOT appear when code39 is active.
+        # (They must not leak from the banner; the page may still mention
+        # symbology elsewhere — but per current templates, it doesn't.)
+        assert "Codabar" not in body
+
+    @pytest.mark.parametrize(
+        "url", ["/ui/labels", "/ui/labels/items"]
+    )
+    def test_no_stale_code128_default_copy(self, url, lw_client, lw_session):
+        """Catches the regression that prompted this slice: pages used to
+        say 'Code 128' as the default in their prose. With Codabar as the
+        default, that copy should be gone."""
+        cookies = _login(lw_client, lw_session, f"lwsym{_next()}")
+        resp = lw_client.get(url, cookies=cookies)
+        assert resp.status_code == 200
+        body = resp.content.decode()
+        # Stale exact phrases that used to appear in the templates.
+        assert "a Code 128 barcode" not in body
+        assert "falls back to Code 128" not in body

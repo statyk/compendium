@@ -1,0 +1,15 @@
+{# Active barcode symbology banner.
+
+   Included on /ui/labels, /ui/labels/items, /ui/labels/patrons. Surfaces
+   the value of the `barcode_symbology` site setting so an operator
+   doesn't have to leave the label-form page to confirm what their PDF
+   will use, and links to where it's changed. The route's `_render`
+   helper injects `barcode_symbology_label` for every label-form page,
+   so the include needs no extra arguments. #}
+{% if barcode_symbology_label %}
+<p class="success-banner">
+  Barcodes will be rendered as <strong>{{ barcode_symbology_label }}</strong>.
+  Change in
+  <a href="/ui/admin/settings/identifiers">Identifiers &amp; barcodes settings</a>.
+</p>
+{% endif %}
