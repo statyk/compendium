@@ -19,7 +19,8 @@
   <script src="/ui/static/htmx.min.js" nonce="{{ csp_nonce(request) }}" defer></script>
 </head>
 <body>
-  <header class="container">
+  <header>
+  <div class="container">
     <nav>
       <ul>
         <li>
@@ -161,14 +162,17 @@
       </ul>
       </details>
     </nav>
+  </div>
   </header>
 
   <main class="container">
     {% block content %}{% endblock %}
   </main>
 
-  <footer class="container">
-    <small>Compendium &mdash; library management system</small>
+  <footer>
+  <div class="container">
+    <small>Compendium &middot; A library catalog system</small>
+  </div>
   </footer>
   {% if user %}
   <script nonce="{{ csp_nonce(request) }}">var _SC_PAGES = {{ shortcut_pages_for_user(user) | tojson }};</script>

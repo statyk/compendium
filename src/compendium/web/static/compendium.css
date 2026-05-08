@@ -130,6 +130,27 @@
   --cmp-glyph-stroke: #5e3a1d;
   --cmp-glyph-label:  #f4e5c3;
   --cmp-glyph-pull:   #d4a24a;
+
+  /* Surfaces — raised/sunken for cards, table headers, footer bands */
+  --cmp-color-surface-raised: #fffaf0;
+  --cmp-color-surface-sunken: #f4ead7;
+
+  /* Rules — brass family */
+  --cmp-color-rule:      #b8924a;
+  --cmp-color-rule-soft: #d4c4a8;
+
+  /* Shadows — warm, not neutral-grey */
+  --cmp-shadow-sm: 0 1px 2px rgba(74, 50, 25, 0.08);
+  --cmp-shadow-md: 0 2px 6px rgba(74, 50, 25, 0.10);
+
+  /* Body typeface — system stack, named so we can swap later */
+  --cmp-font-body: system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+
+  /* Display type scale */
+  --cmp-display-h1: 2.625rem;
+  --cmp-display-h2: 1.875rem;
+  --cmp-display-h3: 1.375rem;
+  --cmp-display-h4: 1.125rem;
 }
 
 /* Pico sets its primary vars on :root:not([data-theme=dark]) (specificity 0,2,0)
@@ -224,48 +245,82 @@
   --cmp-color-success: #2a8c50;
   --cmp-color-warning: #c08020;
   --cmp-color-danger:  #902020;
+
+  /* Surfaces — dark */
+  --cmp-color-surface-raised: #241710;
+  --cmp-color-surface-sunken: #1a110a;
+  --cmp-color-rule:      #c8916a;
+  --cmp-color-rule-soft: #5a4530;
+  --cmp-shadow-sm: 0 1px 2px rgba(74, 50, 25, 0.30);
+  --cmp-shadow-md: 0 2px 6px rgba(74, 50, 25, 0.40);
 }
 
 
-/* ── Headings & typography ───────────────────────────────────── */
+/* ── Body & typography ───────────────────────────────────────── */
+body {
+  background: var(--cmp-color-surface);
+  color: var(--cmp-color-text);
+}
 h1, h2, h3, h4, h5, h6,
 nav .brand {
   font-family: var(--cmp-font-display);
+  color: var(--cmp-color-text);
 }
-h1 { font-variation-settings: 'opsz' 72; }
-h2 { font-variation-settings: 'opsz' 36; }
-h3 { font-variation-settings: 'opsz' 18; }
-h4, h5, h6 { font-variation-settings: 'opsz' 14; }
+h1 {
+  font-size: var(--cmp-display-h1); font-weight: 700;
+  letter-spacing: -0.015em; line-height: 1.1;
+  font-variation-settings: 'opsz' 72;
+}
+h2 {
+  font-size: var(--cmp-display-h2); font-weight: 600;
+  letter-spacing: -0.01em; line-height: 1.15;
+  font-variation-settings: 'opsz' 36;
+}
+h3 {
+  font-size: var(--cmp-display-h3); font-weight: 600; line-height: 1.2;
+  font-variation-settings: 'opsz' 18;
+}
+h4 {
+  font-size: var(--cmp-display-h4); font-weight: 600; line-height: 1.25;
+  font-variation-settings: 'opsz' 14;
+}
+h5, h6 { font-weight: 600; font-variation-settings: 'opsz' 14; }
 nav .brand { font-variation-settings: 'opsz' 18; font-weight: 700; }
 
+/* Tabular numerals in data-dense contexts */
+table, dl, .pill, .responsive-table { font-variant-numeric: tabular-nums; }
+
 /* ── Brand & nav ─────────────────────────────────────────────── */
-header.container {
+header {
   background: var(--cmp-nav-bg);
   color: var(--cmp-nav-fg);
+  border-bottom: 3px solid var(--cmp-color-rule);
+  box-shadow: var(--cmp-shadow-sm);
 }
+header .container { padding-block: 0.6rem; }
 /* Top-level nav links and dropdown summaries take nav-fg color */
-header.container a,
-header.container nav summary {
+header a,
+header nav summary {
   color: var(--cmp-nav-fg);
   text-decoration: none;
 }
-header.container a:hover,
-header.container nav summary:hover { opacity: 0.85; }
+header a:hover,
+header nav summary:hover { opacity: 0.85; }
 /* Dropdown popup menus revert to page surface colors */
-header.container nav details.dropdown summary + ul {
+header nav details.dropdown summary + ul {
   color: var(--pico-color);
 }
-header.container nav details.dropdown summary + ul a,
-header.container nav details.dropdown form.dropdown-form button {
+header nav details.dropdown summary + ul a,
+header nav details.dropdown form.dropdown-form button {
   color: var(--pico-color);
 }
-header.container nav details.dropdown summary + ul a:hover { opacity: 1; }
+header nav details.dropdown summary + ul a:hover { opacity: 1; }
 /* Login outline button — visible on walnut background */
-header.container a[role="button"].outline {
+header a[role="button"].outline {
   border-color: var(--cmp-nav-fg);
   color: var(--cmp-nav-fg);
 }
-header.container a[role="button"].outline:hover {
+header a[role="button"].outline:hover {
   background: rgba(253, 246, 236, 0.12);
   opacity: 1;
 }
@@ -456,7 +511,7 @@ textarea:focus-visible {
   }
   /* Table row highlight */
   .responsive-table tbody tr:hover {
-    background: var(--pico-table-row-stripped-background-color, rgba(0,0,0,0.03));
+    background: rgba(184, 146, 74, 0.07);
   }
 }
 
@@ -487,13 +542,13 @@ p.success-banner::before { content: "✓ "; }
 /* ── Nav dropdown fixes ──────────────────────────────────────── */
 /* Pico gives details.dropdown a card background; strip it inside the nav
    so nothing boxes over the walnut header. */
-header.container nav details.dropdown,
-header.container nav details.dropdown > summary,
-header.container nav details.dropdown > summary:hover,
-header.container nav details.dropdown > summary:focus,
-header.container nav details.dropdown > summary:focus-visible,
-header.container nav details.dropdown > summary:active,
-header.container nav details.dropdown[open] > summary {
+header nav details.dropdown,
+header nav details.dropdown > summary,
+header nav details.dropdown > summary:hover,
+header nav details.dropdown > summary:focus,
+header nav details.dropdown > summary:focus-visible,
+header nav details.dropdown > summary:active,
+header nav details.dropdown[open] > summary {
   background: transparent;
   border: none;
   box-shadow: none;
@@ -503,7 +558,7 @@ header.container nav details.dropdown[open] > summary {
 /* Pico controls summary text via --pico-accordion-*-summary-color, which
    overrides a generic color rule. Override in the nav scope so all
    dropdown summaries (theme picker, Circulation, etc.) stay cream. */
-header.container nav {
+header nav {
   --pico-accordion-close-summary-color:  var(--cmp-nav-fg);
   --pico-accordion-open-summary-color:   var(--cmp-nav-fg);
   --pico-accordion-active-summary-color: var(--cmp-nav-fg);
@@ -958,4 +1013,138 @@ body.kiosk-page { max-width: none; }
   font-size: 0.85em;
   font-weight: 700;
   line-height: 1;
+}
+
+/* ── Heritage: ledger tables ──────────────────────────────────── */
+table {
+  width: 100%;
+  border-collapse: collapse;
+  background: var(--cmp-color-surface-raised);
+  border-top: 2px solid var(--cmp-color-rule);
+  border-bottom: 2px solid var(--cmp-color-rule);
+}
+thead th {
+  font-family: var(--cmp-font-display);
+  font-weight: 600;
+  font-size: 0.82rem;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  background: var(--cmp-color-surface-sunken);
+  border-bottom: 1px solid var(--cmp-color-rule);
+  text-align: left;
+  padding: 0.65rem 0.75rem;
+  color: var(--cmp-color-text);
+}
+tbody td {
+  padding: 0.6rem 0.75rem;
+  border-bottom: 1px solid var(--cmp-color-rule-soft);
+  vertical-align: top;
+}
+tbody tr:last-child td { border-bottom: none; }
+tbody tr:hover { background: rgba(184, 146, 74, 0.07); }
+/* Suppress Pico alternating stripes inside the ledger */
+table tbody tr:nth-child(even) { background: transparent; }
+table tbody tr:nth-child(even):hover { background: rgba(184, 146, 74, 0.07); }
+
+/* ── Heritage: editorial dl metadata grid ─────────────────────── */
+dl {
+  display: grid;
+  grid-template-columns: minmax(8rem, max-content) 1fr;
+  column-gap: 1.5rem;
+  margin: 1rem 0;
+  align-items: start;
+}
+dt, dd {
+  border-top: 1px solid var(--cmp-color-rule-soft);
+  padding: 0.45rem 0;
+}
+dt:first-of-type, dd:first-of-type { border-top: none; }
+dt {
+  font-family: var(--cmp-font-display);
+  font-size: 0.78rem;
+  font-weight: 600;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--cmp-color-muted);
+}
+dd {
+  margin: 0;
+}
+dd > form { margin: 0; }
+
+/* ── Heritage: hgroup, breadcrumb, footer ─────────────────────── */
+hgroup {
+  padding-bottom: 0.75rem;
+  margin-bottom: 1.25rem;
+  border-bottom: 2px solid var(--cmp-color-rule);
+}
+hgroup > :last-child { margin-bottom: 0; }
+
+nav[aria-label="breadcrumb"] ul {
+  font-family: var(--cmp-font-display);
+  font-size: 0.78rem;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--cmp-color-muted);
+  margin-bottom: 0.75rem;
+}
+nav[aria-label="breadcrumb"] li + li::before {
+  content: "·";
+  color: var(--cmp-color-rule);
+  padding: 0 0.4rem;
+}
+nav[aria-label="breadcrumb"] a {
+  color: var(--cmp-color-muted);
+  text-decoration: none;
+}
+nav[aria-label="breadcrumb"] a:hover { text-decoration: underline; }
+
+body > footer {
+  margin-top: 3rem;
+  border-top: 2px solid var(--cmp-color-rule);
+  background: var(--cmp-color-surface-sunken);
+}
+body > footer .container {
+  padding-block: 1.25rem;
+  text-align: center;
+}
+body > footer small {
+  font-family: var(--cmp-font-display);
+  font-size: 0.82rem;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--cmp-color-muted);
+}
+
+/* ── Heritage: buttons & form inputs ─────────────────────────── */
+button, [role="button"], input[type="submit"] {
+  font-weight: 600;
+  letter-spacing: 0.01em;
+}
+input:not([type="checkbox"]):not([type="radio"]):not([type="range"]),
+select, textarea {
+  background: var(--cmp-color-surface-raised);
+}
+input:not([type="checkbox"]):not([type="radio"]):not([type="range"]):focus,
+select:focus, textarea:focus {
+  border-color: var(--cmp-color-rule) !important;
+  box-shadow: 0 0 0 3px rgba(184, 146, 74, 0.22) !important;
+}
+
+/* ── Heritage: article / card surfaces ───────────────────────── */
+article {
+  background: var(--cmp-color-surface-raised);
+  border: 1px solid var(--cmp-color-rule-soft);
+  border-radius: var(--cmp-radius-md);
+  box-shadow: var(--cmp-shadow-sm);
+}
+
+/* Work list cards — heritage surface + brass border on hover */
+.work-card-link {
+  background: var(--cmp-color-surface-raised);
+  border-color: var(--cmp-color-rule-soft);
+}
+.work-card-link:hover {
+  border-color: var(--cmp-color-rule);
+  box-shadow: var(--cmp-shadow-md);
 }
