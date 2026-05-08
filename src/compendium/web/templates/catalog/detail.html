@@ -38,40 +38,54 @@
 </p>
 {% endif %}
 
-<dl>
-  {% if work.creators %}
-  <dt>Creator(s)</dt>
-  <dd>{% for wc in work.creators %}{{ wc.creator.display_name }} ({{ wc.role }}){% if not loop.last %}, {% endif %}{% endfor %}</dd>
-  {% endif %}
-  <dt>Type</dt><dd>{{ media_pill(work.media_type) }}</dd>
-  {% if work.publisher %}<dt>Publisher</dt><dd>{{ work.publisher }}</dd>{% endif %}
-  {% if work.publication_year %}<dt>Year</dt><dd>{{ work.publication_year }}</dd>{% endif %}
-  {% if work.isbn %}<dt>ISBN</dt><dd>{{ work.isbn }}</dd>{% endif %}
-  {% if work.upc %}<dt>UPC</dt><dd>{{ work.upc }}</dd>{% endif %}
-  {% if work.classification_code %}<dt>Classification</dt><dd>{{ work.classification_scheme | upper }}: {{ work.classification_code }}</dd>{% endif %}
-  {% if work.description %}<dt>Description</dt><dd>{{ work.description }}</dd>{% endif %}
-  {% if work.extra_metadata and work.extra_metadata.get('format') %}<dt>Format</dt><dd>{{ work.extra_metadata['format'] }}</dd>{% endif %}
-  {% if work.extra_metadata and work.extra_metadata.get('runtime_minutes') %}<dt>Runtime</dt><dd>{{ work.extra_metadata['runtime_minutes'] }} min</dd>{% endif %}
-  {% if work.extra_metadata and work.extra_metadata.get('genres') %}<dt>Genres</dt><dd>{{ work.extra_metadata['genres'] | join(", ") }}</dd>{% endif %}
-  {% if work.extra_metadata and work.extra_metadata.get('tagline') %}<dt>Tagline</dt><dd><em>{{ work.extra_metadata['tagline'] }}</em></dd>{% endif %}
-  {% if work.extra_metadata and work.extra_metadata.get('cast') %}<dt>Cast</dt><dd>{{ work.extra_metadata['cast'] | join(", ") }}</dd>{% endif %}
-  {% if work.extra_metadata and work.extra_metadata.get('tracks') %}
-  <dt>Tracklist</dt>
-  <dd>
-    <ol style="margin:0;padding-left:1.5rem">
+<hr class="work-detail-rule">
+
+<section class="work-detail-body">
+  <div class="work-detail-narrative">
+    {% if work.description %}
+    <p class="work-detail-description">{{ work.description }}</p>
+    {% endif %}
+    {% if work.extra_metadata and work.extra_metadata.get('tagline') %}
+    <h3>Tagline</h3>
+    <p><em>{{ work.extra_metadata['tagline'] }}</em></p>
+    {% endif %}
+    {% if work.extra_metadata and work.extra_metadata.get('cast') %}
+    <h3>Cast</h3>
+    <p>{{ work.extra_metadata['cast'] | join(", ") }}</p>
+    {% endif %}
+    {% if work.extra_metadata and work.extra_metadata.get('tracks') %}
+    <h3>Tracklist</h3>
+    <ol class="tracklist">
       {% for track in work.extra_metadata['tracks'] %}
       <li>
         {{ track['title'] }}
         {% if track['length_ms'] %}
         {% set s = track['length_ms'] // 1000 %}
-        <small style="color:var(--pico-muted-color)">{{ s // 60 }}:{{ "0" if s % 60 < 10 else "" }}{{ s % 60 }}</small>
+        <small class="track-duration">{{ s // 60 }}:{{ "0" if s % 60 < 10 else "" }}{{ s % 60 }}</small>
         {% endif %}
       </li>
       {% endfor %}
     </ol>
-  </dd>
-  {% endif %}
-</dl>
+    {% endif %}
+  </div>
+  <div class="work-detail-meta">
+    <dl>
+      {% if work.creators %}
+      <dt>Creator(s)</dt>
+      <dd>{% for wc in work.creators %}{{ wc.creator.display_name }} ({{ wc.role }}){% if not loop.last %}, {% endif %}{% endfor %}</dd>
+      {% endif %}
+      <dt>Type</dt><dd>{{ media_pill(work.media_type) }}</dd>
+      {% if work.publisher %}<dt>Publisher</dt><dd>{{ work.publisher }}</dd>{% endif %}
+      {% if work.publication_year %}<dt>Year</dt><dd>{{ work.publication_year }}</dd>{% endif %}
+      {% if work.isbn %}<dt>ISBN</dt><dd>{{ work.isbn }}</dd>{% endif %}
+      {% if work.upc %}<dt>UPC</dt><dd>{{ work.upc }}</dd>{% endif %}
+      {% if work.classification_code %}<dt>Classification</dt><dd>{{ work.classification_scheme | upper }}: {{ work.classification_code }}</dd>{% endif %}
+      {% if work.extra_metadata and work.extra_metadata.get('format') %}<dt>Format</dt><dd>{{ work.extra_metadata['format'] }}</dd>{% endif %}
+      {% if work.extra_metadata and work.extra_metadata.get('runtime_minutes') %}<dt>Runtime</dt><dd>{{ work.extra_metadata['runtime_minutes'] }} min</dd>{% endif %}
+      {% if work.extra_metadata and work.extra_metadata.get('genres') %}<dt>Genres</dt><dd>{{ work.extra_metadata['genres'] | join(", ") }}</dd>{% endif %}
+    </dl>
+  </div>
+</section>
 
 <div class="copies-card">
   <div class="copies-card-head">

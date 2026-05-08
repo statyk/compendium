@@ -1,5 +1,13 @@
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24">
-  <rect x="3" y="5" width="18" height="14" rx="1.5" fill="#a56a3e" stroke="#5e3a1d" stroke-width="0.7"/>
-  <rect x="8.5" y="8" width="7" height="2" rx="0.5" fill="#f4e5c3"/>
-  <circle cx="12" cy="15" r="1.4" fill="#d4a24a"/>
+  <style>
+    @media (prefers-color-scheme: dark) {
+      .g-body  { fill: #bf7e4e; }
+      .g-stroke { stroke: #7a4a28; }
+      .g-label { fill: #f8efd8; }
+      .g-pull  { fill: #e8bc60; }
+    }
+  </style>
+  <rect class="g-body g-stroke" x="3" y="5" width="18" height="14" rx="1.5" fill="#a56a3e" stroke="#5e3a1d" stroke-width="0.7"/>
+  <rect class="g-label" x="8.5" y="8" width="7" height="2" rx="0.5" fill="#f4e5c3"/>
+  <circle class="g-pull" cx="12" cy="15" r="1.4" fill="#d4a24a"/>
 </svg>

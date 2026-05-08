@@ -145,16 +145,18 @@ def test_login_page_renders(web_client):
 
 
 def test_base_template_applies_default_theme(web_client):
-    resp = web_client.get("/ui/login")
+    # Use catalog (full base layout with nav) — login is now a cover page with no nav band
+    resp = web_client.get("/ui/catalog")
     assert b'data-theme="light"' in resp.content
     assert b"compendium_theme" in resp.content  # localStorage override script
     assert b'data-set-theme="auto"' in resp.content  # theme picker present
 
 
 def test_base_template_favicon_and_brand_logo(web_client):
-    resp = web_client.get("/ui/login")
+    # Use catalog (full base layout with nav) — login is now a cover page with no nav band
+    resp = web_client.get("/ui/catalog")
     assert b'href="/ui/static/favicon.svg"' in resp.content
-    assert b'class="brand-logo"' in resp.content
+    assert b'brand-logo' in resp.content  # brand glyph carries brand-logo class
 
 
 def test_base_template_auto_theme_omits_attribute(web_client, monkeypatch):

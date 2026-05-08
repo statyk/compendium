@@ -1,6 +1,6 @@
-{% macro brand_glyph(size='4rem', extra_class='', label=None) %}
+{% macro brand_glyph(size=None, extra_class='', label=None) %}
 <svg class="brand-glyph{{ ' ' + extra_class if extra_class }}" viewBox="0 0 24 24"
-     style="width:{{ size }};height:{{ size }}"
+     {% if size %}style="width:{{ size }};height:{{ size }}"{% endif %}
      {% if label %}role="img" aria-label="{{ label }}"{% else %}aria-hidden="true"{% endif %}>
   <rect x="3" y="5" width="18" height="14" rx="1.5"
         fill="var(--cmp-glyph-body)" stroke="var(--cmp-glyph-stroke)" stroke-width="0.7"/>

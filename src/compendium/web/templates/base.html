@@ -1,3 +1,4 @@
+{% from "_partials/brand_glyph.html" import brand_glyph %}
 <!doctype html>
 {% set _theme = default_theme() %}
 <html lang="en"{% if _theme != "auto" %} data-theme="{{ _theme }}"{% endif %}>
@@ -19,17 +20,13 @@
   <script src="/ui/static/htmx.min.js" nonce="{{ csp_nonce(request) }}" defer></script>
 </head>
 <body>
-  <header>
+  {% block header %}<header>
   <div class="container">
     <nav>
       <ul>
         <li>
           <a class="brand" href="/ui/catalog">
-            <svg class="brand-logo" viewBox="0 0 24 24" aria-hidden="true">
-              <rect x="3" y="5" width="18" height="14" rx="1.5" fill="var(--cmp-glyph-body)" stroke="var(--cmp-glyph-stroke)" stroke-width="0.7"/>
-              <rect x="8.5" y="8" width="7" height="2" rx="0.5" fill="var(--cmp-glyph-label)"/>
-              <circle cx="12" cy="15" r="1.4" fill="var(--cmp-glyph-pull)"/>
-            </svg>
+            {{ brand_glyph(extra_class='brand-logo') }}
             {{ library_name() }}
           </a>
         </li>
@@ -163,17 +160,17 @@
       </details>
     </nav>
   </div>
-  </header>
+  </header>{% endblock %}
 
-  <main class="container">
+  {% block main %}<main class="container">
     {% block content %}{% endblock %}
-  </main>
+  </main>{% endblock %}
 
-  <footer>
+  {% block footer %}<footer>
   <div class="container">
     <small>Compendium &middot; A library catalog system</small>
   </div>
-  </footer>
+  </footer>{% endblock %}
   {% if user %}
   <script nonce="{{ csp_nonce(request) }}">var _SC_PAGES = {{ shortcut_pages_for_user(user) | tojson }};</script>
   <dialog id="shortcuts-dialog">
