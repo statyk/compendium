@@ -602,6 +602,110 @@ class ImportService:
 
         return self._finalize(report, options)
 
+    def import_goodreads(
+        self,
+        stream: IO[str],
+        options: ImportOptions,
+        filename: str | None = None,
+    ) -> ImportReport:
+        """Import a GoodReads library export CSV.
+
+        Translates GoodReads' 23-column CSV schema into the Compendium CSV row
+        contract and delegates per copy to ``_process_csv_row``. GoodReads CSV
+        quirks handled here:
+        - ISBNs wrapped in Excel =\"...\" notation.
+        - ``Owned Copies = 0`` treated as 1 (GoodReads is a reading log, not
+          an inventory system; users almost never populate this field).
+        - All additional authors mapped to CONTRIBUTOR (no role data available).
+        - Language and classification are absent; leave empty for ``--enrich``.
+        """
+        reader = csv.DictReader(stream)
+        if not reader.fieldnames:
+            raise ValidationError("GoodReads CSV is empty or missing header row.")
+        header = {h.strip() for h in reader.fieldnames if h}
+        if "Title" not in header:
+            raise ValidationError(
+                "GoodReads CSV header is missing required column 'Title'. "
+                "Got columns: " + ", ".join(sorted(header))
+            )
+
+        report = ImportReport(
+            source="goodreads", filename=filename, dry_run=options.dry_run
+        )
+        seen_barcodes: set[str] = set()
+        seen_accessions: set[str] = set()
+        copies_options = replace(
+            options, mode=ImportMode.APPEND, enrich_from_external=False
+        )
+
+        for row_num, raw in enumerate(reader, start=2):
+            report.total_rows += 1
+            try:
+                compendium_row, copies = _gr_to_compendium(raw)
+            except (ValidationError, BusinessRuleError) as exc:
+                report.errors.append(
+                    ImportRowError(
+                        row_number=row_num,
+                        identifier=_strip(raw.get("Title")) or "(row)",
+                        message=str(exc),
+                    )
+                )
+                continue
+
+            if copies > 1 and options.mode != ImportMode.APPEND:
+                report.warnings.append(
+                    f"Row {row_num}: forced append mode for copies 2..{copies} "
+                    f"because Owned Copies={copies} > 1"
+                )
+            if copies > 1 and options.enrich_from_external:
+                report.warnings.append(
+                    f"Row {row_num}: enriched copy 1 only; copies 2..{copies} "
+                    "reuse that result without a new external lookup"
+                )
+
+            for copy_idx in range(copies):
+                if copy_idx == 0:
+                    row_for_copy = compendium_row
+                    opts_for_copy = options
+                else:
+                    row_for_copy = dict(compendium_row)
+                    row_for_copy["barcode"] = ""
+                    opts_for_copy = copies_options
+                try:
+                    _, _, outcome, enriched = self._process_csv_row(
+                        row_for_copy, opts_for_copy, seen_barcodes, seen_accessions
+                    )
+                    if enriched:
+                        report.enriched_rows += 1
+                    if outcome == "created_work":
+                        report.created_works += 1
+                    elif outcome == "added_copy":
+                        report.added_copies += 1
+                    elif outcome == "skipped_duplicate":
+                        report.skipped_duplicates += 1
+                    elif outcome == "errored_on_conflict":
+                        report.errors.append(
+                            ImportRowError(
+                                row_number=row_num,
+                                identifier=compendium_row.get("title") or "(row)",
+                                message=(
+                                    "Duplicate ISBN/UPC rejected "
+                                    "(mode=error-on-conflict)"
+                                ),
+                            )
+                        )
+                except (ValidationError, BusinessRuleError) as exc:
+                    report.errors.append(
+                        ImportRowError(
+                            row_number=row_num,
+                            identifier=compendium_row.get("title") or "(row)",
+                            message=str(exc),
+                        )
+                    )
+                    break
+
+        return self._finalize(report, options)
+
     def import_marc(
         self,
         stream: IO[bytes],
@@ -1130,6 +1234,10 @@ _LT_PUBLICATION_RE = re.compile(r"^\s*(.+?)\s*\((\d{4})\)")
 # brackets "[]" are emitted for records without an ISBN — those decode to "".
 _LT_ISBN_BRACKET_RE = re.compile(r"^\[(.*)\]$")
 
+# GoodReads wraps ISBNs in Excel-style ="..." to prevent numeric coercion,
+# e.g. ="0140067477". Empty appears as ="". Strip this before use.
+_GR_ISBN_EXCEL_RE = re.compile(r'^="(.*)"$')
+
 # Map LibraryThing creator-role tokens (case-insensitive) to CreatorRole values.
 # Tokens not in this table fall back to CONTRIBUTOR.
 _LT_ROLE_TO_CREATOR_ROLE: dict[str, str] = {
@@ -1307,6 +1415,130 @@ def _lt_to_compendium(row: dict) -> tuple[dict, int]:
             "classification_code": classification_code or "",
             "call_number": _strip(row.get("Other Call Number")) or "",
             "barcode": _strip(row.get("Barcode")) or "",
+            "_external_ids": external_ids,
+            "_extra_metadata": extra_metadata,
+        },
+        copies,
+    )
+
+
+def _gr_unwrap_isbn(raw: str | None) -> str | None:
+    """Strip GoodReads' Excel-style =\"...\" ISBN wrapper and return the value.
+
+    Returns None for empty or absent values.
+    """
+    if not raw:
+        return None
+    m = _GR_ISBN_EXCEL_RE.match(raw.strip())
+    value = m.group(1).strip() if m else raw.strip()
+    return value or None
+
+
+def _gr_to_compendium(row: dict) -> tuple[dict, int]:
+    """Translate one GoodReads CSV row into a Compendium CSV row dict.
+
+    Returns ``(row, copies)`` using the same contract as ``_lt_to_compendium``:
+    lowercase keys plus the synthetic ``_creators``, ``_external_ids``, and
+    ``_extra_metadata`` keys consumed by ``_process_csv_row``.
+
+    GoodReads is a reading log, not a library system, so several fields have
+    weaker semantics than their LibraryThing equivalents:
+    - No role info on additional authors → all mapped to CONTRIBUTOR.
+    - ``Owned Copies = 0`` means "not tracked", not "zero owned" → treated as 1.
+    - Language and classification are absent → left empty (enrich can fill them).
+
+    User-attached fields with no Compendium home are stashed in
+    ``extra_metadata["goodreads"]`` so a future tags/reading-history slice can
+    promote them without re-importing.
+    """
+    title = normalize_title(_strip(row.get("Title")) or "")
+    if not title:
+        raise ValidationError("Row is missing required column 'Title'")
+
+    creators: list[tuple[str, str]] = []
+    primary = _strip(row.get("Author"))
+    if primary:
+        creators.append((primary, "author"))
+    additional_raw = _strip(row.get("Additional Authors")) or ""
+    for name in additional_raw.split(","):
+        name = name.strip()
+        if name:
+            creators.append((name, "contributor"))
+
+    # GoodReads provides both ISBN-10 and ISBN-13; prefer ISBN-13.
+    isbn13 = _gr_unwrap_isbn(_strip(row.get("ISBN13")))
+    isbn10 = _gr_unwrap_isbn(_strip(row.get("ISBN")))
+    isbn = isbn13 or isbn10
+
+    publisher = _strip(row.get("Publisher"))
+
+    year_raw = _strip(row.get("Year Published"))
+    publication_year: str | None = None
+    if year_raw and year_raw.isdigit() and len(year_raw) == 4:
+        publication_year = year_raw
+
+    # GoodReads is books-only; always map to book media type.
+    media_type = "book"
+
+    # Owned Copies: 0 / empty = "not tracked" → create 1 Item.
+    owned_raw = _strip(row.get("Owned Copies"))
+    copies = 1
+    if owned_raw:
+        try:
+            n = int(owned_raw)
+            if n > 0:
+                copies = n
+        except ValueError:
+            copies = 1
+
+    book_id = _strip(row.get("Book Id"))
+    external_ids: dict = {}
+    if book_id:
+        external_ids["goodreads"] = {"book_id": book_id}
+
+    gr_extra: dict = {}
+    binding = _strip(row.get("Binding"))
+    if binding:
+        gr_extra["binding"] = binding
+    for src_key, dest_key in [
+        ("My Rating", "rating"),
+        ("My Review", "review"),
+        ("Spoiler", "spoiler"),
+        ("Private Notes", "private_notes"),
+        ("Read Count", "read_count"),
+        ("Date Read", "date_read"),
+        ("Date Added", "date_added"),
+        ("Exclusive Shelf", "exclusive_shelf"),
+        ("Number of Pages", "page_count"),
+        ("Original Publication Year", "original_publication_year"),
+    ]:
+        raw = _strip(row.get(src_key))
+        if raw:
+            gr_extra[dest_key] = raw
+    bookshelves_raw = _strip(row.get("Bookshelves"))
+    if bookshelves_raw:
+        shelves = [s.strip() for s in bookshelves_raw.split(",") if s.strip()]
+        if shelves:
+            gr_extra["bookshelves"] = shelves
+
+    extra_metadata: dict = {}
+    if gr_extra:
+        extra_metadata["goodreads"] = gr_extra
+
+    return (
+        {
+            "title": title,
+            "_creators": creators,
+            "authors": "",
+            "publisher": publisher or "",
+            "publication_year": publication_year or "",
+            "media_type": media_type,
+            "language": "",
+            "isbn": isbn or "",
+            "classification_scheme": "",
+            "classification_code": "",
+            "call_number": "",
+            "barcode": "",
             "_external_ids": external_ids,
             "_extra_metadata": extra_metadata,
         },

@@ -99,6 +99,111 @@ def test_cli_import_marc(session, tmp_path):
     assert w is not None and w.title == "Dune"
 
 
+import csv as _csv_mod
+
+
+def _gr_row_line(book_id, title, author, author_lf, isbn10, isbn13, rating,
+                 publisher, binding, pages, year_pub, year_orig, owned):
+    buf = io.StringIO()
+    w = _csv_mod.writer(buf)
+    w.writerow([
+        book_id, title, author, author_lf, "",
+        f'="{isbn10}"', f'="{isbn13}"', rating, publisher, binding,
+        pages, year_pub, year_orig, "", "2026/05/08", "", "", "read",
+        "", "", "", "1", owned,
+    ])
+    return buf.getvalue()
+
+
+_GR_CSV_HEADER = (
+    "Book Id,Title,Author,Author l-f,Additional Authors,ISBN,ISBN13,"
+    "My Rating,Publisher,Binding,Number of Pages,Year Published,"
+    "Original Publication Year,Date Read,Date Added,Bookshelves,"
+    "Bookshelves with positions,Exclusive Shelf,My Review,Spoiler,"
+    "Private Notes,Read Count,Owned Copies\n"
+)
+
+_GR_CSV = (
+    _GR_CSV_HEADER
+    + _gr_row_line("1", "The Tao of Pooh", "Benjamin Hoff", "Hoff, Benjamin",
+                   "0140067477", "9780140067477", "4", "Penguin Books",
+                   "Paperback", "158", "1983", "1982", "1")
+    + _gr_row_line("2", "The Hobbit", "J.R.R. Tolkien", "Tolkien, J.R.R.",
+                   "0345339681", "9780345339683", "5", "Del Rey",
+                   "Paperback", "310", "1982", "1937", "1")
+)
+
+
+def _gr_csv(tmp_path, name="books.csv", content=_GR_CSV):
+    p = tmp_path / name
+    p.write_text(content, encoding="utf-8")
+    return p
+
+
+def test_cli_import_goodreads_default(session, tmp_path):
+    f = _gr_csv(tmp_path)
+    result = _run(session, import_app, ["goodreads", str(f)])
+    assert result.exit_code == 0, result.output
+    works = SqlWorkRepository(session).list()
+    titles = {w.title for w in works}
+    assert "The Tao of Pooh" in titles
+    assert "The Hobbit" in titles
+
+
+def test_cli_import_goodreads_dry_run(session, tmp_path):
+    f = _gr_csv(tmp_path)
+    result = _run(session, import_app, ["goodreads", str(f), "--dry-run"])
+    assert result.exit_code == 0
+    assert "dry-run" in result.output.lower()
+    assert SqlWorkRepository(session).list() == []
+
+
+def test_cli_import_goodreads_isbn13_dedup(session, tmp_path):
+    dup_row = _gr_row_line("3", "The Tao of Pooh", "Benjamin Hoff",
+                           "Hoff, Benjamin", "0140067477", "9780140067488",
+                           "0", "Penguin Books", "Paperback", "", "1983", "", "1")
+    content = _GR_CSV_HEADER + dup_row + dup_row
+    f = _gr_csv(tmp_path, "dedup.csv", content)
+    result = _run(session, import_app, ["goodreads", str(f), "--mode", "skip-duplicates"])
+    assert result.exit_code == 0, result.output
+    assert "skipped" in result.output.lower()
+
+
+def test_cli_import_goodreads_owned_copies_creates_multiple_items(session, tmp_path):
+    content = _GR_CSV_HEADER + _gr_row_line(
+        "4", "Foundation", "Isaac Asimov", "Asimov, Isaac",
+        "0553293354", "9780553293357", "5", "Gnome Press",
+        "Hardcover", "244", "1951", "1951", "3",
+    )
+    f = _gr_csv(tmp_path, "copies.csv", content)
+    result = _run(session, import_app, ["goodreads", str(f)])
+    assert result.exit_code == 0, result.output
+    work = SqlWorkRepository(session).get_by_isbn("9780553293357")
+    assert work is not None
+    assert "added copy" in result.output.lower() or "created" in result.output.lower()
+
+
+def test_cli_import_goodreads_lenient_decode_warns_on_stray_byte(session, tmp_path):
+    raw = _GR_CSV.encode("utf-8").replace(b"Pooh", b"P\xe8oh")
+    f = tmp_path / "messy.csv"
+    f.write_bytes(raw)
+    result = _run(session, import_app, ["goodreads", str(f)])
+    assert result.exit_code == 0, result.output
+    assert "byte replacement" in result.output.lower()
+    hobbit = SqlWorkRepository(session).get_by_isbn("9780345339683")
+    assert hobbit is not None
+
+
+def test_cli_import_goodreads_strict_encoding_rejects_stray_byte(session, tmp_path):
+    raw = _GR_CSV.encode("utf-8").replace(b"Pooh", b"P\xe8oh")
+    f = tmp_path / "messy.csv"
+    f.write_bytes(raw)
+    result = _run(session, import_app, ["goodreads", str(f), "--strict-encoding"])
+    assert result.exit_code != 0
+    output = (result.stderr or "") + (result.output or "")
+    assert "not valid utf-8" in output.lower()
+
+
 _LT_TSV = (
     "Title\tPrimary Author\tPublication\tDate\tMedia\tLanguages\tISBN\tCopies\tTags\n"
     "Dune\tHerbert, Frank\tAce (1965), Paperback\t1965\tPaperback\tEnglish\t[9780441013593]\t1\tSF\n"

@@ -143,7 +143,7 @@ If a partial-word query returns nothing from the default box, switch to a field-
 
 **Catalog ordering** uses `Work.sort_title` (indexed), which strips leading English articles (A, An, The) from the title. "The Great Gatsby" sorts under G, "An Odd Story" under O. The displayed title is unchanged; only the sort key is different. `sort_title` is set automatically on creation and title updates.
 
-**Import normalization:** LibraryThing TSV (and any source that calls `CatalogService`) normalizes two conventions on the way in:
+**Import normalization:** LibraryThing TSV, GoodReads CSV (and any source that calls `CatalogService`) normalizes two conventions on the way in:
 - *Trailing-article titles* — `"Information, The"` is stored as `"The Information"` with `sort_title = "Information"`.
 - *Last, First author names* — `"Brooks, David"` is stored as `"David Brooks"` (conservative heuristic: exactly one comma, no recognized name suffix like Jr./Sr./II). This ensures deduplification works across sources that use different conventions for the same author.
 
@@ -252,17 +252,17 @@ Optional. If the key is not configured the behavior is unchanged (no cover store
 
 ## Bulk import & export
 
-`services/import_export.py` provides bulk ingest and extract for CSV, MARC21 binary (`.mrc`), MARCXML, and LibraryThing TSV exports. Surfaced on all three interfaces:
+`services/import_export.py` provides bulk ingest and extract for CSV, MARC21 binary (`.mrc`), MARCXML, LibraryThing TSV, and GoodReads CSV exports. Surfaced on all three interfaces:
 
-- CLI: `compendium import {csv|librarything|marc} <file>` and `compendium export {csv|marc} <out>` (with `--xml` for MARCXML on export).
-- API: `POST /import/{csv,librarything,marc}` (multipart) and `GET /export/{csv,marc}?xml=…` (streaming). Import requires the `catalog.import` permission; export is gated on `item.view`.
-- Web: `/ui/admin/import` (upload with dry-run preview + apply; format dropdown selects CSV / LibraryThing TSV / MARC21 / MARCXML) and `/ui/admin/export` (filter form → download).
+- CLI: `compendium import {csv|goodreads|librarything|marc} <file>` and `compendium export {csv|marc} <out>` (with `--xml` for MARCXML on export).
+- API: `POST /import/{csv,goodreads,librarything,marc}` (multipart) and `GET /export/{csv,marc}?xml=…` (streaming). Import requires the `catalog.import` permission; export is gated on `item.view`.
+- Web: `/ui/admin/import` (upload with dry-run preview + apply; format dropdown selects CSV / GoodReads CSV / LibraryThing TSV / MARC21 / MARCXML) and `/ui/admin/export` (filter form → download).
 
 **Semantics:**
 
 - **Dedup** by ISBN/UPC only; no fuzzy title matching. Conflict modes: `append` (add a copy to the existing work — default), `skip-duplicates`, `error-on-conflict`.
 - **Barcode generation**: by default, any barcode/accession_number supplied in a CSV row is discarded and a fresh conformant 10/14-digit code is minted via `format_item_barcode()`. Pass `--preserve-barcodes` (CLI/API) or check the web checkbox to instead validate and keep the supplied codes (requires valid Compendium 10/14-digit format with Luhn check).
-- **Encoding** (CSV + LibraryThing TSV): UTF-8 is preferred, but stray non-UTF-8 bytes are tolerated by default — invalid bytes are replaced with U+FFFD and a warning is added to the report. Pass `--strict-encoding` (CLI), `strict_encoding=true` (API), or check "strict encoding" (Web) to fail the whole import on any bad byte. MARC has its own encoding semantics in the leader and is unaffected. Real-world LibraryThing exports often contain a handful of stray Latin-1/cp1252 bytes — the lenient default lets them in.
+- **Encoding** (CSV + GoodReads CSV + LibraryThing TSV): UTF-8 is preferred, but stray non-UTF-8 bytes are tolerated by default — invalid bytes are replaced with U+FFFD and a warning is added to the report. Pass `--strict-encoding` (CLI), `strict_encoding=true` (API), or check "strict encoding" (Web) to fail the whole import on any bad byte. MARC has its own encoding semantics in the leader and is unaffected. Real-world LibraryThing exports often contain a handful of stray Latin-1/cp1252 bytes — the lenient default lets them in.
 - **Transaction ownership**: the importer flushes but never commits — the caller's session scope (or test fixture) controls commit/rollback. Dry-run rolls back. Per-row errors are collected into an `ImportReport`; barcode/accession uniqueness is pre-validated at the application layer to avoid IntegrityError rollbacks mid-batch.
 - **Audit**: one summary `BULK_IMPORT` AuditLog entry per run (not per row), carrying counts and filename.
 
@@ -308,6 +308,23 @@ LibraryThing exports a 53-column tab-separated file. The importer translates eac
 - `Copies > 1` mints additional Items via the same Work. Copies 2..N always run in `append` mode and skip enrichment regardless of the user-selected mode (warnings surface this).
 
 Fields not listed above (LT's `Sort Character`, `Acquired`, `Date Started`, `Date Read`, `Source`, `Entry Date`, `From Where`, lending history, etc.) are dropped.
+
+### GoodReads CSV mapping
+
+GoodReads exports a 23-column CSV. The importer runs through the same `_process_csv_row` pipeline as LibraryThing:
+
+- `Title` → `title` (via `normalize_title`).
+- `Author` → primary creator with role `author`. `Additional Authors` (comma-separated) → each with role `contributor` (GoodReads carries no role data for additional authors).
+- `ISBN13` is preferred over `ISBN` when both are present. Both columns use GoodReads' Excel-style `="..."` wrapper (a common anti-coercion trick for spreadsheets) which is stripped on import.
+- `Publisher` → `publisher`.
+- `Year Published` → `publication_year`. Must be a 4-digit integer; otherwise left empty.
+- `Binding` → always `book` media type (GoodReads is a books-only service); the raw binding value (Paperback / Hardcover / Kindle Edition / etc.) is preserved in `extra_metadata["goodreads"]["binding"]`.
+- Language and classification are absent from GoodReads exports; both fields are left empty. Pass `--enrich` to fill them from Open Library after import.
+- `Owned Copies = 0` (or empty) → 1 copy. GoodReads is a reading log, not an inventory; users rarely populate this field. A value > 0 is honored and mints that many Items (same append-mode and no-re-enrich behavior as LT's `Copies` column).
+- `Book Id` round-trips through `Work.external_ids["goodreads"]["book_id"]`.
+- `My Rating`, `My Review`, `Spoiler`, `Private Notes`, `Read Count`, `Date Read`, `Date Added`, `Bookshelves`, `Exclusive Shelf`, `Original Publication Year`, `Number of Pages`, and the raw `Binding` value are preserved in `Work.extra_metadata["goodreads"]` for a future reading-history or tags slice.
+
+`Author l-f` (last-first format) and `Bookshelves with positions` (redundant with `Bookshelves`) are dropped.
 
 ### Bulk metadata enrichment
 

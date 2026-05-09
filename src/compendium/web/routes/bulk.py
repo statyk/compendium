@@ -156,7 +156,7 @@ async def import_submit(
     importer = _make_importer(session, user)
     replaced = 0
     try:
-        if format in ("csv", "librarything"):
+        if format in ("csv", "librarything", "goodreads"):
             try:
                 text, replaced = decode_text_bytes(data, strict=strict_encoding_bool)
             except UnicodeDecodeError as exc:
@@ -168,8 +168,12 @@ async def import_submit(
             stream = io.StringIO(text)
             if format == "csv":
                 report = importer.import_csv(stream, options, filename=file.filename)
-            else:
+            elif format == "librarything":
                 report = importer.import_librarything(
+                    stream, options, filename=file.filename
+                )
+            else:
+                report = importer.import_goodreads(
                     stream, options, filename=file.filename
                 )
         elif format == "marcxml" or (
@@ -186,7 +190,7 @@ async def import_submit(
             )
         else:
             ctx["error"] = (
-                f"Unknown format '{format}'. Valid: csv, librarything, marc, marcxml"
+                f"Unknown format '{format}'. Valid: csv, goodreads, librarything, marc, marcxml"
             )
             return _render("admin/import.html", request, ctx, status_code=400)
     except ValidationError as exc:

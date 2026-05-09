@@ -248,6 +248,81 @@ def test_api_import_librarything_lenient_imports_with_warning(client, db_session
     assert any("byte replacement" in w.lower() for w in body["warnings"])
 
 
+def _minimal_gr_csv_bytes(isbn13="9780140067477", isbn10="0140067477") -> bytes:
+    # GoodReads wraps ISBNs in Excel-style ="..." to prevent numeric coercion.
+    # In the raw CSV the field is CSV-quoted so the inner " chars are doubled:
+    # "=""0140067477""" (outer "" are CSV quoting; inner "" are escaped quotes).
+    buf = io.StringIO()
+    w = __import__("csv").writer(buf)
+    w.writerow([
+        "Book Id", "Title", "Author", "Author l-f", "Additional Authors",
+        "ISBN", "ISBN13", "My Rating", "Publisher", "Binding",
+        "Number of Pages", "Year Published", "Original Publication Year",
+        "Date Read", "Date Added", "Bookshelves", "Bookshelves with positions",
+        "Exclusive Shelf", "My Review", "Spoiler", "Private Notes",
+        "Read Count", "Owned Copies",
+    ])
+    w.writerow([
+        "242337159", "The Tao of Pooh", "Benjamin Hoff", "Hoff, Benjamin", "",
+        f'="{isbn10}"', f'="{isbn13}"', "4", "Penguin Books", "Paperback",
+        "158", "1983", "1982", "", "2026/05/08", "", "", "read", "", "", "", "1", "1",
+    ])
+    return buf.getvalue().encode("utf-8")
+
+
+def test_api_import_goodreads_happy_path(client, db_session):
+    _, token = _make_user(db_session, "Librarian", "api_imp_gr")
+    db_session.commit()
+
+    resp = client.post(
+        "/import/goodreads",
+        files={
+            "file": (
+                "goodreads.csv",
+                _minimal_gr_csv_bytes("9780140067477"),
+                "text/csv",
+            )
+        },
+        headers=_bearer(token),
+    )
+    assert resp.status_code == 200, resp.text
+    body = resp.json()
+    assert body["source"] == "goodreads"
+    assert body["errors"] == []
+    assert body["warnings"] == []
+    assert body["created_works"] + body["added_copies"] >= 1
+
+
+def test_api_import_goodreads_strict_encoding_rejects_stray_byte(client, db_session):
+    _, token = _make_user(db_session, "Librarian", "api_imp_gr_strict")
+    db_session.commit()
+
+    raw = _minimal_gr_csv_bytes("9780140067490").replace(b"Pooh", b"P\xe8oh")
+    resp = client.post(
+        "/import/goodreads?strict_encoding=true",
+        files={"file": ("messy.csv", raw, "text/csv")},
+        headers=_bearer(token),
+    )
+    assert resp.status_code == 422
+    assert "utf-8" in resp.json()["detail"].lower()
+
+
+def test_api_import_goodreads_lenient_imports_with_warning(client, db_session):
+    _, token = _make_user(db_session, "Librarian", "api_imp_gr_lenient")
+    db_session.commit()
+
+    raw = _minimal_gr_csv_bytes("9780140067491").replace(b"Pooh", b"P\xe8oh")
+    resp = client.post(
+        "/import/goodreads",
+        files={"file": ("messy.csv", raw, "text/csv")},
+        headers=_bearer(token),
+    )
+    assert resp.status_code == 200, resp.text
+    body = resp.json()
+    assert body["created_works"] == 1
+    assert any("byte replacement" in w.lower() for w in body["warnings"])
+
+
 def test_api_import_marc_happy_path(client, db_session):
     _, token = _make_user(db_session, "Librarian", "api_imp_marc")
     db_session.commit()

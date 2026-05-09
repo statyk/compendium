@@ -249,6 +249,71 @@ async def import_librarything(
     return _report_to_response(report)
 
 
+@import_router.post("/goodreads", response_model=ImportReportResponse)
+async def import_goodreads(
+    file: UploadFile = File(..., description="GoodReads library export CSV."),
+    dry_run: bool = Query(False),
+    mode: str = Query("append"),
+    default_branch: str | None = Query(None),
+    default_media_type: str | None = Query(
+        None,
+        description=(
+            "Media type code used when no type can be inferred from the row. "
+            "GoodReads exports are always books, so this is rarely needed."
+        ),
+    ),
+    enrich: bool = Query(False, description="Fill missing fields from external metadata sources per row."),
+    preserve_barcodes: bool = Query(
+        False,
+        description=(
+            "Preserve barcode values from the import rather than minting fresh codes. "
+            "GoodReads exports do not include barcodes, so this has no effect in practice."
+        ),
+    ),
+    strict_encoding: bool = Query(
+        False,
+        description=(
+            "Reject the file on any non-UTF-8 byte. Default is lenient — "
+            "invalid bytes are replaced with U+FFFD and a warning is added to the report."
+        ),
+    ),
+    content_length: int | None = Header(default=None, alias="content-length"),
+    settings: Settings = Depends(get_settings),
+    session: Session = Depends(get_session),
+    user: AppUser = Depends(require_permission("catalog.import")),
+) -> ImportReportResponse:
+    import io as _io
+
+    data = await read_upload_bounded(
+        file, cap=settings.max_upload_bytes, content_length=content_length
+    )
+    text, replaced = _decode_or_422(data, strict=strict_encoding)
+    text_stream = _io.StringIO(text)
+    options = _options(
+        dry_run,
+        mode,
+        default_branch,
+        default_media_type,
+        enrich,
+        preserve_barcodes,
+        strict_encoding,
+    )
+    importer = _make_importer(session, user)
+    try:
+        report = importer.import_goodreads(
+            text_stream, options, filename=file.filename
+        )
+    except ValidationError as exc:
+        raise HTTPException(status_code=422, detail=str(exc)) from exc
+    if replaced:
+        report.warnings.insert(
+            0,
+            f"Decoded with {replaced} byte replacement(s); "
+            "file is not clean UTF-8.",
+        )
+    return _report_to_response(report)
+
+
 @import_router.post("/marc", response_model=ImportReportResponse)
 async def import_marc(
     file: UploadFile = File(..., description="MARC21 binary (.mrc) or MARCXML file."),
