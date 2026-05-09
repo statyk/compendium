@@ -110,7 +110,10 @@ def _parse_int(s: str) -> int | None:
         return None
 
 
-def _filters_qs(*, q: str, field: str, media: list[str], decade: int | None, avail: bool) -> str:
+def _filters_qs(
+    *, q: str, field: str, media: list[str], decade: int | None, avail: bool,
+    include_withdrawn: bool = False,
+) -> str:
     from urllib.parse import urlencode
 
     params = [("q", q), ("field", field)]
@@ -120,6 +123,8 @@ def _filters_qs(*, q: str, field: str, media: list[str], decade: int | None, ava
         params.append(("decade", str(decade)))
     if avail:
         params.append(("avail", "1"))
+    if include_withdrawn:
+        params.append(("include_withdrawn", "1"))
     return urlencode(params)
 
 
@@ -131,6 +136,7 @@ def catalog_search(
     media: str = "",
     decade: str = "",
     avail: str = "",
+    include_withdrawn: str = "",
     page: int = 1,
     user=Depends(get_web_user),
     session: Session = Depends(get_session),
@@ -149,6 +155,8 @@ def catalog_search(
                 "media": [],
                 "decade": None,
                 "avail": False,
+                "include_withdrawn": False,
+                "can_include_withdrawn": False,
                 "new_arrivals": [],
                 "recently_returned": [],
                 "show_landing": False,
@@ -158,6 +166,8 @@ def catalog_search(
     media_codes = _parse_csv(media)
     decade_int = _parse_int(decade)
     available_only = avail in ("1", "true", "on", "yes")
+    can_include_withdrawn = user is not None and has_permission(user.role.permissions, "item.edit")
+    include_withdrawn_flag = can_include_withdrawn and include_withdrawn in ("1", "true", "on", "yes")
     has_filters = bool(q or media_codes or decade_int is not None or available_only)
 
     svc = _discovery(session)
@@ -169,13 +179,17 @@ def catalog_search(
         media_type_codes=media_codes,
         decade=decade_int,
         available_only=available_only,
+        include_withdrawn_only=include_withdrawn_flag,
     )
     new_arrivals: list = []
     recently_returned: list = []
     if not has_filters:
-        new_arrivals = svc.new_arrivals()
-        recently_returned = svc.recently_returned()
-    qs = _filters_qs(q=q, field=field, media=media_codes, decade=decade_int, avail=available_only)
+        new_arrivals = svc.new_arrivals(include_withdrawn_only=include_withdrawn_flag)
+        recently_returned = svc.recently_returned(include_withdrawn_only=include_withdrawn_flag)
+    qs = _filters_qs(
+        q=q, field=field, media=media_codes, decade=decade_int, avail=available_only,
+        include_withdrawn=include_withdrawn_flag,
+    )
     return _render(
         "catalog/search.html",
         request,
@@ -188,6 +202,8 @@ def catalog_search(
             "media": media_codes,
             "decade": decade_int,
             "avail": available_only,
+            "include_withdrawn": include_withdrawn_flag,
+            "can_include_withdrawn": can_include_withdrawn,
             "filters_qs": qs,
             "new_arrivals": new_arrivals,
             "recently_returned": recently_returned,
@@ -204,6 +220,7 @@ def catalog_search_results(
     media: str = "",
     decade: str = "",
     avail: str = "",
+    include_withdrawn: str = "",
     page: int = 1,
     user=Depends(get_web_user),
     session: Session = Depends(get_session),
@@ -216,6 +233,8 @@ def catalog_search_results(
     media_codes = _parse_csv(media)
     decade_int = _parse_int(decade)
     available_only = avail in ("1", "true", "on", "yes")
+    can_include_withdrawn = user is not None and has_permission(user.role.permissions, "item.edit")
+    include_withdrawn_flag = can_include_withdrawn and include_withdrawn in ("1", "true", "on", "yes")
     page_obj = _discovery(session).search(
         q,
         field=field,
@@ -224,8 +243,12 @@ def catalog_search_results(
         media_type_codes=media_codes,
         decade=decade_int,
         available_only=available_only,
+        include_withdrawn_only=include_withdrawn_flag,
     )
-    qs = _filters_qs(q=q, field=field, media=media_codes, decade=decade_int, avail=available_only)
+    qs = _filters_qs(
+        q=q, field=field, media=media_codes, decade=decade_int, avail=available_only,
+        include_withdrawn=include_withdrawn_flag,
+    )
     return templates.TemplateResponse(
         request,
         "_partials/work_list.html",
@@ -276,6 +299,9 @@ def work_detail(
             if active is not None:
                 item_due[it.id] = active.due_at
     has_loanable = SqlWorkRepository(session).has_loanable_item(work.id)
+    all_withdrawn = bool(work.items) and all(
+        it.status == ItemStatus.WITHDRAWN.value for it in work.items
+    )
     # Librarian-only hold queue for this work.
     queue: list = []
     if user is not None and has_permission(user.role.permissions, "hold.view.any"):
@@ -290,6 +316,7 @@ def work_detail(
             "patron": patron,
             "item_due": item_due,
             "has_loanable": has_loanable,
+            "all_withdrawn": all_withdrawn,
             "queue": queue,
             "message": message,
             "error": error,

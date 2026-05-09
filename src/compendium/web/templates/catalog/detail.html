@@ -30,6 +30,7 @@
 
 {% if message %}<p class="success-banner">{{ message }}</p>{% endif %}
 {% if error %}<p class="error-banner">{{ error }}</p>{% endif %}
+{% if all_withdrawn %}<p class="warning-banner">All copies of this title have been withdrawn and it is no longer available to borrow.</p>{% endif %}
 
 {% if has_permission(user, 'work.edit') %}
 <p>

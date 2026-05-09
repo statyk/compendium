@@ -42,6 +42,7 @@
   <input type="hidden" name="media" value="{{ media|join(',') }}">
   <input type="hidden" name="decade" value="{{ decade if decade is not none else '' }}">
   <input type="hidden" name="avail" value="{% if avail %}1{% else %}{% endif %}">
+  <input type="hidden" name="include_withdrawn" value="{% if include_withdrawn %}1{% else %}{% endif %}">
   <button type="submit" style="margin-bottom:0;width:auto">Search</button>
   <span id="search-ind" class="htmx-indicator" aria-label="Loading…"></span>
 </form>
@@ -149,6 +150,20 @@
           </li>
         </ul>
       </details>
+      {% if can_include_withdrawn %}
+      <details open>
+        <summary><strong>Staff</strong></summary>
+        <ul class="facet-list">
+          <li>
+            <label>
+              <input type="checkbox" data-facet="include_withdrawn" value="1"
+                     {% if include_withdrawn %}checked{% endif %}>
+              Include withdrawn-only
+            </label>
+          </li>
+        </ul>
+      </details>
+      {% endif %}
       {% if media or decade is not none or avail %}
       <p><a href="/ui/catalog?q={{ q }}&field={{ field }}"><small>Clear all filters</small></a></p>
       {% endif %}
@@ -193,6 +208,11 @@
         cb.checked = avail;
       });
       if (form.elements.avail) form.elements.avail.value = avail ? '1' : '';
+      var incWd = params.get('include_withdrawn') === '1';
+      document.querySelectorAll('input[data-facet="include_withdrawn"]').forEach(function (cb) {
+        cb.checked = incWd;
+      });
+      if (form.elements.include_withdrawn) form.elements.include_withdrawn.value = incWd ? '1' : '';
     }
     window.addEventListener('pageshow', syncFromUrl);
 
@@ -226,6 +246,12 @@
     document.querySelectorAll('input[data-facet="avail"]').forEach(function (cb) {
       cb.addEventListener('change', function () {
         if (form.elements.avail) form.elements.avail.value = cb.checked ? '1' : '';
+        form.submit();
+      });
+    });
+    document.querySelectorAll('input[data-facet="include_withdrawn"]').forEach(function (cb) {
+      cb.addEventListener('change', function () {
+        if (form.elements.include_withdrawn) form.elements.include_withdrawn.value = cb.checked ? '1' : '';
         form.submit();
       });
     });

@@ -63,6 +63,10 @@ def search_works(
     available: bool = typer.Option(
         False, "--available/--all", help="Only show works with at least one available copy"
     ),
+    include_withdrawn: bool = typer.Option(
+        False, "--include-withdrawn/--hide-withdrawn",
+        help="Include works whose copies are all withdrawn (hidden by default).",
+    ),
 ) -> None:
     """Search the catalog by title, author, publisher, or ISBN."""
     with session_scope() as session:
@@ -73,6 +77,7 @@ def search_works(
             media_type_codes=media_type or None,
             decade=decade,
             available_only=available,
+            include_withdrawn_only=include_withdrawn,
         )
         if not works:
             typer.echo(f"No results for '{query}'.")
@@ -84,10 +89,16 @@ def search_works(
 def new_arrivals(
     days: int = typer.Option(60, "--days", help="Look back this many days"),
     limit: int = typer.Option(20, "--limit"),
+    include_withdrawn: bool = typer.Option(
+        False, "--include-withdrawn/--hide-withdrawn",
+        help="Include works whose copies are all withdrawn.",
+    ),
 ) -> None:
     """List works added to the catalog recently."""
     with session_scope() as session:
-        works = SqlWorkRepository(session).list_recent(days=days, limit=limit)
+        works = SqlWorkRepository(session).list_recent(
+            days=days, limit=limit, include_withdrawn_only=include_withdrawn
+        )
         if not works:
             typer.echo(f"No works added in the last {days} days.")
             return
@@ -98,10 +109,16 @@ def new_arrivals(
 def recently_returned(
     days: int = typer.Option(30, "--days", help="Look back this many days"),
     limit: int = typer.Option(20, "--limit"),
+    include_withdrawn: bool = typer.Option(
+        False, "--include-withdrawn/--hide-withdrawn",
+        help="Include works whose copies are all withdrawn.",
+    ),
 ) -> None:
     """List works whose most recent return was in the last N days."""
     with session_scope() as session:
-        works = SqlWorkRepository(session).list_recently_returned(days=days, limit=limit)
+        works = SqlWorkRepository(session).list_recently_returned(
+            days=days, limit=limit, include_withdrawn_only=include_withdrawn
+        )
         if not works:
             typer.echo(f"No works returned in the last {days} days.")
             return

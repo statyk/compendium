@@ -1,6 +1,8 @@
+from sqlalchemy import exists
 from sqlalchemy.orm import Session
 
-from compendium.domain.models import Creator, Work, WorkCreator
+from compendium.domain.enums import ItemStatus
+from compendium.domain.models import Creator, Item, Work, WorkCreator
 
 
 class SqlCreatorRepository:
@@ -22,11 +24,18 @@ class SqlCreatorRepository:
         self._s.flush()
         return creator
 
-    def list_works(self, creator_id: int) -> list[Work]:
-        return (
+    def list_works(self, creator_id: int, *, include_withdrawn_only: bool = False) -> list[Work]:
+        q = (
             self._s.query(Work)
             .join(WorkCreator, WorkCreator.work_id == Work.id)
             .filter(WorkCreator.creator_id == creator_id)
             .distinct()
-            .all()
         )
+        if not include_withdrawn_only:
+            q = q.filter(
+                exists().where(
+                    (Item.work_id == Work.id)
+                    & (Item.status != ItemStatus.WITHDRAWN.value)
+                )
+            )
+        return q.all()

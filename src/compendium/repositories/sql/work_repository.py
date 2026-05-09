@@ -184,6 +184,7 @@ class SqlWorkRepository:
         media_type_codes: list[str] | None = None,
         decade: int | None = None,
         available_only: bool = False,
+        include_withdrawn_only: bool = False,
     ) -> list[Work]:
         # FTS gives us a candidate id-list (already ranked); filters then narrow.
         if field == "all" and q.strip():
@@ -196,12 +197,14 @@ class SqlWorkRepository:
                     media_type_codes=media_type_codes,
                     decade=decade,
                     available_only=available_only,
+                    include_withdrawn_only=include_withdrawn_only,
                 )
 
         base = self._base_filtered(
             media_type_codes=media_type_codes,
             decade=decade,
             available_only=available_only,
+            include_withdrawn_only=include_withdrawn_only,
         )
         if not q:
             return base.order_by(Work.sort_title, Work.title).offset(offset).limit(limit).all()
@@ -269,6 +272,7 @@ class SqlWorkRepository:
         media_type_codes: list[str] | None = None,
         decade: int | None = None,
         available_only: bool = False,
+        include_withdrawn_only: bool = False,
     ) -> int:
         if field == "all" and q.strip():
             ids = self._fts_ids(q.strip(), limit=10_000)
@@ -278,12 +282,14 @@ class SqlWorkRepository:
                     media_type_codes=media_type_codes,
                     decade=decade,
                     available_only=available_only,
+                    include_withdrawn_only=include_withdrawn_only,
                 )
         # Fall back to the full filter query but counted.
         base = self._base_filtered(
             media_type_codes=media_type_codes,
             decade=decade,
             available_only=available_only,
+            include_withdrawn_only=include_withdrawn_only,
         )
         if not q:
             return base.count()
@@ -317,14 +323,25 @@ class SqlWorkRepository:
             .count()
         )
 
+    @staticmethod
+    def _active_item_clause():
+        """EXISTS clause: at least one non-WITHDRAWN item belongs to the Work."""
+        return exists().where(
+            (Item.work_id == Work.id)
+            & (Item.status != ItemStatus.WITHDRAWN.value)
+        )
+
     def _base_filtered(
         self,
         *,
         media_type_codes: list[str] | None,
         decade: int | None,
         available_only: bool,
+        include_withdrawn_only: bool = False,
     ):
         q = self._s.query(Work)
+        if not include_withdrawn_only:
+            q = q.filter(self._active_item_clause())
         if media_type_codes:
             q = q.join(Work.media_type).filter(MediaType.code.in_(media_type_codes))
         if decade is not None:
@@ -351,6 +368,7 @@ class SqlWorkRepository:
         media_type_codes: list[str] | None,
         decade: int | None,
         available_only: bool,
+        include_withdrawn_only: bool = False,
     ) -> list[Work]:
         if not ids:
             return []
@@ -358,6 +376,7 @@ class SqlWorkRepository:
             media_type_codes=media_type_codes,
             decade=decade,
             available_only=available_only,
+            include_withdrawn_only=include_withdrawn_only,
         ).filter(Work.id.in_(ids))
         works = {w.id: w for w in q.all()}
         # Preserve FTS rank order, then paginate.
@@ -371,6 +390,7 @@ class SqlWorkRepository:
         media_type_codes: list[str] | None,
         decade: int | None,
         available_only: bool,
+        include_withdrawn_only: bool = False,
     ) -> int:
         if not ids:
             return 0
@@ -379,6 +399,7 @@ class SqlWorkRepository:
                 media_type_codes=media_type_codes,
                 decade=decade,
                 available_only=available_only,
+                include_withdrawn_only=include_withdrawn_only,
             )
             .filter(Work.id.in_(ids))
             .count()
@@ -391,6 +412,7 @@ class SqlWorkRepository:
         *,
         decade: int | None = None,
         available_only: bool = False,
+        include_withdrawn_only: bool = False,
     ) -> list[tuple[str, str, int]]:
         """Counts grouped by media type for the current search, ignoring any
         media-type selection (so the user can browse alternatives in the group).
@@ -404,6 +426,8 @@ class SqlWorkRepository:
             if not ids:
                 return []
             base = base.filter(Work.id.in_(ids))
+        if not include_withdrawn_only:
+            base = base.filter(self._active_item_clause())
         if decade is not None:
             base = base.filter(
                 Work.publication_year >= decade,
@@ -431,6 +455,7 @@ class SqlWorkRepository:
         *,
         media_type_codes: list[str] | None = None,
         available_only: bool = False,
+        include_withdrawn_only: bool = False,
     ) -> list[tuple[int, int]]:
         """Decade buckets with counts (e.g. (2010, 87)). Sorted descending so
         recent years lead. Computed Python-side to avoid sqlite/postgres divides
@@ -441,6 +466,8 @@ class SqlWorkRepository:
             if not ids:
                 return []
             base = base.filter(Work.id.in_(ids))
+        if not include_withdrawn_only:
+            base = base.filter(self._active_item_clause())
         if media_type_codes:
             base = base.join(Work.media_type).filter(MediaType.code.in_(media_type_codes))
         if available_only:
@@ -463,12 +490,14 @@ class SqlWorkRepository:
         *,
         media_type_codes: list[str] | None = None,
         decade: int | None = None,
+        include_withdrawn_only: bool = False,
     ) -> int:
         ids = self._candidate_ids(q, field)
         base = self._base_filtered(
             media_type_codes=media_type_codes,
             decade=decade,
             available_only=True,
+            include_withdrawn_only=include_withdrawn_only,
         )
         if ids is not None:
             if not ids:
@@ -516,22 +545,22 @@ class SqlWorkRepository:
             )
         return [r[0] for r in rows]
 
-    def list_recent(self, *, days: int, limit: int) -> list[Work]:
+    def list_recent(self, *, days: int, limit: int, include_withdrawn_only: bool = False) -> list[Work]:
         from datetime import timedelta, timezone
 
         cutoff = datetime.now(tz=timezone.utc) - timedelta(days=days)
-        return (
+        q = (
             self._s.query(Work)
             .options(
                 selectinload(Work.creators).selectinload(WorkCreator.creator)
             )
             .filter(Work.created_at >= cutoff)
-            .order_by(Work.created_at.desc())
-            .limit(limit)
-            .all()
         )
+        if not include_withdrawn_only:
+            q = q.filter(self._active_item_clause())
+        return q.order_by(Work.created_at.desc()).limit(limit).all()
 
-    def list_recently_returned(self, *, days: int, limit: int) -> list[Work]:
+    def list_recently_returned(self, *, days: int, limit: int, include_withdrawn_only: bool = False) -> list[Work]:
         from datetime import timedelta, timezone
 
         cutoff = datetime.now(tz=timezone.utc) - timedelta(days=days)
@@ -543,17 +572,17 @@ class SqlWorkRepository:
             .group_by(Item.work_id)
             .subquery()
         )
-        rows = (
+        q = (
             self._s.query(Work, sub.c.last)
             .options(
                 selectinload(Work.creators).selectinload(WorkCreator.creator)
             )
             .join(sub, sub.c.work_id == Work.id)
             .filter(sub.c.last >= cutoff)
-            .order_by(sub.c.last.desc())
-            .limit(limit)
-            .all()
         )
+        if not include_withdrawn_only:
+            q = q.filter(self._active_item_clause())
+        rows = q.order_by(sub.c.last.desc()).limit(limit).all()
         return [w for w, _last in rows]
 
     def _fts_ids(self, q: str, *, limit: int) -> list[int] | None:

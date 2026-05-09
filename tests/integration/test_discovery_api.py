@@ -114,6 +114,8 @@ class TestSearchFilters:
     def test_filter_by_media(self, disc_client, disc_session):
         b = _add_work(disc_session, title="ApiBook one", media_code="book")
         d = _add_work(disc_session, title="ApiBook two", media_code="dvd")
+        _add_item(disc_session, b)
+        _add_item(disc_session, d)
 
         resp = disc_client.get("/works/search?q=ApiBook&field=title&media=dvd")
         assert resp.status_code == 200
@@ -124,6 +126,8 @@ class TestSearchFilters:
     def test_filter_by_decade(self, disc_client, disc_session):
         old = _add_work(disc_session, title="ApiDecade alpha", year=1995)
         new = _add_work(disc_session, title="ApiDecade beta", year=2015)
+        _add_item(disc_session, old)
+        _add_item(disc_session, new)
 
         resp = disc_client.get(
             "/works/search?q=ApiDecade&field=title&decade=2010"
@@ -137,6 +141,7 @@ class TestSearchFilters:
 class TestNewArrivalsApi:
     def test_returns_works(self, disc_client, disc_session):
         w = _add_work(disc_session, title="ApiNewArrival")
+        _add_item(disc_session, w)
         # Force created_at recent
         disc_session.execute(
             Work.__table__.update().where(Work.id == w.id).values(

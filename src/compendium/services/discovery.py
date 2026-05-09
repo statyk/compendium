@@ -53,6 +53,7 @@ class DiscoveryService:
         media_type_codes: list[str] | None = None,
         decade: int | None = None,
         available_only: bool = False,
+        include_withdrawn_only: bool = False,
     ) -> SearchPage:
         page = max(1, page)
         offset = (page - 1) * page_size
@@ -64,6 +65,7 @@ class DiscoveryService:
             media_type_codes=media_type_codes or None,
             decade=decade,
             available_only=available_only,
+            include_withdrawn_only=include_withdrawn_only,
         )
         total = self._works.count_search(
             q,
@@ -71,6 +73,7 @@ class DiscoveryService:
             media_type_codes=media_type_codes or None,
             decade=decade,
             available_only=available_only,
+            include_withdrawn_only=include_withdrawn_only,
         )
         facets = self.facet_counts(
             q,
@@ -78,6 +81,7 @@ class DiscoveryService:
             media_type_codes=media_type_codes,
             decade=decade,
             available_only=available_only,
+            include_withdrawn_only=include_withdrawn_only,
         )
         availability = self._works.availability_for_works([w.id for w in works])
         return SearchPage(
@@ -97,32 +101,36 @@ class DiscoveryService:
         media_type_codes: list[str] | None = None,
         decade: int | None = None,
         available_only: bool = False,
+        include_withdrawn_only: bool = False,
     ) -> FacetCounts:
         # For each facet, drop that facet's own selection so the user can see
         # alternatives within the group (standard faceted-search UX).
         return FacetCounts(
             media_type=self._works.facet_media_counts(
-                q, field, decade=decade, available_only=available_only
+                q, field, decade=decade, available_only=available_only,
+                include_withdrawn_only=include_withdrawn_only,
             ),
             decade=self._works.facet_decade_counts(
                 q,
                 field,
                 media_type_codes=media_type_codes or None,
                 available_only=available_only,
+                include_withdrawn_only=include_withdrawn_only,
             ),
             available_now=self._works.facet_available_count(
                 q,
                 field,
                 media_type_codes=media_type_codes or None,
                 decade=decade,
+                include_withdrawn_only=include_withdrawn_only,
             ),
         )
 
     def suggest(self, q: str, *, limit: int = 8) -> list[Work]:
         return self._works.suggest(q, limit=limit)
 
-    def new_arrivals(self, *, days: int = 60, limit: int = 12) -> list[Work]:
-        return self._works.list_recent(days=days, limit=limit)
+    def new_arrivals(self, *, days: int = 60, limit: int = 12, include_withdrawn_only: bool = False) -> list[Work]:
+        return self._works.list_recent(days=days, limit=limit, include_withdrawn_only=include_withdrawn_only)
 
-    def recently_returned(self, *, days: int = 30, limit: int = 12) -> list[Work]:
-        return self._works.list_recently_returned(days=days, limit=limit)
+    def recently_returned(self, *, days: int = 30, limit: int = 12, include_withdrawn_only: bool = False) -> list[Work]:
+        return self._works.list_recently_returned(days=days, limit=limit, include_withdrawn_only=include_withdrawn_only)

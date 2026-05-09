@@ -68,7 +68,7 @@ def creator_edit_form(
             {"request": request, "user": user, "message": "Creator not found"},
             status_code=404,
         )
-    works = SqlCreatorRepository(session).list_works(creator_id)
+    works = SqlCreatorRepository(session).list_works(creator_id, include_withdrawn_only=True)
     return _render(
         "creators/edit.html",
         request,
@@ -107,7 +107,7 @@ def creator_edit_submit(
         )
     except (BusinessRuleError, ValidationError) as exc:
         creator = SqlCreatorRepository(session).get(creator_id)
-        works = SqlCreatorRepository(session).list_works(creator_id) if creator else []
+        works = SqlCreatorRepository(session).list_works(creator_id, include_withdrawn_only=True) if creator else []
         return _render(
             "creators/edit.html",
             request,

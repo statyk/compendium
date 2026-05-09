@@ -78,6 +78,8 @@ class TestSearchFilters:
     def test_filter_by_media_type(self, session):
         b = _add_work(session, title="Book Alpha", media_code="book")
         d = _add_work(session, title="DVD Alpha", media_code="dvd")
+        _add_item(session, b)
+        _add_item(session, d)
 
         page = _svc(session).search("Alpha", media_type_codes=["dvd"])
         assert [w.id for w in page.works] == [d.id]
@@ -85,6 +87,8 @@ class TestSearchFilters:
     def test_filter_by_decade(self, session):
         old = _add_work(session, title="DecadeFilter Old", year=1995)
         new = _add_work(session, title="DecadeFilter New", year=2015)
+        _add_item(session, old)
+        _add_item(session, new)
 
         page = _svc(session).search("DecadeFilter", decade=2010)
         ids = {w.id for w in page.works}
@@ -108,7 +112,10 @@ class TestPagination:
     def test_pages_through_results(self, session):
         # Five works matching "PageTest" — field="title" uses substring,
         # since FTS5 tokenizes on word boundaries.
-        ids = [_add_work(session, title=f"PageTest {i}").id for i in range(5)]
+        works = [_add_work(session, title=f"PageTest {i}") for i in range(5)]
+        for w in works:
+            _add_item(session, w)
+        ids = [w.id for w in works]
 
         p1 = _svc(session).search("PageTest", field="title", page=1, page_size=2)
         p2 = _svc(session).search("PageTest", field="title", page=2, page_size=2)
@@ -127,10 +134,13 @@ class TestFacetCounts:
     def test_media_counts_reflect_other_filters(self, session):
         # Two books in 2010s, one DVD in 2010s, one book in 1990s.
         # Use field="title" to lean on substring match instead of FTS tokens.
-        _add_work(session, title="MFAtest one", media_code="book", year=2010)
-        _add_work(session, title="MFAtest two", media_code="book", year=2015)
-        _add_work(session, title="MFAtest three", media_code="dvd", year=2012)
-        _add_work(session, title="MFAtest four", media_code="book", year=1995)
+        for title, media, year in [
+            ("MFAtest one", "book", 2010),
+            ("MFAtest two", "book", 2015),
+            ("MFAtest three", "dvd", 2012),
+            ("MFAtest four", "book", 1995),
+        ]:
+            _add_item(session, _add_work(session, title=title, media_code=media, year=year))
 
         facets = _svc(session).facet_counts("MFAtest", field="title", decade=2010)
         counts = {code: n for code, _name, n in facets.media_type}
@@ -138,8 +148,8 @@ class TestFacetCounts:
         assert counts.get("dvd") == 1
 
     def test_decade_counts_drop_decade_filter(self, session):
-        _add_work(session, title="DTtest old", year=1995)
-        _add_work(session, title="DTtest new", year=2015)
+        _add_item(session, _add_work(session, title="DTtest old", year=1995))
+        _add_item(session, _add_work(session, title="DTtest new", year=2015))
 
         facets = _svc(session).facet_counts("DTtest", field="title", decade=2010)
         decades = {d for d, _ in facets.decade}
@@ -160,6 +170,8 @@ class TestNewArrivals:
     def test_returns_recent_works_in_order(self, session):
         old = _add_work(session, title="OldTitle")
         new = _add_work(session, title="NewTitle")
+        _add_item(session, old)
+        _add_item(session, new)
         # Force created_at: SQLAlchemy server_default uses NOW(), so override on session.
         session.execute(
             Work.__table__.update().where(Work.id == old.id).values(

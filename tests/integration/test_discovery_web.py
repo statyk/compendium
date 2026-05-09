@@ -109,6 +109,7 @@ class TestLandingPage:
 
     def test_landing_shows_new_arrivals_section(self, dw_client, dw_session):
         w = _add_work(dw_session, title="LandingNewArrival")
+        _add_item(dw_session, w)
         dw_session.execute(
             Work.__table__.update().where(Work.id == w.id).values(
                 created_at=datetime.now(tz=timezone.utc) - timedelta(days=1)
@@ -124,8 +125,8 @@ class TestLandingPage:
 
 class TestFacetsRender:
     def test_search_renders_facet_sidebar(self, dw_client, dw_session):
-        _add_work(dw_session, title="FacetUI alpha", media_code="book", year=2010)
-        _add_work(dw_session, title="FacetUI beta", media_code="dvd", year=2015)
+        _add_item(dw_session, _add_work(dw_session, title="FacetUI alpha", media_code="book", year=2010))
+        _add_item(dw_session, _add_work(dw_session, title="FacetUI beta", media_code="dvd", year=2015))
         dw_session.flush()
         resp = dw_client.get("/ui/catalog?q=FacetUI&field=title")
         assert resp.status_code == 200
@@ -136,8 +137,8 @@ class TestFacetsRender:
         assert "2010s" in body or "2010" in body
 
     def test_media_filter_narrows_results(self, dw_client, dw_session):
-        _add_work(dw_session, title="MNarrow alpha", media_code="book")
-        _add_work(dw_session, title="MNarrow beta", media_code="dvd")
+        _add_item(dw_session, _add_work(dw_session, title="MNarrow alpha", media_code="book"))
+        _add_item(dw_session, _add_work(dw_session, title="MNarrow beta", media_code="dvd"))
         dw_session.flush()
         resp = dw_client.get("/ui/catalog?q=MNarrow&field=title&media=dvd")
         assert resp.status_code == 200
