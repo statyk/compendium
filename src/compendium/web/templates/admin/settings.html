@@ -11,7 +11,7 @@
 </nav>
 
 <h2>{{ title }}</h2>
-<p>{{ intro }}</p>
+<p>{{ intro | safe }}</p>
 
 {% if message %}<p class="success-banner">{{ message }}</p>{% endif %}
 {% if error %}<p class="error-banner">{{ error }}</p>{% endif %}

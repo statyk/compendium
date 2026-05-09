@@ -176,7 +176,8 @@ Start the server with `compendium serve` and open your browser to `http://localh
 | `/ui/roles` | SystemAdmin | Role list |
 | `/ui/roles/new` | SystemAdmin | Create custom role |
 | `/ui/roles/{id}` | SystemAdmin | Role detail — edit permissions, clone |
-| `/ui/admin/system/smtp` | SystemAdmin | SMTP host/port/from settings (password env-only) |
+| `/ui/admin/system/smtp` | SystemAdmin | SMTP host/port/from settings |
+| `/ui/admin/system/secrets` | SystemAdmin | Encrypted secrets (SMTP password, TMDb / Google Books API keys) — requires `COMPENDIUM_SECRET_KEY` |
 | `/ui/admin/system/retention` | SystemAdmin | Notification + audit retention, batch sizes |
 
 Guest catalog search is enabled by default (toggle via `/ui/admin/settings/general` or `COMPENDIUM_GUEST_SEARCH_ENABLED=false`).
@@ -224,9 +225,10 @@ Most settings (library name, theme, fine thresholds, hold/overdue defaults, kios
 | `COMPENDIUM_JWT_ALGORITHM` / `COMPENDIUM_JWT_EXPIRE_MINUTES` | Auth deployment knobs |
 | `COMPENDIUM_SSL_CERTFILE` / `COMPENDIUM_SSL_KEYFILE` | OS-level paths |
 | `COMPENDIUM_SECURE_COOKIES` | Default `true`; set `false` only for plain-HTTP LAN deployments (browsers won't send `Secure` cookies over non-HTTPS, except localhost). |
-| `COMPENDIUM_TMDB_API_KEY` | Secret — required only for film metadata (TMDb). |
-| `COMPENDIUM_GOOGLE_BOOKS_API_KEY` | Optional — enables Google Books as a cover-image fallback when Open Library has none. Free tier at console.cloud.google.com. |
-| `COMPENDIUM_SMTP_PASSWORD` | Secret (host/port/from are DB-editable; password stays env) |
+| `COMPENDIUM_SECRET_KEY` | Encryption key for secrets stored in the DB (SMTP password, API keys). Optional — set to enable the `/ui/admin/system/secrets` page. Generate with `compendium keygen --secret`. |
+| `COMPENDIUM_TMDB_API_KEY` | TMDb API key. Override — also settable via Admin → System → Secrets when `COMPENDIUM_SECRET_KEY` is configured. |
+| `COMPENDIUM_GOOGLE_BOOKS_API_KEY` | Google Books API key. Override — also settable via Admin → System → Secrets when `COMPENDIUM_SECRET_KEY` is configured. |
+| `COMPENDIUM_SMTP_PASSWORD` | SMTP password. Override — also settable via Admin → System → Secrets when `COMPENDIUM_SECRET_KEY` is configured. |
 | `COMPENDIUM_MAX_UPLOAD_BYTES` | Hard cap on bulk-import upload size (default 100 MB / 104857600). Env-only so a compromised admin token can't raise it. |
 | `COMPENDIUM_LOGIN_MAX_FAILURES` | Max consecutive failed logins before the identity is throttled (default 10). DB-editable at **System → Security**. |
 | `COMPENDIUM_LOGIN_FAILURE_WINDOW_SECONDS` | Sliding window for counting failures in seconds (default 300 = 5 min). DB-editable at **System → Security**. |

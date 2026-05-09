@@ -110,8 +110,8 @@ _SYSTEM_PAGES: dict[str, dict[str, Any]] = {
         "scope_perm": "system.manage",
         "intro": (
             "Outbound email configuration for hold-ready, due-soon, and "
-            "overdue notices. The SMTP password remains environment-only "
-            "(set COMPENDIUM_SMTP_PASSWORD); other knobs are editable here."
+            "overdue notices. Set the SMTP password on the "
+            "<a href='/ui/admin/system/secrets'>Secrets</a> page."
         ),
         "keys": [
             "smtp_host",
@@ -576,3 +576,123 @@ async def security_post(
         session,
         user,
     )
+
+
+# ── Secrets page ──────────────────────────────────────────────────────────────
+
+
+def _build_secrets_rows(session) -> list[dict]:
+    """Hydrate secret descriptors with status information for the secrets template."""
+    from compendium.services.settings_registry import all_descriptors
+    from compendium.repositories.sql.site_setting_repository import SqlSiteSettingRepository
+
+    repo = SqlSiteSettingRepository(session)
+    rows = []
+    for desc in sorted(
+        (d for d in all_descriptors() if d.secret), key=lambda d: d.key
+    ):
+        env_var = desc.resolved_env_var()
+        env_overridden = os.environ.get(env_var) is not None
+        db_row = repo.get(desc.key)
+        db_set = db_row is not None and bool(db_row.value)
+        rows.append(
+            {
+                "key": desc.key,
+                "display_name": desc.resolved_display_name(),
+                "desc": desc,
+                "env_var": env_var,
+                "env_overridden": env_overridden,
+                "db_set": db_set,
+            }
+        )
+    return rows
+
+
+@router.get("/admin/system/secrets")
+def secrets_get(
+    request: Request,
+    message: str | None = Query(default=None),
+    error: str | None = Query(default=None),
+    user: AppUser = Depends(require_web_permission("system.manage")),
+    session: Session = Depends(get_session),
+):
+    from compendium.services.secrets import CanaryResult, check_canary, secret_key_configured
+
+    key_configured = secret_key_configured()
+    canary = check_canary(session) if key_configured else CanaryResult.NO_KEY
+    rows = _build_secrets_rows(session)
+    return _render(
+        "admin/settings_secrets.html",
+        request,
+        {
+            "request": request,
+            "user": user,
+            "key_configured": key_configured,
+            "canary_ok": canary in (CanaryResult.OK, CanaryResult.MISSING),
+            "canary_mismatch": canary == CanaryResult.MISMATCH,
+            "rows": rows,
+            "message": message,
+            "error": error,
+        },
+    )
+
+
+@router.post("/admin/system/secrets")
+async def secrets_post(
+    request: Request,
+    user: AppUser = Depends(require_web_permission("system.manage")),
+    session: Session = Depends(get_session),
+):
+    from urllib.parse import quote
+
+    from compendium.services.secrets import SecretKeyMissingError, SecretKeyMismatchError
+    from compendium.services.settings_registry import all_descriptors
+
+    form = await request.form()
+    check_csrf_form(request, form.get("csrf_token", ""))
+
+    secret_descs = {d.key: d for d in all_descriptors() if d.secret}
+    audit = _audit_svc(session)
+    errors: list[str] = []
+    changed = 0
+
+    # Clears
+    clear_keys = form.getlist("clear")
+    for key in clear_keys:
+        if key not in secret_descs:
+            continue
+        if delete_site_setting(key, session=session, audit_svc=audit, actor=user, source="web"):
+            changed += 1
+
+    # Sets
+    for key, desc in secret_descs.items():
+        if key in clear_keys:
+            continue
+        if os.environ.get(desc.resolved_env_var()):
+            continue
+        raw = form.get(key, "").strip()
+        if not raw:
+            continue
+        try:
+            set_site_setting(
+                key,
+                raw,
+                session=session,
+                updated_by_id=user.id,
+                audit_svc=audit,
+                actor=user,
+                source="web",
+            )
+            changed += 1
+        except (SecretKeyMissingError, SecretKeyMismatchError) as exc:
+            errors.append(str(exc))
+        except Exception as exc:
+            errors.append(f"{key}: {exc}")
+
+    if errors:
+        qs = f"?error={quote('; '.join(errors))}"
+    elif changed:
+        qs = f"?message={quote(f'Saved {changed} change(s).')}"
+    else:
+        qs = "?message=Nothing+to+save."
+    return RedirectResponse("/ui/admin/system/secrets" + qs, status_code=303)

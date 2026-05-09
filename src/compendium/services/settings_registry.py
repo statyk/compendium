@@ -42,6 +42,7 @@ class SettingDescriptor:
     env_var: str | None = None
     nullable: bool = False  # If True, an empty string parses to None.
     widget: str | None = None  # Hint for custom UI rendering (e.g. "shortcut_picker").
+    secret: bool = False  # If True, value is encrypted at rest; never echoed in UI.
 
     def resolved_env_var(self) -> str:
         return self.env_var or f"COMPENDIUM_{self.key.upper()}"
@@ -675,6 +676,61 @@ def _register_builtins() -> None:
             validator=lambda v: (
                 None if 4 <= int(v) <= 15
                 else "bcrypt_rounds must be between 4 and 15"
+            ),
+        )
+    )
+    # ── Encrypted secrets ──────────────────────────────────────────────────────
+    # These are stored encrypted at rest in the DB. Requires COMPENDIUM_SECRET_KEY.
+    # The env var still wins on read (COMPENDIUM_SMTP_PASSWORD etc.), so
+    # existing env-only deployments are unaffected.
+    register(
+        SettingDescriptor(
+            key="smtp_password",
+            display_name="SMTP Password",
+            type=str,
+            default=None,
+            nullable=True,
+            scope="system",
+            secret=True,
+            help_text=(
+                "Password for the outbound SMTP account. "
+                "Stored encrypted at rest. "
+                "Environment variable COMPENDIUM_SMTP_PASSWORD takes precedence if set."
+            ),
+        )
+    )
+    register(
+        SettingDescriptor(
+            key="tmdb_api_key",
+            display_name="TMDb API Key",
+            type=str,
+            default=None,
+            nullable=True,
+            scope="system",
+            secret=True,
+            help_text=(
+                "API key for The Movie Database (TMDb), used to fetch film and "
+                "TV metadata. Obtain one at themoviedb.org → Settings → API. "
+                "Stored encrypted at rest. "
+                "Environment variable COMPENDIUM_TMDB_API_KEY takes precedence if set."
+            ),
+        )
+    )
+    register(
+        SettingDescriptor(
+            key="google_books_api_key",
+            display_name="Google Books API Key",
+            type=str,
+            default=None,
+            nullable=True,
+            scope="system",
+            secret=True,
+            help_text=(
+                "API key for the Google Books API, used as a fallback cover-image "
+                "source when Open Library has no cover. Obtain one at "
+                "console.cloud.google.com → APIs & Services → Credentials. "
+                "Stored encrypted at rest. "
+                "Environment variable COMPENDIUM_GOOGLE_BOOKS_API_KEY takes precedence if set."
             ),
         )
     )

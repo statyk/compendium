@@ -490,13 +490,13 @@ On each run:
 
 ### SMTP configuration
 
-All non-secret knobs are **DB-editable** via `/ui/admin/system/{smtp,retention}` or `compendium settings set ...`. The env vars below remain a break-glass override (env wins on read). Only `COMPENDIUM_SMTP_PASSWORD` is *exclusively* env-backed (secret).
+All knobs are **DB-editable** via `/ui/admin/system/{smtp,secrets,retention}` or `compendium settings set ...`. Env vars remain a break-glass override (env wins on read). `smtp_password` is a secret — set it via **Admin → System → Secrets** when `COMPENDIUM_SECRET_KEY` is configured, or fall back to `COMPENDIUM_SMTP_PASSWORD` in env.
 
 ```
 smtp_host                   (unset = inert — rows queue but don't send)
 smtp_port                   (default 587)
 smtp_username
-COMPENDIUM_SMTP_PASSWORD    (env-only — secret)
+smtp_password               (secret — stored encrypted; env COMPENDIUM_SMTP_PASSWORD wins)
 smtp_use_starttls           (default true)
 smtp_use_ssl                (default false; mutually exclusive with STARTTLS)
 smtp_from_address           (required when smtp_host is set)
@@ -560,11 +560,11 @@ Most runtime configuration is DB-editable via the `site_setting` table, with env
 **Cache**: `services/site_settings.py` keeps a process-local cache keyed on `MAX(updated_at)` with a 30s TTL. Writes invalidate immediately. Multi-worker (gunicorn) deployments see writes within 30s without a per-read DB round trip. Resilient to a missing `site_setting` table (logs a warning, returns defaults — covers the pre-`db init` case).
 
 **Surfaces**:
-- Web: `/ui/admin/settings/{general,circulation,kiosk}` (librarian-tier) and `/ui/admin/system/{smtp,retention}` (system-tier). Per-row "⚠ Overridden by env var" indicator when the env var is set; inputs disabled in that case.
+- Web: `/ui/admin/settings/{general,circulation,kiosk}` (librarian-tier) and `/ui/admin/system/{smtp,secrets,retention}` (system-tier). Per-row "⚠ Overridden by env var" indicator when the env var is set; inputs disabled in that case.
 - CLI: `compendium settings {list,get,set,reset}`. By default `list` shows DB-editable items only; pass `--all` to also include env-only `Settings` fields (DB URL, JWT secret, TLS material, etc.) — sensitive values mask to `********` unless `--show-secrets` is also passed. `--scope env-only` filters to just those. The combined `--all` view is the canonical answer to "what `COMPENDIUM_*` env vars does this app recognize?"
 - API: `GET /settings/`, `GET/PATCH/DELETE /settings/{key}`.
 
-**Hybrid for secrets**: `smtp_password` stays env-only (`COMPENDIUM_SMTP_PASSWORD`). Other SMTP knobs (host/port/from/etc.) are DB-editable. Same model for any future secrets — env-only by deliberate exclusion from the registry.
+**Secret storage**: `SettingDescriptor.secret=True` marks a setting as sensitive. On write, `services/secrets.py` encrypts the value with Fernet (AES-128-CBC + HMAC-SHA256) and stores `enc:v1:<ciphertext>`. On read, the layer decrypts transparently; if the key is missing or mismatched, a warning is logged and the registered default is returned. A canary value (`_secret_canary`) written on first use lets the app detect key rotation — the Secrets page shows a "Key mismatch" banner rather than silently failing. Currently registered secrets: `smtp_password`, `tmdb_api_key`, `google_books_api_key`. Env vars for these still win on read. `COMPENDIUM_SECRET_KEY` itself is env-only (can't store the key in the encrypted store). Audit payloads for secret settings redact `before`/`after` to `"***"`.
 
 **Audit**: every write emits a `SETTING_UPDATE` (or `SETTING_RESET`) audit entry under `entity_type=site_setting` with `{key, before, after}` details.
 

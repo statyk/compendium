@@ -12,6 +12,7 @@ from compendium.cli.commands import (
     fine,
     hold,
     item,
+    keygen,
     labels,
     loan,
     maintenance,
@@ -20,6 +21,7 @@ from compendium.cli.commands import (
     policy,
     reports,
     role,
+    secrets as secrets_cmd,
     settings as settings_cmd,
     user,
     work,
@@ -52,6 +54,8 @@ app.add_typer(reports.app, name="reports")
 app.add_typer(labels.app, name="labels")
 app.add_typer(settings_cmd.app, name="settings")
 
+app.add_typer(keygen.app, name="keygen")
+app.add_typer(secrets_cmd.app, name="secrets")
 app.command("backup")(backup.backup_command)
 app.command("restore")(backup.restore_command)
 

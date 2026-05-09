@@ -1,7 +1,8 @@
 """SMTP sender — thin wrapper around ``smtplib`` (stdlib, no new dep).
 
-Reads non-secret SMTP settings from the site_setting registry; reads the
-password from the env-only ``Settings`` (hybrid model — secrets stay env-only).
+All SMTP configuration, including the password, is read via ``get_site_setting``
+so it can be set either through the environment (COMPENDIUM_SMTP_PASSWORD) or
+the admin UI (stored encrypted at rest).
 """
 
 from __future__ import annotations
@@ -11,17 +12,14 @@ import smtplib
 import ssl
 from email.message import EmailMessage
 
-from compendium.config.settings import Settings
 from compendium.services.site_settings import get_site_setting
 
 _log = logging.getLogger("compendium.notifications.smtp")
 
 
 class SMTPSender:
-    def __init__(self, settings: Settings) -> None:
-        # Settings is retained only for the env-only secret (smtp_password).
-        # All other SMTP knobs go through get_site_setting().
-        self._s = settings
+    def __init__(self, _settings=None) -> None:
+        pass
 
     def is_configured(self) -> bool:
         return bool(get_site_setting("smtp_host") and get_site_setting("smtp_from_address"))
@@ -67,6 +65,6 @@ class SMTPSender:
 
     def _authenticate(self, smtp: smtplib.SMTP) -> None:
         username = get_site_setting("smtp_username")
-        password = self._s.smtp_password  # env-only secret
+        password = get_site_setting("smtp_password")
         if username and password:
             smtp.login(username, password)

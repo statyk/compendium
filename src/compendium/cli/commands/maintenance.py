@@ -238,7 +238,7 @@ def _make_notification_svc(session):
         hold_repo=SqlHoldRepository(session),
         patron_repo=SqlPatronRepository(session),
         settings=settings,
-        sender=SMTPSender(settings),
+        sender=SMTPSender(),
         audit_svc=AuditService(SqlAuditLogRepository(session)),
         actor_label=f"cli:{getpass.getuser()}",
         source="cli",

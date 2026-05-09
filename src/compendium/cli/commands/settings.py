@@ -34,9 +34,11 @@ app = typer.Typer(help="Inspect and edit site settings (DB-backed configuration)
 
 # Settings whose value should be masked in `settings list` output unless the
 # operator passes --show-secrets. Includes anything that could leak a secret
-# (DB URL embeds the password, JWT key signs tokens, etc.).
+# (DB URL embeds the password, JWT key signs tokens, etc.) plus all
+# descriptors marked secret=True in the registry.
 _SENSITIVE_KEYS: frozenset[str] = frozenset(
-    {"database_url", "jwt_secret_key", "smtp_password", "tmdb_api_key"}
+    {"database_url", "jwt_secret_key"}
+    | {d.key for d in all_descriptors() if d.secret}
 )
 
 

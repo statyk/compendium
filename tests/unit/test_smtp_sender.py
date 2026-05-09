@@ -13,15 +13,7 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 
-from compendium.config.settings import Settings
 from compendium.services.notifications.smtp import SMTPSender
-
-
-def _settings() -> Settings:
-    return Settings(
-        database_url="sqlite:///:memory:",
-        smtp_password="hunter2",
-    )
 
 
 def _site_settings(**overrides):
@@ -29,6 +21,7 @@ def _site_settings(**overrides):
         "smtp_host": "mail.example.com",
         "smtp_port": 587,
         "smtp_username": "alice",
+        "smtp_password": "hunter2",
         "smtp_use_starttls": True,
         "smtp_use_ssl": False,
         "smtp_from_address": "noreply@example.com",
@@ -64,7 +57,7 @@ def test_starttls_passes_verifying_context(fake_smtp):
         "compendium.services.notifications.smtp.get_site_setting",
         side_effect=_site_settings(),
     ):
-        SMTPSender(_settings()).send(
+        SMTPSender().send(
             to="to@example.com", subject="hi", body="b"
         )
     smtp_instance = smtp_cls.return_value.__enter__.return_value
@@ -82,7 +75,7 @@ def test_smtp_ssl_uses_verifying_context(fake_smtp):
         "compendium.services.notifications.smtp.get_site_setting",
         side_effect=_site_settings(smtp_use_ssl=True, smtp_use_starttls=False),
     ):
-        SMTPSender(_settings()).send(
+        SMTPSender().send(
             to="to@example.com", subject="hi", body="b"
         )
     assert smtp_ssl_cls.call_count == 1

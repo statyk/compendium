@@ -33,6 +33,7 @@ NAV_PAGES: list[dict] = [
     {"key": "settings_smtp", "section": "System", "label": "SMTP Settings", "url": "/ui/admin/system/smtp", "permission": "system.manage"},
     {"key": "settings_retention", "section": "System", "label": "Retention Settings", "url": "/ui/admin/system/retention", "permission": "system.manage"},
     {"key": "settings_security", "section": "System", "label": "Security Settings", "url": "/ui/admin/system/security", "permission": "system.manage"},
+    {"key": "settings_secrets", "section": "System", "label": "Secrets", "url": "/ui/admin/system/secrets", "permission": "system.manage"},
     # ── Self-service ─────────────────────────────────────────────────────────
     {"key": "my_loans", "section": "Self-service", "label": "My Loans", "url": "/ui/me/loans", "permission": None},
     {"key": "my_holds", "section": "Self-service", "label": "My Holds", "url": "/ui/me/holds", "permission": None},

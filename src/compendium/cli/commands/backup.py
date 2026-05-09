@@ -18,8 +18,23 @@ def backup_command(
     ),
     no_covers: bool = typer.Option(False, "--no-covers", help="Skip the cover image cache."),
     no_audit: bool = typer.Option(False, "--no-audit", help="Exclude the audit log from the backup."),
+    include_secret_key: bool = typer.Option(
+        False,
+        "--include-secret-key",
+        help=(
+            "Bundle COMPENDIUM_SECRET_KEY into the backup manifest. "
+            "Warning: this defeats encryption-at-rest if the backup file is exposed."
+        ),
+    ),
 ) -> None:
     """Write a portable backup tarball."""
+    if include_secret_key:
+        typer.echo(
+            "Warning: --include-secret-key bundles the encryption key with the backup. "
+            "Ensure the backup file is stored securely — it contains both the ciphertext "
+            "and the key needed to decrypt it.",
+            err=True,
+        )
     settings = get_settings()
     to_stdout = is_stdio(output)
     with session_scope() as session:
@@ -31,12 +46,14 @@ def backup_command(
                         output_fileobj=fout,
                         include_covers=not no_covers,
                         include_audit=not no_audit,
+                        include_secret_key=include_secret_key,
                     )
                 else:
                     manifest = svc.create(
                         output,
                         include_covers=not no_covers,
                         include_audit=not no_audit,
+                        include_secret_key=include_secret_key,
                     )
         except BackupError as exc:
             typer.secho(f"Backup failed: {exc}", fg=typer.colors.RED, err=True)
@@ -98,3 +115,5 @@ def restore_command(
     typer.echo(f"Restored {total} rows from {where}")
     typer.echo(f"  backup revision: {manifest['alembic_head']}")
     typer.echo(f"  source backend:  {manifest.get('source_backend', 'unknown')}")
+    if manifest.get("_secret_key_notice"):
+        typer.echo(f"\nNote: {manifest['_secret_key_notice']}", err=True)

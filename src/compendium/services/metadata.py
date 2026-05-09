@@ -647,10 +647,13 @@ def _parse_tmdb_movie(data: dict) -> dict:
 
 def tmdb_search_title(query: str) -> list[dict]:
     """Search TMDb by title; returns a list of candidate dicts for the picker UI."""
-    api_key = os.getenv("COMPENDIUM_TMDB_API_KEY")
+    from compendium.services.site_settings import get_site_setting
+
+    api_key = get_site_setting("tmdb_api_key")
     if not api_key:
         raise ExternalLookupError(
-            "TMDb API key not configured. Set COMPENDIUM_TMDB_API_KEY to enable film metadata lookup."
+            "TMDb API key not configured. Set COMPENDIUM_TMDB_API_KEY or add it "
+            "via Admin → System → Secrets to enable film metadata lookup."
         )
     return _tmdb_search_candidates(query, api_key)
 
@@ -659,10 +662,13 @@ class TMDbAdapter:
     def lookup(self, kind: str, value: str) -> dict | None:
         if kind != "tmdb_id":
             raise ExternalLookupError(f"TMDb adapter does not support identifier kind '{kind}'")
-        api_key = os.getenv("COMPENDIUM_TMDB_API_KEY")
+        from compendium.services.site_settings import get_site_setting
+
+        api_key = get_site_setting("tmdb_api_key")
         if not api_key:
             raise ExternalLookupError(
-                "TMDb API key not configured. Set COMPENDIUM_TMDB_API_KEY to enable film metadata lookup."
+                "TMDb API key not configured. Set COMPENDIUM_TMDB_API_KEY or add it "
+                "via Admin → System → Secrets to enable film metadata lookup."
             )
         data = _tmdb_fetch_movie(value, api_key)
         if data.get("success") is False:

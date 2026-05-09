@@ -60,12 +60,19 @@ The `.env` file is for things that *must* be set before the DB is available, plu
 # .env — example production settings
 
 COMPENDIUM_DATABASE_URL=sqlite:////var/lib/compendium/compendium.db
-COMPENDIUM_JWT_SECRET_KEY=<generate with: python -c "import secrets; print(secrets.token_hex(32))">
+COMPENDIUM_JWT_SECRET_KEY=<generate with: compendium keygen --jwt>
 COMPENDIUM_JWT_EXPIRE_MINUTES=480
 COMPENDIUM_SECURE_COOKIES=true            # default; set `false` for plain-HTTP LAN deploys
 
-# SMTP — host/port/from are DB-editable but you can pin them here too
-COMPENDIUM_SMTP_PASSWORD=<secret>          # password is env-only by design
+# Optional: enable the encrypted-secrets UI (/ui/admin/system/secrets).
+# Generate with: compendium keygen --secret
+# COMPENDIUM_SECRET_KEY=<Fernet key>
+
+# SMTP password, TMDb key, Google Books key — set these via the Secrets page
+# when COMPENDIUM_SECRET_KEY is configured, OR override here (env wins on read).
+# COMPENDIUM_SMTP_PASSWORD=
+# COMPENDIUM_TMDB_API_KEY=
+# COMPENDIUM_GOOGLE_BOOKS_API_KEY=
 ```
 
 **`JWT_SECRET_KEY` must be set to a strong random value.** The built-in default is intentionally weak — the server refuses to start when it's detected. Generate one with `python -c "import secrets; print(secrets.token_urlsafe(48))"` (or `openssl rand -base64 48`). For first-run / dev work you may set `COMPENDIUM_ALLOW_INSECURE_JWT=1` to bypass the check, which downgrades it to a startup warning; do not use that in production.
@@ -76,7 +83,30 @@ COMPENDIUM_SMTP_PASSWORD=<secret>          # password is env-only by design
 
 **Login rate limiting (default: 10 failures / 5-minute window).** Compendium enforces a per-identity sliding-window throttle on `/auth/login`, `/ui/login`, and the kiosk card gate. After `login_max_failures` consecutive failures within `login_failure_window_seconds` seconds, further attempts from the same username or kiosk card number return 429 with a `Retry-After` header. Throttling is **strictly per-identity** — there is no IP-based block, so users behind a shared reverse proxy are never collectively locked out. Credential-stuffing protection (one attacker, many usernames) is **not** provided by the in-app guard; configure `limit_req_zone` (nginx) or `rate_limit` (Caddy) at the edge for that. Both settings are DB-editable from **Admin → System → Security** and can also be pinned via `COMPENDIUM_LOGIN_MAX_FAILURES` / `COMPENDIUM_LOGIN_FAILURE_WINDOW_SECONDS`. Set `login_max_failures` to `0` to disable throttling.
 
-**Env-only**: `database_url`, `jwt_secret_key`, `jwt_algorithm`, `jwt_expire_minutes`, `ssl_certfile`, `ssl_keyfile`, `secure_cookies`, `tmdb_api_key`, `smtp_password`, `max_upload_bytes`. Everything else can flow through the DB-backed `site_setting` table — see `compendium settings list` for the full registered set with current sources.
+**Env-only** (must live in env, cannot be set via the UI): `database_url`, `jwt_secret_key`, `jwt_algorithm`, `jwt_expire_minutes`, `ssl_certfile`, `ssl_keyfile`, `secure_cookies`, `max_upload_bytes`, and `COMPENDIUM_SECRET_KEY` itself (the encryption key can't be stored in the database it protects). `smtp_password`, `tmdb_api_key`, and `google_books_api_key` are now **also** settable via **Admin → System → Secrets** when `COMPENDIUM_SECRET_KEY` is configured — env vars remain a break-glass override (env wins on read). Everything else can flow through the DB-backed `site_setting` table — see `compendium settings list` for the full registered set with current sources.
+
+### Secret storage
+
+`COMPENDIUM_SECRET_KEY` enables encrypted storage of sensitive settings (SMTP password, TMDb API key, Google Books API key) in the database. Without it those settings remain env-only and the Secrets page shows a setup banner.
+
+**Generate keys for a fresh deployment:**
+
+```bash
+compendium keygen
+# prints COMPENDIUM_JWT_SECRET_KEY and COMPENDIUM_SECRET_KEY — copy both to .env
+```
+
+Use `--jwt` or `--secret` to print only one key. `--quiet` omits the comments.
+
+**Manage secrets from the CLI** (useful for headless/scriptable deployments):
+
+```bash
+compendium secrets list                 # show all registered secrets + their source
+compendium secrets set smtp_password    # prompts for value, encrypts + stores
+compendium secrets clear tmdb_api_key   # removes the stored row
+```
+
+**Encryption details**: values are stored as `enc:v1:<Fernet ciphertext>` (AES-128-CBC + HMAC-SHA256). A canary row (`_secret_canary`) in the settings table lets the app detect key rotation immediately — the Admin → System → Secrets page shows a "Key mismatch" banner rather than silently decrypting garbage. To rotate the key: set the new key in env, re-paste each secret value via the UI or CLI.
 
 ---
 
@@ -360,6 +390,20 @@ Options:
   is safe; use it if the cache is large and you keep backups off-machine).
 - `--no-audit` — drop the `audit_log` table (slimmer file; lose forensic
   history).
+- `--include-secret-key` — bundle `COMPENDIUM_SECRET_KEY` into the backup
+  manifest. Convenient for single-file portability but **defeats
+  encryption-at-rest**: anyone with the file can decrypt stored secrets. Prefer
+  keeping the backup and key separate. The recommended portable alternative:
+
+  ```bash
+  compendium backup -o - | gpg --symmetric > backup-$(date +%F).tar.gz.gpg
+  ```
+
+  Restore the GPG bundle with:
+
+  ```bash
+  gpg --decrypt backup-2026-05-09.tar.gz.gpg | compendium restore -
+  ```
 
 Nightly cron entry:
 

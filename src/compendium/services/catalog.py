@@ -172,9 +172,11 @@ class CatalogService:
             )
 
         if media_type_code == "book" and not meta.get("cover_image_url") and meta.get("isbn"):
+            from compendium.services.site_settings import get_site_setting
+
             meta["cover_image_url"] = lookup_cover_fallbacks(
                 meta["isbn"],
-                google_books_key=get_settings().google_books_api_key,
+                google_books_key=get_site_setting("google_books_api_key"),
             )
 
         # For MBID lookups the returned meta may carry a UPC — check for an
@@ -450,9 +452,11 @@ class CatalogService:
             )
 
         if media_type_code == "book" and not data.get("cover_image_url") and work.isbn:
+            from compendium.services.site_settings import get_site_setting
+
             fallback = lookup_cover_fallbacks(
                 work.isbn,
-                google_books_key=get_settings().google_books_api_key,
+                google_books_key=get_site_setting("google_books_api_key"),
             )
             if fallback:
                 data["cover_image_url"] = fallback

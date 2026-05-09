@@ -127,6 +127,27 @@ def get_site_setting(key: str) -> Any:
     raw = _cache.get(key)
     if raw is None:
         return desc.default
+
+    if desc.secret:
+        from compendium.services.secrets import (
+            SecretKeyMissingError,
+            SecretKeyMismatchError,
+            decrypt,
+            is_encrypted,
+        )
+
+        if not is_encrypted(raw):
+            # Plaintext fallback: row existed before encryption was enabled.
+            pass
+        else:
+            try:
+                raw = decrypt(raw)
+            except (SecretKeyMissingError, SecretKeyMismatchError) as exc:
+                _log.warning(
+                    "Cannot decrypt site_setting %r; using default. %s", key, exc
+                )
+                return desc.default
+
     try:
         return parse(desc, raw)
     except SettingsRegistryError:
@@ -165,6 +186,35 @@ def set_site_setting(
         raise SettingValidationError(f"setting {key!r} is not nullable")
     validate(desc, value)
     raw = encode_for_storage(value, desc.type)
+
+    if desc.secret and raw:
+        from compendium.services.secrets import (
+            SecretKeyMissingError,
+            check_canary,
+            encrypt,
+            write_canary,
+            CanaryResult,
+        )
+
+        if not raw:
+            pass  # clearing a secret — store empty without encryption
+        else:
+            canary = check_canary(session)
+            if canary == CanaryResult.NO_KEY:
+                raise SecretKeyMissingError(
+                    "Cannot store secret: COMPENDIUM_SECRET_KEY is not set. "
+                    "Run 'compendium keygen --secret' to generate one."
+                )
+            if canary == CanaryResult.MISMATCH:
+                from compendium.services.secrets import SecretKeyMismatchError
+                raise SecretKeyMismatchError(
+                    "Cannot store secret: COMPENDIUM_SECRET_KEY does not match the "
+                    "key used for existing secrets. Restore the original key first."
+                )
+            if canary == CanaryResult.MISSING:
+                write_canary(session)
+            raw = encrypt(raw)
+
     repo = SqlSiteSettingRepository(session)
     existing = repo.get(key)
     before = existing.value if existing is not None else None
@@ -173,6 +223,11 @@ def set_site_setting(
     if audit_svc is not None:
         from compendium.services.audit import AuditAction, AuditEntityType
 
+        audit_details = (
+            {"key": key, "before": "***", "after": "***"}
+            if desc.secret
+            else {"key": key, "before": before, "after": raw}
+        )
         audit_svc.record(
             actor=actor,
             actor_label=actor_label,
@@ -180,7 +235,7 @@ def set_site_setting(
             entity_type=AuditEntityType.SITE_SETTING,
             entity_id=None,
             action=AuditAction.SETTING_UPDATE,
-            details={"key": key, "before": before, "after": raw},
+            details=audit_details,
         )
     return row
 

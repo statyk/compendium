@@ -205,6 +205,7 @@ class BackupService:
         output_fileobj: Any | None = None,
         include_covers: bool = True,
         include_audit: bool = True,
+        include_secret_key: bool = False,
     ) -> dict[str, Any]:
         if (output_path is None) == (output_fileobj is None):
             raise BackupError(
@@ -223,6 +224,16 @@ class BackupService:
                 f"Database is at revision {revision}, but the code's head is {head}. "
                 "Run 'compendium db upgrade' before taking a backup."
             )
+
+        import os as _os
+
+        secret_key_value: str | None = None
+        if include_secret_key:
+            secret_key_value = _os.environ.get("COMPENDIUM_SECRET_KEY")
+            if not secret_key_value:
+                raise BackupError(
+                    "Cannot bundle secret key: COMPENDIUM_SECRET_KEY is not set in the environment."
+                )
 
         counts: dict[str, int] = {}
         if output_path is not None:
@@ -245,7 +256,7 @@ class BackupService:
                 if src.exists() and any(src.iterdir()):
                     shutil.copytree(src, staging / _COVERS_DIR)
 
-            manifest = {
+            manifest: dict[str, Any] = {
                 "compendium_version": _compendium_version(),
                 "alembic_head": revision,
                 "source_backend": _detect_backend(self._settings.database_url),
@@ -253,7 +264,10 @@ class BackupService:
                 "tables": counts,
                 "include_audit": include_audit,
                 "include_covers": include_covers,
+                "has_secret_key": include_secret_key,
             }
+            if secret_key_value:
+                manifest["secret_key"] = secret_key_value
             (staging / _MANIFEST_NAME).write_text(json.dumps(manifest, indent=2))
 
             # Streaming write mode (``w|gz``) for fileobj — stdout pipes
@@ -372,6 +386,34 @@ class BackupService:
         from compendium.services.site_settings import invalidate_cache
 
         invalidate_cache()
+
+        # Handle secret key bundled in or absent from the backup.
+        import os as _os
+        from compendium.services.secrets import is_encrypted
+
+        bundled_key = manifest.get("secret_key")
+        if bundled_key:
+            _os.environ["COMPENDIUM_SECRET_KEY"] = bundled_key
+            manifest["_secret_key_notice"] = (
+                "Secret key bundled with this backup has been loaded for this session. "
+                "Set COMPENDIUM_SECRET_KEY in your environment to make it permanent."
+            )
+        else:
+            # Check if any restored app_setting rows contain encrypted values.
+            from compendium.repositories.sql.site_setting_repository import (
+                SqlSiteSettingRepository,
+            )
+            from sqlalchemy.orm import Session
+
+            with Session(engine) as check_session:
+                all_rows = SqlSiteSettingRepository(check_session).all()
+            encrypted_keys = [r.key for r in all_rows if r.value and is_encrypted(r.value)]
+            if encrypted_keys and not _os.environ.get("COMPENDIUM_SECRET_KEY"):
+                manifest["_secret_key_notice"] = (
+                    "Encrypted secrets were restored but COMPENDIUM_SECRET_KEY is not set. "
+                    "Set it in your environment (matching the original key) to enable them. "
+                    f"Affected settings: {', '.join(encrypted_keys)}"
+                )
 
         return manifest
 

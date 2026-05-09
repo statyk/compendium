@@ -29,6 +29,7 @@ docker/
 cd docker
 cp .env.example .env
 $EDITOR .env                       # change POSTGRES_PASSWORD, JWT secret (required), admin password
+                                   # optionally add COMPENDIUM_SECRET_KEY for encrypted-secrets UI
 
 docker compose up -d --build
 ```
