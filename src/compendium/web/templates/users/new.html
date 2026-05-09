@@ -34,8 +34,10 @@
       <input type="radio" name="patron_mode" value="link"
              {% if unlinked_patrons %}checked{% endif %}
              {% if not unlinked_patrons %}disabled{% endif %}> Link an existing card-only patron
-      {% if not unlinked_patrons %}<small style="color:var(--pico-muted-color)"> — no unlinked patrons available</small>{% endif %}
     </label>
+    {% if not unlinked_patrons %}
+    <small style="display:block; margin-left:1.5rem; color:var(--pico-muted-color)">No unlinked patrons available — create a new one below.</small>
+    {% endif %}
     {% if unlinked_patrons %}
     <select name="link_patron_card" id="patron-link-select" style="margin-left:1.5rem; width:auto">
       {% for p in unlinked_patrons %}
@@ -97,8 +99,10 @@
   patronModeRadios.forEach(function(r) { r.addEventListener('change', updateCreateFields); });
 
   if (emailInput && patronEmailInput) {
+    var patronEmailDirty = false;
+    patronEmailInput.addEventListener('input', function() { patronEmailDirty = true; });
     emailInput.addEventListener('input', function() {
-      if (!patronEmailInput.value) patronEmailInput.value = emailInput.value;
+      if (!patronEmailDirty) patronEmailInput.value = emailInput.value;
     });
   }
 

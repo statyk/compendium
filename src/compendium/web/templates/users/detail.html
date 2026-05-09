@@ -91,7 +91,7 @@
           <button type="submit" style="padding:0.2rem 0.6rem; margin:0; width:auto">Link</button>
         </form>
         <details style="margin-top:0.5rem">
-          <summary>Create a new patron record</summary>
+          <summary class="outline secondary" role="button">Create a new patron record</summary>
           <form method="post" action="/ui/users/{{ target.username }}/create-patron" style="margin-top:0.5rem; max-width:24rem">
             <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
             <label for="new_patron_name">Full name
@@ -112,7 +112,7 @@
       </div>
     {% elif target.is_active %}
       <details>
-        <summary>Create a patron record</summary>
+        <summary class="outline secondary" role="button">Create a patron record</summary>
         <form method="post" action="/ui/users/{{ target.username }}/create-patron" style="margin-top:0.5rem; max-width:24rem">
           <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
           <label for="solo_patron_name">Full name

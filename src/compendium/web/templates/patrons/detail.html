@@ -97,7 +97,7 @@
       </form>
       {% if has_permission(user, 'patron.account.manage') %}
       <details style="margin-top:0.5rem">
-        <summary>Create a new login for this patron</summary>
+        <summary class="outline secondary" role="button">Create a new login for this patron</summary>
         <form method="post" action="/ui/patrons/{{ patron.library_card_number }}/create-user" style="margin-top:0.5rem; max-width:24rem">
           <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
           <label for="new_login_username">Username
@@ -115,7 +115,7 @@
       {% endif %}
     {% elif patron.is_active and has_permission(user, 'patron.account.manage') %}
       <details>
-        <summary>Create a login for this patron</summary>
+        <summary class="outline secondary" role="button">Create a login for this patron</summary>
         <form method="post" action="/ui/patrons/{{ patron.library_card_number }}/create-user" style="margin-top:0.5rem; max-width:24rem">
           <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
           <label for="solo_login_username">Username
