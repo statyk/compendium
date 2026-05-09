@@ -35,6 +35,10 @@
       </form>
     {% else %}
       <em>Inactive</em>
+      <form method="post" action="/ui/patrons/{{ patron.library_card_number }}/reactivate" style="display:inline">
+        <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+        <button type="submit" class="outline" style="padding:0.2rem 0.6rem; margin-left:1rem; width:auto">Reactivate</button>
+      </form>
     {% endif %}
   </dd>
   {% if patron.contact_email %}<dt>Email</dt><dd>{{ patron.contact_email }}</dd>{% endif %}

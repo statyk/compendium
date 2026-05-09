@@ -90,14 +90,21 @@ def _unlinked_users(session: Session) -> list[AppUser]:
 @router.get("/patrons")
 def patron_list(
     request: Request,
+    include_inactive: int = Query(default=0),
     user: AppUser = Depends(require_web_permission(_PERM)),
     session: Session = Depends(get_session),
 ):
-    patrons = SqlPatronRepository(session).list()
+    show_inactive = include_inactive == 1
+    patrons = SqlPatronRepository(session).list(limit=500, include_inactive=show_inactive)
     return _render(
         "patrons/list.html",
         request,
-        {"request": request, "user": user, "patrons": patrons},
+        {
+            "request": request,
+            "user": user,
+            "patrons": patrons,
+            "include_inactive": show_inactive,
+        },
     )
 
 
@@ -425,3 +432,23 @@ def deactivate_patron(
         return HTMLResponse("<span class='error-banner'>Patron deactivated.</span>")
     except (BusinessRuleError, NotFoundError) as exc:
         return HTMLResponse(f"<span class='error-banner'>{escape(str(exc))}</span>")
+
+
+@router.post("/patrons/{card_number}/reactivate")
+def reactivate_patron(
+    card_number: str,
+    request: Request,
+    csrf_token: str = Form(default=""),
+    user: AppUser = Depends(require_web_permission(_PERM)),
+    session: Session = Depends(get_session),
+):
+    check_csrf_form(request, csrf_token)
+    try:
+        _patron_svc(session, user).reactivate(card_number)
+        return RedirectResponse(
+            f"/ui/patrons/{card_number}?message=Patron+reactivated.", status_code=303
+        )
+    except (BusinessRuleError, NotFoundError) as exc:
+        return RedirectResponse(
+            f"/ui/patrons/{card_number}?error={escape(str(exc))}", status_code=303
+        )

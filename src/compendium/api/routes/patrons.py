@@ -169,3 +169,18 @@ def deactivate_patron(
     except BusinessRuleError as exc:
         raise HTTPException(status_code=422, detail=str(exc)) from exc
     return PatronResponse.model_validate(patron)
+
+
+@router.post("/{card_number}/reactivate", response_model=PatronResponse)
+def reactivate_patron(
+    card_number: str,
+    session: Session = Depends(get_session),
+    user: AppUser = Depends(require_permission("patron.manage")),
+) -> PatronResponse:
+    try:
+        patron = _patron_service(session, user).reactivate(card_number)
+    except NotFoundError as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
+    except BusinessRuleError as exc:
+        raise HTTPException(status_code=422, detail=str(exc)) from exc
+    return PatronResponse.model_validate(patron)

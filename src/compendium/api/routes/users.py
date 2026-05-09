@@ -110,6 +110,21 @@ def deactivate_user(
     return UserResponse.model_validate(result)
 
 
+@router.post("/{username}/reactivate", response_model=UserResponse)
+def reactivate_user(
+    username: str,
+    session: Session = Depends(get_session),
+    user: AppUser = Depends(require_permission("user.manage")),
+) -> UserResponse:
+    try:
+        result = _auth(session, user).reactivate_user(username)
+    except NotFoundError as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
+    except BusinessRuleError as exc:
+        raise HTTPException(status_code=422, detail=str(exc)) from exc
+    return UserResponse.model_validate(result)
+
+
 @router.post("/{username}/patron", response_model=PatronResponse)
 def link_patron(
     username: str,

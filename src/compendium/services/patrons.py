@@ -219,6 +219,27 @@ class PatronService:
         user = self._auth.create_user(username, password, "Patron")
         return self.link_user(card_number, user.id)
 
+    def reactivate(self, card_number: str) -> Patron:
+        patron = self._patrons.get_by_card_number(card_number)
+        if patron is None:
+            raise NotFoundError(f"No patron with card number '{card_number}'")
+        if patron.is_active:
+            raise BusinessRuleError(f"Patron '{card_number}' is already active")
+        if patron.expires_at is not None and patron.expires_at < date.today():
+            raise BusinessRuleError(
+                f"Patron card expired {patron.expires_at.isoformat()}. "
+                "Update the expiry date before reactivating."
+            )
+        patron.is_active = True
+        result = self._patrons.update(patron)
+        self._record(
+            AuditEntityType.PATRON,
+            patron.id,
+            AuditAction.REACTIVATE,
+            {"snapshot": {"name": patron.full_name, "card": patron.library_card_number}},
+        )
+        return result
+
     def deactivate(self, card_number: str) -> Patron:
         patron = self._patrons.get_by_card_number(card_number)
         if patron is None:

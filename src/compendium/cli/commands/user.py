@@ -162,10 +162,11 @@ def set_user_password(
 @app.command("list")
 def list_users(
     limit: int = typer.Option(50, "--limit"),
+    include_inactive: bool = typer.Option(False, "--include-inactive", help="Include inactive accounts"),
 ) -> None:
-    """List user accounts."""
+    """List user accounts (active only by default)."""
     with session_scope() as session:
-        users = SqlUserRepository(session).list(limit=limit)
+        users = SqlUserRepository(session).list(limit=limit, include_inactive=include_inactive)
         if not users:
             typer.echo("No users found.")
             return
@@ -183,6 +184,20 @@ def deactivate_user(
         with session_scope() as session:
             user = _auth_svc(session).deactivate_user(username)
             typer.echo(f"\nDeactivated user '{user.username}'.")
+    except DomainError as exc:
+        typer.echo(f"Error: {exc}", err=True)
+        raise typer.Exit(1) from exc
+
+
+@app.command("reactivate")
+def reactivate_user(
+    username: str = typer.Option(..., "--username", help="Username to reactivate"),
+) -> None:
+    """Reactivate an inactive user account."""
+    try:
+        with session_scope() as session:
+            user = _auth_svc(session).reactivate_user(username)
+            typer.echo(f"\nReactivated user '{user.username}'.")
     except DomainError as exc:
         typer.echo(f"Error: {exc}", err=True)
         raise typer.Exit(1) from exc

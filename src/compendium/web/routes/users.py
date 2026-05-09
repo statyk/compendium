@@ -93,14 +93,16 @@ def _render(name: str, request: Request, ctx: dict, status_code: int = 200):
 @router.get("/users")
 def user_list(
     request: Request,
+    include_inactive: int = Query(default=0),
     user: AppUser = Depends(require_web_permission(_PERM)),
     session: Session = Depends(get_session),
 ):
-    users = SqlUserRepository(session).list(limit=200)
+    show_inactive = include_inactive == 1
+    users = SqlUserRepository(session).list(limit=200, include_inactive=show_inactive)
     return _render(
         "users/list.html",
         request,
-        {"request": request, "user": user, "users": users},
+        {"request": request, "user": user, "users": users, "include_inactive": show_inactive},
     )
 
 
@@ -434,3 +436,23 @@ def user_deactivate(
         return HTMLResponse("<span class='error-banner'>User deactivated.</span>")
     except (BusinessRuleError, NotFoundError) as exc:
         return HTMLResponse(f"<span class='error-banner'>{escape(str(exc))}</span>")
+
+
+@router.post("/users/{username}/reactivate")
+def user_reactivate(
+    username: str,
+    request: Request,
+    csrf_token: str = Form(default=""),
+    user: AppUser = Depends(require_web_permission(_PERM)),
+    session: Session = Depends(get_session),
+):
+    check_csrf_form(request, csrf_token)
+    try:
+        _auth_svc(session, user).reactivate_user(username)
+        return RedirectResponse(
+            f"/ui/users/{quote(username)}?message=User+reactivated.", status_code=303
+        )
+    except (BusinessRuleError, NotFoundError) as exc:
+        return RedirectResponse(
+            f"/ui/users/{quote(username)}?error={quote(str(exc))}", status_code=303
+        )

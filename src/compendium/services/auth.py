@@ -224,6 +224,22 @@ class AuthService:
         )
         return result
 
+    def reactivate_user(self, username: str) -> AppUser:
+        user = self._users.get_by_username(username)
+        if user is None:
+            raise NotFoundError(f"No user with username '{username}'")
+        if user.is_active:
+            raise BusinessRuleError(f"User '{username}' is already active")
+        user.is_active = True
+        result = self._users.update(user)
+        self._record(
+            AuditEntityType.USER,
+            result.id,
+            AuditAction.REACTIVATE,
+            {"snapshot": {"username": result.username}},
+        )
+        return result
+
     def _record(
         self,
         entity_type: str,

@@ -101,9 +101,9 @@ Run `compendium --help` for the full command tree, or `compendium <group> --help
 **Patrons & accounts**
 | Group | Common subcommands |
 |---|---|
-| `patron` | `add`, `list`, `set`, `link-user`, `unlink-user`, `deactivate` |
+| `patron` | `add`, `list` (`--include-inactive`), `set`, `link-user`, `unlink-user`, `deactivate`, `reactivate` |
 | `patron-category` | `list`, `create`, `update`, `delete` |
-| `user` | `add` (default --role Administrator), `set-role`, `set-password`, `deactivate` |
+| `user` | `add` (default --role Administrator), `list` (`--include-inactive`), `set-role`, `set-password`, `deactivate`, `reactivate` |
 | `role` | `list`, `create`, `update`, `clone` |
 | `policy` | `list`, `create`, `set` (configures fines, category-aware) |
 
@@ -149,7 +149,7 @@ Start the server with `compendium serve` and open your browser to `http://localh
 | `/ui/items/{barcode}` | Librarian | Item detail, loan history, withdraw, set-loanable, lost/damaged/claims actions |
 | `/ui/patrons` | Librarian | Patron list |
 | `/ui/patrons/new` | Librarian | Create patron (with category + expiry) |
-| `/ui/patrons/{card}` | Librarian | Patron detail with active loans, holds, link/unlink user, deactivate |
+| `/ui/patrons/{card}` | Librarian | Patron detail with active loans, holds, link/unlink user, deactivate, reactivate |
 | `/ui/patrons/{card}/loans` | Librarian | Patron loan history (active / returned / all) |
 | `/ui/patrons/{card}/fines` | Librarian | Patron fines with pay/waive |
 | `/ui/admin/loans` | Librarian | All active loans (system-wide) with overdue/due-soon filters |
@@ -172,7 +172,7 @@ Start the server with `compendium serve` and open your browser to `http://localh
 | `/ui/audit` | Librarian | Audit log viewer |
 | `/ui/users` | SystemAdmin | User list |
 | `/ui/users/new` | SystemAdmin | Create user |
-| `/ui/users/{username}` | SystemAdmin | User detail — change role, deactivate, reset password |
+| `/ui/users/{username}` | SystemAdmin | User detail — change role, deactivate, reactivate, reset password |
 | `/ui/roles` | SystemAdmin | Role list |
 | `/ui/roles/new` | SystemAdmin | Create custom role |
 | `/ui/roles/{id}` | SystemAdmin | Role detail — edit permissions, clone |
@@ -191,7 +191,7 @@ Below is a high-level inventory grouped by concern; the OpenAPI document is the 
 |---|---|---|
 | **Auth** | `POST /auth/login` | none |
 | **Catalog** | `GET /works/search`, `/works/new-arrivals`, `/works/recently-returned`; `GET /items/{barcode}`; `POST /items/{barcode}/{withdraw,loanable,verify-returned,write-off-claim,lost,damaged,clear-lost,clear-damage}` | guest / `item.view` / `item.delete` |
-| **Patrons** | `GET/POST /patrons`, `PATCH /patrons/{card}`, `POST /patrons/{card}/deactivate`, `POST /patrons/{card}/account`, `GET/POST /patron-categories`, `PATCH/DELETE /patron-categories/{id}` | `patron.manage` / `patron.account.manage` for account endpoints |
+| **Patrons** | `GET/POST /patrons`, `PATCH /patrons/{card}`, `POST /patrons/{card}/{deactivate,reactivate}`, `POST /patrons/{card}/account`, `GET/POST /patron-categories`, `PATCH/DELETE /patron-categories/{id}` | `patron.manage` / `patron.account.manage` for account endpoints |
 | **Loans** | `POST /loans/checkout`, `/loans/{id}/{checkin,renew,claim-returned}`, `POST /loans/{id}/declare-lost`/`mark-damaged`; `GET /loans` (system-wide), `/loans/patron/{card}`, `/loans/item/{barcode}`, `/loans/claims` | `loan.*` (see below) |
 | **Holds** | `GET /holds`, `/holds/queue/{work_id}`; `POST/DELETE /holds`, `/holds/{id}`; `POST /holds/{id}/{suspend,resume}` | `hold.*` |
 | **Fines** | `GET /fines`, `GET/POST /patrons/{card}/fines`, `POST /fines/{id}/{pay,waive}`, `POST /patrons/{card}/fines/assess-overdue` | `fine.manage` / `fine.view.self` |
@@ -201,7 +201,7 @@ Below is a high-level inventory grouped by concern; the OpenAPI document is the 
 | **Bulk import/export** | `POST /import/{csv,goodreads,librarything,marc}` (multipart), `GET /export/{csv,marc}` (streaming) | `catalog.import` / `item.view` |
 | **Labels** | `GET /labels/items`, `/labels/patrons` (PDF) | `labels.generate` |
 | **Policies** | `GET/POST /policies` | `item.view` / `policy.edit` |
-| **Users** | `POST /users`, `POST /users/{username}/deactivate`, `POST/DELETE /users/{username}/patron` | `user.manage` |
+| **Users** | `POST /users`, `POST /users/{username}/{deactivate,reactivate}`, `POST/DELETE /users/{username}/patron` | `user.manage` |
 | **Settings** | `GET /settings/`, `GET/PATCH/DELETE /settings/{key}` | `patron.manage` (librarian-tier) / `system.manage` (system-tier) |
 | **Audit** | `GET /audit/` | `audit.view` |
 

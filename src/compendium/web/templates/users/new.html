@@ -30,21 +30,25 @@
 
   <div id="patron-section" style="display:none; margin-top:1rem; padding:0.75rem 1rem; border:1px solid var(--pico-muted-border-color); border-radius:var(--pico-border-radius)">
     <p><strong>Patron record</strong> — a Patron-role user needs a linked patron record.</p>
-    {% if unlinked_patrons %}
     <label>
-      <input type="radio" name="patron_mode" value="link" checked> Link an existing card-only patron
+      <input type="radio" name="patron_mode" value="link"
+             {% if unlinked_patrons %}checked{% endif %}
+             {% if not unlinked_patrons %}disabled{% endif %}> Link an existing card-only patron
+      {% if not unlinked_patrons %}<small style="color:var(--pico-muted-color)"> — no unlinked patrons available</small>{% endif %}
     </label>
-    <select name="link_patron_card" style="margin-left:1.5rem; width:auto">
+    {% if unlinked_patrons %}
+    <select name="link_patron_card" id="patron-link-select" style="margin-left:1.5rem; width:auto">
       {% for p in unlinked_patrons %}
       <option value="{{ p.library_card_number }}">{{ p.full_name }} ({{ p.library_card_number }})</option>
       {% endfor %}
     </select>
-    <label style="margin-top:0.5rem">
-      <input type="radio" name="patron_mode" value="create"> Create a new patron record
-    </label>
     {% else %}
-    <input type="hidden" name="patron_mode" value="create">
+    <select name="link_patron_card" id="patron-link-select" style="margin-left:1.5rem; width:auto; display:none" disabled></select>
     {% endif %}
+    <label style="margin-top:0.5rem">
+      <input type="radio" name="patron_mode" value="create"
+             {% if not unlinked_patrons %}checked{% endif %}> Create a new patron record
+    </label>
     <div id="patron-create-fields" style="{% if unlinked_patrons %}display:none;{% endif %}margin-left:1.5rem; margin-top:0.5rem">
       <label for="patron_full_name">Full name <span style="color:red">*</span>
         <input type="text" id="patron_full_name" name="patron_full_name" autocomplete="off">
@@ -73,6 +77,9 @@
   var patronSection = document.getElementById('patron-section');
   var patronModeRadios = document.querySelectorAll('input[name="patron_mode"]');
   var createFields = document.getElementById('patron-create-fields');
+  var linkSelect = document.getElementById('patron-link-select');
+  var emailInput = document.getElementById('email');
+  var patronEmailInput = document.getElementById('patron_email');
 
   function updatePatronSection() {
     patronSection.style.display = roleSelect.value === 'Patron' ? 'block' : 'none';
@@ -81,11 +88,19 @@
   function updateCreateFields() {
     if (!createFields) return;
     var mode = document.querySelector('input[name="patron_mode"]:checked');
-    if (createFields) createFields.style.display = (mode && mode.value === 'create') ? 'block' : 'none';
+    var isCreate = mode && mode.value === 'create';
+    createFields.style.display = isCreate ? 'block' : 'none';
+    if (linkSelect) linkSelect.style.display = (!isCreate) ? 'block' : 'none';
   }
 
   roleSelect.addEventListener('change', updatePatronSection);
   patronModeRadios.forEach(function(r) { r.addEventListener('change', updateCreateFields); });
+
+  if (emailInput && patronEmailInput) {
+    emailInput.addEventListener('input', function() {
+      if (!patronEmailInput.value) patronEmailInput.value = emailInput.value;
+    });
+  }
 
   updatePatronSection();
   updateCreateFields();

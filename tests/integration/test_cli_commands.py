@@ -115,7 +115,7 @@ class TestUserCli:
             "compendium.cli.commands.user",
         )
         assert r.exit_code == 0
-        r = _invoke(session, ["user", "list"], "compendium.cli.commands.user")
+        r = _invoke(session, ["user", "list", "--include-inactive"], "compendium.cli.commands.user")
         assert "inactive" in r.output
 
 

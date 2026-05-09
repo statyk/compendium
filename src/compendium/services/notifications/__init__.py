@@ -361,6 +361,14 @@ class NotificationService:
     # Internals
     # ------------------------------------------------------------------
 
+    def _patron_email(self, patron: Patron) -> str | None:
+        """Return the effective notification email: contact_email wins; falls back to user.email."""
+        if patron.contact_email:
+            return patron.contact_email
+        if patron.user_id is not None and patron.user is not None:
+            return patron.user.email
+        return None
+
     def _patron_can_receive(self, patron: Patron | None) -> bool:
         if patron is None:
             return False
@@ -368,7 +376,7 @@ class NotificationService:
             return False
         if not patron.receive_notifications:
             return False
-        if not patron.contact_email:
+        if not self._patron_email(patron):
             return False
         return True
 
@@ -395,7 +403,7 @@ class NotificationService:
         safe_ctx = {k: _json_safe(v) for k, v in context.items()}
         row = Notification(
             recipient_patron_id=patron.id,
-            recipient_email=patron.contact_email,
+            recipient_email=self._patron_email(patron),
             template_key=template.value,
             context=safe_ctx,
             subject=subject,

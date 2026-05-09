@@ -25,5 +25,8 @@ class SqlPatronRepository:
         self._s.flush()
         return patron
 
-    def list(self, limit: int = 50, offset: int = 0) -> list[Patron]:
-        return self._s.query(Patron).order_by(Patron.full_name).offset(offset).limit(limit).all()
+    def list(self, limit: int = 50, offset: int = 0, include_inactive: bool = False) -> list[Patron]:
+        q = self._s.query(Patron)
+        if not include_inactive:
+            q = q.filter(Patron.is_active == True)  # noqa: E712
+        return q.order_by(Patron.full_name).offset(offset).limit(limit).all()

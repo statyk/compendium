@@ -6,6 +6,20 @@
   <h2 style="margin:0">Patrons</h2>
   <a href="/ui/patrons/new" role="button" class="outline" style="padding:0.25rem 0.75rem">+ New Patron</a>
 </div>
+<form method="get" action="/ui/patrons" id="patron-filter-form" style="margin-bottom:0.75rem; display:flex; align-items:center; gap:0.5rem">
+  <label style="display:inline-flex; align-items:center; gap:0.4rem; font-size:0.9rem; cursor:pointer; margin:0">
+    <input type="checkbox" id="patron-include-inactive" name="include_inactive" value="1"
+           {% if include_inactive %}checked{% endif %} style="margin:0">
+    Include inactive patrons
+  </label>
+  <button type="submit" class="outline" style="padding:0.2rem 0.6rem; width:auto; font-size:0.85rem">Apply</button>
+</form>
+<script nonce="{{ csp_nonce(request) }}">
+(function() {
+  var cb = document.getElementById('patron-include-inactive');
+  if (cb) cb.addEventListener('change', function() { document.getElementById('patron-filter-form').submit(); });
+})();
+</script>
 {% if not patrons %}
   {{ empty_state("No patrons on record", "Add patrons to start tracking checkouts and holds.", cta_href="/ui/patrons/new", cta_label="Add patron") }}
 {% else %}

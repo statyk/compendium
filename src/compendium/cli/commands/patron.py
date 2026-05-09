@@ -196,6 +196,20 @@ def deactivate_patron(
         raise typer.Exit(1) from exc
 
 
+@app.command("reactivate")
+def reactivate_patron(
+    card: str = typer.Option(..., "--card", help="Patron library card number"),
+) -> None:
+    """Reactivate an inactive patron account."""
+    try:
+        with session_scope() as session:
+            patron = _patron_svc(session).reactivate(card)
+            typer.echo(f"\nReactivated: {patron.full_name} ({patron.library_card_number})")
+    except DomainError as exc:
+        typer.echo(f"Error: {exc}", err=True)
+        raise typer.Exit(1) from exc
+
+
 @app.command("link-user")
 def link_user_cmd(
     card: str = typer.Option(..., "--card", help="Patron library card number"),
@@ -254,10 +268,11 @@ def create_user_for_patron(
 @app.command("list")
 def list_patrons(
     limit: int = typer.Option(20, "--limit"),
+    include_inactive: bool = typer.Option(False, "--include-inactive", help="Include inactive patrons"),
 ) -> None:
-    """List registered patrons."""
+    """List registered patrons (active only by default)."""
     with session_scope() as session:
-        patrons = SqlPatronRepository(session).list(limit=limit)
+        patrons = SqlPatronRepository(session).list(limit=limit, include_inactive=include_inactive)
         if not patrons:
             typer.echo("No patrons registered.")
             return

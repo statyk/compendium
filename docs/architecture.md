@@ -141,6 +141,8 @@ The catalog search box has two modes, and they match differently:
 
 If a partial-word query returns nothing from the default box, switch to a field-scoped search. This asymmetry is a known quirk; we're leaving it as-is until real-world feedback says otherwise.
 
+**Inactive patron / user filtering:** The patron list (`/ui/patrons`) and user list (`/ui/users`) default to active-only rows (same pattern as the catalog hiding all-withdrawn works). Append `?include_inactive=1` or tick the "Include inactive" checkbox to see deactivated records. The repository `list()` methods on `SqlPatronRepository` and `SqlUserRepository` accept an `include_inactive: bool = False` keyword for the same purpose. The CLI `patron list` and `user list` commands expose `--include-inactive`.
+
 **Catalog ordering** uses `Work.sort_title` (indexed), which strips leading English articles (A, An, The) from the title. "The Great Gatsby" sorts under G, "An Odd Story" under O. The displayed title is unchanged; only the sort key is different. `sort_title` is set automatically on creation and title updates.
 
 **Import normalization:** LibraryThing TSV, GoodReads CSV (and any source that calls `CatalogService`) normalizes two conventions on the way in:
@@ -446,7 +448,8 @@ POST   /items/{barcode}/clear-lost
 ### Model
 
 - `Notification` table — one row per definitive notification, with pre-rendered `subject` + `body` (snapshot-at-queue semantics so later data edits don't retroactively rewrite pending messages).
-- `patron.receive_notifications` bool — default true; patrons without `contact_email` are implicitly opted out.
+- `patron.receive_notifications` bool — default true; patrons without a resolvable email are implicitly opted out.
+- **Email resolution order**: `patron.contact_email` (wins), then `patron.user.email` (fallback when `contact_email` is blank and the patron has a linked user account). The `_patron_email()` helper in `NotificationService` encapsulates this; both `_patron_can_receive` and the `recipient_email` column use it for consistency.
 
 ### Templates
 

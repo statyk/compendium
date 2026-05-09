@@ -22,5 +22,8 @@ class SqlUserRepository:
         self._s.flush()
         return user
 
-    def list(self, limit: int = 50, offset: int = 0) -> list[AppUser]:
-        return self._s.query(AppUser).order_by(AppUser.username).offset(offset).limit(limit).all()
+    def list(self, limit: int = 50, offset: int = 0, include_inactive: bool = False) -> list[AppUser]:
+        q = self._s.query(AppUser)
+        if not include_inactive:
+            q = q.filter(AppUser.is_active == True)  # noqa: E712
+        return q.order_by(AppUser.username).offset(offset).limit(limit).all()
