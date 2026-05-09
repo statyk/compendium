@@ -2,6 +2,7 @@ import os
 import re
 import time
 import xml.etree.ElementTree as ET
+from contextvars import ContextVar
 from typing import Protocol, runtime_checkable
 
 import httpx
@@ -240,33 +241,66 @@ class GoogleBooksAdapter:
 # Google Books quota circuit breaker
 # ---------------------------------------------------------------------------
 
+# Library-mode injection point.  When Compendium is used as a library (e.g.
+# Litcat), the host sets _quota_session_factory to its own session_scope so
+# that quota sentinel reads/writes target the host's database, not the
+# Compendium default.  Value: a zero-arg callable returning a context manager
+# that yields a SQLAlchemy Session.  None → use compendium.db.session.session_scope.
+_quota_session_factory: ContextVar = ContextVar("_quota_session_factory", default=None)
+
+# Set by lookup_metadata for the duration of one call so that the quota READ
+# check inside _resolve_book_adapter can reuse the already-open session.
+_active_lookup_session: ContextVar = ContextVar("_active_lookup_session", default=None)
+
 _GB_QUOTA_ADAPTER = "GoogleBooksAdapter"
 _GB_QUOTA_KIND = "_quota"
 _GB_QUOTA_VALUE = "exhausted"
 
 
-def _mark_gb_quota_exhausted() -> None:
-    """Persist the quota-exhausted sentinel row so all processes see it."""
+def _get_quota_factory():
+    """Return the session factory to use for quota sentinel reads/writes."""
+    factory = _quota_session_factory.get()
+    if factory is not None:
+        return factory
+    from compendium.db.session import session_scope
+    return session_scope
+
+
+def _mark_gb_quota_exhausted(*, session=None) -> None:
+    """Persist the quota-exhausted sentinel row so all processes see it.
+
+    ``session`` is accepted for callers that manage their own transaction but
+    note it must not be a session that may roll back (e.g. a dry-run import
+    session) — the sentinel must survive any outer rollback.  When omitted the
+    function opens its own short-lived session via ``_quota_session_factory``
+    (or ``compendium.db.session.session_scope`` as the default).
+    """
     import logging
     from datetime import datetime, timezone
 
-    from compendium.db.session import session_scope
     from compendium.domain.models import MetadataCache
 
     logger = logging.getLogger(__name__)
+
+    def _write(s) -> None:
+        entry = s.get(MetadataCache, (_GB_QUOTA_ADAPTER, _GB_QUOTA_KIND, _GB_QUOTA_VALUE))
+        if entry is None:
+            entry = MetadataCache(
+                adapter=_GB_QUOTA_ADAPTER,
+                kind=_GB_QUOTA_KIND,
+                lookup_value=_GB_QUOTA_VALUE,
+            )
+            s.add(entry)
+        entry.is_negative = True
+        entry.payload = None
+        entry.fetched_at = datetime.now(timezone.utc).replace(tzinfo=None)
+
     try:
-        with session_scope() as s:
-            entry = s.get(MetadataCache, (_GB_QUOTA_ADAPTER, _GB_QUOTA_KIND, _GB_QUOTA_VALUE))
-            if entry is None:
-                entry = MetadataCache(
-                    adapter=_GB_QUOTA_ADAPTER,
-                    kind=_GB_QUOTA_KIND,
-                    lookup_value=_GB_QUOTA_VALUE,
-                )
-                s.add(entry)
-            entry.is_negative = True
-            entry.payload = None
-            entry.fetched_at = datetime.now(timezone.utc).replace(tzinfo=None)
+        if session is not None:
+            _write(session)
+        else:
+            with _get_quota_factory()() as s:
+                _write(s)
         logger.warning(
             "Google Books daily quota exhausted. Using Open Library fallback "
             "for book lookups. Quota typically resets after 24 h."
@@ -275,35 +309,51 @@ def _mark_gb_quota_exhausted() -> None:
         logger.exception("Failed to persist Google Books quota sentinel")
 
 
-def is_gb_quota_exhausted() -> bool:
-    """Return True if a valid quota-exhausted sentinel row exists (< 24 h old)."""
+def is_gb_quota_exhausted(*, session=None) -> bool:
+    """Return True if a valid quota-exhausted sentinel row exists (< 24 h old).
+
+    When ``session`` is provided (or when called from inside ``lookup_metadata``
+    where ``_active_lookup_session`` is set), the existing session is reused for
+    the read — no new connection is opened.  When neither is available the
+    function falls back to ``_quota_session_factory`` (or Compendium's default
+    session_scope).
+    """
     from datetime import datetime, timedelta, timezone
 
-    from compendium.db.session import session_scope
     from compendium.domain.models import MetadataCache
 
+    def _check(s) -> bool:
+        entry = s.get(MetadataCache, (_GB_QUOTA_ADAPTER, _GB_QUOTA_KIND, _GB_QUOTA_VALUE))
+        if entry is None:
+            return False
+        threshold = datetime.now(timezone.utc).replace(tzinfo=None) - timedelta(hours=24)
+        return entry.fetched_at >= threshold
+
+    s = session or _active_lookup_session.get()
     try:
-        with session_scope() as s:
-            entry = s.get(MetadataCache, (_GB_QUOTA_ADAPTER, _GB_QUOTA_KIND, _GB_QUOTA_VALUE))
-            if entry is None:
-                return False
-            threshold = datetime.now(timezone.utc).replace(tzinfo=None) - timedelta(hours=24)
-            return entry.fetched_at >= threshold
+        if s is not None:
+            return _check(s)
+        with _get_quota_factory()() as s2:
+            return _check(s2)
     except Exception:
         return False
 
 
-def clear_gb_quota_exhausted() -> bool:
+def clear_gb_quota_exhausted(*, session=None) -> bool:
     """Delete the quota-exhausted sentinel row. Returns True if one existed."""
-    from compendium.db.session import session_scope
     from compendium.domain.models import MetadataCache
 
-    with session_scope() as s:
+    def _clear(s) -> bool:
         entry = s.get(MetadataCache, (_GB_QUOTA_ADAPTER, _GB_QUOTA_KIND, _GB_QUOTA_VALUE))
         if entry is None:
             return False
         s.delete(entry)
-    return True
+        return True
+
+    if session is not None:
+        return _clear(session)
+    with _get_quota_factory()() as s:
+        return _clear(s)
 
 
 def open_library_search_title(query: str) -> list[dict]:
@@ -961,36 +1011,45 @@ def lookup_metadata(
     session=None,
     write_buffer=None,
 ) -> dict | None:
-    adapter = _get_adapter(media_type_code)
+    # Make the session visible to is_gb_quota_exhausted (called from _resolve_book_adapter
+    # inside _get_adapter) so it can piggyback on the open connection instead of opening
+    # a duplicate one.  _mark_gb_quota_exhausted intentionally does NOT use this — it
+    # opens its own short-lived session so the sentinel survives any outer rollback.
+    _tok = _active_lookup_session.set(session) if session is not None else None
+    try:
+        adapter = _get_adapter(media_type_code)
 
-    if session is None:
-        result = adapter.lookup(kind, value)
-        # When GB is primary and returns None, try OL as a secondary source.
-        if result is None and media_type_code == "book" and adapter is _GB_ADAPTER:
-            result = _OL_ADAPTER.lookup(kind, value)
-        return result
+        if session is None:
+            result = adapter.lookup(kind, value)
+            # When GB is primary and returns None, try OL as a secondary source.
+            if result is None and media_type_code == "book" and adapter is _GB_ADAPTER:
+                result = _OL_ADAPTER.lookup(kind, value)
+            return result
 
-    from compendium.services.metadata_cache import get_or_fetch
+        from compendium.services.metadata_cache import get_or_fetch
 
-    adapter_name = type(adapter).__name__
-    result = get_or_fetch(
-        session,
-        adapter_name,
-        kind,
-        value,
-        lambda: adapter.lookup(kind, value),
-        bypass_cache=bypass_cache,
-        write_buffer=write_buffer,
-    )
-    # When GB is primary and returns None, try OL; cache both under their namespaces.
-    if result is None and media_type_code == "book" and adapter is _GB_ADAPTER:
+        adapter_name = type(adapter).__name__
         result = get_or_fetch(
             session,
-            type(_OL_ADAPTER).__name__,
+            adapter_name,
             kind,
             value,
-            lambda: _OL_ADAPTER.lookup(kind, value),
+            lambda: adapter.lookup(kind, value),
             bypass_cache=bypass_cache,
             write_buffer=write_buffer,
         )
-    return result
+        # When GB is primary and returns None, try OL; cache both under their namespaces.
+        if result is None and media_type_code == "book" and adapter is _GB_ADAPTER:
+            result = get_or_fetch(
+                session,
+                type(_OL_ADAPTER).__name__,
+                kind,
+                value,
+                lambda: _OL_ADAPTER.lookup(kind, value),
+                bypass_cache=bypass_cache,
+                write_buffer=write_buffer,
+            )
+        return result
+    finally:
+        if _tok is not None:
+            _active_lookup_session.reset(_tok)

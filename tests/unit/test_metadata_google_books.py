@@ -2,14 +2,20 @@
 
 from __future__ import annotations
 
+from contextvars import copy_context
+from datetime import datetime, timezone
 from unittest.mock import MagicMock, patch
 
 import httpx
 import pytest
 
 from compendium.domain.errors import ExternalLookupError, GoogleBooksQuotaExhausted
+from compendium.domain.models import MetadataCache
 from compendium.services.metadata import (
     GoogleBooksAdapter,
+    _quota_session_factory,
+    clear_gb_quota_exhausted,
+    is_gb_quota_exhausted,
     lookup_google_books,
     parse_google_books,
 )
@@ -263,3 +269,100 @@ def test_adapter_returns_parsed_dict_on_hit():
     assert result is not None
     assert result["title"] == "Dune"
     assert result["external_ids"] == {"google_books": "vol_abc123"}
+
+
+# ---------------------------------------------------------------------------
+# Library-mode: _quota_session_factory injection
+# ---------------------------------------------------------------------------
+
+def _make_sentinel_entry() -> MetadataCache:
+    from compendium.services.metadata import _GB_QUOTA_ADAPTER, _GB_QUOTA_KIND, _GB_QUOTA_VALUE
+
+    return MetadataCache(
+        adapter=_GB_QUOTA_ADAPTER,
+        kind=_GB_QUOTA_KIND,
+        lookup_value=_GB_QUOTA_VALUE,
+        is_negative=True,
+        payload=None,
+        fetched_at=datetime.now(timezone.utc).replace(tzinfo=None),
+    )
+
+
+def test_is_gb_quota_exhausted_uses_injected_session():
+    """is_gb_quota_exhausted reads from an explicit session when provided."""
+    mock_session = MagicMock()
+    mock_session.get.return_value = None  # no sentinel → not exhausted
+
+    assert is_gb_quota_exhausted(session=mock_session) is False
+    assert mock_session.get.called
+
+
+def test_is_gb_quota_exhausted_returns_true_with_fresh_sentinel_session():
+    """Returns True when the provided session has a fresh sentinel row."""
+    mock_session = MagicMock()
+    mock_session.get.return_value = _make_sentinel_entry()
+
+    assert is_gb_quota_exhausted(session=mock_session) is True
+
+
+def test_clear_gb_quota_exhausted_uses_injected_session():
+    """clear_gb_quota_exhausted deletes from the provided session."""
+    mock_session = MagicMock()
+    mock_session.get.return_value = _make_sentinel_entry()
+
+    result = clear_gb_quota_exhausted(session=mock_session)
+
+    assert result is True
+    mock_session.delete.assert_called_once()
+
+
+def test_clear_gb_quota_exhausted_returns_false_when_no_sentinel():
+    mock_session = MagicMock()
+    mock_session.get.return_value = None
+
+    result = clear_gb_quota_exhausted(session=mock_session)
+
+    assert result is False
+    mock_session.delete.assert_not_called()
+
+
+def test_quota_session_factory_injected_for_is_exhausted():
+    """_quota_session_factory is consulted when no explicit session is given."""
+    mock_session = MagicMock()
+    mock_session.__enter__ = lambda s: s
+    mock_session.__exit__ = MagicMock(return_value=False)
+    mock_session.get.return_value = None
+
+    factory = MagicMock(return_value=mock_session)
+
+    def _run():
+        _quota_session_factory.set(factory)
+        return is_gb_quota_exhausted()
+
+    ctx = copy_context()
+    result = ctx.run(_run)
+
+    assert result is False
+    factory.assert_called_once()
+
+
+def test_quota_session_factory_injected_for_mark_exhausted():
+    """_mark_gb_quota_exhausted writes to the injected factory's session."""
+    from compendium.services.metadata import _mark_gb_quota_exhausted
+
+    mock_session = MagicMock()
+    mock_session.__enter__ = lambda s: s
+    mock_session.__exit__ = MagicMock(return_value=False)
+    mock_session.get.return_value = None
+
+    factory = MagicMock(return_value=mock_session)
+
+    def _run():
+        _quota_session_factory.set(factory)
+        _mark_gb_quota_exhausted()
+
+    ctx = copy_context()
+    ctx.run(_run)
+
+    factory.assert_called_once()
+    mock_session.add.assert_called_once()
