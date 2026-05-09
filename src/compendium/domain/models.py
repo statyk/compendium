@@ -419,3 +419,21 @@ class FailedLogin(Base):
     __table_args__ = (
         Index("ix_failed_login_scope_id_at", "scope", "identifier", "occurred_at"),
     )
+
+
+class MetadataCache(Base):
+    """Persistent cache for external metadata lookups (Open Library, MusicBrainz, TMDb, etc.).
+
+    Keyed on (adapter, kind, lookup_value) so adapter-source switching never
+    causes cross-namespace pollution. payload is JSON-encoded; NULL on
+    is_negative rows. fetched_at is indexed for the prune maintenance command.
+    """
+
+    __tablename__ = "metadata_cache"
+
+    adapter: Mapped[str] = mapped_column(String(64), primary_key=True)
+    kind: Mapped[str] = mapped_column(String(32), primary_key=True)
+    lookup_value: Mapped[str] = mapped_column(String(255), primary_key=True)
+    payload: Mapped[str | None] = mapped_column(Text, nullable=True)
+    is_negative: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)
+    fetched_at: Mapped[datetime] = mapped_column(UtcDateTime, nullable=False, index=True)

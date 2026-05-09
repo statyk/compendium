@@ -49,6 +49,10 @@
 # Optional: bound the on-disk cover-image cache (weekly).
 # 45 3 * * 0 docker compose --project-directory COMPENDIUM_DIR exec -T compendium compendium maintenance prune-cover-cache --max-mb 500 LOG_REDIRECT
 
+# Optional: prune expired metadata-cache rows (weekly). The default TTL is 30 days
+# for positive entries and 24h for negative (not-found) entries.
+# 50 3 * * 0 docker compose --project-directory COMPENDIUM_DIR exec -T compendium compendium maintenance prune-metadata-cache LOG_REDIRECT
+
 # Optional: prune old failed-login rows (weekly — any row older than 1 day is
 # already outside the 5-minute throttle window, so this is just housekeeping).
 # 30 3 * * 0 docker compose --project-directory COMPENDIUM_DIR exec -T compendium compendium maintenance prune-failed-logins --older-than-days 7 LOG_REDIRECT

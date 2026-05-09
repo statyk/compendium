@@ -153,7 +153,7 @@ def test_refresh_metadata_bulk_dry_run_buckets_outcomes(session):
 
     fixture = dict(_DUNE)
 
-    def fake_lookup(_media_type, kind, value):
+    def fake_lookup(_media_type, kind, value, **_kwargs):
         # Return a fresh description so refresh_metadata sees a planned diff.
         return {**fixture, "isbn": value, "description": "filled in by upstream"}
 
@@ -180,7 +180,7 @@ def test_refresh_metadata_bulk_apply_writes_and_audits(session):
     needs_id = _seed(session, description="")
     fixture = dict(_DUNE)
 
-    def fake_lookup(_media_type, kind, value):
+    def fake_lookup(_media_type, kind, value, **_kwargs):
         return {**fixture, "isbn": value, "description": "filled in by upstream"}
 
     with patch("compendium.services.catalog.lookup_metadata", side_effect=fake_lookup):
@@ -211,7 +211,7 @@ def test_refresh_metadata_bulk_no_change_when_upstream_is_blank(session):
     # will skip filling it (since `new` is falsy).
     sparse = {**_DUNE, "description": None, "cover_image_url": None}
 
-    def fake_lookup(_media_type, kind, value):
+    def fake_lookup(_media_type, kind, value, **_kwargs):
         return {**sparse, "isbn": value}
 
     with patch("compendium.services.catalog.lookup_metadata", side_effect=fake_lookup):
@@ -236,7 +236,7 @@ def test_refresh_metadata_bulk_respects_limit(session):
     _seed(session, description="")
     _seed(session, description="")
 
-    def fake_lookup(_media_type, kind, value):
+    def fake_lookup(_media_type, kind, value, **_kwargs):
         return {**_DUNE, "isbn": value, "description": "x"}
 
     with patch("compendium.services.catalog.lookup_metadata", side_effect=fake_lookup):
@@ -255,7 +255,7 @@ def test_refresh_metadata_bulk_on_progress_fires_per_iteration_with_indices(sess
 
     fixture = dict(_DUNE)
 
-    def fake_lookup(_media_type, _kind, value):
+    def fake_lookup(_media_type, _kind, value, **_kwargs):
         return {**fixture, "isbn": value, "description": "filled"}
 
     calls: list[tuple[int, int, int, bool]] = []
@@ -284,7 +284,7 @@ def test_refresh_metadata_bulk_on_progress_buckets_match_report(session):
     refresh_isbn = SqlWorkRepository(session).get(id_refreshed).isbn
     not_found_isbn = SqlWorkRepository(session).get(id_not_found).isbn
 
-    def fake_lookup(_media_type, _kind, value):
+    def fake_lookup(_media_type, _kind, value, **_kwargs):
         if value == refresh_isbn:
             return {**fixture, "isbn": value, "description": "filled"}
         if value == not_found_isbn:

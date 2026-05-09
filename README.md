@@ -122,7 +122,9 @@ Run `compendium --help` for the full command tree, or `compendium <group> --help
 | `compendium backup --output <path-or->` | Write a portable JSONL tarball backup |
 | `compendium restore <path-or->` | Restore from a backup tarball (lenient — auto-migrates) |
 | `compendium settings list/get/set/reset` | Inspect & edit DB-backed site settings |
-| `compendium maintenance ...` | Cron-invoked tasks: `expire-holds`, `resume-expired-suspends`, `assess-overdue-fines`, `queue-due-soon-notices`, `queue-overdue-notices`, `send-queued-notifications`, `prune-notifications`, `prune-audit-log`, `deactivate-expired-patrons`, `prune-cover-cache`, `refresh-metadata` |
+| `compendium maintenance ...` | Cron-invoked tasks: `expire-holds`, `resume-expired-suspends`, `assess-overdue-fines`, `queue-due-soon-notices`, `queue-overdue-notices`, `send-queued-notifications`, `prune-notifications`, `prune-audit-log`, `deactivate-expired-patrons`, `prune-cover-cache`, `prune-metadata-cache`, `refresh-metadata` |
+| `compendium metadata cache stats` | Show metadata cache row counts by adapter and TTL status |
+| `compendium metadata cache clear` | Delete all metadata cache rows (audited) |
 
 File-argument commands (`backup`, `restore`, `import`, `export`, `labels items/patrons`) accept `-` for stdin/stdout. Status messages are routed to stderr in stdio mode so they don't corrupt binary output.
 
@@ -228,6 +230,7 @@ Most settings (library name, theme, fine thresholds, hold/overdue defaults, kios
 | `COMPENDIUM_SECRET_KEY` | Encryption key for secrets stored in the DB (SMTP password, API keys). Optional — set to enable the `/ui/admin/system/secrets` page. Generate with `compendium keygen --secret`. |
 | `COMPENDIUM_TMDB_API_KEY` | TMDb API key. Override — also settable via Admin → System → Secrets when `COMPENDIUM_SECRET_KEY` is configured. |
 | `COMPENDIUM_GOOGLE_BOOKS_API_KEY` | Google Books API key. Override — also settable via Admin → System → Secrets when `COMPENDIUM_SECRET_KEY` is configured. |
+| `COMPENDIUM_METADATA_CACHE_TTL_DAYS` | Positive-hit TTL for the metadata cache in days (default 30). Negative (not-found) entries always expire after 24 hours. DB-editable at **System** settings. |
 | `COMPENDIUM_SMTP_PASSWORD` | SMTP password. Override — also settable via Admin → System → Secrets when `COMPENDIUM_SECRET_KEY` is configured. |
 | `COMPENDIUM_MAX_UPLOAD_BYTES` | Hard cap on bulk-import upload size (default 100 MB / 104857600). Env-only so a compromised admin token can't raise it. |
 | `COMPENDIUM_LOGIN_MAX_FAILURES` | Max consecutive failed logins before the identity is throttled (default 10). DB-editable at **System → Security**. |

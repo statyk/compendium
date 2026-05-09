@@ -76,7 +76,7 @@ def test_cli_refresh_metadata_dry_run_reports_no_writes(session):
     work_id = _seed_incomplete(session)
     fixture = dict(_DUNE)
 
-    def fake_lookup(_media_type, _kind, value):
+    def fake_lookup(_media_type, _kind, value, **_kwargs):
         return {**fixture, "isbn": value, "description": "filled in"}
 
     with patch(
@@ -98,7 +98,7 @@ def test_cli_refresh_metadata_apply_writes_changes(session):
     work_id = _seed_incomplete(session, isbn="9780441013596")
     fixture = dict(_DUNE)
 
-    def fake_lookup(_media_type, _kind, value):
+    def fake_lookup(_media_type, _kind, value, **_kwargs):
         return {**fixture, "isbn": value, "description": "filled in by upstream"}
 
     with patch(
@@ -124,7 +124,7 @@ def test_cli_refresh_metadata_emits_per_work_progress_lines(session):
     _seed_incomplete(session, isbn="9780441013701")
     fixture = dict(_DUNE)
 
-    def fake_lookup(_media_type, _kind, value):
+    def fake_lookup(_media_type, _kind, value, **_kwargs):
         return {**fixture, "isbn": value, "description": "filled"}
 
     with patch(
@@ -145,7 +145,7 @@ def test_cli_refresh_metadata_quiet_suppresses_per_work_lines(session):
     _seed_incomplete(session, isbn="9780441013702")
     fixture = dict(_DUNE)
 
-    def fake_lookup(_media_type, _kind, value):
+    def fake_lookup(_media_type, _kind, value, **_kwargs):
         return {**fixture, "isbn": value, "description": "filled"}
 
     with patch(
@@ -163,7 +163,7 @@ def test_cli_refresh_metadata_quiet_still_prints_errored_lines(session):
     """--quiet keeps lines for actual errors (per-Work refresh raised)."""
     _seed_incomplete(session, isbn="9780441013703")
 
-    def boom(_media_type, _kind, _value):
+    def boom(_media_type, _kind, _value, **_kwargs):
         raise RuntimeError("boom — adapter blew up")
 
     with patch("compendium.services.catalog.lookup_metadata", side_effect=boom):

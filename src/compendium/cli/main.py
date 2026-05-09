@@ -16,6 +16,7 @@ from compendium.cli.commands import (
     labels,
     loan,
     maintenance,
+    metadata as metadata_cmd,
     patron,
     patron_category,
     policy,
@@ -56,6 +57,7 @@ app.add_typer(settings_cmd.app, name="settings")
 
 app.add_typer(keygen.app, name="keygen")
 app.add_typer(secrets_cmd.app, name="secrets")
+app.add_typer(metadata_cmd.app, name="metadata")
 app.command("backup")(backup.backup_command)
 app.command("restore")(backup.restore_command)
 

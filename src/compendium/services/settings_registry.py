@@ -734,6 +734,23 @@ def _register_builtins() -> None:
             ),
         )
     )
+    register(
+        SettingDescriptor(
+            key="metadata_cache_ttl_days",
+            display_name="Metadata Cache TTL (days)",
+            type=int,
+            default=30,
+            scope="system",
+            help_text=(
+                "How long to keep successful external metadata lookups cached in "
+                "the database (Open Library, MusicBrainz, TMDb). Negative (not-found) "
+                "responses are always cached for 24 hours. Set to a higher value to "
+                "reduce network calls; lower to pick up upstream corrections sooner. "
+                "Environment variable COMPENDIUM_METADATA_CACHE_TTL_DAYS takes precedence if set."
+            ),
+            validator=_positive_int,
+        )
+    )
 
 
 _register_builtins()

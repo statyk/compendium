@@ -444,6 +444,9 @@ class ImportService:
         self._actor = actor
         self._actor_label = actor_label
         self._source = source
+        from compendium.services.metadata_cache import WriteBuffer
+
+        self._cache_buffer = WriteBuffer()
 
     def import_csv(
         self,
@@ -827,6 +830,7 @@ class ImportService:
     def _finalize(self, report: ImportReport, options: ImportOptions) -> ImportReport:
         if options.dry_run:
             self._session.rollback()
+            self._cache_buffer.flush()
             return report
         self._session.flush()
         if self._audit is not None:
@@ -848,6 +852,7 @@ class ImportService:
                 },
             )
             self._session.flush()
+        self._cache_buffer.flush()
         return report
 
     def _process_csv_row(
@@ -1021,7 +1026,10 @@ class ImportService:
         if kind is None:
             return False
         try:
-            data = lookup_metadata(media_type_code, kind, value)
+            data = lookup_metadata(
+                media_type_code, kind, value,
+                session=self._session, write_buffer=self._cache_buffer,
+            )
         except ExternalLookupError:
             return False
         if not data:

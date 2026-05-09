@@ -421,7 +421,9 @@ def work_refresh_preview(
 ):
     """Preview a metadata refresh — fetches upstream + computes diff. No DB writes."""
     try:
-        report = _catalog_svc(session, user).refresh_metadata(work_id, dry_run=True)
+        report = _catalog_svc(session, user).refresh_metadata(
+            work_id, dry_run=True, bypass_cache=True
+        )
     except NotFoundError:
         return _render(
             "error.html",
@@ -453,7 +455,9 @@ def work_refresh_apply(
     """Apply a metadata refresh. Re-fetches upstream (idempotent) and commits."""
     check_csrf_form(request, csrf_token)
     try:
-        report = _catalog_svc(session, user).refresh_metadata(work_id, dry_run=False)
+        report = _catalog_svc(session, user).refresh_metadata(
+            work_id, dry_run=False, bypass_cache=True
+        )
     except NotFoundError:
         return _render(
             "error.html",

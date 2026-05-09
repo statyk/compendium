@@ -330,12 +330,30 @@ def lookup_cover_from_google_books(isbn: str, *, api_key: str | None) -> str | N
         return None
 
 
-def lookup_cover_fallbacks(isbn: str, *, google_books_key: str | None) -> str | None:
+def lookup_cover_fallbacks(
+    isbn: str,
+    *,
+    google_books_key: str | None,
+    bypass_cache: bool = False,
+    session=None,
+) -> str | None:
     """Try cover image fallback sources when the primary (Open Library) has none.
 
     Currently tries Google Books only. Returns the URL or None.
     """
-    return lookup_cover_from_google_books(isbn, api_key=google_books_key)
+    if session is None:
+        return lookup_cover_from_google_books(isbn, api_key=google_books_key)
+
+    from compendium.services.metadata_cache import get_or_fetch
+
+    return get_or_fetch(
+        session,
+        "gb_cover",
+        "isbn",
+        isbn,
+        lambda: lookup_cover_from_google_books(isbn, api_key=google_books_key),
+        bypass_cache=bypass_cache,
+    )
 
 
 def pick_classification_code(scheme: str, meta: dict) -> str | None:
@@ -692,11 +710,34 @@ _ADAPTERS: dict[str, MetadataAdapter] = {
 }
 
 
-def lookup_metadata(media_type_code: str, kind: str, value: str) -> dict | None:
+def lookup_metadata(
+    media_type_code: str,
+    kind: str,
+    value: str,
+    *,
+    bypass_cache: bool = False,
+    session=None,
+    write_buffer=None,
+) -> dict | None:
     adapter = _ADAPTERS.get(media_type_code)
     if adapter is None:
         raise ExternalLookupError(
             f"No metadata adapter for media type '{media_type_code}'. "
             "Use manual entry for this type."
         )
-    return adapter.lookup(kind, value)
+
+    if session is None:
+        return adapter.lookup(kind, value)
+
+    from compendium.services.metadata_cache import get_or_fetch
+
+    adapter_name = type(adapter).__name__
+    return get_or_fetch(
+        session,
+        adapter_name,
+        kind,
+        value,
+        lambda: adapter.lookup(kind, value),
+        bypass_cache=bypass_cache,
+        write_buffer=write_buffer,
+    )

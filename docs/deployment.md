@@ -73,6 +73,7 @@ COMPENDIUM_SECURE_COOKIES=true            # default; set `false` for plain-HTTP 
 # COMPENDIUM_SMTP_PASSWORD=
 # COMPENDIUM_TMDB_API_KEY=
 # COMPENDIUM_GOOGLE_BOOKS_API_KEY=
+# COMPENDIUM_METADATA_CACHE_TTL_DAYS=30  # positive-hit TTL for metadata cache (days)
 ```
 
 **`JWT_SECRET_KEY` must be set to a strong random value.** The built-in default is intentionally weak — the server refuses to start when it's detected. Generate one with `python -c "import secrets; print(secrets.token_urlsafe(48))"` (or `openssl rand -base64 48`). For first-run / dev work you may set `COMPENDIUM_ALLOW_INSECURE_JWT=1` to bypass the check, which downgrades it to a startup warning; do not use that in production.
@@ -198,6 +199,9 @@ Several maintenance commands should run periodically:
 - `maintenance prune-notifications` / `prune-audit-log` — retention cleanup.
 - `maintenance deactivate-expired-patrons` — flips `is_active=false` for patrons whose `expires_at` has passed.
 - `maintenance prune-cover-cache --max-mb N` — bound the on-disk cover-image cache.
+- `maintenance prune-metadata-cache` — delete expired metadata cache rows (past positive or negative TTL).
+- `metadata cache clear` — delete all metadata cache rows (audited); useful if a metadata source's response shape changes.
+- `metadata cache stats` — print cache row counts by adapter and TTL status.
 
 ### Installing the schedule
 

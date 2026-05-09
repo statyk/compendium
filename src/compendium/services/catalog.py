@@ -164,7 +164,10 @@ class CatalogService:
             )
             return existing, item
 
-        meta = lookup_metadata(media_type_code, identifier_kind, identifier_value)
+        _session = self._works._s
+        meta = lookup_metadata(
+            media_type_code, identifier_kind, identifier_value, session=_session
+        )
         if not meta:
             raise ExternalLookupError(
                 f"No metadata found for {identifier_kind} '{identifier_value}'. "
@@ -177,6 +180,7 @@ class CatalogService:
             meta["cover_image_url"] = lookup_cover_fallbacks(
                 meta["isbn"],
                 google_books_key=get_site_setting("google_books_api_key"),
+                session=_session,
             )
 
         # For MBID lookups the returned meta may carry a UPC — check for an
@@ -381,6 +385,7 @@ class CatalogService:
         work_id: int,
         *,
         dry_run: bool = True,
+        bypass_cache: bool = False,
     ) -> RefreshReport:
         """Re-fetch metadata for an existing Work and (optionally) apply.
 
@@ -429,8 +434,12 @@ class CatalogService:
             )
 
         source = _SOURCE_FOR_MEDIA_TYPE.get(media_type_code, "external")
+        _session = self._works._s
         try:
-            data = lookup_metadata(media_type_code, kind, value)
+            data = lookup_metadata(
+                media_type_code, kind, value,
+                bypass_cache=bypass_cache, session=_session,
+            )
         except ExternalLookupError as exc:
             return RefreshReport(
                 work_id=work_id,
@@ -457,6 +466,8 @@ class CatalogService:
             fallback = lookup_cover_fallbacks(
                 work.isbn,
                 google_books_key=get_site_setting("google_books_api_key"),
+                bypass_cache=bypass_cache,
+                session=_session,
             )
             if fallback:
                 data["cover_image_url"] = fallback

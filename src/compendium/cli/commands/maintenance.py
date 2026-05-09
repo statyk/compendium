@@ -487,6 +487,20 @@ def refresh_metadata_cmd(
             typer.echo(f"  - {line}")
 
 
+@app.command("prune-metadata-cache")
+def prune_metadata_cache() -> None:
+    """Delete expired metadata cache rows (past positive or negative TTL)."""
+    from compendium.db.session import session_scope
+    from compendium.services.metadata_cache import prune_expired
+
+    with session_scope() as session:
+        deleted = prune_expired(session)
+    if deleted == 0:
+        typer.echo("Metadata cache: no expired entries found.")
+    else:
+        typer.echo(f"Metadata cache: pruned {deleted} expired row(s).")
+
+
 @app.command("prune-cover-cache")
 def prune_cover_cache(
     max_mb: int = typer.Option(

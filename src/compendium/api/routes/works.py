@@ -157,7 +157,9 @@ def preview_refresh_metadata(
 ) -> dict:
     """Dry-run a metadata refresh — returns the planned diff without committing."""
     try:
-        report = _catalog(session, user).refresh_metadata(work_id, dry_run=True)
+        report = _catalog(session, user).refresh_metadata(
+            work_id, dry_run=True, bypass_cache=True
+        )
     except NotFoundError as exc:
         raise HTTPException(status_code=404, detail=str(exc)) from exc
     return _serialize_refresh_report(report)
@@ -171,7 +173,9 @@ def apply_refresh_metadata(
 ) -> dict:
     """Apply a metadata refresh: commits fill-missing diff + busts cover cache."""
     try:
-        report = _catalog(session, user).refresh_metadata(work_id, dry_run=False)
+        report = _catalog(session, user).refresh_metadata(
+            work_id, dry_run=False, bypass_cache=True
+        )
     except NotFoundError as exc:
         raise HTTPException(status_code=404, detail=str(exc)) from exc
     return _serialize_refresh_report(report)

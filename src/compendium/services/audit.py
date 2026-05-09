@@ -16,6 +16,7 @@ class AuditEntityType:
     FINE = "fine"
     NOTIFICATION = "notification"
     SITE_SETTING = "site_setting"
+    METADATA_CACHE = "metadata_cache"
 
 
 class AuditAction:

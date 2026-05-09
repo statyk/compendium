@@ -269,6 +269,23 @@ When Open Library does not provide a cover for a book ISBN, `CatalogService.add_
 
 Optional. If the key is not configured the behavior is unchanged (no cover stored, placeholder shown in the UI).
 
+### Metadata cache
+
+Successful external lookups (and definitive not-found responses) are persisted in the `metadata_cache` DB table so repeated lookups — especially the dry-run/apply doubling in the web importer — hit the cache instead of the network.
+
+**Cache key:** `(adapter, kind, lookup_value)` — e.g., `("OpenLibraryAdapter", "isbn", "9780441013593")`. The adapter class name is part of the key so a future swap of which adapter is "primary" for a media type writes new entries under a new namespace without polluting or reading existing ones.
+
+**TTLs:**
+- Positive (found) entries: `metadata_cache_ttl_days` site setting (default 30 days, DB-editable at **Admin → System**, env `COMPENDIUM_METADATA_CACHE_TTL_DAYS`).
+- Negative (not-found) entries: hardcoded 24 hours.
+- Transport errors (`httpx` exceptions) are **not** cached — they propagate so the caller can retry.
+
+**Write path:** during bulk import, cache writes are buffered in-process (`WriteBuffer`) and flushed to the DB *after* the import session commits or rolls back. This avoids a SQLite write-lock conflict (two active writers on the same connection) and ensures dry-run rollbacks don't swallow cache entries. For single-item add and refresh, writes go directly to the caller's session.
+
+**`bypass_cache=True`:** user-clicked "Refresh from upstream" passes this flag so the explicit refresh intent is honored — the adapter is always called — while still writing the fresh response back to the cache for subsequent imports.
+
+**Maintenance:** `compendium maintenance prune-metadata-cache` deletes rows past their TTL. `compendium metadata cache clear` deletes all rows (audited). `compendium metadata cache stats` prints counts by adapter.
+
 ---
 
 ## Bulk import & export

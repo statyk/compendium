@@ -169,8 +169,8 @@ Cadences taken from `docker/crontab.sample`:
 | daily 08:00 / 08:15  | `queue-due-soon-notices` / `queue-overdue-notices` | enqueues reminder emails |
 
 Optional (commented out in the sample): `prune-audit-log`,
-`prune-notifications`, `prune-cover-cache`. Uncomment and edit the
-retention windows to suit your deployment.
+`prune-notifications`, `prune-cover-cache`, `prune-metadata-cache`. Uncomment
+and edit the retention windows to suit your deployment.
 
 ### Caveats
 
