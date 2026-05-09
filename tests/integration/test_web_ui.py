@@ -1284,18 +1284,13 @@ def test_user_change_role_redirects(web_client, librarian, web_session):
 # ── Patron↔user linking ───────────────────────────────────────────────────────
 
 
-def test_patron_new_form_shows_user_dropdown(web_client, librarian, web_session):
-    # Ensure there's at least one unlinked active user
-    role = SqlRoleRepository(web_session).get_by_name("Patron")
-    from compendium.services.auth import hash_password as hp
-    u = AppUser(username="unlinked01", password_hash=hp("pw"), role_id=role.id)
-    SqlUserRepository(web_session).add(u)
-    web_session.flush()
-
+def test_patron_new_form_shows_create_login_section(web_client, librarian, web_session):
+    # Librarians have patron.account.manage — they see the inline "create login" block
     cookies = _login(web_client, "lib01")
     resp = web_client.get("/ui/patrons/new", cookies=cookies)
     assert resp.status_code == 200
-    assert b"unlinked01" in resp.content
+    assert b"Also create a login account" in resp.content
+    assert b"create_username" in resp.content
 
 
 def test_patron_create_with_linked_user(web_client, librarian, web_session):

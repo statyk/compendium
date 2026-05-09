@@ -20,10 +20,12 @@ from compendium.repositories.sql.patron_category_repository import (
     SqlPatronCategoryRepository,
 )
 from compendium.repositories.sql.patron_repository import SqlPatronRepository
+from compendium.repositories.sql.role_repository import SqlRoleRepository
 from compendium.repositories.sql.user_repository import SqlUserRepository
 from compendium.repositories.sql.branch_repository import SqlBranchRepository
 from compendium.repositories.sql.work_repository import SqlWorkRepository
 from compendium.services.audit import AuditService
+from compendium.services.auth import AuthService, has_permission
 from compendium.services.holds import HoldService
 from compendium.services.patrons import PatronService, _MISSING
 from compendium.web.csrf import check_csrf_form, ensure_csrf, set_csrf_cookie
@@ -43,6 +45,26 @@ def _patron_svc(session: Session, actor: AppUser) -> PatronService:
         audit_svc=AuditService(SqlAuditLogRepository(session)),
         actor=actor,
         source="web",
+    )
+
+
+def _patron_svc_with_auth(session: Session, actor: AppUser) -> PatronService:
+    auth_svc = AuthService(
+        user_repo=SqlUserRepository(session),
+        role_repo=SqlRoleRepository(session),
+        settings=get_settings(),
+        audit_svc=AuditService(SqlAuditLogRepository(session)),
+        actor=actor,
+        source="web",
+    )
+    return PatronService(
+        patron_repo=SqlPatronRepository(session),
+        loan_repo=SqlLoanRepository(session),
+        hold_repo=SqlHoldRepository(session),
+        audit_svc=AuditService(SqlAuditLogRepository(session)),
+        actor=actor,
+        source="web",
+        auth_svc=auth_svc,
     )
 
 
@@ -121,23 +143,41 @@ def patron_create(
     user_id: str = Form(default=""),
     category_id: str = Form(default=""),
     expires_at: str = Form(default=""),
+    create_username: str = Form(default=""),
+    create_password: str = Form(default=""),
+    create_password_confirm: str = Form(default=""),
     csrf_token: str = Form(default=""),
     user: AppUser = Depends(require_web_permission(_PERM)),
     session: Session = Depends(get_session),
 ):
     check_csrf_form(request, csrf_token)
-    linked_user_id: int | None = int(user_id) if user_id.strip() else None
     cat_id: int | None = int(category_id) if category_id.strip() else None
     try:
         exp_at = _parse_date_or_none(expires_at)
-        patron = _patron_svc(session, user).create(
-            full_name=full_name.strip(),
-            contact_email=contact_email.strip() or None,
-            contact_phone=contact_phone.strip() or None,
-            user_id=linked_user_id,
-            category_id=cat_id,
-            expires_at=exp_at,
-        )
+        uname = create_username.strip()
+        can_create_acct = has_permission(user.role.permissions, "patron.account.manage")
+        if uname and can_create_acct:
+            if create_password != create_password_confirm:
+                raise ValidationError("Passwords do not match.")
+            patron = _patron_svc_with_auth(session, user).create_with_account(
+                full_name=full_name.strip(),
+                contact_email=contact_email.strip() or None,
+                contact_phone=contact_phone.strip() or None,
+                category_id=cat_id,
+                expires_at=exp_at,
+                username=uname,
+                password=create_password,
+            )
+        else:
+            linked_user_id: int | None = int(user_id) if user_id.strip() else None
+            patron = _patron_svc(session, user).create(
+                full_name=full_name.strip(),
+                contact_email=contact_email.strip() or None,
+                contact_phone=contact_phone.strip() or None,
+                user_id=linked_user_id,
+                category_id=cat_id,
+                expires_at=exp_at,
+            )
     except (BusinessRuleError, ValidationError) as exc:
         return _render(
             "patrons/new.html",
@@ -254,6 +294,35 @@ def patron_unlink_user(
             f"/ui/patrons/{card_number}?message=User+account+unlinked.", status_code=303
         )
     except (BusinessRuleError, NotFoundError) as exc:
+        return RedirectResponse(
+            f"/ui/patrons/{card_number}?error={exc}", status_code=303
+        )
+
+
+@router.post("/patrons/{card_number}/create-user")
+def patron_create_user(
+    card_number: str,
+    request: Request,
+    username: str = Form(),
+    password: str = Form(),
+    password_confirm: str = Form(default=""),
+    csrf_token: str = Form(default=""),
+    user: AppUser = Depends(require_web_permission("patron.account.manage")),
+    session: Session = Depends(get_session),
+):
+    check_csrf_form(request, csrf_token)
+    if password != password_confirm:
+        return RedirectResponse(
+            f"/ui/patrons/{card_number}?error=Passwords+do+not+match.", status_code=303
+        )
+    try:
+        _patron_svc_with_auth(session, user).create_account_for_patron(
+            card_number, username=username.strip(), password=password
+        )
+        return RedirectResponse(
+            f"/ui/patrons/{card_number}?message=Login+account+created+and+linked.", status_code=303
+        )
+    except (BusinessRuleError, NotFoundError, ValidationError) as exc:
         return RedirectResponse(
             f"/ui/patrons/{card_number}?error={exc}", status_code=303
         )

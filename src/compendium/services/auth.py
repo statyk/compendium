@@ -8,7 +8,7 @@ import jwt
 
 from compendium.config.settings import Settings
 from compendium.domain.errors import AuthError, BusinessRuleError, ConflictError, NotFoundError
-from compendium.domain.models import AppUser
+from compendium.domain.models import AppUser, Role
 from compendium.repositories.base import RoleRepository, UserRepository
 from compendium.services.audit import AuditAction, AuditEntityType, AuditService
 
@@ -52,6 +52,19 @@ def verify_password(plain: str, hashed: str) -> bool:
 
 def has_permission(permissions: list[str], required: str) -> bool:
     return "*" in permissions or required in permissions
+
+
+def assignable_roles(actor_permissions: list[str], all_roles: list[Role]) -> list[Role]:
+    """Return roles an actor may assign.
+
+    Rule: actor can assign role R if every permission in R is also held by the
+    actor (i.e. R.permissions ⊆ actor_permissions).  An actor with the wildcard
+    '*' can assign any role, including those that also carry '*'.
+    """
+    if "*" in actor_permissions:
+        return list(all_roles)
+    actor_set = set(actor_permissions)
+    return [r for r in all_roles if set(r.permissions) <= actor_set]
 
 
 class AuthService:

@@ -111,12 +111,18 @@ class LoanableUpdate(BaseModel):
     note: str | None = None
 
 
+class CreateAccountInline(BaseModel):
+    username: str
+    password: str
+
+
 class CreatePatronRequest(BaseModel):
     full_name: str
     contact_email: str | None = None
     contact_phone: str | None = None
     category_code: str | None = None
     expires_at: date | None = None
+    account: CreateAccountInline | None = None
 
 
 class UpdatePatronRequest(BaseModel):
@@ -215,6 +221,30 @@ class UserResponse(BaseModel):
     username: str
     email: str | None
     is_active: bool
+
+
+class CreatePatronInline(BaseModel):
+    full_name: str
+    contact_email: str | None = None
+    contact_phone: str | None = None
+    expires_at: date | None = None
+
+
+class CreateUserPatronBlock(BaseModel):
+    link_card: str | None = None
+    create: CreatePatronInline | None = None
+
+
+class CreateUserRequest(BaseModel):
+    username: str
+    password: str
+    role_name: str
+    email: str | None = None
+    patron: CreateUserPatronBlock | None = None
+
+
+class PatronLinkRequest(BaseModel):
+    card_number: str
 
 
 class LoanPolicyResponse(BaseModel):

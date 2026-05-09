@@ -31,7 +31,7 @@ PERMISSION_GROUPS = [
     ("Reports", ["report.view"]),
     ("Labels", ["labels.generate"]),
     ("Audit", ["audit.view"]),
-    ("Administration", ["patron.manage", "policy.edit", "branch.edit"]),
+    ("Administration", ["patron.manage", "patron.account.manage", "policy.edit", "branch.edit"]),
     ("System", ["system.manage", "user.manage", "role.manage"]),
 ]
 
@@ -67,6 +67,7 @@ PERMISSION_DESCRIPTIONS: dict[str, str] = {
     "audit.view":          "View the audit log of librarian-level changes to catalog and patron records.",
     # Administration
     "patron.manage": "Create, edit, and deactivate patron records.",
+    "patron.account.manage": "Create, reset, and deactivate login accounts for Patron-role users linked to patron records.",
     "policy.edit":   "Create and edit loan policies (loan period, renewal limits, media/category rules).",
     "branch.edit":   "Edit branch settings: name, location code, and classification defaults.",
     # System

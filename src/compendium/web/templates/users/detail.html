@@ -27,6 +27,10 @@
         {% for r in roles %}
         <option value="{{ r.name }}"{% if r.id == target.role_id %} selected{% endif %}>{{ r.name }}</option>
         {% endfor %}
+        {# show current role even if actor can't assign it (e.g. Administrator viewing SystemAdmin user) #}
+        {% if target.role.name not in roles|map(attribute='name')|list %}
+        <option value="{{ target.role.name }}" selected disabled>{{ target.role.name }} (current, not changeable)</option>
+        {% endif %}
       </select>
       <button type="submit" style="padding:0.2rem 0.6rem; margin:0; width:auto">Change</button>
     </form>
@@ -58,8 +62,72 @@
     {% if patron %}
       <a href="/ui/patrons/{{ patron.library_card_number }}">{{ patron.full_name }}</a>
       <small>(<code>{{ patron.library_card_number }}</code>)</small>
+      {% if target.is_active %}
+      <form
+        hx-post="/ui/users/{{ target.username }}/unlink-patron"
+        hx-include="[name='csrf_token']"
+        hx-confirm="Unlink this patron record from the user?"
+        hx-target="body"
+        hx-swap="outerHTML"
+        style="display:inline"
+      >
+        <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+        <button type="submit" class="outline contrast" style="padding:0.2rem 0.6rem; margin-left:1rem; width:auto">Unlink</button>
+      </form>
+      {% endif %}
+    {% elif target.is_active and unlinked_patrons %}
+      <div>
+        <form method="post" action="/ui/users/{{ target.username }}/link-patron" style="display:flex; gap:0.5rem; align-items:center; margin-top:0.25rem">
+          <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+          <select name="card_number" style="margin:0; width:auto">
+            {% for p in unlinked_patrons %}
+            <option value="{{ p.library_card_number }}">{{ p.full_name }} ({{ p.library_card_number }})</option>
+            {% endfor %}
+          </select>
+          <button type="submit" style="padding:0.2rem 0.6rem; margin:0; width:auto">Link</button>
+        </form>
+        <details style="margin-top:0.5rem">
+          <summary>Create a new patron record</summary>
+          <form method="post" action="/ui/users/{{ target.username }}/create-patron" style="margin-top:0.5rem; max-width:24rem">
+            <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+            <label for="new_patron_name">Full name
+              <input type="text" id="new_patron_name" name="full_name" required autocomplete="off">
+            </label>
+            <label for="new_patron_email">Email
+              <input type="email" id="new_patron_email" name="contact_email" autocomplete="off">
+            </label>
+            <label for="new_patron_phone">Phone
+              <input type="tel" id="new_patron_phone" name="contact_phone">
+            </label>
+            <label for="new_patron_expires">Card expires
+              <input type="date" id="new_patron_expires" name="expires_at">
+            </label>
+            <button type="submit" style="width:auto">Create patron</button>
+          </form>
+        </details>
+      </div>
+    {% elif target.is_active %}
+      <details>
+        <summary>Create a patron record</summary>
+        <form method="post" action="/ui/users/{{ target.username }}/create-patron" style="margin-top:0.5rem; max-width:24rem">
+          <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+          <label for="solo_patron_name">Full name
+            <input type="text" id="solo_patron_name" name="full_name" required autocomplete="off">
+          </label>
+          <label for="solo_patron_email">Email
+            <input type="email" id="solo_patron_email" name="contact_email" autocomplete="off">
+          </label>
+          <label for="solo_patron_phone">Phone
+            <input type="tel" id="solo_patron_phone" name="contact_phone">
+          </label>
+          <label for="solo_patron_expires">Card expires
+            <input type="date" id="solo_patron_expires" name="expires_at">
+          </label>
+          <button type="submit" style="width:auto">Create patron</button>
+        </form>
+      </details>
     {% else %}
-      <em>None</em> — <a href="/ui/patrons/new">create a patron record</a>
+      <em>None</em>
     {% endif %}
   </dd>
 </dl>

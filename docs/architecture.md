@@ -171,13 +171,32 @@ Five roles seed at startup; they are all `is_system=true` and can't be edited in
 |---|---|---|
 | **Administrator** | `["*"]` (wildcard) | Single-person deployments where one person does everything |
 | **SystemAdmin** | `system.manage`, `user.manage`, `role.manage`, `audit.view`, plus minimal view perms (`item.view`, `work.view`) | Multi-person shops — IT/sysadmin seat. Manages users, roles, infra settings |
-| **Librarian** | All catalog/circ/holds/fines/notifications/reports/labels/audit perms + `patron.manage`, `policy.edit`, `branch.edit`. **No** `user.manage` / `role.manage` / `system.manage`. | Multi-person shops — day-to-day operational seat |
+| **Librarian** | All catalog/circ/holds/fines/notifications/reports/labels/audit perms + `patron.manage`, `patron.account.manage`, `policy.edit`, `branch.edit`. **No** `user.manage` / `role.manage` / `system.manage`. | Multi-person shops — day-to-day operational seat |
 | **Patron** | Self-service: `loan.view.self`, `loan.renew.self`, `hold.place.self`, `hold.view.self`, `fine.view.self`, `loan.claim.self` | Library members with a login account |
 | **ReadOnly** | `item.view`, `work.view` | Anonymous catalog browsing or read-only auditors |
 
 A startup warning logs if no active user holds `system.manage` — best-effort, doesn't block startup.
 
 Guest catalog search is controlled by the `guest_search_enabled` site setting (env: `COMPENDIUM_GUEST_SEARCH_ENABLED`, default `true`).
+
+### patron.account.manage
+
+`patron.account.manage` is narrower than `user.manage`. It gates:
+- Creating a Patron-role login inline when registering a new patron (web/API/CLI).
+- `POST /patrons/{card}/account` — post-hoc account creation for a card-only patron.
+- The "Create new login for this patron" form on the patron detail page.
+
+It does **not** grant access to `/ui/users` (the full user list), role changes, or any account other than a freshly-created Patron-role account. This lets Librarians give self-service access to members without being able to touch staff accounts.
+
+### Role-escalation guardrail
+
+An actor may assign a role R only if every permission in R is also held by the actor — i.e. `set(R.permissions) ⊆ set(actor.permissions)`. An actor with the wildcard `"*"` (Administrator) may assign any role. This rule is enforced uniformly in:
+
+- **Web** — the role dropdown on `/ui/users/new` and `/ui/users/{username}` is filtered to assignable roles; the server re-checks on submit.
+- **API** — `POST /users` and `POST /users/{username}/change-role` validate via the same `assignable_roles()` helper.
+- **CLI** — `compendium user add` enforces the rule when `COMPENDIUM_ACTOR_USERNAME` is set in the environment. Without that env var, the command warns if an Administrator already exists (bootstrap safety-net) but does not block.
+
+The `assignable_roles(actor_permissions, all_roles)` function lives in `services/auth.py`.
 
 ### CSP and inline scripts
 

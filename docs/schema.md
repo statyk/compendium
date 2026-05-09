@@ -187,7 +187,7 @@ Borrower record. `user_id` is nullable — card-only patrons (children, guests) 
 | Column | Type | Notes |
 |--------|------|-------|
 | id | integer PK | |
-| user_id | integer FK → app_user NULLABLE | 1:1 enforced at service level |
+| user_id | integer FK → app_user NULLABLE | Partial unique index `ix_patron_user_id_unique` (`WHERE user_id IS NOT NULL`) enforces 1:1 at the DB level |
 | category_id | integer FK → patron_category NULLABLE INDEX | Drives category-aware loan policies |
 | library_card_number | varchar(64) UNIQUE | |
 | full_name | varchar(256) | |

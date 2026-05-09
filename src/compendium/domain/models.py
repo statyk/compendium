@@ -148,6 +148,12 @@ class AppUser(Base):
     )
 
     role: Mapped[Role] = relationship(back_populates="users")
+    patron: Mapped[Patron | None] = relationship(
+        "Patron",
+        foreign_keys="[Patron.user_id]",
+        back_populates="user",
+        uselist=False,
+    )
 
 
 class PatronCategory(Base):
@@ -184,7 +190,7 @@ class Patron(Base):
         UtcDateTime, onupdate=func.now()
     )
 
-    user: Mapped[AppUser | None] = relationship(foreign_keys=[user_id])
+    user: Mapped[AppUser | None] = relationship(foreign_keys=[user_id], back_populates="patron")
     category: Mapped[PatronCategory | None] = relationship(foreign_keys=[category_id])
 
 

@@ -3,12 +3,14 @@ from sqlalchemy.orm import Session
 
 from compendium.api.deps import require_permission
 from compendium.api.schemas import (
+    CreateAccountInline,
     CreatePatronRequest,
     PatronResponse,
     UpdatePatronRequest,
 )
+from compendium.db.engine import get_settings
 from compendium.db.session import get_session
-from compendium.domain.errors import BusinessRuleError, NotFoundError, ValidationError
+from compendium.domain.errors import BusinessRuleError, ConflictError, NotFoundError, ValidationError
 from compendium.domain.models import AppUser
 from compendium.repositories.sql.audit_log_repository import SqlAuditLogRepository
 from compendium.repositories.sql.hold_repository import SqlHoldRepository
@@ -17,7 +19,10 @@ from compendium.repositories.sql.patron_category_repository import (
     SqlPatronCategoryRepository,
 )
 from compendium.repositories.sql.patron_repository import SqlPatronRepository
+from compendium.repositories.sql.role_repository import SqlRoleRepository
+from compendium.repositories.sql.user_repository import SqlUserRepository
 from compendium.services.audit import AuditService
+from compendium.services.auth import AuthService, has_permission
 from compendium.services.patrons import PatronService, _MISSING
 
 router = APIRouter()
@@ -45,6 +50,26 @@ def _patron_service(session: Session, actor: AppUser, source: str = "api") -> Pa
     )
 
 
+def _patron_service_with_auth(session: Session, actor: AppUser, source: str = "api") -> PatronService:
+    auth_svc = AuthService(
+        user_repo=SqlUserRepository(session),
+        role_repo=SqlRoleRepository(session),
+        settings=get_settings(),
+        audit_svc=AuditService(SqlAuditLogRepository(session)),
+        actor=actor,
+        source=source,
+    )
+    return PatronService(
+        patron_repo=SqlPatronRepository(session),
+        loan_repo=SqlLoanRepository(session),
+        hold_repo=SqlHoldRepository(session),
+        audit_svc=AuditService(SqlAuditLogRepository(session)),
+        actor=actor,
+        source=source,
+        auth_svc=auth_svc,
+    )
+
+
 @router.post("", status_code=201, response_model=PatronResponse)
 def create_patron(
     body: CreatePatronRequest,
@@ -52,13 +77,51 @@ def create_patron(
     user: AppUser = Depends(require_permission("patron.manage")),
 ) -> PatronResponse:
     category_id = _resolve_category_id(session, body.category_code)
-    patron = _patron_service(session, user).create(
-        full_name=body.full_name,
-        contact_email=body.contact_email,
-        contact_phone=body.contact_phone,
-        category_id=category_id,
-        expires_at=body.expires_at,
-    )
+    if body.account is not None:
+        if not has_permission(user.role.permissions, "patron.account.manage"):
+            raise HTTPException(status_code=403, detail="Forbidden: patron.account.manage required")
+        try:
+            patron = _patron_service_with_auth(session, user).create_with_account(
+                full_name=body.full_name,
+                contact_email=body.contact_email,
+                contact_phone=body.contact_phone,
+                category_id=category_id,
+                expires_at=body.expires_at,
+                username=body.account.username,
+                password=body.account.password,
+            )
+        except ConflictError as exc:
+            raise HTTPException(status_code=409, detail=str(exc)) from exc
+        except (BusinessRuleError, ValidationError) as exc:
+            raise HTTPException(status_code=422, detail=str(exc)) from exc
+    else:
+        patron = _patron_service(session, user).create(
+            full_name=body.full_name,
+            contact_email=body.contact_email,
+            contact_phone=body.contact_phone,
+            category_id=category_id,
+            expires_at=body.expires_at,
+        )
+    return PatronResponse.model_validate(patron)
+
+
+@router.post("/{card_number}/account", response_model=PatronResponse)
+def create_patron_account(
+    card_number: str,
+    body: CreateAccountInline,
+    session: Session = Depends(get_session),
+    user: AppUser = Depends(require_permission("patron.account.manage")),
+) -> PatronResponse:
+    try:
+        patron = _patron_service_with_auth(session, user).create_account_for_patron(
+            card_number, username=body.username, password=body.password
+        )
+    except NotFoundError as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
+    except ConflictError as exc:
+        raise HTTPException(status_code=409, detail=str(exc)) from exc
+    except (BusinessRuleError, ValidationError) as exc:
+        raise HTTPException(status_code=422, detail=str(exc)) from exc
     return PatronResponse.model_validate(patron)
 
 

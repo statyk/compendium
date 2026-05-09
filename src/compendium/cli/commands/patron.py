@@ -5,6 +5,7 @@ import typer
 
 from compendium.db.session import session_scope
 from compendium.domain.errors import DomainError
+from compendium.db.engine import get_settings
 from compendium.repositories.sql.audit_log_repository import SqlAuditLogRepository
 from compendium.repositories.sql.hold_repository import SqlHoldRepository
 from compendium.repositories.sql.loan_repository import SqlLoanRepository
@@ -12,8 +13,10 @@ from compendium.repositories.sql.patron_category_repository import (
     SqlPatronCategoryRepository,
 )
 from compendium.repositories.sql.patron_repository import SqlPatronRepository
+from compendium.repositories.sql.role_repository import SqlRoleRepository
 from compendium.repositories.sql.user_repository import SqlUserRepository
 from compendium.services.audit import AuditService
+from compendium.services.auth import AuthService
 from compendium.services.patrons import PatronService
 
 app = typer.Typer(help="Patron management commands.")
@@ -43,35 +46,76 @@ def _patron_svc(session) -> PatronService:
     )
 
 
+def _patron_svc_with_auth(session) -> PatronService:
+    auth_svc = AuthService(
+        user_repo=SqlUserRepository(session),
+        role_repo=SqlRoleRepository(session),
+        settings=get_settings(),
+        audit_svc=AuditService(SqlAuditLogRepository(session)),
+        actor_label=f"cli:{getpass.getuser()}",
+        source="cli",
+    )
+    return PatronService(
+        patron_repo=SqlPatronRepository(session),
+        loan_repo=SqlLoanRepository(session),
+        hold_repo=SqlHoldRepository(session),
+        audit_svc=AuditService(SqlAuditLogRepository(session)),
+        actor_label=f"cli:{getpass.getuser()}",
+        source="cli",
+        auth_svc=auth_svc,
+    )
+
+
 @app.command("add")
 def add_patron(
     name: str = typer.Option(..., "--name", help="Patron's full name"),
     email: str | None = typer.Option(None, "--email"),
     phone: str | None = typer.Option(None, "--phone"),
     link_user: str | None = typer.Option(None, "--link-user", help="Username to link to this patron"),
+    create_user: bool = typer.Option(False, "--create-user", help="Create a new Patron-role login for this patron"),
+    username: str | None = typer.Option(None, "--username", help="Username for the new login (requires --create-user)"),
+    password: str | None = typer.Option(None, "--password", help="Password for the new login (prompted if omitted)", hide_input=True),
     category: str | None = typer.Option(None, "--category", help="Patron category code (adult/child/staff/teacher)"),
     expires: str | None = typer.Option(None, "--expires", help="Card expiry date (YYYY-MM-DD)"),
 ) -> None:
     """Register a new patron."""
+    if link_user and create_user:
+        typer.echo("Error: --link-user and --create-user are mutually exclusive", err=True)
+        raise typer.Exit(1)
     try:
         with session_scope() as session:
-            user_id: int | None = None
-            if link_user:
-                u = SqlUserRepository(session).get_by_username(link_user)
-                if u is None:
-                    typer.echo(f"Error: No user with username '{link_user}'", err=True)
-                    raise typer.Exit(1)
-                user_id = u.id
             category_id = _resolve_category_id(session, category)
             expires_at = _parse_date(expires) if expires else None
-            patron = _patron_svc(session).create(
-                full_name=name,
-                contact_email=email,
-                contact_phone=phone,
-                user_id=user_id,
-                category_id=category_id,
-                expires_at=expires_at,
-            )
+            if create_user:
+                if not username:
+                    username = typer.prompt("Username")
+                if not password:
+                    password = typer.prompt("Password", hide_input=True, confirmation_prompt=True)
+                patron = _patron_svc_with_auth(session).create_with_account(
+                    full_name=name,
+                    contact_email=email,
+                    contact_phone=phone,
+                    category_id=category_id,
+                    expires_at=expires_at,
+                    username=username,
+                    password=password,
+                )
+            else:
+                user_id: int | None = None
+                if link_user:
+                    u = SqlUserRepository(session).get_by_username(link_user)
+                    if u is None:
+                        typer.echo(f"Error: No user with username '{link_user}'", err=True)
+                        raise typer.Exit(1)
+                    user_id = u.id
+                patron = _patron_svc(session).create(
+                    full_name=name,
+                    contact_email=email,
+                    contact_phone=phone,
+                    user_id=user_id,
+                    category_id=category_id,
+                    expires_at=expires_at,
+                )
     except DomainError as exc:
         typer.echo(f"Error: {exc}", err=True)
         raise typer.Exit(1) from exc
@@ -82,7 +126,9 @@ def add_patron(
         typer.echo(f"  Email       : {email}")
     if phone:
         typer.echo(f"  Phone       : {phone}")
-    if link_user:
+    if create_user:
+        typer.echo(f"  Login       : {username} (Patron role)")
+    elif link_user:
         typer.echo(f"  Linked user : {link_user}")
     if category:
         typer.echo(f"  Category    : {category}")
@@ -178,6 +224,28 @@ def unlink_user_cmd(
         with session_scope() as session:
             patron = _patron_svc(session).unlink_user(card)
             typer.echo(f"\nUnlinked user from patron {patron.full_name} ({card})")
+    except DomainError as exc:
+        typer.echo(f"Error: {exc}", err=True)
+        raise typer.Exit(1) from exc
+
+
+@app.command("create-user")
+def create_user_for_patron(
+    card: str = typer.Option(..., "--card", help="Patron library card number"),
+    username: str = typer.Option(..., "--username", help="Username for the new login"),
+    password: str | None = typer.Option(
+        None, "--password", hide_input=True, help="Password (prompted if omitted)"
+    ),
+) -> None:
+    """Create a Patron-role login and link it to an existing card-only patron."""
+    if not password:
+        password = typer.prompt("Password", hide_input=True, confirmation_prompt=True)
+    try:
+        with session_scope() as session:
+            patron = _patron_svc_with_auth(session).create_account_for_patron(
+                card, username=username, password=password
+            )
+            typer.echo(f"\nCreated login '{username}' and linked to patron {patron.full_name} ({card})")
     except DomainError as exc:
         typer.echo(f"Error: {exc}", err=True)
         raise typer.Exit(1) from exc

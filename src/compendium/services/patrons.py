@@ -10,6 +10,10 @@ from compendium.domain.models import AppUser, Patron
 from compendium.repositories.base import HoldRepository, LoanRepository, PatronRepository
 from compendium.services.audit import AuditAction, AuditEntityType, AuditService
 
+from typing import TYPE_CHECKING
+if TYPE_CHECKING:
+    from compendium.services.auth import AuthService
+
 _MISSING = object()
 
 
@@ -23,6 +27,7 @@ class PatronService:
         actor: AppUser | None = None,
         actor_label: str | None = None,
         source: str = "system",
+        auth_svc: AuthService | None = None,
     ) -> None:
         self._patrons = patron_repo
         self._loans = loan_repo
@@ -31,6 +36,7 @@ class PatronService:
         self._actor = actor
         self._actor_label = actor_label
         self._source = source
+        self._auth = auth_svc
 
     def create(
         self,
@@ -170,6 +176,48 @@ class PatronService:
             {"snapshot": {"card": patron.library_card_number, "linked_user_id": None}},
         )
         return result
+
+    def create_with_account(
+        self,
+        *,
+        full_name: str,
+        contact_email: str | None = None,
+        contact_phone: str | None = None,
+        category_id: int | None = None,
+        expires_at: date | None = None,
+        username: str,
+        password: str,
+    ) -> Patron:
+        """Atomically create a Patron-role login and a linked patron record."""
+        if self._auth is None:
+            raise BusinessRuleError("PatronService not configured for account creation.")
+        user = self._auth.create_user(username, password, "Patron")
+        return self.create(
+            full_name=full_name,
+            contact_email=contact_email,
+            contact_phone=contact_phone,
+            user_id=user.id,
+            category_id=category_id,
+            expires_at=expires_at,
+        )
+
+    def create_account_for_patron(
+        self,
+        card_number: str,
+        *,
+        username: str,
+        password: str,
+    ) -> Patron:
+        """Create a Patron-role login and link it to an existing card-only patron."""
+        if self._auth is None:
+            raise BusinessRuleError("PatronService not configured for account creation.")
+        patron = self._patrons.get_by_card_number(card_number)
+        if patron is None:
+            raise NotFoundError(f"No patron with card number '{card_number}'")
+        if patron.user_id is not None:
+            raise BusinessRuleError("This patron already has a linked user account.")
+        user = self._auth.create_user(username, password, "Patron")
+        return self.link_user(card_number, user.id)
 
     def deactivate(self, card_number: str) -> Patron:
         patron = self._patrons.get_by_card_number(card_number)

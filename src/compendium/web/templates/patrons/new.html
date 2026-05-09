@@ -20,6 +20,20 @@
   <input type="email" id="contact_email" name="contact_email">
   <label for="contact_phone">Phone</label>
   <input type="tel" id="contact_phone" name="contact_phone">
+  {% if has_permission(user, 'patron.account.manage') %}
+  <details id="create-login-section">
+    <summary>Also create a login account for this patron</summary>
+    <fieldset style="border:1px solid var(--pico-muted-border-color); padding:0.75rem 1rem; border-radius:var(--pico-border-radius)">
+      <label for="create_username">Username</label>
+      <input type="text" id="create_username" name="create_username" autocomplete="off">
+      <label for="create_password">Password</label>
+      <input type="password" id="create_password" name="create_password" autocomplete="new-password">
+      <label for="create_password_confirm">Confirm password</label>
+      <input type="password" id="create_password_confirm" name="create_password_confirm" autocomplete="new-password">
+      <small>Leave username blank to skip account creation. The account will have the Patron role.</small>
+    </fieldset>
+  </details>
+  {% else %}
   <label for="user_id">Link user account <span class="field-hint" data-tooltip="Linking lets this patron sign in to the web UI to view their own loans, holds, and fines.">ⓘ</span></label>
   <select id="user_id" name="user_id">
     <option value="">— none —</option>
@@ -27,6 +41,7 @@
     <option value="{{ u.id }}">{{ u.username }}{% if u.email %} ({{ u.email }}){% endif %} — {{ u.role.name }}</option>
     {% endfor %}
   </select>
+  {% endif %}
   <label for="category_id">Category <span class="field-hint" data-tooltip="Patron category determines which loan policies apply. Leave blank for the default policy.">ⓘ</span></label>
   <select id="category_id" name="category_id">
     <option value="">— none —</option>

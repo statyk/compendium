@@ -191,7 +191,7 @@ Below is a high-level inventory grouped by concern; the OpenAPI document is the 
 |---|---|---|
 | **Auth** | `POST /auth/login` | none |
 | **Catalog** | `GET /works/search`, `/works/new-arrivals`, `/works/recently-returned`; `GET /items/{barcode}`; `POST /items/{barcode}/{withdraw,loanable,verify-returned,write-off-claim,lost,damaged,clear-lost,clear-damage}` | guest / `item.view` / `item.delete` |
-| **Patrons** | `GET/POST /patrons`, `PATCH /patrons/{card}`, `POST /patrons/{card}/deactivate`, `GET/POST /patron-categories`, `PATCH/DELETE /patron-categories/{id}` | `patron.manage` |
+| **Patrons** | `GET/POST /patrons`, `PATCH /patrons/{card}`, `POST /patrons/{card}/deactivate`, `POST /patrons/{card}/account`, `GET/POST /patron-categories`, `PATCH/DELETE /patron-categories/{id}` | `patron.manage` / `patron.account.manage` for account endpoints |
 | **Loans** | `POST /loans/checkout`, `/loans/{id}/{checkin,renew,claim-returned}`, `POST /loans/{id}/declare-lost`/`mark-damaged`; `GET /loans` (system-wide), `/loans/patron/{card}`, `/loans/item/{barcode}`, `/loans/claims` | `loan.*` (see below) |
 | **Holds** | `GET /holds`, `/holds/queue/{work_id}`; `POST/DELETE /holds`, `/holds/{id}`; `POST /holds/{id}/{suspend,resume}` | `hold.*` |
 | **Fines** | `GET /fines`, `GET/POST /patrons/{card}/fines`, `POST /fines/{id}/{pay,waive}`, `POST /patrons/{card}/fines/assess-overdue` | `fine.manage` / `fine.view.self` |
@@ -201,7 +201,7 @@ Below is a high-level inventory grouped by concern; the OpenAPI document is the 
 | **Bulk import/export** | `POST /import/{csv,goodreads,librarything,marc}` (multipart), `GET /export/{csv,marc}` (streaming) | `catalog.import` / `item.view` |
 | **Labels** | `GET /labels/items`, `/labels/patrons` (PDF) | `labels.generate` |
 | **Policies** | `GET/POST /policies` | `item.view` / `policy.edit` |
-| **Users** | `POST /users/{username}/deactivate` | `user.manage` |
+| **Users** | `POST /users`, `POST /users/{username}/deactivate`, `POST/DELETE /users/{username}/patron` | `user.manage` |
 | **Settings** | `GET /settings/`, `GET/PATCH/DELETE /settings/{key}` | `patron.manage` (librarian-tier) / `system.manage` (system-tier) |
 | **Audit** | `GET /audit/` | `audit.view` |
 

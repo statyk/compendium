@@ -5,7 +5,7 @@ import pytest
 from compendium.config.settings import Settings
 from compendium.domain.errors import AuthError, BusinessRuleError, ConflictError, NotFoundError
 from compendium.domain.models import AppUser, Role
-from compendium.services.auth import AuthService, has_permission, hash_password, verify_password
+from compendium.services.auth import AuthService, assignable_roles, has_permission, hash_password, verify_password
 
 
 def _settings() -> Settings:
@@ -276,6 +276,46 @@ class TestAdminResetPassword:
                 actor_current_password="x",
                 new_password="y",
             )
+
+
+class TestAssignableRoles:
+    def _role(self, name: str, perms: list[str], rid: int = 1) -> Role:
+        r = Role(name=name, permissions=perms, is_system=True)
+        r.id = rid
+        return r
+
+    def test_wildcard_actor_gets_all_roles(self):
+        admin = self._role("Administrator", ["*"], 1)
+        librarian = self._role("Librarian", ["patron.manage", "item.view"], 2)
+        patron = self._role("Patron", ["loan.renew.self"], 3)
+        all_roles = [admin, librarian, patron]
+        result = assignable_roles(["*"], all_roles)
+        assert {r.name for r in result} == {"Administrator", "Librarian", "Patron"}
+
+    def test_subset_actor_excludes_superset_role(self):
+        # Actor has only patron.manage — cannot assign Librarian (which adds item.view)
+        librarian_role = self._role("Librarian", ["patron.manage", "item.view"], 1)
+        patron_role = self._role("Patron", ["loan.renew.self"], 2)
+        all_roles = [librarian_role, patron_role]
+        result = assignable_roles(["patron.manage"], all_roles)
+        assert not any(r.name == "Librarian" for r in result)
+        assert not any(r.name == "Patron" for r in result)
+
+    def test_actor_can_assign_subset_role(self):
+        patron_role = self._role("Patron", ["loan.renew.self", "item.view"], 1)
+        all_roles = [patron_role]
+        result = assignable_roles(["loan.renew.self", "item.view", "patron.manage"], all_roles)
+        assert any(r.name == "Patron" for r in result)
+
+    def test_empty_role_permissions_always_assignable(self):
+        readonly = self._role("ReadOnly", [], 1)
+        result = assignable_roles(["item.view"], [readonly])
+        assert any(r.name == "ReadOnly" for r in result)
+
+    def test_actor_without_wildcard_cannot_assign_wildcard_role(self):
+        admin = self._role("Administrator", ["*"], 1)
+        result = assignable_roles(["patron.manage", "item.view"], [admin])
+        assert not any(r.name == "Administrator" for r in result)
 
 
 class TestPasswordStrength:

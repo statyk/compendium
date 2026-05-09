@@ -91,8 +91,43 @@
         </select>
         <button type="submit" style="padding:0.2rem 0.6rem; margin:0; width:auto">Link</button>
       </form>
+      {% if has_permission(user, 'patron.account.manage') %}
+      <details style="margin-top:0.5rem">
+        <summary>Create a new login for this patron</summary>
+        <form method="post" action="/ui/patrons/{{ patron.library_card_number }}/create-user" style="margin-top:0.5rem; max-width:24rem">
+          <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+          <label for="new_login_username">Username
+            <input type="text" id="new_login_username" name="username" autocomplete="off" required>
+          </label>
+          <label for="new_login_password">Password
+            <input type="password" id="new_login_password" name="password" autocomplete="new-password" required>
+          </label>
+          <label for="new_login_confirm">Confirm password
+            <input type="password" id="new_login_confirm" name="password_confirm" autocomplete="new-password" required>
+          </label>
+          <button type="submit" style="width:auto">Create login</button>
+        </form>
+      </details>
+      {% endif %}
+    {% elif patron.is_active and has_permission(user, 'patron.account.manage') %}
+      <details>
+        <summary>Create a login for this patron</summary>
+        <form method="post" action="/ui/patrons/{{ patron.library_card_number }}/create-user" style="margin-top:0.5rem; max-width:24rem">
+          <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+          <label for="solo_login_username">Username
+            <input type="text" id="solo_login_username" name="username" autocomplete="off" required>
+          </label>
+          <label for="solo_login_password">Password
+            <input type="password" id="solo_login_password" name="password" autocomplete="new-password" required>
+          </label>
+          <label for="solo_login_confirm">Confirm password
+            <input type="password" id="solo_login_confirm" name="password_confirm" autocomplete="new-password" required>
+          </label>
+          <button type="submit" style="width:auto">Create login</button>
+        </form>
+      </details>
     {% elif patron.is_active %}
-      <em>None</em> — <a href="/ui/users/new">create a user first</a>
+      <em>None</em>
     {% else %}
       <em>None</em>
     {% endif %}
