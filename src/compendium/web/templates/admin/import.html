@@ -10,6 +10,7 @@
 </p>
 
 {% if error %}<p class="error-banner">{{ error }}</p>{% endif %}
+{% if gb_quota_warning %}<p class="warning-banner">{{ gb_quota_warning }}</p>{% endif %}
 
 <form method="post" action="/ui/admin/import" enctype="multipart/form-data">
   <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
@@ -57,8 +58,9 @@
     <input type="checkbox" name="enrich" value="1">
     Enrich from external source — for rows with an ISBN or UPC, fill in
     missing fields (cover, description, publisher, etc.) by looking up the
-    record in Open Library / MusicBrainz / TMDb. Adds one HTTP per row;
-    keep off for fast bulk imports.
+    record in Google Books / Open Library / MusicBrainz / TMDb. Adds one
+    network request per row on first run (cached thereafter); keep off for
+    fast bulk imports of clean data.
   </label>
 
   <label>
@@ -92,6 +94,14 @@
   {% if report.created_works or report.added_copies %}
   <a href="/ui/catalog" role="button" class="outline" style="margin-left:.75rem">Browse catalog</a>
   {% endif %}
+</p>
+{% endif %}
+
+{% if report.gb_quota_tripped %}
+<p class="warning-banner">
+  Google Books daily quota was exhausted during this import. Remaining rows
+  used Open Library as fallback. Quota resets ~24 h after the first hit.
+  Run this import again tomorrow to fill those rows with Google Books metadata.
 </p>
 {% endif %}
 

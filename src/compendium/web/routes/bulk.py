@@ -73,6 +73,18 @@ def _render(name: str, request: Request, ctx: dict, status_code: int = 200):
 _MODE_CHOICES = [m.value for m in ImportMode]
 
 
+def _gb_quota_warning() -> str | None:
+    """Return a warning message if Google Books quota is currently exhausted, else None."""
+    from compendium.services.metadata import get_book_primary_adapter_name, is_gb_quota_exhausted
+
+    if get_book_primary_adapter_name() == "googlebooks" and is_gb_quota_exhausted():
+        return (
+            "Google Books daily quota exhausted (resets ~24 h after first hit). "
+            "Enriched imports will use Open Library only until the quota resets."
+        )
+    return None
+
+
 @router.get("/admin/import")
 def import_form(
     request: Request,
@@ -92,6 +104,7 @@ def import_form(
             "mode_choices": _MODE_CHOICES,
             "report": None,
             "error": None,
+            "gb_quota_warning": _gb_quota_warning(),
         },
     )
 
@@ -126,6 +139,7 @@ async def import_submit(
         "mode_choices": _MODE_CHOICES,
         "report": None,
         "error": None,
+        "gb_quota_warning": _gb_quota_warning(),
     }
     try:
         mode_enum = ImportMode(mode)

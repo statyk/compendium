@@ -199,6 +199,14 @@ def _positive_int(v: int) -> None:
         raise ValueError("must be a positive integer")
 
 
+def _one_of(*choices: str):
+    """Return a validator that checks the value is one of the given strings."""
+    def _validate(v: str) -> None:
+        if v not in choices:
+            raise ValueError(f"must be one of: {', '.join(choices)}")
+    return _validate
+
+
 def _non_negative_int(v: int) -> None:
     if not isinstance(v, int) or v < 0:
         raise ValueError("must be a non-negative integer")
@@ -726,12 +734,36 @@ def _register_builtins() -> None:
             scope="system",
             secret=True,
             help_text=(
-                "API key for the Google Books API, used as a fallback cover-image "
-                "source when Open Library has no cover. Obtain one at "
+                "API key for the Google Books API. When set (and "
+                "'book_metadata_source_preference' is 'googlebooks'), Google Books "
+                "is the primary source for book metadata and covers, with Open Library "
+                "as fallback. Obtain a key at "
                 "console.cloud.google.com → APIs & Services → Credentials. "
+                "Free tier: 1 000 requests/day. "
                 "Stored encrypted at rest. "
                 "Environment variable COMPENDIUM_GOOGLE_BOOKS_API_KEY takes precedence if set."
             ),
+        )
+    )
+    register(
+        SettingDescriptor(
+            key="book_metadata_source_preference",
+            display_name="Book Metadata Source Preference",
+            type=str,
+            default="googlebooks",
+            scope="system",
+            help_text=(
+                "Which source to use as the primary metadata adapter for books. "
+                "'googlebooks' uses Google Books when an API key is configured, "
+                "falling back to Open Library otherwise. "
+                "'openlibrary' always uses Open Library as primary regardless of "
+                "whether a Google Books key is present. "
+                "The other source is consulted for cover images when the primary "
+                "has none. "
+                "Environment variable COMPENDIUM_BOOK_METADATA_SOURCE_PREFERENCE "
+                "takes precedence if set."
+            ),
+            validator=_one_of("googlebooks", "openlibrary"),
         )
     )
     register(

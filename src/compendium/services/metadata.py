@@ -1,11 +1,12 @@
 import os
 import re
+import time
 import xml.etree.ElementTree as ET
 from typing import Protocol, runtime_checkable
 
 import httpx
 
-from compendium.domain.errors import ExternalLookupError, ValidationError
+from compendium.domain.errors import ExternalLookupError, GoogleBooksQuotaExhausted, ValidationError
 
 _OPENLIBRARY_URL = "https://openlibrary.org/api/books"
 _OPENLIBRARY_SEARCH_URL = "https://openlibrary.org/search.json"
@@ -125,6 +126,184 @@ class OpenLibraryAdapter:
         if not data:
             return None
         return parse_open_library(data, value)
+
+
+# ---------------------------------------------------------------------------
+# Google Books adapter (books — primary when API key is configured)
+# ---------------------------------------------------------------------------
+
+def lookup_google_books(isbn: str, api_key: str) -> dict | None:
+    """Fetch a book record from the Google Books volumes API.
+
+    Returns a ``{id, volumeInfo}`` dict on hit, ``None`` on definitive not-found.
+    Raises ``GoogleBooksQuotaExhausted`` on HTTP 403 dailyLimitExceeded.
+    Raises ``ExternalLookupError`` on transport failure.
+    Retries once after 1 s on HTTP 429 userRateLimitExceeded (burst limit).
+    """
+    params = {
+        "q": f"isbn:{isbn}",
+        "key": api_key,
+        "fields": "items(id,volumeInfo(title,subtitle,authors,publisher,publishedDate,description,imageLinks,industryIdentifiers))",
+    }
+    for attempt in range(2):
+        try:
+            with httpx.Client(timeout=10) as client:
+                resp = client.get(_GOOGLE_BOOKS_URL, params=params)
+        except httpx.HTTPError as exc:
+            raise ExternalLookupError(f"Google Books request failed: {exc}") from exc
+
+        if resp.status_code == 200:
+            items = resp.json().get("items", [])
+            return items[0] if items else None
+
+        if resp.status_code == 429:
+            # Per-second burst limit — retry once after a pause.
+            if attempt == 0:
+                time.sleep(1)
+                continue
+            raise ExternalLookupError("Google Books per-second rate limit exceeded after retry.")
+
+        if resp.status_code == 403:
+            try:
+                reasons = [e.get("reason") for e in resp.json().get("error", {}).get("errors", [])]
+            except Exception:
+                reasons = []
+            if "dailyLimitExceeded" in reasons or "userRateLimitExceeded" in reasons:
+                raise GoogleBooksQuotaExhausted("Google Books daily quota exhausted.")
+            raise ExternalLookupError(f"Google Books returned 403: {resp.text[:200]}")
+
+        # Any other non-200 is treated as a transient/unknown error.
+        raise ExternalLookupError(f"Google Books returned HTTP {resp.status_code}")
+
+    raise ExternalLookupError("Google Books request failed after retry.")  # unreachable
+
+
+def parse_google_books(volume: dict, isbn: str) -> dict:
+    """Map a Google Books volume ``{id, volumeInfo}`` to the canonical metadata dict."""
+    info = volume.get("volumeInfo", {})
+    volume_id: str = volume.get("id", "")
+
+    authors: list[str] = info.get("authors") or []
+
+    pub_date: str = info.get("publishedDate", "")
+    year: int | None = None
+    m = re.search(r"\d{4}", pub_date)
+    if m:
+        year = int(m.group())
+
+    links = info.get("imageLinks") or {}
+    raw_url = (
+        links.get("large") or links.get("medium")
+        or links.get("small") or links.get("thumbnail")
+    )
+    cover_url: str | None = raw_url.replace("http://", "https://") if raw_url else None
+
+    return {
+        "title": info.get("title") or "Unknown Title",
+        "subtitle": info.get("subtitle"),
+        "authors": authors,
+        "creator_role": "author",
+        "publisher": info.get("publisher"),
+        "publication_year": year,
+        "description": info.get("description"),
+        "cover_image_url": cover_url,
+        "isbn": isbn,
+        "upc": None,
+        "external_ids": {"google_books": volume_id} if volume_id else {},
+        "extra_metadata": {},
+        "lc_classification": None,
+        "ddc_classification": None,
+        "lccn": None,
+    }
+
+
+class GoogleBooksAdapter:
+    def lookup(self, kind: str, value: str) -> dict | None:
+        if kind != "isbn":
+            raise ExternalLookupError(f"Google Books does not support identifier kind '{kind}'")
+        from compendium.services.site_settings import get_site_setting
+
+        api_key = get_site_setting("google_books_api_key")
+        if not api_key:
+            return None
+        try:
+            volume = lookup_google_books(value, api_key)
+        except GoogleBooksQuotaExhausted:
+            _mark_gb_quota_exhausted()
+            return None
+        if volume is None:
+            return None
+        return parse_google_books(volume, value)
+
+
+# ---------------------------------------------------------------------------
+# Google Books quota circuit breaker
+# ---------------------------------------------------------------------------
+
+_GB_QUOTA_ADAPTER = "GoogleBooksAdapter"
+_GB_QUOTA_KIND = "_quota"
+_GB_QUOTA_VALUE = "exhausted"
+
+
+def _mark_gb_quota_exhausted() -> None:
+    """Persist the quota-exhausted sentinel row so all processes see it."""
+    import logging
+    from datetime import datetime, timezone
+
+    from compendium.db.session import session_scope
+    from compendium.domain.models import MetadataCache
+
+    logger = logging.getLogger(__name__)
+    try:
+        with session_scope() as s:
+            entry = s.get(MetadataCache, (_GB_QUOTA_ADAPTER, _GB_QUOTA_KIND, _GB_QUOTA_VALUE))
+            if entry is None:
+                entry = MetadataCache(
+                    adapter=_GB_QUOTA_ADAPTER,
+                    kind=_GB_QUOTA_KIND,
+                    lookup_value=_GB_QUOTA_VALUE,
+                )
+                s.add(entry)
+            entry.is_negative = True
+            entry.payload = None
+            entry.fetched_at = datetime.now(timezone.utc).replace(tzinfo=None)
+        logger.warning(
+            "Google Books daily quota exhausted. Using Open Library fallback "
+            "for book lookups. Quota typically resets after 24 h."
+        )
+    except Exception:
+        logger.exception("Failed to persist Google Books quota sentinel")
+
+
+def is_gb_quota_exhausted() -> bool:
+    """Return True if a valid quota-exhausted sentinel row exists (< 24 h old)."""
+    from datetime import datetime, timedelta, timezone
+
+    from compendium.db.session import session_scope
+    from compendium.domain.models import MetadataCache
+
+    try:
+        with session_scope() as s:
+            entry = s.get(MetadataCache, (_GB_QUOTA_ADAPTER, _GB_QUOTA_KIND, _GB_QUOTA_VALUE))
+            if entry is None:
+                return False
+            threshold = datetime.now(timezone.utc).replace(tzinfo=None) - timedelta(hours=24)
+            return entry.fetched_at >= threshold
+    except Exception:
+        return False
+
+
+def clear_gb_quota_exhausted() -> bool:
+    """Delete the quota-exhausted sentinel row. Returns True if one existed."""
+    from compendium.db.session import session_scope
+    from compendium.domain.models import MetadataCache
+
+    with session_scope() as s:
+        entry = s.get(MetadataCache, (_GB_QUOTA_ADAPTER, _GB_QUOTA_KIND, _GB_QUOTA_VALUE))
+        if entry is None:
+            return False
+        s.delete(entry)
+    return True
 
 
 def open_library_search_title(query: str) -> list[dict]:
@@ -330,22 +509,53 @@ def lookup_cover_from_google_books(isbn: str, *, api_key: str | None) -> str | N
         return None
 
 
+def _lookup_ol_cover_by_isbn(isbn: str) -> str | None:
+    """Probe Open Library's covers-by-ISBN endpoint; return URL or None.
+
+    Uses ``?default=false`` so a 404 means no cover exists (instead of a
+    placeholder image). Safe to call without an API key.
+    """
+    url = f"https://covers.openlibrary.org/b/isbn/{isbn}-L.jpg"
+    try:
+        with httpx.Client(timeout=5) as client:
+            resp = client.head(url, params={"default": "false"}, follow_redirects=True)
+        return url if resp.status_code == 200 else None
+    except Exception:
+        return None
+
+
 def lookup_cover_fallbacks(
     isbn: str,
     *,
     google_books_key: str | None,
+    primary: str = "openlibrary",
     bypass_cache: bool = False,
     session=None,
 ) -> str | None:
-    """Try cover image fallback sources when the primary (Open Library) has none.
+    """Try the *other* source's cover when the primary returned no cover URL.
 
-    Currently tries Google Books only. Returns the URL or None.
+    When ``primary`` is ``'openlibrary'`` (default), falls back to Google Books.
+    When ``primary`` is ``'googlebooks'``, falls back to Open Library
+    covers-by-ISBN (no API key required).
     """
-    if session is None:
-        return lookup_cover_from_google_books(isbn, api_key=google_books_key)
-
     from compendium.services.metadata_cache import get_or_fetch
 
+    if primary == "googlebooks":
+        # Primary was GB → try Open Library covers.
+        if session is None:
+            return _lookup_ol_cover_by_isbn(isbn)
+        return get_or_fetch(
+            session,
+            "ol_cover",
+            "isbn",
+            isbn,
+            lambda: _lookup_ol_cover_by_isbn(isbn),
+            bypass_cache=bypass_cache,
+        )
+
+    # Primary was OL → try Google Books (original behavior).
+    if session is None:
+        return lookup_cover_from_google_books(isbn, api_key=google_books_key)
     return get_or_fetch(
         session,
         "gb_cover",
@@ -699,15 +909,47 @@ class TMDbAdapter:
 # ---------------------------------------------------------------------------
 
 _tmdb_adapter = TMDbAdapter()
+_GB_ADAPTER = GoogleBooksAdapter()
+_OL_ADAPTER = OpenLibraryAdapter()
 
 _ADAPTERS: dict[str, MetadataAdapter] = {
-    "book": OpenLibraryAdapter(),
     "vinyl": MusicBrainzAdapter(),
     "cd": MusicBrainzAdapter(),
     "dvd": _tmdb_adapter,
     "bluray": _tmdb_adapter,
     "vhs": _tmdb_adapter,
 }
+
+
+def _resolve_book_adapter() -> MetadataAdapter:
+    """Return the active primary book adapter based on preference + key + quota."""
+    from compendium.services.site_settings import get_site_setting
+
+    pref = get_site_setting("book_metadata_source_preference") or "googlebooks"
+    if pref != "googlebooks":
+        return _OL_ADAPTER
+    if not get_site_setting("google_books_api_key"):
+        return _OL_ADAPTER
+    if is_gb_quota_exhausted():
+        return _OL_ADAPTER
+    return _GB_ADAPTER
+
+
+def get_book_primary_adapter_name() -> str:
+    """Return 'googlebooks' or 'openlibrary' based on current runtime config."""
+    return "googlebooks" if _resolve_book_adapter() is _GB_ADAPTER else "openlibrary"
+
+
+def _get_adapter(media_type_code: str) -> MetadataAdapter:
+    if media_type_code == "book":
+        return _resolve_book_adapter()
+    adapter = _ADAPTERS.get(media_type_code)
+    if adapter is None:
+        raise ExternalLookupError(
+            f"No metadata adapter for media type '{media_type_code}'. "
+            "Use manual entry for this type."
+        )
+    return adapter
 
 
 def lookup_metadata(
@@ -719,20 +961,19 @@ def lookup_metadata(
     session=None,
     write_buffer=None,
 ) -> dict | None:
-    adapter = _ADAPTERS.get(media_type_code)
-    if adapter is None:
-        raise ExternalLookupError(
-            f"No metadata adapter for media type '{media_type_code}'. "
-            "Use manual entry for this type."
-        )
+    adapter = _get_adapter(media_type_code)
 
     if session is None:
-        return adapter.lookup(kind, value)
+        result = adapter.lookup(kind, value)
+        # When GB is primary and returns None, try OL as a secondary source.
+        if result is None and media_type_code == "book" and adapter is _GB_ADAPTER:
+            result = _OL_ADAPTER.lookup(kind, value)
+        return result
 
     from compendium.services.metadata_cache import get_or_fetch
 
     adapter_name = type(adapter).__name__
-    return get_or_fetch(
+    result = get_or_fetch(
         session,
         adapter_name,
         kind,
@@ -741,3 +982,15 @@ def lookup_metadata(
         bypass_cache=bypass_cache,
         write_buffer=write_buffer,
     )
+    # When GB is primary and returns None, try OL; cache both under their namespaces.
+    if result is None and media_type_code == "book" and adapter is _GB_ADAPTER:
+        result = get_or_fetch(
+            session,
+            type(_OL_ADAPTER).__name__,
+            kind,
+            value,
+            lambda: _OL_ADAPTER.lookup(kind, value),
+            bypass_cache=bypass_cache,
+            write_buffer=write_buffer,
+        )
+    return result

@@ -1,0 +1,265 @@
+"""Unit tests for the Google Books adapter and quota circuit breaker."""
+
+from __future__ import annotations
+
+from unittest.mock import MagicMock, patch
+
+import httpx
+import pytest
+
+from compendium.domain.errors import ExternalLookupError, GoogleBooksQuotaExhausted
+from compendium.services.metadata import (
+    GoogleBooksAdapter,
+    lookup_google_books,
+    parse_google_books,
+)
+
+
+# ---------------------------------------------------------------------------
+# parse_google_books — field mapping
+# ---------------------------------------------------------------------------
+
+_VOLUME = {
+    "id": "vol_abc123",
+    "volumeInfo": {
+        "title": "Dune",
+        "subtitle": "A Novel",
+        "authors": ["Frank Herbert"],
+        "publisher": "Chilton Books",
+        "publishedDate": "1965-08-01",
+        "description": "A sci-fi epic set on a desert planet.",
+        "imageLinks": {
+            "thumbnail": "http://books.google.com/books/content?id=abc123&zoom=1",
+            "small": "http://books.google.com/books/content?id=abc123&zoom=2",
+            "medium": "http://books.google.com/books/content?id=abc123&zoom=3",
+        },
+        "industryIdentifiers": [
+            {"type": "ISBN_13", "identifier": "9780441013593"},
+        ],
+    },
+}
+
+
+def test_parse_google_books_maps_fields():
+    result = parse_google_books(_VOLUME, "9780441013593")
+    assert result["title"] == "Dune"
+    assert result["subtitle"] == "A Novel"
+    assert result["authors"] == ["Frank Herbert"]
+    assert result["creator_role"] == "author"
+    assert result["publisher"] == "Chilton Books"
+    assert result["publication_year"] == 1965
+    assert result["description"] == "A sci-fi epic set on a desert planet."
+    assert result["isbn"] == "9780441013593"
+    assert result["upc"] is None
+    assert result["external_ids"] == {"google_books": "vol_abc123"}
+    assert result["lc_classification"] is None
+    assert result["ddc_classification"] is None
+    assert result["lccn"] is None
+
+
+def test_parse_google_books_prefers_larger_image():
+    vol = dict(_VOLUME)
+    vol["volumeInfo"] = dict(_VOLUME["volumeInfo"])
+    vol["volumeInfo"]["imageLinks"] = {
+        "thumbnail": "http://books.google.com/thumb",
+        "large": "http://books.google.com/large",
+    }
+    result = parse_google_books(vol, "9780441013593")
+    assert result["cover_image_url"] == "https://books.google.com/large"
+
+
+def test_parse_google_books_upgrades_http_to_https():
+    vol = dict(_VOLUME)
+    vol["volumeInfo"] = dict(_VOLUME["volumeInfo"])
+    vol["volumeInfo"]["imageLinks"] = {"thumbnail": "http://books.google.com/t"}
+    result = parse_google_books(vol, "9780441013593")
+    assert result["cover_image_url"].startswith("https://")
+
+
+def test_parse_google_books_no_image():
+    vol = dict(_VOLUME)
+    vol["volumeInfo"] = dict(_VOLUME["volumeInfo"])
+    vol["volumeInfo"]["imageLinks"] = {}
+    result = parse_google_books(vol, "9780441013593")
+    assert result["cover_image_url"] is None
+
+
+def test_parse_google_books_partial_date():
+    vol = dict(_VOLUME)
+    vol["volumeInfo"] = dict(_VOLUME["volumeInfo"])
+    vol["volumeInfo"]["publishedDate"] = "1965"
+    result = parse_google_books(vol, "9780441013593")
+    assert result["publication_year"] == 1965
+
+
+def test_parse_google_books_no_date():
+    vol = dict(_VOLUME)
+    vol["volumeInfo"] = dict(_VOLUME["volumeInfo"])
+    vol["volumeInfo"]["publishedDate"] = ""
+    result = parse_google_books(vol, "9780441013593")
+    assert result["publication_year"] is None
+
+
+# ---------------------------------------------------------------------------
+# lookup_google_books — HTTP responses
+# ---------------------------------------------------------------------------
+
+def _make_response(status: int, body: dict) -> MagicMock:
+    resp = MagicMock()
+    resp.status_code = status
+    resp.json.return_value = body
+    resp.text = str(body)
+    return resp
+
+
+def _mock_client(resp):
+    client = MagicMock()
+    client.__enter__ = MagicMock(return_value=client)
+    client.__exit__ = MagicMock(return_value=False)
+    client.get = MagicMock(return_value=resp)
+    return client
+
+
+def test_lookup_google_books_hit():
+    body = {"items": [_VOLUME]}
+    resp = _make_response(200, body)
+    with patch("httpx.Client", return_value=_mock_client(resp)):
+        result = lookup_google_books("9780441013593", api_key="key")
+    assert result == _VOLUME
+
+
+def test_lookup_google_books_empty_items():
+    resp = _make_response(200, {"items": []})
+    with patch("httpx.Client", return_value=_mock_client(resp)):
+        result = lookup_google_books("9780441013593", api_key="key")
+    assert result is None
+
+
+def test_lookup_google_books_no_items_key():
+    resp = _make_response(200, {})
+    with patch("httpx.Client", return_value=_mock_client(resp)):
+        result = lookup_google_books("9780441013593", api_key="key")
+    assert result is None
+
+
+def test_lookup_google_books_daily_limit_exceeded():
+    body = {
+        "error": {
+            "errors": [{"reason": "dailyLimitExceeded", "domain": "usageLimits"}]
+        }
+    }
+    resp = _make_response(403, body)
+    with patch("httpx.Client", return_value=_mock_client(resp)):
+        with pytest.raises(GoogleBooksQuotaExhausted):
+            lookup_google_books("9780441013593", api_key="key")
+
+
+def test_lookup_google_books_user_rate_limit_exceeded_also_raises_quota():
+    body = {
+        "error": {
+            "errors": [{"reason": "userRateLimitExceeded", "domain": "usageLimits"}]
+        }
+    }
+    resp = _make_response(403, body)
+    with patch("httpx.Client", return_value=_mock_client(resp)):
+        with pytest.raises(GoogleBooksQuotaExhausted):
+            lookup_google_books("9780441013593", api_key="key")
+
+
+def test_lookup_google_books_other_403_raises_external_error():
+    body = {"error": {"errors": [{"reason": "accessNotConfigured"}]}}
+    resp = _make_response(403, body)
+    with patch("httpx.Client", return_value=_mock_client(resp)):
+        with pytest.raises(ExternalLookupError):
+            lookup_google_books("9780441013593", api_key="key")
+
+
+def test_lookup_google_books_transport_error():
+    client = MagicMock()
+    client.__enter__ = MagicMock(return_value=client)
+    client.__exit__ = MagicMock(return_value=False)
+    client.get = MagicMock(side_effect=httpx.RequestError("timeout"))
+    with patch("httpx.Client", return_value=client):
+        with pytest.raises(ExternalLookupError):
+            lookup_google_books("9780441013593", api_key="key")
+
+
+def test_lookup_google_books_429_retries_once():
+    """HTTP 429 (burst limit) retries once, then raises ExternalLookupError."""
+    burst_resp = _make_response(429, {})
+    client = MagicMock()
+    client.__enter__ = MagicMock(return_value=client)
+    client.__exit__ = MagicMock(return_value=False)
+    client.get = MagicMock(return_value=burst_resp)
+
+    with patch("httpx.Client", return_value=client), patch("time.sleep"):
+        with pytest.raises(ExternalLookupError):
+            lookup_google_books("9780441013593", api_key="key")
+
+    assert client.get.call_count == 2, "should retry exactly once on 429"
+
+
+def test_lookup_google_books_429_success_on_retry():
+    """HTTP 429 on first attempt, 200 on retry."""
+    burst_resp = _make_response(429, {})
+    ok_resp = _make_response(200, {"items": [_VOLUME]})
+    client = MagicMock()
+    client.__enter__ = MagicMock(return_value=client)
+    client.__exit__ = MagicMock(return_value=False)
+    client.get = MagicMock(side_effect=[burst_resp, ok_resp])
+
+    with patch("httpx.Client", return_value=client), patch("time.sleep"):
+        result = lookup_google_books("9780441013593", api_key="key")
+
+    assert result == _VOLUME
+
+
+# ---------------------------------------------------------------------------
+# GoogleBooksAdapter.lookup
+# ---------------------------------------------------------------------------
+
+def test_adapter_returns_none_when_no_key():
+    adapter = GoogleBooksAdapter()
+    with patch("compendium.services.site_settings.get_site_setting", return_value=None):
+        result = adapter.lookup("isbn", "9780441013593")
+    assert result is None
+
+
+def test_adapter_raises_on_unsupported_kind():
+    adapter = GoogleBooksAdapter()
+    with pytest.raises(ExternalLookupError, match="does not support"):
+        adapter.lookup("title", "Dune")
+
+
+def test_adapter_marks_quota_exhausted_on_quota_error():
+    adapter = GoogleBooksAdapter()
+    with (
+        patch("compendium.services.site_settings.get_site_setting", return_value="fake-key"),
+        patch("compendium.services.metadata.lookup_google_books", side_effect=GoogleBooksQuotaExhausted()),
+        patch("compendium.services.metadata._mark_gb_quota_exhausted") as mock_mark,
+    ):
+        result = adapter.lookup("isbn", "9780441013593")
+    assert result is None
+    mock_mark.assert_called_once()
+
+
+def test_adapter_returns_none_on_miss():
+    adapter = GoogleBooksAdapter()
+    with (
+        patch("compendium.services.site_settings.get_site_setting", return_value="fake-key"),
+        patch("compendium.services.metadata.lookup_google_books", return_value=None),
+    ):
+        result = adapter.lookup("isbn", "9780441013593")
+    assert result is None
+
+
+def test_adapter_returns_parsed_dict_on_hit():
+    adapter = GoogleBooksAdapter()
+    with (
+        patch("compendium.services.site_settings.get_site_setting", return_value="fake-key"),
+        patch("compendium.services.metadata.lookup_google_books", return_value=_VOLUME),
+    ):
+        result = adapter.lookup("isbn", "9780441013593")
+    assert result is not None
+    assert result["title"] == "Dune"
+    assert result["external_ids"] == {"google_books": "vol_abc123"}

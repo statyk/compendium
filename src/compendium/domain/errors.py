@@ -52,5 +52,9 @@ class ExternalLookupError(DomainError):
     """An external metadata source failed or returned nothing usable."""
 
 
+class GoogleBooksQuotaExhausted(Exception):
+    """Google Books daily API quota (1000 req/day on the free tier) was reached."""
+
+
 class AuthError(DomainError):
     """Authentication failed (bad credentials, expired token, etc.)."""

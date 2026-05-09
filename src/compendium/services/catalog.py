@@ -175,11 +175,13 @@ class CatalogService:
             )
 
         if media_type_code == "book" and not meta.get("cover_image_url") and meta.get("isbn"):
+            from compendium.services.metadata import get_book_primary_adapter_name
             from compendium.services.site_settings import get_site_setting
 
             meta["cover_image_url"] = lookup_cover_fallbacks(
                 meta["isbn"],
                 google_books_key=get_site_setting("google_books_api_key"),
+                primary=get_book_primary_adapter_name(),
                 session=_session,
             )
 
@@ -461,11 +463,13 @@ class CatalogService:
             )
 
         if media_type_code == "book" and not data.get("cover_image_url") and work.isbn:
+            from compendium.services.metadata import get_book_primary_adapter_name
             from compendium.services.site_settings import get_site_setting
 
             fallback = lookup_cover_fallbacks(
                 work.isbn,
                 google_books_key=get_site_setting("google_books_api_key"),
+                primary=get_book_primary_adapter_name(),
                 bypass_cache=bypass_cache,
                 session=_session,
             )

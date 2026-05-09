@@ -108,6 +108,7 @@ class ImportReport:
     errors: list[ImportRowError] = field(default_factory=list)
     warnings: list[str] = field(default_factory=list)
     dry_run: bool = False
+    gb_quota_tripped: bool = False  # True if GB daily quota was hit during this run
 
 
 @dataclass
@@ -445,8 +446,10 @@ class ImportService:
         self._actor_label = actor_label
         self._source = source
         from compendium.services.metadata_cache import WriteBuffer
+        from compendium.services.metadata import is_gb_quota_exhausted
 
         self._cache_buffer = WriteBuffer()
+        self._gb_quota_pre_import = is_gb_quota_exhausted()
 
     def import_csv(
         self,
@@ -828,6 +831,11 @@ class ImportService:
         report.total_rows += 1
 
     def _finalize(self, report: ImportReport, options: ImportOptions) -> ImportReport:
+        from compendium.services.metadata import is_gb_quota_exhausted
+
+        if options.enrich_from_external and not self._gb_quota_pre_import:
+            report.gb_quota_tripped = is_gb_quota_exhausted()
+
         if options.dry_run:
             self._session.rollback()
             self._cache_buffer.flush()

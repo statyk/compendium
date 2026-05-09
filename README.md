@@ -12,7 +12,7 @@ This paragraph here is about the only part of the project written by a human.
 
 ## Features
 
-- **Catalog** — add items by ISBN / UPC / MusicBrainz ID / TMDb ID / title search (Open Library, MusicBrainz, TMDb) or manually for obscure items; search and browse works and copies; faceted discovery (media type, decade, availability)
+- **Catalog** — add items by ISBN / UPC / MusicBrainz ID / TMDb ID / title search (Google Books / Open Library, MusicBrainz, TMDb) or manually for obscure items; search and browse works and copies; faceted discovery (media type, decade, availability)
 - **Circulation** — checkout, checkin, loan renewal with category-aware per-media-type loan policies; lost / damaged / claims-returned states; self-checkout kiosk mode
 - **Holds** — patron reservation queue; immediate promotion when a copy is available; suspend/resume; auto-expiry via maintenance command
 - **Fines** — configurable per-policy overdue rates with caps and grace periods; lost/damaged fees; threshold-based checkout/hold blocking; pay/waive workflow; per-patron and bulk overdue assessment
@@ -65,7 +65,7 @@ uv run compendium db init
 # Create an Administrator account
 uv run compendium user add --username admin --role Administrator
 
-# Add a book by ISBN (looks up metadata from Open Library)
+# Add a book by ISBN (looks up metadata from Google Books when key is set, else Open Library)
 uv run compendium item add --isbn 9780441013593
 
 # Add a patron
@@ -229,7 +229,8 @@ Most settings (library name, theme, fine thresholds, hold/overdue defaults, kios
 | `COMPENDIUM_SECURE_COOKIES` | Default `true`; set `false` only for plain-HTTP LAN deployments (browsers won't send `Secure` cookies over non-HTTPS, except localhost). |
 | `COMPENDIUM_SECRET_KEY` | Encryption key for secrets stored in the DB (SMTP password, API keys). Optional — set to enable the `/ui/admin/system/secrets` page. Generate with `compendium keygen --secret`. |
 | `COMPENDIUM_TMDB_API_KEY` | TMDb API key. Override — also settable via Admin → System → Secrets when `COMPENDIUM_SECRET_KEY` is configured. |
-| `COMPENDIUM_GOOGLE_BOOKS_API_KEY` | Google Books API key. Override — also settable via Admin → System → Secrets when `COMPENDIUM_SECRET_KEY` is configured. |
+| `COMPENDIUM_GOOGLE_BOOKS_API_KEY` | Google Books API key (primary book metadata source when set). Override — also settable via Admin → System → Secrets when `COMPENDIUM_SECRET_KEY` is configured. |
+| `COMPENDIUM_BOOK_METADATA_SOURCE_PREFERENCE` | Primary book metadata source: `googlebooks` (default; uses GB when key is set, else OL) or `openlibrary`. DB-editable at **System** settings. |
 | `COMPENDIUM_METADATA_CACHE_TTL_DAYS` | Positive-hit TTL for the metadata cache in days (default 30). Negative (not-found) entries always expire after 24 hours. DB-editable at **System** settings. |
 | `COMPENDIUM_SMTP_PASSWORD` | SMTP password. Override — also settable via Admin → System → Secrets when `COMPENDIUM_SECRET_KEY` is configured. |
 | `COMPENDIUM_MAX_UPLOAD_BYTES` | Hard cap on bulk-import upload size (default 100 MB / 104857600). Env-only so a compromised admin token can't raise it. |

@@ -251,23 +251,33 @@ When adding items by identifier, Compendium looks up metadata from external sour
 
 | Media type | Primary source | Identifier |
 |-----------|---------------|------------|
-| book | Open Library (CC0, no key) | ISBN or title search |
+| book | Google Books (when key present; else Open Library) | ISBN or title search |
 | vinyl, cd | MusicBrainz (CC0, no key) | UPC, MBID, or title search (format-filtered, artist+title fuzzy) |
 | dvd, bluray, vhs | TMDb (requires key) | TMDb ID or title search |
 
 For items that external sources can't find (zines, obscure self-releases, out-of-print rarities), `CatalogService.add_manual()` accepts user-supplied metadata directly. Exposed via the web UI at `/ui/items/new/manual` and the CLI `compendium item add-manual`.
 
-Adapters are registered in `services/metadata.py` via `_ADAPTERS: dict[str, MetadataAdapter]`. Adding a new media type requires implementing the `MetadataAdapter` protocol and registering it.
+Book adapters are resolved at runtime by `_resolve_book_adapter()` in `services/metadata.py`; non-book adapters are registered in the static `_ADAPTERS` dict. Adding a new media type requires implementing the `MetadataAdapter` protocol and registering it.
 
 Note: TMDb does not index physical-disc UPCs, so film items are added via a title-search candidate picker rather than direct barcode scan. A UPC→title bridge is a deferred enhancement.
 
-### Cover image fallbacks
+### Book metadata source preference and rate-limit handling
 
-When Open Library does not provide a cover for a book ISBN, `CatalogService.add_from_lookup` tries one optional fallback source:
+The primary book metadata adapter is chosen at runtime based on three factors:
 
-- **Google Books** (`COMPENDIUM_GOOGLE_BOOKS_API_KEY`) — thumbnail URL extracted from the Volumes API. Domain `books.google.com` is on the cover-proxy allowlist.
+1. **`book_metadata_source_preference`** site setting (default `"googlebooks"`, DB-editable at **Admin → System**, env `COMPENDIUM_BOOK_METADATA_SOURCE_PREFERENCE`). Valid values: `"googlebooks"`, `"openlibrary"`.
+2. **`google_books_api_key`** — if the preference is `"googlebooks"` but no key is configured, Open Library is used silently.
+3. **Quota circuit breaker** — Google Books free tier allows 1 000 requests/day. When the daily cap is hit (HTTP 403 `dailyLimitExceeded`), a sentinel row is written to `metadata_cache` under the key `("GoogleBooksAdapter", "_quota", "exhausted")` with a 24-hour TTL. All subsequent book lookups fall back to Open Library until the TTL expires. Use `compendium metadata gb-quota status` to inspect and `compendium metadata gb-quota clear` to force an early reset.
 
-Optional. If the key is not configured the behavior is unchanged (no cover stored, placeholder shown in the UI).
+**Cover fallback symmetry:** when the primary adapter returns no cover URL, the *other* source is consulted:
+- Open Library primary → Google Books cover (via Volumes API; requires key).
+- Google Books primary → Open Library covers-by-ISBN endpoint (no key required; HEAD probe with `?default=false` to detect absence).
+
+**Cross-source miss fallback:** when Google Books is primary and returns a definitive not-found for an ISBN (common for long-tail/academic titles), `lookup_metadata` automatically tries Open Library as a secondary source. Both results are cached under their respective adapter namespaces.
+
+### Cover image (legacy note)
+
+Prior to the Google-Books-primary slice, Open Library was the sole primary book adapter and Google Books was a cover-only fallback. The text above supersedes the old "Cover image fallbacks" section.
 
 ### Metadata cache
 
