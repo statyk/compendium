@@ -50,9 +50,9 @@ def _make_importer(session, *, with_audit: bool = True) -> tuple[ImportService, 
 # requires that referenced columns exist. The columns below cover every
 # branch the importer touches (mapping, classification, copies, IDs, tags).
 _LT_HEADER = (
-    "Title\tPrimary Author\tSecondary Author\tPublication\tDate\tMedia\t"
-    "Languages\tLC Classification\tDewey Decimal\tISBN\tOther Call Number\t"
-    "Copies\tTags\tCollections\tBook Id\tWork id\tOCLC\tBarcode"
+    "Title\tPrimary Author\tPrimary Author Role\tSecondary Author\tSecondary Author Roles\t"
+    "Publication\tDate\tMedia\tLanguages\tLC Classification\tDewey Decimal\tISBN\t"
+    "Other Call Number\tCopies\tTags\tCollections\tBook Id\tWork id\tOCLC\tBarcode"
 )
 
 
@@ -60,7 +60,9 @@ def _row(**vals: str) -> str:
     fields = [
         "Title",
         "Primary Author",
+        "Primary Author Role",
         "Secondary Author",
+        "Secondary Author Roles",
         "Publication",
         "Date",
         "Media",
@@ -316,3 +318,36 @@ def test_lt_import_dedupes_author_across_name_formats(session):
     all_works = repo.list(limit=10)
     creator_ids = {wc.creator_id for w in all_works for wc in w.creators}
     assert len(creator_ids) == 1
+
+
+def test_lt_import_preserves_secondary_creator_roles(session):
+    importer, _ = _make_importer(session)
+    tsv = _tsv(
+        _row(
+            Title="The Plague",
+            **{"Primary Author": "Camus, Albert"},
+            **{"Primary Author Role": ""},
+            **{"Secondary Author": "Gilbert, Stuart|Intro, Ian"},
+            **{"Secondary Author Roles": "Translator|Introduction"},
+            Media="Paperback",
+            ISBN="[9780679720218]",
+            Copies="1",
+        ),
+    )
+    report = importer.import_librarything(io.StringIO(tsv), ImportOptions())
+    assert report.errors == []
+
+    work = SqlWorkRepository(session).get_by_isbn("9780679720218")
+    assert work is not None
+
+    # normalize_creator_name converts "Last, First" → "First Last" for display.
+    by_name = {wc.creator.display_name: wc for wc in work.creators}
+    assert "Albert Camus" in by_name
+    assert by_name["Albert Camus"].role == "author"
+    assert by_name["Albert Camus"].display_order == 0
+
+    assert "Stuart Gilbert" in by_name
+    assert by_name["Stuart Gilbert"].role == "translator"
+
+    assert "Ian Intro" in by_name
+    assert by_name["Ian Intro"].role == "contributor"

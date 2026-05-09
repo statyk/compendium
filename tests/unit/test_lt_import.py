@@ -44,7 +44,9 @@ def _lt_row(**overrides):
     base = {
         "Title": "On the Road",
         "Primary Author": "Kerouac, Jack",
+        "Primary Author Role": "",
         "Secondary Author": "",
+        "Secondary Author Roles": "",
         "Publication": "Library of America (2007), Edition: 1st, Hardcover, 864 pages",
         "Date": "2007",
         "Media": "Hardcover",
@@ -75,7 +77,7 @@ def test_lt_basic_mapping():
     row, copies = _lt_to_compendium(_lt_row())
     assert copies == 1
     assert row["title"] == "On the Road"
-    assert row["authors"] == "Kerouac, Jack"
+    assert row["_creators"] == [("Kerouac, Jack", "author")]
     assert row["publisher"] == "Library of America"
     assert row["publication_year"] == "2007"
     assert row["media_type"] == "book"
@@ -87,7 +89,10 @@ def test_lt_basic_mapping():
 
 def test_lt_authors_join_primary_and_secondary():
     row, _ = _lt_to_compendium(_lt_row(**{"Secondary Author": "Brinkley, Douglas"}))
-    assert row["authors"] == "Kerouac, Jack; Brinkley, Douglas"
+    assert row["_creators"] == [
+        ("Kerouac, Jack", "author"),
+        ("Brinkley, Douglas", "author"),
+    ]
 
 
 def test_lt_publication_regex_extracts_publisher_and_year_when_date_blank():
@@ -259,3 +264,124 @@ def test_lt_copies_parsed_to_int_with_floor_of_1():
 def test_lt_missing_title_raises():
     with pytest.raises(ValidationError):
         _lt_to_compendium(_lt_row(**{"Title": ""}))
+
+
+# ---------------------------------------------------------------------------
+# Creator role parsing
+# ---------------------------------------------------------------------------
+
+
+def test_lt_primary_role_blank_defaults_to_author():
+    row, _ = _lt_to_compendium(_lt_row(**{"Primary Author Role": ""}))
+    assert row["_creators"] == [("Kerouac, Jack", "author")]
+
+
+def test_lt_primary_role_explicit_author():
+    row, _ = _lt_to_compendium(_lt_row(**{"Primary Author Role": "Author"}))
+    assert row["_creators"] == [("Kerouac, Jack", "author")]
+
+
+def test_lt_secondary_roles_map_correctly():
+    row, _ = _lt_to_compendium(
+        _lt_row(
+            **{
+                "Secondary Author": "Goldhammer, Arthur|Smith, John",
+                "Secondary Author Roles": "Translator|Editor",
+            }
+        )
+    )
+    assert row["_creators"] == [
+        ("Kerouac, Jack", "author"),
+        ("Goldhammer, Arthur", "translator"),
+        ("Smith, John", "editor"),
+    ]
+
+
+def test_lt_mixed_empty_role_tokens_default_to_author():
+    row, _ = _lt_to_compendium(
+        _lt_row(
+            **{
+                "Primary Author": "",
+                "Secondary Author": "Doe, Jane|Roe, Richard|Ava, Ada",
+                "Secondary Author Roles": "|Translator|",
+            }
+        )
+    )
+    assert row["_creators"] == [
+        ("Doe, Jane", "author"),
+        ("Roe, Richard", "translator"),
+        ("Ava, Ada", "author"),
+    ]
+
+
+def test_lt_unknown_role_becomes_contributor():
+    row, _ = _lt_to_compendium(
+        _lt_row(
+            **{
+                "Secondary Author": "Preface, P.",
+                "Secondary Author Roles": "Foreword",
+            }
+        )
+    )
+    contributors = [r for _, r in row["_creators"] if r == "contributor"]
+    assert len(contributors) == 1
+
+
+def test_lt_designer_and_preface_become_contributor():
+    row, _ = _lt_to_compendium(
+        _lt_row(
+            **{
+                "Secondary Author": "Art, Alice|Pre, Bob",
+                "Secondary Author Roles": "Designer|Preface",
+            }
+        )
+    )
+    roles = [r for _, r in row["_creators"]]
+    assert roles.count("contributor") == 2
+
+
+def test_lt_narrator_role_maps_to_narrator():
+    row, _ = _lt_to_compendium(
+        _lt_row(
+            **{
+                "Secondary Author": "Voice, Val",
+                "Secondary Author Roles": "Narrator",
+            }
+        )
+    )
+    assert ("Voice, Val", "narrator") in row["_creators"]
+
+
+def test_lt_same_person_two_roles_both_preserved():
+    row, _ = _lt_to_compendium(
+        _lt_row(
+            **{
+                "Secondary Author": "Galvin, Dallas|Galvin, Dallas",
+                "Secondary Author Roles": "Editor|Translator",
+            }
+        )
+    )
+    creator_pairs = row["_creators"]
+    assert ("Galvin, Dallas", "editor") in creator_pairs
+    assert ("Galvin, Dallas", "translator") in creator_pairs
+
+
+def test_lt_no_primary_author_yields_empty_creators():
+    row, _ = _lt_to_compendium(_lt_row(**{"Primary Author": "", "Secondary Author": ""}))
+    assert row["_creators"] == []
+
+
+def test_lt_mismatched_secondary_lengths_use_author_default():
+    # More names than roles — extra names get default 'author'.
+    row, _ = _lt_to_compendium(
+        _lt_row(
+            **{
+                "Secondary Author": "A|B|C",
+                "Secondary Author Roles": "Translator",
+            }
+        )
+    )
+    creators = row["_creators"]
+    assert ("A", "translator") in creators
+    assert ("B", "author") in creators
+    assert ("C", "author") in creators

@@ -40,6 +40,7 @@ class CreatorRole(StrEnum):
     EDITOR = "editor"
     ILLUSTRATOR = "illustrator"
     TRANSLATOR = "translator"
+    NARRATOR = "narrator"
     DIRECTOR = "director"
     ARTIST = "artist"
     COMPOSER = "composer"

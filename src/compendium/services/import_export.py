@@ -786,19 +786,24 @@ class ImportService:
                     f"publication_year '{pub_year_raw}' is not a valid integer"
                 ) from exc
 
-        authors_raw = _strip(row.get("authors"))
+        pre_built = row.get("_creators")
         creators: list[tuple[str, str]] = []
-        if authors_raw:
-            default_role = _DEFAULT_CREATOR_ROLE.get(mt, "author")
-            for entry in authors_raw.split(";"):
-                entry = entry.strip()
-                if not entry:
-                    continue
-                if ":" in entry:
-                    name, role = entry.split(":", 1)
-                    creators.append((name.strip(), role.strip()))
-                else:
-                    creators.append((entry, default_role))
+        if pre_built:
+            # Pre-built pairs from _lt_to_compendium; skip flat authors parser.
+            creators = [(str(n).strip(), str(r)) for n, r in pre_built if str(n).strip()]
+        else:
+            authors_raw = _strip(row.get("authors"))
+            if authors_raw:
+                default_role = _DEFAULT_CREATOR_ROLE.get(mt, "author")
+                for entry in authors_raw.split(";"):
+                    entry = entry.strip()
+                    if not entry:
+                        continue
+                    if ":" in entry:
+                        name, role = entry.split(":", 1)
+                        creators.append((name.strip(), role.strip()))
+                    else:
+                        creators.append((entry, default_role))
 
         is_loanable_raw = (_strip(row.get("is_loanable")) or "").lower()
         is_loanable = is_loanable_raw not in {"no", "false", "0"}
@@ -1125,6 +1130,27 @@ _LT_PUBLICATION_RE = re.compile(r"^\s*(.+?)\s*\((\d{4})\)")
 # brackets "[]" are emitted for records without an ISBN — those decode to "".
 _LT_ISBN_BRACKET_RE = re.compile(r"^\[(.*)\]$")
 
+# Map LibraryThing creator-role tokens (case-insensitive) to CreatorRole values.
+# Tokens not in this table fall back to CONTRIBUTOR.
+_LT_ROLE_TO_CREATOR_ROLE: dict[str, str] = {
+    "author": "author",
+    "editor": "editor",
+    "translator": "translator",
+    "illustrator": "illustrator",
+    "narrator": "narrator",
+    "director": "director",
+    "artist": "artist",
+    "composer": "composer",
+    "performer": "performer",
+}
+
+
+def _normalize_lt_role(token: str | None) -> str:
+    """Return a CreatorRole string for a LibraryThing role token."""
+    if not token or not token.strip():
+        return "author"
+    return _LT_ROLE_TO_CREATOR_ROLE.get(token.strip().lower(), "contributor")
+
 
 def _lt_to_compendium(row: dict) -> tuple[dict, int]:
     """Translate one LibraryThing TSV row into a Compendium CSV row dict.
@@ -1144,10 +1170,22 @@ def _lt_to_compendium(row: dict) -> tuple[dict, int]:
     if not title:
         raise ValidationError("Row is missing required column 'Title'")
 
+    # Build structured (name, role) pairs from the four LT creator columns.
+    creators: list[tuple[str, str]] = []
     primary = _strip(row.get("Primary Author"))
-    secondary = _strip(row.get("Secondary Author"))
-    authors_parts = [a for a in (primary, secondary) if a]
-    authors = "; ".join(authors_parts) if authors_parts else None
+    if primary:
+        primary_role = _normalize_lt_role(_strip(row.get("Primary Author Role")))
+        creators.append((primary, primary_role))
+    secondary_names_raw = _strip(row.get("Secondary Author")) or ""
+    secondary_roles_raw = _strip(row.get("Secondary Author Roles")) or ""
+    sec_names = secondary_names_raw.split("|") if secondary_names_raw else []
+    sec_roles = secondary_roles_raw.split("|") if secondary_roles_raw else []
+    for i, sec_name in enumerate(sec_names):
+        sec_name = sec_name.strip()
+        if not sec_name:
+            continue
+        role_token = sec_roles[i] if i < len(sec_roles) else ""
+        creators.append((sec_name, _normalize_lt_role(role_token)))
 
     # Publication string carries publisher + fallback year; "Date" wins for year.
     publisher: str | None = None
@@ -1255,7 +1293,8 @@ def _lt_to_compendium(row: dict) -> tuple[dict, int]:
     return (
         {
             "title": title,
-            "authors": authors or "",
+            "_creators": creators,
+            "authors": "",
             "publisher": publisher or "",
             "publication_year": publication_year or "",
             "media_type": media_type or "",
