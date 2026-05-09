@@ -318,8 +318,8 @@ def test_lt_unknown_role_becomes_contributor():
     row, _ = _lt_to_compendium(
         _lt_row(
             **{
-                "Secondary Author": "Preface, P.",
-                "Secondary Author Roles": "Foreword",
+                "Secondary Author": "Des, Alice",
+                "Secondary Author Roles": "Designer",
             }
         )
     )
@@ -327,17 +327,32 @@ def test_lt_unknown_role_becomes_contributor():
     assert len(contributors) == 1
 
 
-def test_lt_designer_and_preface_become_contributor():
+def test_lt_introduction_foreword_preface_all_map_to_introduction():
     row, _ = _lt_to_compendium(
         _lt_row(
             **{
-                "Secondary Author": "Art, Alice|Pre, Bob",
-                "Secondary Author Roles": "Designer|Preface",
+                "Primary Author": "",
+                "Secondary Author": "Intro, I.|Fore, F.|Pre, P.",
+                "Secondary Author Roles": "Introduction|Foreword|Preface",
             }
         )
     )
     roles = [r for _, r in row["_creators"]]
-    assert roles.count("contributor") == 2
+    assert roles == ["introduction", "introduction", "introduction"]
+
+
+def test_lt_designer_becomes_contributor():
+    row, _ = _lt_to_compendium(
+        _lt_row(
+            **{
+                "Secondary Author": "Art, Alice",
+                "Secondary Author Roles": "Designer",
+            }
+        )
+    )
+    roles = [r for _, r in row["_creators"]]
+    assert "contributor" in roles
+    assert "introduction" not in roles
 
 
 def test_lt_narrator_role_maps_to_narrator():

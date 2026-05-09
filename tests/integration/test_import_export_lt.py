@@ -350,4 +350,28 @@ def test_lt_import_preserves_secondary_creator_roles(session):
     assert by_name["Stuart Gilbert"].role == "translator"
 
     assert "Ian Intro" in by_name
-    assert by_name["Ian Intro"].role == "contributor"
+    assert by_name["Ian Intro"].role == "introduction"
+
+
+def test_lt_import_foreword_and_preface_consolidate_to_introduction(session):
+    importer, _ = _make_importer(session)
+    tsv = _tsv(
+        _row(
+            Title="Front Matter Test",
+            **{"Primary Author": "Main, Author"},
+            **{"Secondary Author": "Fore, W.|Pre, W."},
+            **{"Secondary Author Roles": "Foreword|Preface"},
+            Media="Hardcover",
+            ISBN="[9780000000099]",
+            Copies="1",
+        ),
+    )
+    report = importer.import_librarything(io.StringIO(tsv), ImportOptions())
+    assert report.errors == []
+
+    work = SqlWorkRepository(session).get_by_isbn("9780000000099")
+    assert work is not None
+
+    roles = {wc.creator.display_name: wc.role for wc in work.creators}
+    assert roles.get("W. Fore") == "introduction"
+    assert roles.get("W. Pre") == "introduction"
