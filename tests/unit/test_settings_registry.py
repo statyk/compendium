@@ -57,6 +57,24 @@ class TestDescriptorLookup:
         )
         assert desc.resolved_env_var() == "OVERRIDE_NAME"
 
+    def test_env_value_returns_none_when_unset(self, monkeypatch):
+        desc = get_descriptor("tmdb_api_key")
+        monkeypatch.delenv("COMPENDIUM_TMDB_API_KEY", raising=False)
+        assert desc.env_value() is None
+        assert desc.env_overridden() is False
+
+    def test_env_value_returns_none_for_empty_string(self, monkeypatch):
+        desc = get_descriptor("tmdb_api_key")
+        monkeypatch.setenv("COMPENDIUM_TMDB_API_KEY", "")
+        assert desc.env_value() is None
+        assert desc.env_overridden() is False
+
+    def test_env_value_returns_value_when_set(self, monkeypatch):
+        desc = get_descriptor("tmdb_api_key")
+        monkeypatch.setenv("COMPENDIUM_TMDB_API_KEY", "abc123")
+        assert desc.env_value() == "abc123"
+        assert desc.env_overridden() is True
+
     def test_duplicate_registration_raises(self, isolated_registry):
         register(
             SettingDescriptor(

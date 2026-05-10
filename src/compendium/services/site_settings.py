@@ -17,7 +17,6 @@ that mutate rows through other paths (tests, backup restore) must call
 from __future__ import annotations
 
 import logging
-import os
 import threading
 import time
 from datetime import datetime
@@ -117,8 +116,7 @@ def get_site_setting(key: str) -> Any:
     """Return the current value of a registered setting."""
     desc = get_descriptor(key)
 
-    env_var = desc.resolved_env_var()
-    raw_env = os.environ.get(env_var)
+    raw_env = desc.env_value()
     if raw_env is not None:
         # Fail loud: a misconfigured env var should not silently fall through.
         return parse(desc, raw_env)

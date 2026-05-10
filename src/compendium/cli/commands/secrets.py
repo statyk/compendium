@@ -2,7 +2,6 @@
 from __future__ import annotations
 
 import getpass
-import os
 
 import typer
 
@@ -62,7 +61,7 @@ def list_secrets() -> None:
     rows = []
     for d in sorted(descs, key=lambda x: x.key):
         env_var = d.resolved_env_var()
-        env_set = os.environ.get(env_var) is not None
+        env_set = d.env_overridden()
         if env_set:
             source = "env"
         else:
@@ -114,10 +113,9 @@ def set_secret(
         typer.echo(f"Error: {exc}", err=True)
         raise typer.Exit(1)
 
-    env_var = desc.resolved_env_var()
-    if os.environ.get(env_var):
+    if desc.env_overridden():
         typer.echo(
-            f"Warning: {env_var} is also set in the environment and will "
+            f"Warning: {desc.resolved_env_var()} is also set in the environment and will "
             "take precedence over the DB value on read.",
             err=True,
         )

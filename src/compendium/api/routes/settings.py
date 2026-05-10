@@ -12,7 +12,6 @@ librarian-tier keys.
 
 from __future__ import annotations
 
-import os
 from typing import Any
 
 from fastapi import APIRouter, Depends, HTTPException
@@ -78,7 +77,7 @@ def _serialize(desc, *, value: Any) -> SettingResponse:
         default=desc.default,
         value=value,
         env_var=desc.resolved_env_var(),
-        env_overridden=os.environ.get(desc.resolved_env_var()) is not None,
+        env_overridden=desc.env_overridden(),
         help_text=desc.help_text,
     )
 

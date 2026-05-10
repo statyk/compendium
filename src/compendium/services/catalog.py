@@ -1151,7 +1151,7 @@ class CatalogService:
 
         def _read(key: str):
             desc = get_descriptor(key)
-            env_val = os.environ.get(desc.resolved_env_var())
+            env_val = desc.env_value()
             if env_val is not None:
                 return parse_setting(desc, env_val)
             row = repo.get(key)

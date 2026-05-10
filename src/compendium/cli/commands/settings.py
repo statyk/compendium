@@ -107,7 +107,7 @@ def list_settings(
             descs = [d for d in descs if d.scope == scope]
         for d in sorted(descs, key=lambda x: (x.scope, x.key)):
             env_var = d.resolved_env_var()
-            env_set = os.environ.get(env_var) is not None
+            env_set = d.env_overridden()
             try:
                 value = get_site_setting(d.key)
             except SettingValidationError as exc:
@@ -124,7 +124,7 @@ def list_settings(
         s = Settings()
         for name in env_only_field_names():
             env_var = f"COMPENDIUM_{name.upper()}"
-            env_set = os.environ.get(env_var) is not None
+            env_set = bool(os.environ.get(env_var))
             value = getattr(s, name)
             source = "env" if env_set else "default"
             formatted = _format_listing_value(name, value, show_secrets=show_secrets)
@@ -212,7 +212,7 @@ def set_setting(
         except SettingValidationError as exc:
             typer.echo(f"Error: {exc}", err=True)
             raise typer.Exit(1)
-    if os.environ.get(desc.resolved_env_var()):
+    if desc.env_overridden():
         typer.echo(
             f"Warning: env var {desc.resolved_env_var()} is set and will "
             "override this value on read.",

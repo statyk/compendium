@@ -13,7 +13,6 @@ cleared.
 
 from __future__ import annotations
 
-import os
 from typing import Any
 from urllib.parse import quote
 
@@ -183,7 +182,7 @@ def _build_rows(keys: list[str]) -> list[dict[str, Any]]:
     for key in keys:
         desc = get_descriptor(key)
         env_var = desc.resolved_env_var()
-        env_overridden = os.environ.get(env_var) is not None
+        env_overridden = desc.env_overridden()
         try:
             value = get_site_setting(key)
         except SettingValidationError:
@@ -311,7 +310,7 @@ def _apply_form(
         except UnknownSettingError:
             continue
         # Skip keys whose env var is set — write would be silently masked.
-        if os.environ.get(desc.resolved_env_var()) is not None:
+        if desc.env_overridden():
             continue
         raw = form_values.get(key, "")
         # Bool: missing checkbox = false; otherwise treat the form value
@@ -592,7 +591,7 @@ def _build_secrets_rows(session) -> list[dict]:
         (d for d in all_descriptors() if d.secret), key=lambda d: d.key
     ):
         env_var = desc.resolved_env_var()
-        env_overridden = os.environ.get(env_var) is not None
+        env_overridden = desc.env_overridden()
         db_row = repo.get(desc.key)
         db_set = db_row is not None and bool(db_row.value)
         rows.append(
@@ -668,7 +667,7 @@ async def secrets_post(
     for key, desc in secret_descs.items():
         if key in clear_keys:
             continue
-        if os.environ.get(desc.resolved_env_var()):
+        if desc.env_overridden():
             continue
         raw = form.get(key, "").strip()
         if not raw:

@@ -100,6 +100,20 @@ class TestLookupOrder:
         monkeypatch.setenv("COMPENDIUM_LIBRARY_NAME", "Break Glass")
         assert ss.get_site_setting("library_name") == "Break Glass"
 
+    def test_empty_env_string_falls_through_to_db(self, ss_session, monkeypatch):
+        """Docker-compose forwards '' when host var is unset; must not mask DB value."""
+        ss.set_site_setting("library_name", "Archived", session=ss_session)
+        ss_session.commit()
+        monkeypatch.setenv("COMPENDIUM_LIBRARY_NAME", "")
+        ss.invalidate_cache()
+        assert ss.get_site_setting("library_name") == "Archived"
+
+    def test_empty_env_string_falls_through_to_default(self, monkeypatch):
+        """Empty env string with no DB row returns the descriptor default."""
+        monkeypatch.setenv("COMPENDIUM_LIBRARY_NAME", "")
+        ss.invalidate_cache()
+        assert ss.get_site_setting("library_name") == "Compendium"
+
 
 class TestCache:
     def test_write_invalidates_cache(self, ss_session):

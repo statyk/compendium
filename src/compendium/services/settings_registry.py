@@ -11,6 +11,7 @@ Each descriptor declares its type, default, scope (``librarian`` vs
 from __future__ import annotations
 
 import json
+import os
 from dataclasses import dataclass, field
 from typing import Any, Callable, Literal, get_args, get_origin
 
@@ -46,6 +47,20 @@ class SettingDescriptor:
 
     def resolved_env_var(self) -> str:
         return self.env_var or f"COMPENDIUM_{self.key.upper()}"
+
+    def env_value(self) -> str | None:
+        """The env override for this setting, or None if unset OR empty.
+
+        Empty-string is treated as unset to match docker-compose's ``${VAR:-}``
+        pattern (which sets the var to "" when the host-side value is absent).
+        This mirrors the Settings model_validator that strips empty strings
+        before pydantic parses them.
+        """
+        raw = os.environ.get(self.resolved_env_var())
+        return raw if raw else None
+
+    def env_overridden(self) -> bool:
+        return self.env_value() is not None
 
     def resolved_display_name(self) -> str:
         return self.display_name or self.key.replace("_", " ").title()
