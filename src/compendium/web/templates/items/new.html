@@ -29,6 +29,12 @@
     </fieldset>
     <button type="submit" style="width:auto">Look Up</button>
   </form>
+  {% if has_permission(user, 'system.manage') %}
+  <p class="field-hint" style="margin-top:.75rem">
+    Tip: book / film metadata lookups are richer when Google Books and TMDb
+    API keys are configured on the <a href="/ui/admin/system/secrets">Secrets page</a>.
+  </p>
+  {% endif %}
 </article>
 
 <div id="item-preview"></div>

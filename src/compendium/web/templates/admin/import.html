@@ -62,6 +62,12 @@
     network request per row on first run (cached thereafter); keep off for
     fast bulk imports of clean data.
   </label>
+  {% if has_permission(user, 'system.manage') %}
+  <p class="field-hint" style="margin-top:-.5rem">
+    Tip: configure Google Books and TMDb API keys on the
+    <a href="/ui/admin/system/secrets">Secrets page</a> for best enrichment quality.
+  </p>
+  {% endif %}
 
   <label>
     <input type="checkbox" name="preserve_barcodes" value="1">
