@@ -1,5 +1,6 @@
 from typing import Literal
 
+from pydantic import model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 INSECURE_JWT_DEFAULT = "insecure-default-change-in-production"
@@ -16,6 +17,16 @@ class Settings(BaseSettings):
         env_file_encoding="utf-8",
         extra="ignore",
     )
+
+    @model_validator(mode="before")
+    @classmethod
+    def _treat_empty_env_strings_as_unset(cls, data: object) -> object:
+        # Docker-compose's `${VAR:-}` pattern sets the var to "" when the
+        # host-side value is absent. Drop empty strings so int/bool/Literal
+        # fields fall back to their Python defaults instead of crashing.
+        if isinstance(data, dict):
+            return {k: v for k, v in data.items() if v != ""}
+        return data
 
     database_url: str = "sqlite:///compendium.db"
     guest_search_enabled: bool = True
