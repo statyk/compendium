@@ -394,14 +394,6 @@ nav .brand-logo { width: 2em; height: 2em; flex-shrink: 0; display: block; }
     background: var(--pico-dropdown-hover-background-color);
     opacity: 1;
   }
-  /* Remove Pico's full-viewport overlay (position:fixed; z-index:1) that Pico
-     puts on summary::before as its "click outside to close" mechanism.
-     Inside our z-index:999 hamburger stacking context, that overlay lands at
-     z-index:1 which is ABOVE the static sub-menu items (z-index:auto), so it
-     intercepts every tap before it can reach a link. */
-  details.nav-wrap > ul details.dropdown[open] > summary::before {
-    display: none !important;
-  }
   details.nav-wrap > ul details.dropdown > summary + ul {
     position: static !important; width: auto !important;
     background: transparent; border: none; box-shadow: none;
@@ -540,6 +532,16 @@ p.success-banner::before { content: "✓ "; }
 }
 
 /* ── Nav dropdown fixes ──────────────────────────────────────── */
+/* Pico's "click outside to close" attaches a transparent position:fixed;
+   inset:0 overlay to summary::before. In a nav with multiple sibling
+   dropdowns it covers the other summaries, causing cursor/highlight flicker
+   and intermittent dual-open (the click sometimes reaches the sibling
+   summary instead of the overlay). Disable it; JS in base.html replaces
+   the auto-close behavior. */
+header nav details.dropdown[open] > summary::before {
+  display: none !important;
+}
+
 /* Pico gives details.dropdown a card background; strip it inside the nav
    so nothing boxes over the walnut header. */
 header nav details.dropdown,

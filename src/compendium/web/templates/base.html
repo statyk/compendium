@@ -205,6 +205,26 @@
       }
     })();
     (function () {
+      var navRoot = document.querySelector('header nav');
+      if (!navRoot) return;
+      var mq = window.matchMedia('(max-width: 720px)');
+      var dropdowns = navRoot.querySelectorAll('details.dropdown');
+      dropdowns.forEach(function (d) {
+        d.addEventListener('toggle', function () {
+          if (mq.matches || !d.open) return;
+          dropdowns.forEach(function (other) {
+            if (other !== d && other.open) other.open = false;
+          });
+        });
+      });
+      document.addEventListener('click', function (e) {
+        if (mq.matches) return;
+        dropdowns.forEach(function (d) {
+          if (d.open && !d.contains(e.target)) d.open = false;
+        });
+      });
+    })();
+    (function () {
       var menu = document.getElementById('theme-menu');
       if (!menu) return;
       var items = menu.querySelectorAll('[data-set-theme]');
