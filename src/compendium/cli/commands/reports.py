@@ -13,6 +13,7 @@ from compendium.repositories.sql.branch_repository import SqlBranchRepository
 from compendium.repositories.sql.item_repository import SqlItemRepository
 from compendium.repositories.sql.loan_repository import SqlLoanRepository
 from compendium.repositories.sql.work_repository import SqlWorkRepository
+from compendium.services.import_export import csv_safe_cell
 from compendium.services.reports import ReportsService
 
 app = typer.Typer(help="Circulation & overdue reports.")
@@ -36,7 +37,7 @@ def _emit_csv(rows: list[dict], fieldnames: list[str]) -> None:
     writer = csv.DictWriter(buf, fieldnames=fieldnames)
     writer.writeheader()
     for row in rows:
-        writer.writerow(row)
+        writer.writerow({k: csv_safe_cell(v) for k, v in row.items()})
     typer.echo(buf.getvalue(), nl=False)
 
 

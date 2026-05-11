@@ -12,6 +12,7 @@ from fastapi.responses import Response
 from sqlalchemy.orm import Session
 
 from compendium.db.engine import get_settings
+from compendium.services.import_export import csv_safe_cell
 from compendium.db.session import get_session
 from compendium.domain.models import AppUser
 from compendium.repositories.sql.branch_repository import SqlBranchRepository
@@ -70,7 +71,7 @@ def _csv_response(rows: list[dict], fieldnames: list[str], filename: str) -> Res
     writer = csv.DictWriter(buf, fieldnames=fieldnames)
     writer.writeheader()
     for row in rows:
-        writer.writerow(row)
+        writer.writerow({k: csv_safe_cell(v) for k, v in row.items()})
     return Response(
         content=buf.getvalue(),
         media_type="text/csv",

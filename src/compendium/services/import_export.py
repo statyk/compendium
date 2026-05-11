@@ -41,6 +41,16 @@ from compendium.services._normalization import normalize_title
 from compendium.services.catalog import _DEFAULT_CREATOR_ROLE, CatalogService
 from compendium.services.metadata import normalize_isbn, normalize_upc
 
+_CSV_FORMULA_TRIGGERS = ("=", "+", "-", "@", "\t", "\r")
+
+
+def csv_safe_cell(cell: object) -> object:
+    """Prefix formula-trigger characters so spreadsheets don't execute them."""
+    if isinstance(cell, str) and cell.startswith(_CSV_FORMULA_TRIGGERS):
+        return "'" + cell
+    return cell
+
+
 class ImportMode(str, Enum):
     APPEND = "append"
     SKIP_DUPLICATES = "skip-duplicates"
@@ -1105,34 +1115,33 @@ class ExportService:
             for item in items:
                 if filters.branch_code and item.branch and item.branch.code != filters.branch_code:
                     continue
-                writer.writerow(
-                    {
-                        "media_type": mt_code,
-                        "title": work.title or "",
-                        "subtitle": work.subtitle or "",
-                        "authors": authors_col,
-                        "publisher": work.publisher or "",
-                        "publication_year": work.publication_year
-                        if work.publication_year is not None
-                        else "",
-                        "isbn": work.isbn or "",
-                        "upc": work.upc or "",
-                        "classification_scheme": work.classification_scheme or "",
-                        "classification_code": work.classification_code or "",
-                        "description": work.description or "",
-                        "language": work.language or "",
-                        "cover_image_url": work.cover_image_url or "",
-                        "barcode": item.barcode or "",
-                        "accession_number": item.accession_number or "",
-                        "branch": item.branch.code if item.branch else "",
-                        "call_number": item.call_number or "",
-                        "condition": item.condition or "",
-                        "location": item.location or "",
-                        "is_loanable": "yes" if item.is_loanable else "no",
-                        "loan_restriction_reason": item.loan_restriction_reason or "",
-                        "loan_restriction_note": item.loan_restriction_note or "",
-                    }
-                )
+                row = {
+                    "media_type": mt_code,
+                    "title": work.title or "",
+                    "subtitle": work.subtitle or "",
+                    "authors": authors_col,
+                    "publisher": work.publisher or "",
+                    "publication_year": work.publication_year
+                    if work.publication_year is not None
+                    else "",
+                    "isbn": work.isbn or "",
+                    "upc": work.upc or "",
+                    "classification_scheme": work.classification_scheme or "",
+                    "classification_code": work.classification_code or "",
+                    "description": work.description or "",
+                    "language": work.language or "",
+                    "cover_image_url": work.cover_image_url or "",
+                    "barcode": item.barcode or "",
+                    "accession_number": item.accession_number or "",
+                    "branch": item.branch.code if item.branch else "",
+                    "call_number": item.call_number or "",
+                    "condition": item.condition or "",
+                    "location": item.location or "",
+                    "is_loanable": "yes" if item.is_loanable else "no",
+                    "loan_restriction_reason": item.loan_restriction_reason or "",
+                    "loan_restriction_note": item.loan_restriction_note or "",
+                }
+                writer.writerow({k: csv_safe_cell(v) for k, v in row.items()})
                 count += 1
         return count
 

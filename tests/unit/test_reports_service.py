@@ -6,6 +6,10 @@ from datetime import datetime, timedelta, timezone
 from types import SimpleNamespace
 from unittest.mock import MagicMock
 
+import csv
+import io
+
+from compendium.services.import_export import csv_safe_cell
 from compendium.services.reports import ReportsService
 
 
@@ -137,3 +141,42 @@ class TestCurrentOverdues:
         assert rows[0].days_overdue == 5  # floor of 5 days + 3 hours
         assert rows[0].patron_card == "C1"
         assert rows[0].item_barcode == "BC1"
+
+
+class TestCsvSafeCell:
+    """M3: formula-injection guard for CSV exports."""
+
+    def test_formula_prefix_escaped(self):
+        assert csv_safe_cell("=SUM(A1)") == "'=SUM(A1)"
+
+    def test_plus_prefix_escaped(self):
+        assert csv_safe_cell("+CMD") == "'+CMD"
+
+    def test_minus_prefix_escaped(self):
+        assert csv_safe_cell("-1+1+1") == "'-1+1+1"
+
+    def test_at_prefix_escaped(self):
+        assert csv_safe_cell("@SUM") == "'@SUM"
+
+    def test_tab_prefix_escaped(self):
+        assert csv_safe_cell("\tcell") == "'\tcell"
+
+    def test_benign_string_unchanged(self):
+        assert csv_safe_cell("Normal title") == "Normal title"
+
+    def test_non_string_unchanged(self):
+        assert csv_safe_cell(42) == 42
+        assert csv_safe_cell(None) is None
+
+    def test_csv_roundtrip_with_formula(self):
+        rows = [{"title": "=DANGEROUS", "author": "Bob"}]
+        fieldnames = ["title", "author"]
+        buf = io.StringIO()
+        writer = csv.DictWriter(buf, fieldnames=fieldnames)
+        writer.writeheader()
+        for row in rows:
+            writer.writerow({k: csv_safe_cell(v) for k, v in row.items()})
+        buf.seek(0)
+        reader = csv.DictReader(buf)
+        result = next(reader)
+        assert result["title"].startswith("'"), "Formula should be apostrophe-prefixed"
