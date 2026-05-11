@@ -1025,9 +1025,11 @@ def lookup_metadata_with_source(
     when nothing was found.
 
     When Google Books is the primary book adapter and it raises an
-    ``ExternalLookupError`` (e.g. HTTP 400 from a malformed key), this function
-    catches the error and falls back to Open Library rather than propagating the
-    exception — matching the existing None-result fallback behaviour."""
+    ``ExternalLookupError``, this function catches the error and falls back to
+    Open Library rather than propagating the exception — matching the existing
+    None-result fallback behaviour. This covers any transport or HTTP failure
+    (400 bad key, 429 rate-limit, 5xx, network timeout), not just the
+    not-found case."""
     # Make the session visible to is_gb_quota_exhausted (called from _resolve_book_adapter
     # inside _get_adapter) so it can piggyback on the open connection instead of opening
     # a duplicate one.  _mark_gb_quota_exhausted intentionally does NOT use this — it
