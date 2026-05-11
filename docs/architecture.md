@@ -243,6 +243,23 @@ of the "must not rely on `'unsafe-inline'`" promise.
 
 **Style-src** still allows `'unsafe-inline'` because templates use `style="..."` attributes throughout. CSS-based attacks (data exfil via crafted selectors) are real but much lower impact than script execution; tightening that would be a separate, larger refactor.
 
+### CORS posture
+
+Compendium ships **no CORS middleware**. This is intentional: today all clients
+are same-origin (the HTMX web UI and any API consumer that runs server-side).
+The `Access-Control-Allow-*` headers are therefore absent, which means browsers
+reject cross-origin requests — the safe default.
+
+If a future slice adds a JavaScript SPA or a third-party integration that
+legitimately needs cross-origin API access:
+
+1. Add `CORSMiddleware` from Starlette/FastAPI.
+2. **Never combine `allow_credentials=True` with `allow_origins=["*"]`**. That
+   combination lets any origin make credentialed requests, effectively removing
+   SameSite cookie protection. Enumerate the allowed origins explicitly.
+3. Prefer narrowing `allow_methods` and `allow_headers` to exactly what the
+   cross-origin client needs.
+
 ---
 
 ## External metadata
