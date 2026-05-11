@@ -22,7 +22,13 @@ from compendium.domain.models import Patron
 from compendium.repositories.sql.patron_repository import SqlPatronRepository
 
 
-def _invoke(session, args: list[str], module_path: str, input: str | None = None):
+def _invoke(
+    session,
+    args: list[str],
+    module_path: str,
+    input: str | None = None,
+    env: dict | None = None,
+):
     """Run a CLI command with ``session_scope`` patched in the given module."""
 
     @contextmanager
@@ -31,7 +37,7 @@ def _invoke(session, args: list[str], module_path: str, input: str | None = None
 
     runner = CliRunner()
     with patch(f"{module_path}.session_scope", _scope):
-        return runner.invoke(app, args, input=input)
+        return runner.invoke(app, args, input=input, env=env)
 
 
 # ──────────────────────────────────────────────────────────────────────────────
@@ -75,20 +81,42 @@ class TestUserCli:
         assert "No users" in r.output or "alice" not in r.output
 
     def test_set_role_and_list(self, session):
+        # Create an admin actor, then create charlie as Patron
+        _invoke(
+            session,
+            ["user", "add", "--username", "admin", "--password", "s", "--role", "Administrator"],
+            "compendium.cli.commands.user",
+        )
         _invoke(
             session,
             ["user", "add", "--username", "charlie", "--password", "s", "--role", "Patron"],
             "compendium.cli.commands.user",
+            env={"COMPENDIUM_ACTOR_USERNAME": "admin"},
         )
         r = _invoke(
             session,
             ["user", "set-role", "--username", "charlie", "--role", "Librarian"],
             "compendium.cli.commands.user",
+            env={"COMPENDIUM_ACTOR_USERNAME": "admin"},
         )
         assert r.exit_code == 0, r.output
         r = _invoke(session, ["user", "list"], "compendium.cli.commands.user")
         assert "charlie" in r.output
         assert "Librarian" in r.output
+
+    def test_set_role_without_actor_fails(self, session):
+        _invoke(
+            session,
+            ["user", "add", "--username", "diane", "--password", "s", "--role", "Patron"],
+            "compendium.cli.commands.user",
+        )
+        r = _invoke(
+            session,
+            ["user", "set-role", "--username", "diane", "--role", "Librarian"],
+            "compendium.cli.commands.user",
+        )
+        assert r.exit_code == 1
+        assert "COMPENDIUM_ACTOR_USERNAME" in r.output
 
     def test_set_password(self, session):
         _invoke(

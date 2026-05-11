@@ -58,6 +58,18 @@ def _administrator_exists(session) -> bool:
     ) is not None
 
 
+def _log_bootstrap_override(session, username: str, role: str) -> None:
+    AuditService(SqlAuditLogRepository(session)).record(
+        actor=None,
+        actor_label=f"cli:{getpass.getuser()}",
+        source="cli",
+        entity_type="USER",
+        entity_id=None,
+        action="CREATE",
+        details={"bootstrap_override": True, "username": username, "role": role},
+    )
+
+
 @app.command("add")
 def add_user(
     username: str = typer.Option(..., "--username", prompt=True),
@@ -73,6 +85,11 @@ def add_user(
     create_patron: bool = typer.Option(False, "--create-patron", help="Also create a patron record (requires --role Patron)"),
     patron_name: str | None = typer.Option(None, "--patron-name", help="Full name for the new patron record"),
     link_patron: str | None = typer.Option(None, "--link-patron", help="Library card number of an existing patron to link (requires --role Patron)"),
+    allow_bootstrap: bool = typer.Option(
+        False,
+        "--allow-bootstrap",
+        help="Bypass the actor check when re-bootstrapping an existing database (audit-logged).",
+    ),
 ) -> None:
     """Create a new user account."""
     if create_patron and link_patron:
@@ -95,11 +112,16 @@ def add_user(
                     typer.echo(f"Error: Your account cannot assign the '{role}' role.", err=True)
                     raise typer.Exit(1)
             elif _administrator_exists(session):
-                typer.echo(
-                    f"Warning: An Administrator already exists. Set COMPENDIUM_ACTOR_USERNAME "
-                    f"to enforce role-escalation limits.",
-                    err=True,
-                )
+                if not allow_bootstrap:
+                    typer.echo(
+                        "Error: An Administrator already exists. Set COMPENDIUM_ACTOR_USERNAME "
+                        "to an existing user whose permissions cover the requested role, or pass "
+                        "--allow-bootstrap if you genuinely need to re-bootstrap "
+                        "(this will be audit-logged).",
+                        err=True,
+                    )
+                    raise typer.Exit(1)
+                _log_bootstrap_override(session, username, role)
 
             new_user = _auth_svc(session).create_user(username, password, role, email=email)
 
@@ -130,6 +152,23 @@ def set_user_role(
     """Change the role assigned to a user account."""
     try:
         with session_scope() as session:
+            actor_username = os.environ.get("COMPENDIUM_ACTOR_USERNAME")
+            if not actor_username:
+                typer.echo(
+                    "Error: Set COMPENDIUM_ACTOR_USERNAME to an existing user whose "
+                    "permissions cover the requested role assignment.",
+                    err=True,
+                )
+                raise typer.Exit(1)
+            actor = SqlUserRepository(session).get_by_username(actor_username)
+            if actor is None:
+                typer.echo(f"Error: COMPENDIUM_ACTOR_USERNAME '{actor_username}' not found", err=True)
+                raise typer.Exit(1)
+            all_roles = SqlRoleRepository(session).list()
+            allowed_names = {r.name for r in assignable_roles(actor.role.permissions, all_roles)}
+            if role not in allowed_names:
+                typer.echo(f"Error: Your account cannot assign the '{role}' role.", err=True)
+                raise typer.Exit(1)
             user = _auth_svc(session).update_role(username, role)
             typer.echo(f"\nUser '{user.username}' role set to '{user.role.name}'.")
     except DomainError as exc:
