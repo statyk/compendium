@@ -13,7 +13,7 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 
-from compendium.services.notifications.smtp import SMTPSender
+from compendium.services.notifications.smtp import SMTPSender, _validate_header
 
 
 def _site_settings(**overrides):
@@ -67,6 +67,48 @@ def test_starttls_passes_verifying_context(fake_smtp):
     call = smtp_instance.starttls.call_args
     ctx = call.kwargs.get("context") or (call.args[0] if call.args else None)
     _assert_verifying_context(ctx)
+
+
+def test_header_injection_in_subject_rejected(fake_smtp):
+    """M6: a CRLF in subject must not reach the SMTP socket."""
+    with patch(
+        "compendium.services.notifications.smtp.get_site_setting",
+        side_effect=_site_settings(),
+    ):
+        with pytest.raises(ValueError, match="CR or LF"):
+            SMTPSender().send(
+                to="victim@example.com",
+                subject="hi\r\nBcc: attacker@evil.example",
+                body="body",
+            )
+
+
+def test_header_injection_in_to_rejected(fake_smtp):
+    """M6: a CRLF in the To address must not reach the SMTP socket."""
+    with patch(
+        "compendium.services.notifications.smtp.get_site_setting",
+        side_effect=_site_settings(),
+    ):
+        with pytest.raises(ValueError, match="CR or LF"):
+            SMTPSender().send(
+                to="victim@x\r\nBcc: attacker@evil.example",
+                subject="hi",
+                body="body",
+            )
+
+
+def test_validate_header_accepts_clean_value():
+    assert _validate_header("Normal Subject", "Subject") == "Normal Subject"
+
+
+def test_validate_header_rejects_cr():
+    with pytest.raises(ValueError, match="CR or LF"):
+        _validate_header("bad\rvalue", "Subject")
+
+
+def test_validate_header_rejects_lf():
+    with pytest.raises(ValueError, match="CR or LF"):
+        _validate_header("bad\nvalue", "Subject")
 
 
 def test_smtp_ssl_uses_verifying_context(fake_smtp):

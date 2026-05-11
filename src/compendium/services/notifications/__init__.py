@@ -13,6 +13,7 @@ already-queued messages.
 from __future__ import annotations
 
 import logging
+import re
 from dataclasses import dataclass
 from datetime import datetime, timezone
 from pathlib import Path
@@ -266,7 +267,7 @@ class NotificationService:
                 counts.sent += 1
             except Exception as exc:
                 row.attempts += 1
-                row.last_error = str(exc)
+                row.last_error = re.sub(r"[\r\n\t]+", " ", str(exc))[:500]
                 if row.attempts >= max_attempts:
                     row.status = NotificationStatus.FAILED.value
                     counts.failed += 1

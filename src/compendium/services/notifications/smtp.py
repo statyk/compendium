@@ -7,6 +7,7 @@ the admin UI (stored encrypted at rest).
 
 from __future__ import annotations
 
+import email.policy
 import logging
 import smtplib
 import ssl
@@ -15,6 +16,13 @@ from email.message import EmailMessage
 from compendium.services.site_settings import get_site_setting
 
 _log = logging.getLogger("compendium.notifications.smtp")
+
+
+def _validate_header(value: str, name: str) -> str:
+    """Reject CR/LF in header values to prevent email header injection."""
+    if "\r" in value or "\n" in value:
+        raise ValueError(f"Email header '{name}' must not contain CR or LF characters")
+    return value
 
 
 class SMTPSender:
@@ -29,10 +37,10 @@ class SMTPSender:
         if not self.is_configured():
             raise RuntimeError("SMTP is not configured")
 
-        msg = EmailMessage()
-        msg["Subject"] = subject
-        msg["From"] = self._format_from()
-        msg["To"] = to
+        msg = EmailMessage(policy=email.policy.default)
+        msg["Subject"] = _validate_header(subject, "Subject")
+        msg["From"] = _validate_header(self._format_from(), "From")
+        msg["To"] = _validate_header(to, "To")
         msg.set_content(body)
 
         host = get_site_setting("smtp_host")
@@ -59,7 +67,10 @@ class SMTPSender:
     def _format_from(self) -> str:
         addr = get_site_setting("smtp_from_address")
         name = get_site_setting("smtp_from_name")
+        if addr:
+            _validate_header(addr, "smtp_from_address")
         if name:
+            _validate_header(name, "smtp_from_name")
             return f"{name} <{addr}>"
         return addr or ""
 
