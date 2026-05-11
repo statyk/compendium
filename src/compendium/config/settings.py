@@ -4,6 +4,7 @@ from pydantic import model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 INSECURE_JWT_DEFAULT = "insecure-default-change-in-production"
+MIN_JWT_SECRET_LENGTH = 32
 
 
 class InsecureConfigError(RuntimeError):

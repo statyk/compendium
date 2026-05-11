@@ -29,7 +29,7 @@ from compendium.api.routes import (
     users,
     works,
 )
-from compendium.config.settings import INSECURE_JWT_DEFAULT, InsecureConfigError
+from compendium.config.settings import INSECURE_JWT_DEFAULT, MIN_JWT_SECRET_LENGTH, InsecureConfigError
 from compendium.db.engine import get_settings
 from compendium.web.app import NoPatronAccountException, RequiresLoginException, create_web_router
 from compendium.web.jinja import templates
@@ -107,20 +107,29 @@ def _warn_if_no_system_admin() -> None:
 
 
 def create_app() -> FastAPI:
-    if get_settings().jwt_secret_key == INSECURE_JWT_DEFAULT:
-        if os.environ.get("COMPENDIUM_ALLOW_INSECURE_JWT") == "1":
+    secret = get_settings().jwt_secret_key
+    allow_insecure = os.environ.get("COMPENDIUM_ALLOW_INSECURE_JWT") == "1"
+    is_default = secret == INSECURE_JWT_DEFAULT
+    is_too_short = len(secret) < MIN_JWT_SECRET_LENGTH
+    if is_default or is_too_short:
+        reason = (
+            "set to the insecure default"
+            if is_default
+            else f"shorter than the {MIN_JWT_SECRET_LENGTH}-character minimum"
+        )
+        if allow_insecure:
             _log.warning(
-                "SECURITY: COMPENDIUM_JWT_SECRET_KEY is set to the insecure default. "
+                "SECURITY: COMPENDIUM_JWT_SECRET_KEY is %s. "
                 "COMPENDIUM_ALLOW_INSECURE_JWT=1 is set, so the server is starting "
-                "anyway. DO NOT do this in production — set a real secret instead."
+                "anyway. DO NOT do this in production.",
+                reason,
             )
         else:
             raise InsecureConfigError(
-                "COMPENDIUM_JWT_SECRET_KEY is set to the insecure default. Set it to "
-                "a strong random value (e.g. `python -c \"import secrets; "
-                "print(secrets.token_urlsafe(48))\"`) before starting the server. "
-                "For first-run/dev only, you may set COMPENDIUM_ALLOW_INSECURE_JWT=1 "
-                "to bypass this check — but do NOT use that in production."
+                f"COMPENDIUM_JWT_SECRET_KEY is {reason}. Generate one with "
+                '`python -c "import secrets; print(secrets.token_urlsafe(48))"` '
+                "(or `compendium keygen --jwt`). For first-run/dev only, "
+                "you may set COMPENDIUM_ALLOW_INSECURE_JWT=1 to bypass."
             )
     _warn_if_no_system_admin()
 
@@ -212,7 +221,7 @@ def create_app() -> FastAPI:
             status_code=403,
         )
         if fresh:
-            set_csrf_cookie(response, fresh, get_settings().jwt_secret_key)
+            set_csrf_cookie(response, fresh)
         return response
 
     return app

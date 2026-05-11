@@ -34,7 +34,10 @@ def test_create_app_warns_when_default_key_and_escape_hatch_set(monkeypatch, cap
 def test_create_app_silent_when_real_key_set(monkeypatch, caplog):
     # Escape hatch presence shouldn't matter — a real key is a real key.
     monkeypatch.setenv("COMPENDIUM_ALLOW_INSECURE_JWT", "1")
-    settings = Settings(database_url="sqlite:///:memory:", jwt_secret_key="a-proper-secret-key")
+    settings = Settings(
+        database_url="sqlite:///:memory:",
+        jwt_secret_key="a-proper-secret-key-that-is-long-enough-abcdef",
+    )
     with patch("compendium.api.app.get_settings", return_value=settings):
         with caplog.at_level(logging.WARNING, logger="compendium"):
             from compendium.api.app import create_app
@@ -52,3 +55,24 @@ def test_escape_hatch_is_strict_one(monkeypatch):
 
         with pytest.raises(InsecureConfigError):
             create_app()
+
+
+def test_create_app_raises_when_key_too_short(monkeypatch):
+    monkeypatch.delenv("COMPENDIUM_ALLOW_INSECURE_JWT", raising=False)
+    settings = Settings(database_url="sqlite:///:memory:", jwt_secret_key="tooshort")
+    with patch("compendium.api.app.get_settings", return_value=settings):
+        from compendium.api.app import create_app
+
+        with pytest.raises(InsecureConfigError, match="shorter than the"):
+            create_app()
+
+
+def test_create_app_warns_when_key_too_short_and_escape_hatch(monkeypatch, caplog):
+    monkeypatch.setenv("COMPENDIUM_ALLOW_INSECURE_JWT", "1")
+    settings = Settings(database_url="sqlite:///:memory:", jwt_secret_key="tooshort")
+    with patch("compendium.api.app.get_settings", return_value=settings):
+        with caplog.at_level(logging.WARNING, logger="compendium"):
+            from compendium.api.app import create_app
+
+            create_app()
+    assert any("shorter than the" in r.message for r in caplog.records)
