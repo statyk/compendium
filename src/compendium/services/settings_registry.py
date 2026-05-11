@@ -670,6 +670,37 @@ def _register_builtins() -> None:
     )
     register(
         SettingDescriptor(
+            key="login_max_failures_per_ip",
+            display_name="Login Max Failures Per IP",
+            type=int,
+            default=30,
+            scope="system",
+            help_text=(
+                "Number of failed login attempts allowed from a single IP "
+                "address within the per-IP throttle window before further "
+                "attempts from that IP are blocked. Set to 0 to disable "
+                "IP-based throttling. Set COMPENDIUM_TRUSTED_PROXIES to "
+                "resolve the real client IP behind a reverse proxy."
+            ),
+            validator=_non_negative_int,
+        )
+    )
+    register(
+        SettingDescriptor(
+            key="login_failure_window_seconds_per_ip",
+            display_name="Login Failure Window Per IP (seconds)",
+            type=int,
+            default=300,
+            scope="system",
+            help_text=(
+                "Sliding-window duration for per-IP failed login counting. "
+                "Default 300 = 5 minutes."
+            ),
+            validator=_positive_int,
+        )
+    )
+    register(
+        SettingDescriptor(
             key="password_min_length",
             display_name="Password Minimum Length",
             type=int,

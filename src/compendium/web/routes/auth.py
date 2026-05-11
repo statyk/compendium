@@ -12,7 +12,7 @@ from compendium.repositories.sql.failed_login_repository import SqlFailedLoginRe
 from compendium.repositories.sql.role_repository import SqlRoleRepository
 from compendium.repositories.sql.user_repository import SqlUserRepository
 from compendium.services.auth import AuthService
-from compendium.services.rate_limit import RateLimitService
+from compendium.services.rate_limit import RateLimitService, resolve_client_ip
 from compendium.web.csrf import check_csrf_form, generate_token, set_csrf_cookie
 from compendium.web.deps import clear_auth_cookie, get_web_user, set_auth_cookie
 from compendium.web.jinja import templates
@@ -70,7 +70,15 @@ def login_submit(
     check_csrf_form(request, csrf_token)
     token = generate_token()
 
+    client_ip = resolve_client_ip(
+        request.client.host if request.client else None,
+        request.headers.get("X-Forwarded-For", ""),
+        get_settings().trusted_proxies,
+    )
+
     retry_after = rl.check("login_user", username)
+    if retry_after is None and client_ip:
+        retry_after = rl.check_ip(client_ip)
     if retry_after is not None:
         resp = templates.TemplateResponse(
             request,
@@ -93,6 +101,8 @@ def login_submit(
         jwt_token = svc.issue_token(user)
     except AuthError as exc:
         rl.record_failure("login_user", username)
+        if client_ip:
+            rl.record_ip_failure(client_ip)
         resp = templates.TemplateResponse(
             request,
             "login.html",
@@ -109,6 +119,8 @@ def login_submit(
         return resp
 
     rl.clear("login_user", username)
+    if client_ip:
+        rl.clear_ip(client_ip)
     parsed = urlparse(next)
     redirect_to = next if (parsed.netloc == "" and next.startswith("/ui/")) else "/ui/catalog"
     resp = RedirectResponse(url=redirect_to, status_code=303)

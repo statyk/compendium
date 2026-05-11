@@ -1,4 +1,4 @@
-"""Login rate limiting (M1) — per-identity sliding-window throttle.
+"""Login rate limiting — per-identity and per-IP sliding-window throttle.
 
 Covers:
 - API /auth/login: 429 with Retry-After on the Nth+1 bad-password attempt.
@@ -6,6 +6,8 @@ Covers:
 - Kiosk /ui/kiosk/start: redirect with error on the Nth+1 unrecognized card.
 - Blocking is per-username only — a different user from the same path is
   never affected (confirms no IP-based block exists).
+- Per-IP blocking: failures across different usernames from one IP trigger a block.
+- X-Forwarded-For is ignored when COMPENDIUM_TRUSTED_PROXIES is unset.
 - Successful login clears prior failures.
 - Valid card with active/expired/fees does NOT increment kiosk counter.
 - login_max_failures=0 disables throttling entirely.
@@ -26,7 +28,7 @@ from compendium.config.seed import seed_defaults
 from compendium.config.settings import Settings
 from compendium.db.engine import get_settings
 from compendium.db.session import get_session
-from compendium.domain.models import AppUser, Base, Patron
+from compendium.domain.models import AppUser, Base, FailedLogin, Patron
 from compendium.repositories.sql.patron_repository import SqlPatronRepository
 from compendium.repositories.sql.role_repository import SqlRoleRepository
 from compendium.repositories.sql.user_repository import SqlUserRepository
@@ -273,3 +275,99 @@ def test_kiosk_valid_card_with_active_patron_not_counted(client, db_session):
         assert "too+many" not in loc and "too%20many" not in loc and "many" not in loc, (
             f"Active-but-gated patron should not trigger rate limiting: {loc}"
         )
+
+
+# ---------------------------------------------------------------------------
+# Per-IP rate limiting (M9)
+# ---------------------------------------------------------------------------
+
+_MAX_IP_FAILURES = 3
+_MAX_USER_FAILURES_HIGH = 100  # high enough that username block never fires in these tests
+
+
+@pytest.fixture
+def ip_client(engine, db_session, monkeypatch):
+    """Client configured with a low per-IP threshold and a high per-username threshold."""
+    monkeypatch.setenv("COMPENDIUM_LOGIN_MAX_FAILURES", str(_MAX_USER_FAILURES_HIGH))
+    monkeypatch.setenv("COMPENDIUM_LOGIN_FAILURE_WINDOW_SECONDS", str(_WINDOW))
+    monkeypatch.setenv("COMPENDIUM_LOGIN_MAX_FAILURES_PER_IP", str(_MAX_IP_FAILURES))
+    monkeypatch.setenv("COMPENDIUM_LOGIN_FAILURE_WINDOW_SECONDS_PER_IP", str(_WINDOW))
+    ss.invalidate_cache()
+
+    app = create_app()
+
+    def _override():
+        factory = sessionmaker(bind=engine, autoflush=False, expire_on_commit=False)
+        s = factory()
+        try:
+            yield s
+            s.commit()
+        except Exception:
+            s.rollback()
+            raise
+        finally:
+            s.close()
+
+    app.dependency_overrides[get_session] = _override
+    app.dependency_overrides[get_settings] = lambda: _SETTINGS
+    with patch("compendium.db.engine.get_settings", return_value=_SETTINGS):
+        yield TestClient(app, follow_redirects=False)
+
+    # Remove login_ip failures so they don't bleed into the next test.
+    with Session(engine) as s:
+        s.query(FailedLogin).filter(FailedLogin.scope == "login_ip").delete()
+        s.commit()
+    ss.invalidate_cache()
+
+
+def test_ip_block_triggers_across_different_usernames(ip_client, db_session):
+    """Failures against different usernames from the same IP accumulate toward the IP cap."""
+    users = [f"ip_victim_{i}" for i in range(_MAX_IP_FAILURES + 1)]
+    for u in users:
+        _make_user(db_session, u)
+
+    # Send one failure per unique username — each stays under the per-username cap
+    # but collectively they exhaust the per-IP cap.
+    for u in users[:_MAX_IP_FAILURES]:
+        r = ip_client.post("/auth/login", json={"username": u, "password": "wrong"})
+        assert r.status_code == 401, f"Expected 401 for {u}, got {r.status_code}"
+
+    # The (MAX_IP+1)th attempt — any username — should be blocked at the IP level.
+    r = ip_client.post(
+        "/auth/login", json={"username": users[-1], "password": "wrong"}
+    )
+    assert r.status_code == 429
+    assert "retry-after" in r.headers
+
+
+def test_xff_ignored_without_trusted_proxies(ip_client, db_session):
+    """X-Forwarded-For header is NOT honored when COMPENDIUM_TRUSTED_PROXIES is unset.
+
+    A request bearing XFF: 1.2.3.4 is keyed on request.client.host (testclient),
+    not on 1.2.3.4. Exhausting failures for testclient blocks testclient; a
+    request from an imaginary 1.2.3.4 would not be separately blocked.
+    """
+    users = [f"xff_victim_{i}" for i in range(_MAX_IP_FAILURES + 2)]
+    for u in users:
+        _make_user(db_session, u)
+
+    # Send failures with X-Forwarded-For: 1.2.3.4; they are keyed on testclient.
+    for u in users[:_MAX_IP_FAILURES]:
+        r = ip_client.post(
+            "/auth/login",
+            json={"username": u, "password": "wrong"},
+            headers={"X-Forwarded-For": "1.2.3.4"},
+        )
+        assert r.status_code == 401
+
+    # testclient is now blocked even without the spoofed XFF header.
+    r = ip_client.post("/auth/login", json={"username": users[-2], "password": "wrong"})
+    assert r.status_code == 429
+
+    # And it's also blocked with the XFF header — confirming the key is testclient.
+    r = ip_client.post(
+        "/auth/login",
+        json={"username": users[-1], "password": "wrong"},
+        headers={"X-Forwarded-For": "1.2.3.4"},
+    )
+    assert r.status_code == 429

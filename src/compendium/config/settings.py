@@ -72,6 +72,11 @@ class Settings(BaseSettings):
     # Production: set to your public hostname(s),
     # e.g. COMPENDIUM_ALLOWED_HOSTS=library.example.org,www.library.example.org
     allowed_hosts: str | None = None
+    # Comma-separated list of trusted reverse-proxy IP addresses. When set,
+    # X-Forwarded-For is honored for the per-IP login rate limit; otherwise
+    # request.client.host is used directly (prevents header spoofing).
+    # e.g. COMPENDIUM_TRUSTED_PROXIES=172.17.0.2,10.0.0.1
+    trusted_proxies: str | None = None
     # Library name — printed on patron cards, shown in emails, and (future)
     # in the nav brand. First of several Settings that should migrate to a
     # DB-backed site_setting table when that slice lands; see CLAUDE.md.
