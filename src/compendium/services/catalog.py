@@ -26,6 +26,7 @@ from compendium.services.audit import AuditAction, AuditEntityType, AuditService
 from compendium.services.metadata import (
     lookup_cover_fallbacks,
     lookup_metadata,
+    lookup_metadata_with_source,
     normalize_isbn,
     normalize_upc,
     pick_classification_code,
@@ -435,22 +436,23 @@ class CatalogService:
                 ),
             )
 
-        source = _SOURCE_FOR_MEDIA_TYPE.get(media_type_code, "external")
+        intended_source = _SOURCE_FOR_MEDIA_TYPE.get(media_type_code, "external")
         _session = self._works._s
         try:
-            data = lookup_metadata(
+            data, actual_source = lookup_metadata_with_source(
                 media_type_code, kind, value,
                 bypass_cache=bypass_cache, session=_session,
             )
         except ExternalLookupError as exc:
             return RefreshReport(
                 work_id=work_id,
-                source=source,
+                source=intended_source,
                 lookup_kind=kind,
                 lookup_value=value,
                 found=False,
                 error=str(exc),
             )
+        source = actual_source or intended_source
 
         if not data:
             return RefreshReport(
