@@ -2,7 +2,6 @@
 set -eu
 
 : "${COMPENDIUM_ADMIN_USERNAME:=admin}"
-: "${COMPENDIUM_ADMIN_PASSWORD:=compendium}"
 : "${COMPENDIUM_ADMIN_ROLE:=Administrator}"
 
 echo "[compendium] Running database migrations..."
@@ -13,6 +12,11 @@ if compendium user list --limit 1000 2>/dev/null \
         | grep -qx "${COMPENDIUM_ADMIN_USERNAME}"; then
     echo "[compendium] Admin user '${COMPENDIUM_ADMIN_USERNAME}' already exists; skipping bootstrap."
 else
+    if [ -z "${COMPENDIUM_ADMIN_PASSWORD:-}" ]; then
+        echo "[compendium] ERROR: COMPENDIUM_ADMIN_PASSWORD is required for first-run bootstrap." >&2
+        echo "[compendium] Set it in .env (see .env.example) and restart." >&2
+        exit 1
+    fi
     echo "[compendium] Creating admin user '${COMPENDIUM_ADMIN_USERNAME}' (role: ${COMPENDIUM_ADMIN_ROLE})..."
     compendium user add \
         --username "${COMPENDIUM_ADMIN_USERNAME}" \
