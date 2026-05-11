@@ -29,6 +29,7 @@ _ALLOWED_SUFFIXES: tuple[str, ...] = (".archive.org",)
 
 NEGATIVE_TTL_SECONDS: int = 24 * 3600
 FETCH_TIMEOUT_SECONDS: float = 10.0
+MAX_COVER_BYTES: int = 10 * 1024 * 1024  # 10 MB — real covers are <500 KB
 
 
 class CoverNotFound(Exception):
@@ -100,24 +101,43 @@ def fetch_or_404(url: str) -> Path:
         raise CoverNotFound("recently-failed cover, not retrying yet")
 
     try:
-        resp = httpx.get(url, follow_redirects=True, timeout=FETCH_TIMEOUT_SECONDS)
+        with httpx.stream("GET", url, follow_redirects=True, timeout=FETCH_TIMEOUT_SECONDS) as resp:
+            for hop in list(resp.history) + [resp]:
+                if not host_allowed(str(hop.url)):
+                    raise DisallowedHost(f"redirect to disallowed host: {hop.url}")
+
+            content_type = resp.headers.get("content-type", "").lower()
+            if resp.status_code >= 400 or not content_type.startswith("image/"):
+                miss.touch()
+                raise CoverNotFound(f"upstream {resp.status_code} / {content_type!r}")
+
+            declared = resp.headers.get("content-length")
+            if declared is not None and declared.isdigit() and int(declared) > MAX_COVER_BYTES:
+                miss.touch()
+                raise CoverNotFound(
+                    f"upstream cover exceeds {MAX_COVER_BYTES} bytes (Content-Length={declared})"
+                )
+
+            tmp = d / f"{key}.tmp"
+            total = 0
+            try:
+                with tmp.open("wb") as fh:
+                    for chunk in resp.iter_bytes():
+                        total += len(chunk)
+                        if total > MAX_COVER_BYTES:
+                            raise CoverNotFound(
+                                f"upstream cover exceeded {MAX_COVER_BYTES} bytes mid-stream"
+                            )
+                        fh.write(chunk)
+            except CoverNotFound:
+                tmp.unlink(missing_ok=True)
+                miss.touch()
+                raise
+            tmp.replace(hit)
+            return hit
     except httpx.HTTPError as exc:
         miss.touch()
         raise CoverNotFound("upstream fetch failed") from exc
-
-    for hop in list(resp.history) + [resp]:
-        if not host_allowed(str(hop.url)):
-            raise DisallowedHost(f"redirect to disallowed host: {hop.url}")
-
-    content_type = resp.headers.get("content-type", "").lower()
-    if resp.status_code >= 400 or not content_type.startswith("image/"):
-        miss.touch()
-        raise CoverNotFound(f"upstream {resp.status_code} / {content_type!r}")
-
-    tmp = d / f"{key}.tmp"
-    tmp.write_bytes(resp.content)
-    tmp.replace(hit)
-    return hit
 
 
 def invalidate(url: str) -> bool:

@@ -26,8 +26,13 @@ from compendium.services.covers import (
 from compendium.web.routes.covers import router as covers_router
 
 
-class _FakeResp:
-    """Duck-typed stand-in for ``httpx.Response`` with just what fetch_or_404 reads."""
+class _FakeStreamResp:
+    """Duck-typed stand-in for a streaming ``httpx.Response``.
+
+    Supports the context-manager protocol and ``iter_bytes()`` so it can
+    stand in for the result of ``httpx.stream(...)``.  History items only
+    need ``.url``; they don't need to be context managers.
+    """
 
     def __init__(
         self,
@@ -36,12 +41,29 @@ class _FakeResp:
         content: bytes = b"\xff\xd8\xff\xe0",
         content_type: str = "image/jpeg",
         history=(),
+        extra_headers: dict | None = None,
     ):
         self.url = url
         self.status_code = status
-        self.content = content
-        self.headers = {"content-type": content_type}
+        self._content = content
+        base_headers = {"content-type": content_type}
+        if extra_headers:
+            base_headers.update(extra_headers)
+        self.headers = base_headers
         self.history = list(history)
+
+    # context-manager support (httpx.stream() returns a context manager)
+    def __enter__(self):
+        return self
+
+    def __exit__(self, *args):
+        pass
+
+    def iter_bytes(self, chunk_size: int = 65536):
+        # Yield body in one shot; tests that need multi-chunk behaviour
+        # can override this via monkeypatching the instance.
+        if self._content:
+            yield self._content
 
 
 @pytest.fixture
@@ -50,8 +72,8 @@ def cache_tmp(tmp_path, monkeypatch):
     return tmp_path
 
 
-def _patch_httpx_get(monkeypatch, fn):
-    monkeypatch.setattr("compendium.services.covers.httpx.get", fn)
+def _patch_httpx_stream(monkeypatch, fn):
+    monkeypatch.setattr("compendium.services.covers.httpx.stream", fn)
 
 
 # ── host_allowed ──────────────────────────────────────────────────────────────
@@ -98,7 +120,7 @@ def test_disallowed_initial_url_raises(cache_tmp, monkeypatch):
         called["n"] += 1
         raise AssertionError("should not fetch")
 
-    _patch_httpx_get(monkeypatch, _fail)
+    _patch_httpx_stream(monkeypatch, _fail)
 
     with pytest.raises(DisallowedHost):
         fetch_or_404("https://evil.example.com/x.jpg")
@@ -112,7 +134,7 @@ def test_non_http_url_raises(cache_tmp):
 
 def test_fetch_miss_stores_and_returns_path(cache_tmp, monkeypatch):
     url = "https://covers.openlibrary.org/b/id/42-L.jpg"
-    _patch_httpx_get(monkeypatch, lambda *a, **kw: _FakeResp(url=url, content=b"IMGBYTES"))
+    _patch_httpx_stream(monkeypatch, lambda *a, **kw: _FakeStreamResp(url=url, content=b"IMGBYTES"))
 
     path = fetch_or_404(url)
 
@@ -129,7 +151,7 @@ def test_fetch_hit_short_circuits(cache_tmp, monkeypatch):
     def _should_not_fetch(*a, **kw):
         raise AssertionError("cache hit should not fetch")
 
-    _patch_httpx_get(monkeypatch, _should_not_fetch)
+    _patch_httpx_stream(monkeypatch, _should_not_fetch)
 
     assert fetch_or_404(url).read_bytes() == b"CACHED"
 
@@ -141,7 +163,7 @@ def test_negative_cache_blocks_refetch_within_ttl(cache_tmp, monkeypatch):
     def _should_not_fetch(*a, **kw):
         raise AssertionError("negative cache should prevent fetch")
 
-    _patch_httpx_get(monkeypatch, _should_not_fetch)
+    _patch_httpx_stream(monkeypatch, _should_not_fetch)
 
     with pytest.raises(CoverNotFound):
         fetch_or_404(url)
@@ -155,16 +177,16 @@ def test_negative_cache_expires_and_refetches(cache_tmp, monkeypatch):
     import os
     os.utime(stale, (stale_age, stale_age))
 
-    _patch_httpx_get(monkeypatch, lambda *a, **kw: _FakeResp(url=url, content=b"FRESH"))
+    _patch_httpx_stream(monkeypatch, lambda *a, **kw: _FakeStreamResp(url=url, content=b"FRESH"))
 
     assert fetch_or_404(url).read_bytes() == b"FRESH"
 
 
 def test_non_image_content_type_marks_negative(cache_tmp, monkeypatch):
     url = "https://covers.openlibrary.org/b/id/42-L.jpg"
-    _patch_httpx_get(
+    _patch_httpx_stream(
         monkeypatch,
-        lambda *a, **kw: _FakeResp(url=url, content=b"<html>", content_type="text/html"),
+        lambda *a, **kw: _FakeStreamResp(url=url, content=b"<html>", content_type="text/html"),
     )
 
     with pytest.raises(CoverNotFound):
@@ -174,9 +196,9 @@ def test_non_image_content_type_marks_negative(cache_tmp, monkeypatch):
 
 def test_4xx_response_marks_negative(cache_tmp, monkeypatch):
     url = "https://covers.openlibrary.org/b/id/42-L.jpg"
-    _patch_httpx_get(
+    _patch_httpx_stream(
         monkeypatch,
-        lambda *a, **kw: _FakeResp(url=url, status=404, content=b"", content_type="image/jpeg"),
+        lambda *a, **kw: _FakeStreamResp(url=url, status=404, content=b"", content_type="image/jpeg"),
     )
 
     with pytest.raises(CoverNotFound):
@@ -190,7 +212,7 @@ def test_httpx_error_marks_negative(cache_tmp, monkeypatch):
     def _boom(*a, **kw):
         raise httpx.ConnectError("no network")
 
-    _patch_httpx_get(monkeypatch, _boom)
+    _patch_httpx_stream(monkeypatch, _boom)
 
     with pytest.raises(CoverNotFound):
         fetch_or_404(url)
@@ -201,11 +223,11 @@ def test_redirect_to_disallowed_host_rejects(cache_tmp, monkeypatch):
     url = "https://covers.openlibrary.org/b/id/42-L.jpg"
     # Final resp URL is on a disallowed host — simulates a redirect chain that
     # ends off-allowlist (e.g., openlibrary → evil.com).
-    bad_final = _FakeResp(
+    bad_final = _FakeStreamResp(
         url="https://evil.example.com/x.jpg",
-        history=[_FakeResp(url=url)],  # first hop was allowed
+        history=[_FakeStreamResp(url=url)],  # first hop was allowed
     )
-    _patch_httpx_get(monkeypatch, lambda *a, **kw: bad_final)
+    _patch_httpx_stream(monkeypatch, lambda *a, **kw: bad_final)
 
     with pytest.raises(DisallowedHost):
         fetch_or_404(url)
@@ -213,16 +235,83 @@ def test_redirect_to_disallowed_host_rejects(cache_tmp, monkeypatch):
 
 def test_redirect_chain_within_allowlist_succeeds(cache_tmp, monkeypatch):
     url = "https://covers.openlibrary.org/b/id/42-L.jpg"
-    final = _FakeResp(
+    final = _FakeStreamResp(
         url="https://ia600507.us.archive.org/view_archive.php?file=x.jpg",
         content=b"JPEG",
-        history=[_FakeResp(url=url), _FakeResp(url="https://archive.org/download/foo/x.jpg")],
+        history=[
+            _FakeStreamResp(url=url),
+            _FakeStreamResp(url="https://archive.org/download/foo/x.jpg"),
+        ],
     )
-    _patch_httpx_get(monkeypatch, lambda *a, **kw: final)
+    _patch_httpx_stream(monkeypatch, lambda *a, **kw: final)
 
     path = fetch_or_404(url)
 
     assert path.read_bytes() == b"JPEG"
+
+
+# ── size-cap tests ────────────────────────────────────────────────────────────
+
+def test_content_length_cap_rejects(cache_tmp, monkeypatch):
+    url = "https://covers.openlibrary.org/b/id/42-L.jpg"
+    big = str(covers.MAX_COVER_BYTES + 1)
+    _patch_httpx_stream(
+        monkeypatch,
+        lambda *a, **kw: _FakeStreamResp(
+            url=url, content=b"", extra_headers={"content-length": big}
+        ),
+    )
+
+    with pytest.raises(CoverNotFound, match="Content-Length"):
+        fetch_or_404(url)
+    assert (cache_tmp / f"{cache_key(url)}.404").exists()
+    assert not (cache_tmp / f"{cache_key(url)}.tmp").exists()
+
+
+def test_midstream_cap_rejects(cache_tmp, monkeypatch):
+    url = "https://covers.openlibrary.org/b/id/42-L.jpg"
+    chunk = b"x" * (covers.MAX_COVER_BYTES // 2 + 1)
+
+    class _BigStream(_FakeStreamResp):
+        def iter_bytes(self, chunk_size=65536):
+            yield chunk
+            yield chunk  # two halves exceed the cap
+
+    _patch_httpx_stream(monkeypatch, lambda *a, **kw: _BigStream(url=url))
+
+    with pytest.raises(CoverNotFound, match="mid-stream"):
+        fetch_or_404(url)
+    assert (cache_tmp / f"{cache_key(url)}.404").exists()
+    assert not (cache_tmp / f"{cache_key(url)}.tmp").exists()
+
+
+def test_exactly_at_cap_succeeds(cache_tmp, monkeypatch):
+    url = "https://covers.openlibrary.org/b/id/42-L.jpg"
+    at_cap = b"x" * covers.MAX_COVER_BYTES
+
+    class _ExactStream(_FakeStreamResp):
+        def iter_bytes(self, chunk_size=65536):
+            yield at_cap
+
+    _patch_httpx_stream(monkeypatch, lambda *a, **kw: _ExactStream(url=url))
+
+    path = fetch_or_404(url)
+    assert path.stat().st_size == covers.MAX_COVER_BYTES
+
+
+def test_one_byte_over_cap_rejects(cache_tmp, monkeypatch):
+    url = "https://covers.openlibrary.org/b/id/42-L.jpg"
+    over = b"x" * (covers.MAX_COVER_BYTES + 1)
+
+    class _OverStream(_FakeStreamResp):
+        def iter_bytes(self, chunk_size=65536):
+            yield over
+
+    _patch_httpx_stream(monkeypatch, lambda *a, **kw: _OverStream(url=url))
+
+    with pytest.raises(CoverNotFound, match="mid-stream"):
+        fetch_or_404(url)
+    assert not (cache_tmp / f"{cache_key(url)}.tmp").exists()
 
 
 # ── prune ─────────────────────────────────────────────────────────────────────
@@ -268,7 +357,7 @@ def proxy_client():
 
 def test_route_returns_image_on_success(cache_tmp, proxy_client, monkeypatch):
     url = "https://covers.openlibrary.org/b/id/42-L.jpg"
-    _patch_httpx_get(monkeypatch, lambda *a, **kw: _FakeResp(url=url, content=b"JPEGBYTES"))
+    _patch_httpx_stream(monkeypatch, lambda *a, **kw: _FakeStreamResp(url=url, content=b"JPEGBYTES"))
 
     resp = proxy_client.get("/ui/covers", params={"url": url})
 
@@ -286,9 +375,9 @@ def test_route_rejects_disallowed_host(cache_tmp, proxy_client):
 
 def test_route_returns_404_on_upstream_miss(cache_tmp, proxy_client, monkeypatch):
     url = "https://covers.openlibrary.org/b/id/42-L.jpg"
-    _patch_httpx_get(
+    _patch_httpx_stream(
         monkeypatch,
-        lambda *a, **kw: _FakeResp(url=url, status=404, content=b"", content_type="image/jpeg"),
+        lambda *a, **kw: _FakeStreamResp(url=url, status=404, content=b"", content_type="image/jpeg"),
     )
 
     resp = proxy_client.get("/ui/covers", params={"url": url})
