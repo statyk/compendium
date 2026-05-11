@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-from contextvars import copy_context
 from datetime import datetime, timezone
 from unittest.mock import MagicMock, patch
 
@@ -13,7 +12,6 @@ from compendium.domain.errors import ExternalLookupError, GoogleBooksQuotaExhaus
 from compendium.domain.models import MetadataCache
 from compendium.services.metadata import (
     GoogleBooksAdapter,
-    _quota_session_factory,
     clear_gb_quota_exhausted,
     is_gb_quota_exhausted,
     lookup_google_books,
@@ -326,43 +324,3 @@ def test_clear_gb_quota_exhausted_returns_false_when_no_sentinel():
     mock_session.delete.assert_not_called()
 
 
-def test_quota_session_factory_injected_for_is_exhausted():
-    """_quota_session_factory is consulted when no explicit session is given."""
-    mock_session = MagicMock()
-    mock_session.__enter__ = lambda s: s
-    mock_session.__exit__ = MagicMock(return_value=False)
-    mock_session.get.return_value = None
-
-    factory = MagicMock(return_value=mock_session)
-
-    def _run():
-        _quota_session_factory.set(factory)
-        return is_gb_quota_exhausted()
-
-    ctx = copy_context()
-    result = ctx.run(_run)
-
-    assert result is False
-    factory.assert_called_once()
-
-
-def test_quota_session_factory_injected_for_mark_exhausted():
-    """_mark_gb_quota_exhausted writes to the injected factory's session."""
-    from compendium.services.metadata import _mark_gb_quota_exhausted
-
-    mock_session = MagicMock()
-    mock_session.__enter__ = lambda s: s
-    mock_session.__exit__ = MagicMock(return_value=False)
-    mock_session.get.return_value = None
-
-    factory = MagicMock(return_value=mock_session)
-
-    def _run():
-        _quota_session_factory.set(factory)
-        _mark_gb_quota_exhausted()
-
-    ctx = copy_context()
-    ctx.run(_run)
-
-    factory.assert_called_once()
-    mock_session.add.assert_called_once()

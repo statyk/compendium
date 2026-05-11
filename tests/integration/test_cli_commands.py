@@ -1612,7 +1612,7 @@ class TestDbInitCli:
         monkeypatch.setenv("COMPENDIUM_JWT_SECRET_KEY", "a" * 48)
         from compendium.db import engine as _engine
         _engine.get_settings.cache_clear()
-        _engine.get_engine.cache_clear()
+        _engine._server_engine.cache_clear()
         try:
             r = CliRunner().invoke(app, ["db", "init"])
             assert r.exit_code == 0, r.output
@@ -1622,7 +1622,7 @@ class TestDbInitCli:
             assert r.exit_code == 0
         finally:
             _engine.get_settings.cache_clear()
-            _engine.get_engine.cache_clear()
+            _engine._server_engine.cache_clear()
 
     def test_db_upgrade(self, tmp_path, monkeypatch):
         db_file = tmp_path / "cli_upgrade.db"
@@ -1630,14 +1630,14 @@ class TestDbInitCli:
         monkeypatch.setenv("COMPENDIUM_JWT_SECRET_KEY", "a" * 48)
         from compendium.db import engine as _engine
         _engine.get_settings.cache_clear()
-        _engine.get_engine.cache_clear()
+        _engine._server_engine.cache_clear()
         try:
             r = CliRunner().invoke(app, ["db", "upgrade"])
             assert r.exit_code == 0
             assert "Migrations applied" in r.output
         finally:
             _engine.get_settings.cache_clear()
-            _engine.get_engine.cache_clear()
+            _engine._server_engine.cache_clear()
 
 
 # ──────────────────────────────────────────────────────────────────────────────
@@ -1652,7 +1652,7 @@ class TestBackupCli:
         monkeypatch.setenv("COMPENDIUM_JWT_SECRET_KEY", "a" * 48)
         from compendium.db import engine as _engine
         _engine.get_settings.cache_clear()
-        _engine.get_engine.cache_clear()
+        _engine._server_engine.cache_clear()
         try:
             assert CliRunner().invoke(app, ["db", "init"]).exit_code == 0
             assert CliRunner().invoke(
@@ -1670,7 +1670,7 @@ class TestBackupCli:
             dst = tmp_path / "dst.db"
             monkeypatch.setenv("COMPENDIUM_DATABASE_URL", f"sqlite:///{dst}")
             _engine.get_settings.cache_clear()
-            _engine.get_engine.cache_clear()
+            _engine._server_engine.cache_clear()
             r = CliRunner().invoke(
                 app, ["restore", str(archive), "--no-covers"]
             )
@@ -1682,7 +1682,7 @@ class TestBackupCli:
             assert "alice" in r.output
         finally:
             _engine.get_settings.cache_clear()
-            _engine.get_engine.cache_clear()
+            _engine._server_engine.cache_clear()
 
     def test_restore_refuses_populated_db_without_force(self, tmp_path, monkeypatch):
         db = tmp_path / "live.db"
@@ -1690,7 +1690,7 @@ class TestBackupCli:
         monkeypatch.setenv("COMPENDIUM_JWT_SECRET_KEY", "a" * 48)
         from compendium.db import engine as _engine
         _engine.get_settings.cache_clear()
-        _engine.get_engine.cache_clear()
+        _engine._server_engine.cache_clear()
         try:
             assert CliRunner().invoke(app, ["db", "init"]).exit_code == 0
             assert CliRunner().invoke(
@@ -1708,7 +1708,7 @@ class TestBackupCli:
             assert "--force" in r.output
         finally:
             _engine.get_settings.cache_clear()
-            _engine.get_engine.cache_clear()
+            _engine._server_engine.cache_clear()
 
     def test_backup_no_audit_flag_honored(self, tmp_path, monkeypatch):
         src = tmp_path / "src.db"
@@ -1716,7 +1716,7 @@ class TestBackupCli:
         monkeypatch.setenv("COMPENDIUM_JWT_SECRET_KEY", "a" * 48)
         from compendium.db import engine as _engine
         _engine.get_settings.cache_clear()
-        _engine.get_engine.cache_clear()
+        _engine._server_engine.cache_clear()
         try:
             assert CliRunner().invoke(app, ["db", "init"]).exit_code == 0
             archive = tmp_path / "backup.tar.gz"
@@ -1732,4 +1732,4 @@ class TestBackupCli:
             assert manifest["tables"]["audit_log"] == 0
         finally:
             _engine.get_settings.cache_clear()
-            _engine.get_engine.cache_clear()
+            _engine._server_engine.cache_clear()

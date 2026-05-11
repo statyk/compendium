@@ -241,13 +241,6 @@ class GoogleBooksAdapter:
 # Google Books quota circuit breaker
 # ---------------------------------------------------------------------------
 
-# Library-mode injection point.  When Compendium is used as a library (e.g.
-# Litcat), the host sets _quota_session_factory to its own session_scope so
-# that quota sentinel reads/writes target the host's database, not the
-# Compendium default.  Value: a zero-arg callable returning a context manager
-# that yields a SQLAlchemy Session.  None → use compendium.db.session.session_scope.
-_quota_session_factory: ContextVar = ContextVar("_quota_session_factory", default=None)
-
 # Set by lookup_metadata for the duration of one call so that the quota READ
 # check inside _resolve_book_adapter can reuse the already-open session.
 _active_lookup_session: ContextVar = ContextVar("_active_lookup_session", default=None)
@@ -257,23 +250,14 @@ _GB_QUOTA_KIND = "_quota"
 _GB_QUOTA_VALUE = "exhausted"
 
 
-def _get_quota_factory():
-    """Return the session factory to use for quota sentinel reads/writes."""
-    factory = _quota_session_factory.get()
-    if factory is not None:
-        return factory
-    from compendium.db.session import session_scope
-    return session_scope
-
-
 def _mark_gb_quota_exhausted(*, session=None) -> None:
     """Persist the quota-exhausted sentinel row so all processes see it.
 
     ``session`` is accepted for callers that manage their own transaction but
     note it must not be a session that may roll back (e.g. a dry-run import
     session) — the sentinel must survive any outer rollback.  When omitted the
-    function opens its own short-lived session via ``_quota_session_factory``
-    (or ``compendium.db.session.session_scope`` as the default).
+    function opens its own short-lived session via
+    ``compendium.db.session.session_scope``.
     """
     import logging
     from datetime import datetime, timezone
@@ -299,7 +283,8 @@ def _mark_gb_quota_exhausted(*, session=None) -> None:
         if session is not None:
             _write(session)
         else:
-            with _get_quota_factory()() as s:
+            from compendium.db.session import session_scope
+            with session_scope() as s:
                 _write(s)
         logger.warning(
             "Google Books daily quota exhausted. Using Open Library fallback "
@@ -315,8 +300,8 @@ def is_gb_quota_exhausted(*, session=None) -> bool:
     When ``session`` is provided (or when called from inside ``lookup_metadata``
     where ``_active_lookup_session`` is set), the existing session is reused for
     the read — no new connection is opened.  When neither is available the
-    function falls back to ``_quota_session_factory`` (or Compendium's default
-    session_scope).
+    function opens its own short-lived session via
+    ``compendium.db.session.session_scope``.
     """
     from datetime import datetime, timedelta, timezone
 
@@ -333,7 +318,8 @@ def is_gb_quota_exhausted(*, session=None) -> bool:
     try:
         if s is not None:
             return _check(s)
-        with _get_quota_factory()() as s2:
+        from compendium.db.session import session_scope
+        with session_scope() as s2:
             return _check(s2)
     except Exception:
         return False
@@ -352,7 +338,8 @@ def clear_gb_quota_exhausted(*, session=None) -> bool:
 
     if session is not None:
         return _clear(session)
-    with _get_quota_factory()() as s:
+    from compendium.db.session import session_scope
+    with session_scope() as s:
         return _clear(s)
 
 
