@@ -26,7 +26,7 @@ from compendium.services.auth import hash_password
 from compendium.services.catalog import CatalogService
 import compendium.services.site_settings as ss
 from compendium.web.csrf import _COOKIE as CSRF_COOKIE
-from compendium.web.csrf import _sign, generate_token
+from compendium.web.csrf import _derive_csrf_secret, _sign, generate_token
 
 _OPEN_LIB_DUNE = {
     "title": "Dune",
@@ -39,12 +39,13 @@ _OPEN_LIB_DUNE = {
 _ISBN = "9780441013593"
 _SECRET = "insecure-default-change-in-production"
 _TEST_SETTINGS = Settings(database_url="sqlite:///:memory:", jwt_secret_key=_SECRET)
+_CSRF_KEY = _derive_csrf_secret(_SECRET)
 
 
 def _make_csrf_pair() -> tuple[str, str]:
     """Returns (raw_token, signed_cookie_value) for test requests."""
     raw = generate_token()
-    signed = f"{raw}.{_sign(raw, _SECRET)}"
+    signed = f"{raw}.{_sign(raw, _CSRF_KEY)}"
     return raw, signed
 
 
@@ -1664,8 +1665,8 @@ def test_csrf_signature_tamper_rejected(web_client, librarian):
     """Tampering with the signed cookie (not just the raw token) must fail."""
     cookies = _login(web_client, "lib01")
     raw = generate_token()
-    # Sign with the wrong secret.
-    bad_signed = f"{raw}.{_sign(raw, 'wrong-secret')}"
+    # Sign with the wrong secret (raw bytes — _sign expects bytes now).
+    bad_signed = f"{raw}.{_sign(raw, b'wrong-secret')}"
     resp = web_client.post(
         "/ui/circ/checkout",
         data={"barcode": "X", "card_number": "Y", "csrf_token": raw},

@@ -53,7 +53,7 @@ def login_page(
             "message": message or None,
         },
     )
-    set_csrf_cookie(resp, token, get_settings().jwt_secret_key)
+    set_csrf_cookie(resp, token)
     return resp
 
 
@@ -85,7 +85,7 @@ def login_submit(
             status_code=429,
             headers={"Retry-After": str(retry_after)},
         )
-        set_csrf_cookie(resp, token, get_settings().jwt_secret_key)
+        set_csrf_cookie(resp, token)
         return resp
 
     try:
@@ -105,7 +105,7 @@ def login_submit(
             },
             status_code=401,
         )
-        set_csrf_cookie(resp, token, get_settings().jwt_secret_key)
+        set_csrf_cookie(resp, token)
         return resp
 
     rl.clear("login_user", username)
@@ -113,7 +113,7 @@ def login_submit(
     redirect_to = next if (parsed.netloc == "" and next.startswith("/ui/")) else "/ui/catalog"
     resp = RedirectResponse(url=redirect_to, status_code=303)
     set_auth_cookie(resp, jwt_token)
-    set_csrf_cookie(resp, token, get_settings().jwt_secret_key)
+    set_csrf_cookie(resp, token)
     return resp
 
 

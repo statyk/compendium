@@ -42,7 +42,7 @@ def _render(name: str, request: Request, ctx: dict, status_code: int = 200):
     ctx_clean["csrf_token"] = token
     resp = templates.TemplateResponse(request, name, ctx_clean, status_code=status_code)
     if fresh:
-        set_csrf_cookie(resp, fresh, get_settings().jwt_secret_key)
+        set_csrf_cookie(resp, fresh)
     return resp
 
 

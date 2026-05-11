@@ -32,7 +32,7 @@ from compendium.services.site_settings import (
     set_site_setting,
 )
 from compendium.web.csrf import _COOKIE as CSRF_COOKIE
-from compendium.web.csrf import _sign, generate_token
+from compendium.web.csrf import _derive_csrf_secret, _sign, generate_token
 
 _SETTINGS = Settings(database_url="sqlite:///:memory:")
 
@@ -106,7 +106,7 @@ def _make_user(s, *, role_name: str, username: str) -> tuple[AppUser, str]:
 def _make_csrf_pair() -> tuple[str, str]:
     """Returns (raw_token, signed_cookie_value) for test requests."""
     raw = generate_token()
-    signed = f"{raw}.{_sign(raw, _SETTINGS.jwt_secret_key)}"
+    signed = f"{raw}.{_sign(raw, _derive_csrf_secret(_SETTINGS.jwt_secret_key))}"
     return raw, signed
 
 

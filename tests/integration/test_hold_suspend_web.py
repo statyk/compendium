@@ -33,7 +33,7 @@ from compendium.services.catalog import CatalogService
 from compendium.services.circulation import CirculationService
 from compendium.services.holds import HoldService
 from compendium.web.csrf import _COOKIE as CSRF_COOKIE
-from compendium.web.csrf import _sign, generate_token
+from compendium.web.csrf import _derive_csrf_secret, _sign, generate_token
 from tests.helpers import setup_sqlite_fts
 
 _DUNE = {
@@ -50,7 +50,7 @@ _TEST_SETTINGS = Settings(database_url="sqlite:///:memory:", jwt_secret_key=_SEC
 
 def _csrf_pair() -> tuple[str, str]:
     raw = generate_token()
-    return raw, f"{raw}.{_sign(raw, _SECRET)}"
+    return raw, f"{raw}.{_sign(raw, _derive_csrf_secret(_SECRET))}"
 
 
 @pytest.fixture(scope="module")

@@ -18,7 +18,7 @@ from compendium.domain.models import AppUser, Base
 from compendium.repositories.sql.role_repository import SqlRoleRepository
 from compendium.repositories.sql.user_repository import SqlUserRepository
 from compendium.services.auth import AuthService, hash_password
-from compendium.web.csrf import _sign, generate_token
+from compendium.web.csrf import _derive_csrf_secret, _sign, generate_token
 
 TEST_SECRET = "insecure-default-change-in-production"
 
@@ -145,4 +145,4 @@ def make_user(session: Session, username: str, role_name: str) -> tuple[AppUser,
 def csrf_pair() -> tuple[str, str]:
     """Return (raw_token, signed_cookie_value) for CSRF testing."""
     raw = generate_token()
-    return raw, f"{raw}.{_sign(raw, TEST_SECRET)}"
+    return raw, f"{raw}.{_sign(raw, _derive_csrf_secret(TEST_SECRET))}"

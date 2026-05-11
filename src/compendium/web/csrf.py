@@ -4,25 +4,44 @@ from __future__ import annotations
 
 import hmac
 import secrets
+from functools import lru_cache
 from hashlib import sha256
 
+from cryptography.hazmat.primitives import hashes
+from cryptography.hazmat.primitives.kdf.hkdf import HKDF
 from fastapi import HTTPException, Request
 
 _COOKIE = "csrf_token"
+
+
+@lru_cache(maxsize=4)
+def _derive_csrf_secret(jwt_secret: str) -> bytes:
+    return HKDF(
+        algorithm=hashes.SHA256(),
+        length=32,
+        salt=None,
+        info=b"compendium-csrf-v1",
+    ).derive(jwt_secret.encode())
+
+
+def _csrf_secret() -> bytes:
+    from compendium.db.engine import get_settings
+
+    return _derive_csrf_secret(get_settings().jwt_secret_key)
 
 
 def generate_token() -> str:
     return secrets.token_urlsafe(32)
 
 
-def _sign(token: str, secret: str) -> str:
-    return hmac.new(secret.encode(), token.encode(), sha256).hexdigest()
+def _sign(token: str, secret: bytes) -> str:
+    return hmac.new(secret, token.encode(), sha256).hexdigest()
 
 
-def set_csrf_cookie(response, token: str, secret: str) -> None:
+def set_csrf_cookie(response, token: str) -> None:
     from compendium.db.engine import get_settings
 
-    signed = f"{token}.{_sign(token, secret)}"
+    signed = f"{token}.{_sign(token, _csrf_secret())}"
     response.set_cookie(
         _COOKIE,
         signed,
@@ -38,9 +57,7 @@ def get_csrf_token(request: Request) -> str:
     if not cookie_val or "." not in cookie_val:
         raise HTTPException(status_code=403, detail="CSRF cookie missing or malformed")
     raw, sig = cookie_val.rsplit(".", 1)
-    from compendium.db.engine import get_settings
-
-    if not hmac.compare_digest(_sign(raw, get_settings().jwt_secret_key), sig):
+    if not hmac.compare_digest(_sign(raw, _csrf_secret()), sig):
         raise HTTPException(status_code=403, detail="CSRF cookie invalid")
     return raw
 
@@ -60,10 +77,7 @@ def check_csrf_form(request: Request, token: str) -> None:
     if not cookie_val or "." not in cookie_val:
         raise HTTPException(status_code=403, detail="CSRF token missing")
     raw, sig = cookie_val.rsplit(".", 1)
-    from compendium.db.engine import get_settings
-
-    secret = get_settings().jwt_secret_key
-    if not hmac.compare_digest(_sign(raw, secret), sig):
+    if not hmac.compare_digest(_sign(raw, _csrf_secret()), sig):
         raise HTTPException(status_code=403, detail="CSRF signature invalid")
     if not hmac.compare_digest(token, raw):
         raise HTTPException(status_code=403, detail="CSRF token mismatch")

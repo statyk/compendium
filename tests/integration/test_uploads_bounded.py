@@ -25,7 +25,7 @@ from compendium.domain.models import AppUser, Base
 from compendium.repositories.sql.role_repository import SqlRoleRepository
 from compendium.repositories.sql.user_repository import SqlUserRepository
 from compendium.services.auth import AuthService, hash_password
-from compendium.web.csrf import _sign, generate_token
+from compendium.web.csrf import _derive_csrf_secret, _sign, generate_token
 from tests.helpers import setup_sqlite_fts
 
 _SECRET = "insecure-default-change-in-production"
@@ -107,7 +107,7 @@ def _bearer(token: str) -> dict[str, str]:
 
 def _csrf_pair() -> tuple[str, str]:
     raw = generate_token()
-    return raw, f"{raw}.{_sign(raw, _SECRET)}"
+    return raw, f"{raw}.{_sign(raw, _derive_csrf_secret(_SECRET))}"
 
 
 def test_api_csv_rejects_upload_above_cap(client, db_session):

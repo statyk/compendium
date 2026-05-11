@@ -23,7 +23,7 @@ from compendium.services.auth import AuthService, hash_password
 from compendium.services.secrets import is_encrypted
 from compendium.services.site_settings import get_site_setting, set_site_setting
 from compendium.web.csrf import _COOKIE as CSRF_COOKIE
-from compendium.web.csrf import _sign, generate_token
+from compendium.web.csrf import _derive_csrf_secret, _sign, generate_token
 from compendium.web.deps import AUTH_COOKIE
 
 _SETTINGS = Settings(database_url="sqlite:///:memory:")
@@ -80,7 +80,7 @@ def _make_admin(s) -> tuple[AppUser, str]:
 
 def _csrf_pair() -> tuple[str, str]:
     raw = generate_token()
-    signed = f"{raw}.{_sign(raw, _SETTINGS.jwt_secret_key)}"
+    signed = f"{raw}.{_sign(raw, _derive_csrf_secret(_SETTINGS.jwt_secret_key))}"
     return raw, signed
 
 

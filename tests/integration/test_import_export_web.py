@@ -22,7 +22,7 @@ from compendium.repositories.sql.user_repository import SqlUserRepository
 from compendium.repositories.sql.work_repository import SqlWorkRepository
 from compendium.services.auth import AuthService, hash_password
 from compendium.web.csrf import _COOKIE as CSRF_COOKIE
-from compendium.web.csrf import _sign, generate_token
+from compendium.web.csrf import _derive_csrf_secret, _sign, generate_token
 from tests.helpers import setup_sqlite_fts
 
 _SECRET = "insecure-default-change-in-production"
@@ -84,7 +84,7 @@ def _make_user(s, role_name, username):
 
 def _make_csrf_pair() -> tuple[str, str]:
     raw = generate_token()
-    signed = f"{raw}.{_sign(raw, _SECRET)}"
+    signed = f"{raw}.{_sign(raw, _derive_csrf_secret(_SECRET))}"
     return raw, signed
 
 
