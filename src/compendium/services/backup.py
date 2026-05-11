@@ -9,6 +9,7 @@ from __future__ import annotations
 
 import importlib.metadata
 import json
+import re
 import shutil
 import tarfile
 import tempfile
@@ -45,6 +46,22 @@ _BATCH_SIZE = 500
 
 class BackupError(Exception):
     """Backup or restore cannot proceed."""
+
+
+_SAFE_IDENT_RE = re.compile(r"^[A-Za-z_][A-Za-z0-9_]*$")
+
+
+def _safe_ident(name: str) -> str:
+    """Validate a SQL identifier before f-string interpolation.
+
+    Names entering backup/restore SQL come from ``sqlite_master`` and
+    SQLAlchemy ``Base.metadata.sorted_tables``; both are trusted today.
+    This guard is defense-in-depth — future call sites that inadvertently
+    pass less-trusted names get a hard error instead of silent injection.
+    """
+    if not _SAFE_IDENT_RE.match(name):
+        raise BackupError(f"refusing to interpolate unsafe SQL identifier: {name!r}")
+    return name
 
 
 def _alembic_cfg(db_url: str, migrations_dir: Path = _MIGRATIONS_DIR) -> AlembicConfig:
@@ -141,7 +158,7 @@ def _clear_target(engine: Engine) -> None:
     if dialect == "sqlite":
         with engine.begin() as conn:
             for name in list(_iter_user_tables_sqlite(conn)):
-                conn.execute(text(f'DROP TABLE IF EXISTS "{name}"'))
+                conn.execute(text(f'DROP TABLE IF EXISTS "{_safe_ident(name)}"'))
     elif dialect == "postgresql":
         with engine.begin() as conn:
             conn.execute(text("DROP SCHEMA public CASCADE"))
@@ -171,7 +188,7 @@ def _delete_all_rows(engine: Engine) -> None:
     with engine.begin() as conn:
         for table in reversed(Base.metadata.sorted_tables):
             if insp.has_table(table.name):
-                conn.execute(text(f'DELETE FROM "{table.name}"'))
+                conn.execute(text(f'DELETE FROM "{_safe_ident(table.name)}"'))
 
 
 def _rebuild_sqlite_fts(engine: Engine) -> None:
@@ -476,9 +493,9 @@ class BackupService:
         for row in batch:
             for k in keys:
                 row.setdefault(k, None)
-        col_list = ", ".join(f'"{k}"' for k in keys)
+        col_list = ", ".join(f'"{_safe_ident(k)}"' for k in keys)
         placeholders = ", ".join(f":{k}" for k in keys)
-        sql = text(f'INSERT INTO "{table.name}" ({col_list}) VALUES ({placeholders})')
+        sql = text(f'INSERT INTO "{_safe_ident(table.name)}" ({col_list}) VALUES ({placeholders})')
         conn.execute(sql, batch)
 
 
@@ -491,11 +508,13 @@ def _reset_postgres_sequences_conn(conn: sa.Connection) -> None:
         if len(pk_cols) != 1:
             continue
         col = pk_cols[0]
+        t_ident = _safe_ident(table.name)
+        c_ident = _safe_ident(col.name)
         conn.execute(
             text(
                 "SELECT CASE WHEN pg_get_serial_sequence(:t, :c) IS NOT NULL "
                 f"THEN setval(pg_get_serial_sequence(:t, :c), "
-                f"COALESCE((SELECT MAX(\"{col.name}\") FROM \"{table.name}\"), 0) + 1, false) END"
+                f'COALESCE((SELECT MAX("{c_ident}") FROM "{t_ident}"), 0) + 1, false) END'
             ),
             {"t": table.name, "c": col.name},
         )
