@@ -51,6 +51,18 @@ def csv_safe_cell(cell: object) -> object:
     return cell
 
 
+def _reject_xml_entity_declarations(data: bytes) -> None:
+    """Raise ValidationError if data contains XML entity declarations.
+
+    Internal XML entity expansion (billion-laughs) can pin a CPU even though
+    stdlib expat blocks external-entity fetching. pymarc uses xml.sax
+    internally so we pre-scan the raw bytes instead of swapping the parser.
+    """
+    from compendium.domain.errors import ValidationError as _VE
+    if b"<!entity" in data.lower():
+        raise _VE("MARCXML contains XML entity declarations, which are not allowed.")
+
+
 class ImportMode(str, Enum):
     APPEND = "append"
     SKIP_DUPLICATES = "skip-duplicates"
@@ -754,7 +766,12 @@ class ImportService:
             source="marcxml", filename=filename, dry_run=options.dry_run
         )
         try:
-            records = parse_xml_to_array(stream)
+            raw = stream.read()
+            _reject_xml_entity_declarations(raw)
+            import io
+            records = parse_xml_to_array(io.BytesIO(raw))
+        except ValidationError:
+            raise
         except Exception as exc:
             raise ValidationError(f"Malformed MARCXML: {exc}") from exc
         for idx, record in enumerate(records, start=1):

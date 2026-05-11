@@ -24,6 +24,7 @@ dependencies = [
     "reportlab>=4.0",
     "python-barcode>=0.16.1",
     "cryptography>=42.0",
+    "defusedxml>=0.7.1",
 ]
 
 [project.optional-dependencies]

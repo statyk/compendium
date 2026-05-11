@@ -1,7 +1,7 @@
 import os
 import re
 import time
-import xml.etree.ElementTree as ET
+import defusedxml.ElementTree as ET
 from contextvars import ContextVar
 from typing import Protocol, runtime_checkable
 
