@@ -1,4 +1,5 @@
 import getpass
+import os
 
 import typer
 
@@ -6,6 +7,7 @@ from compendium.db.session import session_scope
 from compendium.domain.errors import DomainError
 from compendium.repositories.sql.audit_log_repository import SqlAuditLogRepository
 from compendium.repositories.sql.role_repository import SqlRoleRepository
+from compendium.repositories.sql.user_repository import SqlUserRepository
 from compendium.services.audit import AuditService
 from compendium.services.roles import RoleService
 
@@ -13,9 +15,24 @@ app = typer.Typer(help="Role management commands.")
 
 
 def _role_svc(session) -> RoleService:
+    actor = None
+    actor_username = os.environ.get("COMPENDIUM_ACTOR_USERNAME")
+    if actor_username:
+        actor = SqlUserRepository(session).get_by_username(actor_username)
+        if actor is None:
+            typer.echo(f"Error: COMPENDIUM_ACTOR_USERNAME '{actor_username}' not found", err=True)
+            raise typer.Exit(1)
+    elif SqlUserRepository(session).list(limit=1):
+        typer.echo(
+            "Error: Users exist in this database. Set COMPENDIUM_ACTOR_USERNAME to "
+            "an active user whose permissions cover the role operations you want to perform.",
+            err=True,
+        )
+        raise typer.Exit(1)
     return RoleService(
         role_repo=SqlRoleRepository(session),
         audit_svc=AuditService(SqlAuditLogRepository(session)),
+        actor=actor,
         actor_label=f"cli:{getpass.getuser()}",
         source="cli",
     )

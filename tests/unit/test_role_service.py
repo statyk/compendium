@@ -3,7 +3,7 @@ from unittest.mock import MagicMock
 import pytest
 
 from compendium.domain.errors import BusinessRuleError, ConflictError, NotFoundError
-from compendium.domain.models import Role
+from compendium.domain.models import AppUser, Role
 from compendium.services.roles import RoleService
 
 
@@ -11,6 +11,13 @@ def _role(id: int, name: str, permissions: list[str], is_system: bool = False) -
     r = Role(name=name, permissions=permissions, is_system=is_system)
     r.id = id
     return r
+
+
+def _actor(permissions: list[str]) -> AppUser:
+    actor = MagicMock(spec=AppUser)
+    actor.role = MagicMock(spec=Role)
+    actor.role.permissions = permissions
+    return actor
 
 
 def _svc(role_repo=None) -> RoleService:
@@ -112,3 +119,65 @@ class TestRoleClone:
         repo.get.return_value = None
         with pytest.raises(NotFoundError):
             RoleService(role_repo=repo).clone(99, "X")
+
+
+class TestPermissionSubsetGuardrail:
+    """C1: actor cannot grant permissions they don't hold."""
+
+    def _repo(self, existing_role=None):
+        repo = MagicMock()
+        repo.get_by_name.return_value = None
+        repo.get.return_value = existing_role
+        repo.add.side_effect = lambda r: r
+        return repo
+
+    def test_no_actor_bypasses_check(self):
+        repo = self._repo()
+        svc = RoleService(role_repo=repo, actor=None)
+        role = svc.create("FullAccess", ["*"])
+        assert role.permissions == ["*"]
+
+    def test_wildcard_actor_can_grant_anything(self):
+        repo = self._repo()
+        svc = RoleService(role_repo=repo, actor=_actor(["*"]))
+        role = svc.create("FullAccess", ["*"])
+        assert role.permissions == ["*"]
+
+    def test_subset_create_succeeds(self):
+        repo = self._repo()
+        svc = RoleService(role_repo=repo, actor=_actor(["item.view", "loan.checkout"]))
+        role = svc.create("LimitedRole", ["item.view"])
+        assert role.permissions == ["item.view"]
+
+    def test_create_excess_permission_blocked(self):
+        repo = self._repo()
+        svc = RoleService(role_repo=repo, actor=_actor(["item.view"]))
+        with pytest.raises(BusinessRuleError, match="system.manage"):
+            svc.create("EscalatedRole", ["item.view", "system.manage"])
+
+    def test_create_wildcard_blocked_for_non_wildcard_actor(self):
+        repo = self._repo()
+        svc = RoleService(role_repo=repo, actor=_actor(["item.view", "loan.checkout"]))
+        with pytest.raises(BusinessRuleError):
+            svc.create("Escalated", ["*"])
+
+    def test_update_excess_permission_blocked(self):
+        existing = _role(1, "Custom", ["item.view"])
+        repo = self._repo(existing_role=existing)
+        svc = RoleService(role_repo=repo, actor=_actor(["item.view"]))
+        with pytest.raises(BusinessRuleError, match="system.manage"):
+            svc.update(1, permissions=["item.view", "system.manage"])
+
+    def test_update_no_permission_change_skips_check(self):
+        existing = _role(1, "Custom", ["item.view"])
+        repo = self._repo(existing_role=existing)
+        svc = RoleService(role_repo=repo, actor=_actor(["item.view"]))
+        r = svc.update(1, name="Renamed")
+        assert r.name == "Renamed"
+
+    def test_clone_wildcard_role_blocked_for_non_wildcard_actor(self):
+        source = _role(1, "Administrator", ["*"], is_system=True)
+        repo = self._repo(existing_role=source)
+        svc = RoleService(role_repo=repo, actor=_actor(["item.view", "loan.checkout"]))
+        with pytest.raises(BusinessRuleError):
+            svc.clone(1, "AdminCopy")

@@ -6,6 +6,25 @@ from compendium.repositories.base import RoleRepository
 from compendium.services.audit import AuditAction, AuditEntityType, AuditService
 
 
+def _check_permission_subset(actor: AppUser | None, permissions: list[str]) -> None:
+    """Raise BusinessRuleError if actor cannot hold all requested permissions.
+
+    An actor with ["*"] may grant anything. actor=None (seed/system context)
+    bypasses the check. Prevents privilege escalation through role construction.
+    """
+    if actor is None:
+        return
+    if "*" in actor.role.permissions:
+        return
+    actor_perms = set(actor.role.permissions)
+    requested = set(permissions)
+    excess = requested - actor_perms
+    if excess:
+        raise BusinessRuleError(
+            f"You cannot grant permissions you do not hold: {', '.join(sorted(excess))}"
+        )
+
+
 class RoleService:
     def __init__(
         self,
@@ -28,6 +47,7 @@ class RoleService:
         return self._roles.get(role_id)
 
     def create(self, name: str, permissions: list[str]) -> Role:
+        _check_permission_subset(self._actor, permissions)
         if self._roles.get_by_name(name) is not None:
             raise ConflictError(f"A role named '{name}' already exists.")
         role = Role(name=name, permissions=permissions, is_system=False)
@@ -59,6 +79,7 @@ class RoleService:
                 raise ConflictError(f"A role named '{name}' already exists.")
             role.name = name
         if permissions is not None:
+            _check_permission_subset(self._actor, permissions)
             role.permissions = permissions
         self._roles.update(role)
         after = {"name": role.name, "permissions": list(role.permissions)}
@@ -76,6 +97,7 @@ class RoleService:
             raise NotFoundError(f"No role with id={role_id}")
         if self._roles.get_by_name(new_name) is not None:
             raise ConflictError(f"A role named '{new_name}' already exists.")
+        _check_permission_subset(self._actor, source.permissions)
         role = Role(name=new_name, permissions=list(source.permissions), is_system=False)
         self._roles.add(role)
         self._record(
