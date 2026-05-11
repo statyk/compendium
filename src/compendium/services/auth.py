@@ -26,6 +26,20 @@ _WEAK_PASSWORDS = frozenset({
     "compendium", "library",
 })
 
+# bcrypt silently truncates inputs beyond 72 bytes; enforce the cap explicitly.
+_BCRYPT_MAX_PASSWORD_BYTES = 72
+# Minimum and default bcrypt cost factors. The DB setting may go higher but
+# cannot go below _MIN_BCRYPT_ROUNDS at hash time.
+_MIN_BCRYPT_ROUNDS = 10
+_DEFAULT_BCRYPT_ROUNDS = 12
+
+# Precomputed hash for the "user not found" path in authenticate().
+# Running bcrypt here equalises timing so callers cannot distinguish a missing
+# user from a wrong password by wall-clock measurement.
+_DUMMY_HASH: str = bcrypt.hashpw(
+    b"compendium-dummy-do-not-match", bcrypt.gensalt(_DEFAULT_BCRYPT_ROUNDS)
+).decode()
+
 
 def _validate_password_strength(password: str) -> None:
     from compendium.services.site_settings import get_site_setting
@@ -41,12 +55,18 @@ def _validate_password_strength(password: str) -> None:
 
 
 def hash_password(password: str) -> str:
+    if len(password.encode("utf-8")) > _BCRYPT_MAX_PASSWORD_BYTES:
+        raise BusinessRuleError(
+            f"Password may not exceed {_BCRYPT_MAX_PASSWORD_BYTES} bytes when UTF-8 encoded."
+        )
     from compendium.services.site_settings import get_site_setting
-    rounds = int(get_site_setting("bcrypt_rounds"))
+    rounds = max(int(get_site_setting("bcrypt_rounds")), _MIN_BCRYPT_ROUNDS)
     return bcrypt.hashpw(password.encode(), bcrypt.gensalt(rounds)).decode()
 
 
 def verify_password(plain: str, hashed: str) -> bool:
+    if len(plain.encode("utf-8")) > _BCRYPT_MAX_PASSWORD_BYTES:
+        return False
     return bcrypt.checkpw(plain.encode(), hashed.encode())
 
 
@@ -115,7 +135,11 @@ class AuthService:
 
     def authenticate(self, username: str, password: str) -> AppUser:
         user = self._users.get_by_username(username)
-        if user is None or not verify_password(password, user.password_hash):
+        if user is None:
+            # Always run bcrypt to equalise timing and prevent user-enumeration.
+            verify_password(password, _DUMMY_HASH)
+            raise AuthError("Invalid username or password")
+        if not verify_password(password, user.password_hash):
             raise AuthError("Invalid username or password")
         if not user.is_active:
             raise AuthError("Account is inactive")

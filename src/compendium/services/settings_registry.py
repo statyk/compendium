@@ -693,12 +693,12 @@ def _register_builtins() -> None:
             help_text=(
                 "bcrypt cost factor used when hashing new passwords. "
                 "Higher values are slower and more resistant to brute-force. "
-                "Must be between 4 and 15. Existing password hashes are "
+                "Must be between 10 and 15. Existing password hashes are "
                 "not affected (bcrypt embeds the cost in each hash)."
             ),
             validator=lambda v: (
-                None if 4 <= int(v) <= 15
-                else "bcrypt_rounds must be between 4 and 15"
+                None if 10 <= int(v) <= 15
+                else "bcrypt_rounds must be between 10 and 15"
             ),
         )
     )

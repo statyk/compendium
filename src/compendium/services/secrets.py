@@ -63,9 +63,13 @@ def _load_fernet() -> Fernet:
         )
     try:
         return Fernet(raw.encode() if isinstance(raw, str) else raw)
-    except Exception as exc:
+    except (TypeError, AttributeError) as exc:
         raise SecretKeyMissingError(
-            f"{_ENV_VAR} is not a valid Fernet key: {exc}. "
+            f"{_ENV_VAR} is missing or not a string (got {type(raw).__name__})"
+        ) from exc
+    except ValueError as exc:
+        raise SecretKeyMissingError(
+            f"{_ENV_VAR} is malformed: {exc}. "
             "Run 'compendium keygen --secret' to generate a new one."
         ) from exc
 

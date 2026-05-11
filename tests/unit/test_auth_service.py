@@ -5,7 +5,14 @@ import pytest
 from compendium.config.settings import Settings
 from compendium.domain.errors import AuthError, BusinessRuleError, ConflictError, NotFoundError
 from compendium.domain.models import AppUser, Role
-from compendium.services.auth import AuthService, assignable_roles, has_permission, hash_password, verify_password
+from compendium.services.auth import (
+    AuthService,
+    _BCRYPT_MAX_PASSWORD_BYTES,
+    assignable_roles,
+    has_permission,
+    hash_password,
+    verify_password,
+)
 
 
 def _settings() -> Settings:
@@ -316,6 +323,68 @@ class TestAssignableRoles:
         admin = self._role("Administrator", ["*"], 1)
         result = assignable_roles(["patron.manage", "item.view"], [admin])
         assert not any(r.name == "Administrator" for r in result)
+
+
+class TestBcryptCapAndTimingOracle:
+    """M1 (bcrypt 72-byte cap) + M2 (timing oracle) + M7 (rounds floor)."""
+
+    def test_hash_password_rejects_oversized(self):
+        oversized = "x" * (_BCRYPT_MAX_PASSWORD_BYTES + 1)
+        with pytest.raises(BusinessRuleError, match="72 bytes"):
+            hash_password(oversized)
+
+    def test_hash_password_accepts_exactly_at_cap(self):
+        # Exactly 72 ASCII bytes must succeed (border case).
+        boundary = "a" * _BCRYPT_MAX_PASSWORD_BYTES
+        h = hash_password(boundary)
+        assert verify_password(boundary, h)
+
+    def test_verify_password_rejects_oversized(self):
+        # Build a valid hash for the first 72 bytes, then verify a 73-byte input
+        # that shares the same prefix — bcrypt would consider them equal without
+        # the cap guard.
+        prefix = "a" * _BCRYPT_MAX_PASSWORD_BYTES
+        h = hash_password(prefix)
+        oversized = prefix + "x"
+        assert not verify_password(oversized, h)
+
+    def test_timing_oracle_dummy_hash_runs_bcrypt(self):
+        import time
+
+        role = _librarian_role()
+        user = _make_user(role)
+        svc_known = _service(user=user)
+        svc_unknown = _service()
+
+        t_start = time.monotonic_ns()
+        with pytest.raises(Exception):
+            svc_known.authenticate("alice", "wrong_password")
+        t_known = time.monotonic_ns() - t_start
+
+        t_start = time.monotonic_ns()
+        with pytest.raises(Exception):
+            svc_unknown.authenticate("nobody", "wrong_password")
+        t_unknown = time.monotonic_ns() - t_start
+
+        # Both paths should exercise bcrypt; neither should be 10× faster.
+        ratio = t_unknown / max(t_known, 1)
+        assert 0.1 < ratio < 10, (
+            f"Timing ratio unknown/known={ratio:.2f} suggests bcrypt skipped "
+            f"on unknown-user path (known={t_known}ns, unknown={t_unknown}ns)"
+        )
+
+    def test_bcrypt_rounds_floor_applied(self, monkeypatch):
+        import compendium.services.site_settings as ss
+        monkeypatch.setenv("COMPENDIUM_BCRYPT_ROUNDS", "4")
+        ss.invalidate_cache()
+        try:
+            h = hash_password("test-password-ok")
+            # Extract the cost from the $2b$NN$ prefix — must be >= 10.
+            cost = int(h.split("$")[2])
+            assert cost >= 10, f"Expected cost >= 10, got {cost}"
+        finally:
+            monkeypatch.delenv("COMPENDIUM_BCRYPT_ROUNDS", raising=False)
+            ss.invalidate_cache()
 
 
 class TestPasswordStrength:

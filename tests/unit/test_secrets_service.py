@@ -115,6 +115,12 @@ def test_check_canary_ok(monkeypatch):
     assert result == CanaryResult.OK
 
 
+def test_malformed_secret_key_raises_with_malformed_message(monkeypatch):
+    monkeypatch.setenv("COMPENDIUM_SECRET_KEY", "not-valid-base64!")
+    with pytest.raises(SecretKeyMissingError, match="malformed"):
+        encrypt("anything")
+
+
 def test_check_canary_mismatch(monkeypatch):
     monkeypatch.setenv("COMPENDIUM_SECRET_KEY", _VALID_KEY)
     from compendium.services.secrets import _CANARY_PLAINTEXT, check_canary
