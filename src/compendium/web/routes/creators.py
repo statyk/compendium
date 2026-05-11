@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from urllib.parse import urlparse
+
 from fastapi import APIRouter, Depends, Form, Query, Request
 from fastapi.responses import RedirectResponse
 from sqlalchemy.orm import Session
@@ -48,7 +50,7 @@ def _render(name: str, request: Request, ctx: dict, status_code: int = 200):
     ctx_clean["csrf_token"] = token
     resp = templates.TemplateResponse(request, name, ctx_clean, status_code=status_code)
     if fresh:
-        set_csrf_cookie(resp, fresh, get_settings().jwt_secret_key)
+        set_csrf_cookie(resp, fresh)
     return resp
 
 
@@ -120,5 +122,6 @@ def creator_edit_submit(
                 "error": str(exc),
             },
         )
-    target = return_to or "/ui/catalog"
+    parsed = urlparse(return_to or "")
+    target = return_to if (return_to and parsed.netloc == "" and return_to.startswith("/ui/")) else "/ui/catalog"
     return RedirectResponse(target, status_code=303)
