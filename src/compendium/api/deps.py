@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from datetime import timezone
+
 import jwt
 from fastapi import Depends, HTTPException
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
@@ -15,26 +17,50 @@ from compendium.services.auth import has_permission
 _bearer = HTTPBearer(auto_error=False)
 
 
+def _decode_api_token(token: str) -> dict | None:
+    settings = get_settings()
+    try:
+        return jwt.decode(
+            token,
+            settings.jwt_secret_key,
+            algorithms=[settings.jwt_algorithm],
+            audience="compendium",
+        )
+    except jwt.PyJWTError:
+        return None
+
+
+def _check_pwd_iat(payload: dict, user: AppUser) -> bool:
+    """Return False if the token's pwd_iat predates the user's password_changed_at."""
+    pwd_iat = payload.get("pwd_iat")
+    if pwd_iat is None or user.password_changed_at is None:
+        return True
+    user_ts = int(user.password_changed_at.replace(tzinfo=timezone.utc).timestamp())
+    return int(pwd_iat) >= user_ts
+
+
 def get_current_user(
     creds: HTTPAuthorizationCredentials | None = Depends(_bearer),
     session: Session = Depends(get_session),
 ) -> AppUser:
     if creds is None:
         raise HTTPException(status_code=401, detail="Not authenticated")
-    settings = get_settings()
+    payload = _decode_api_token(creds.credentials)
+    if payload is None:
+        raise HTTPException(status_code=401, detail="Invalid token")
+    if payload.get("exp") is not None:
+        import time
+        if payload["exp"] < time.time():
+            raise HTTPException(status_code=401, detail="Token has expired")
     try:
-        payload = jwt.decode(
-            creds.credentials,
-            settings.jwt_secret_key,
-            algorithms=[settings.jwt_algorithm],
-        )
-    except jwt.ExpiredSignatureError:
-        raise HTTPException(status_code=401, detail="Token has expired") from None
-    except jwt.PyJWTError:
+        user_id = int(payload["sub"])
+    except (KeyError, ValueError):
         raise HTTPException(status_code=401, detail="Invalid token") from None
-    user = SqlUserRepository(session).get(int(payload["sub"]))
+    user = SqlUserRepository(session).get(user_id)
     if user is None or not user.is_active:
         raise HTTPException(status_code=401, detail="User not found or inactive")
+    if not _check_pwd_iat(payload, user):
+        raise HTTPException(status_code=401, detail="Session invalidated — please log in again")
     return user
 
 
@@ -44,17 +70,17 @@ def get_optional_user(
 ) -> AppUser | None:
     if creds is None:
         return None
-    settings = get_settings()
-    try:
-        payload = jwt.decode(
-            creds.credentials,
-            settings.jwt_secret_key,
-            algorithms=[settings.jwt_algorithm],
-        )
-    except jwt.PyJWTError:
+    payload = _decode_api_token(creds.credentials)
+    if payload is None:
         return None
-    user = SqlUserRepository(session).get(int(payload["sub"]))
+    try:
+        user_id = int(payload["sub"])
+    except (KeyError, ValueError):
+        return None
+    user = SqlUserRepository(session).get(user_id)
     if user is None or not user.is_active:
+        return None
+    if not _check_pwd_iat(payload, user):
         return None
     return user
 

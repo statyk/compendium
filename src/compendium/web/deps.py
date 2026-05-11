@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from datetime import timezone
+
 import jwt
 from fastapi import Cookie, Depends, HTTPException, Request
 from sqlalchemy.orm import Session
@@ -28,9 +30,23 @@ class NoPatronAccountException(Exception):
 def _decode_token(token: str) -> dict | None:
     settings = get_settings()
     try:
-        return jwt.decode(token, settings.jwt_secret_key, algorithms=[settings.jwt_algorithm])
+        return jwt.decode(
+            token,
+            settings.jwt_secret_key,
+            algorithms=[settings.jwt_algorithm],
+            audience="compendium",
+        )
     except jwt.PyJWTError:
         return None
+
+
+def _check_pwd_iat(payload: dict, user: AppUser) -> bool:
+    """Return False if the token's pwd_iat predates the user's password_changed_at."""
+    pwd_iat = payload.get("pwd_iat")
+    if pwd_iat is None or user.password_changed_at is None:
+        return True
+    user_ts = int(user.password_changed_at.replace(tzinfo=timezone.utc).timestamp())
+    return int(pwd_iat) >= user_ts
 
 
 def set_auth_cookie(response, token: str) -> None:
@@ -58,8 +74,14 @@ def get_web_user(
     payload = _decode_token(auth)
     if payload is None:
         return None
-    user = SqlUserRepository(session).get(int(payload["sub"]))
+    try:
+        user_id = int(payload["sub"])
+    except (KeyError, ValueError):
+        return None
+    user = SqlUserRepository(session).get(user_id)
     if user is None or not user.is_active:
+        return None
+    if not _check_pwd_iat(payload, user):
         return None
     return user
 

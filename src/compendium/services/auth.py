@@ -122,14 +122,19 @@ class AuthService:
         return user
 
     def issue_token(self, user: AppUser) -> str:
-        expire = datetime.now(timezone.utc) + timedelta(minutes=self._settings.jwt_expire_minutes)
+        now = datetime.now(timezone.utc)
+        expire = now + timedelta(minutes=self._settings.jwt_expire_minutes)
         payload: dict[str, Any] = {
             "sub": str(user.id),
             "username": user.username,
             "role": user.role.name,
             "permissions": user.role.permissions,
             "exp": expire,
+            "iat": now,
+            "aud": "compendium",
         }
+        if user.password_changed_at is not None:
+            payload["pwd_iat"] = int(user.password_changed_at.replace(tzinfo=timezone.utc).timestamp())
         return jwt.encode(
             payload,
             self._settings.jwt_secret_key,
@@ -169,6 +174,7 @@ class AuthService:
         if user is None:
             raise NotFoundError(f"No user with username '{username}'")
         user.password_hash = hash_password(password)
+        user.password_changed_at = datetime.now(timezone.utc)
         result = self._users.update(user)
         self._record(
             AuditEntityType.USER,
@@ -264,6 +270,7 @@ class AuthService:
                 token,
                 self._settings.jwt_secret_key,
                 algorithms=[self._settings.jwt_algorithm],
+                audience="compendium",
             )
         except jwt.ExpiredSignatureError as exc:
             raise AuthError("Token has expired") from exc

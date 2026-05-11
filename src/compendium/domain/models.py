@@ -146,6 +146,7 @@ class AppUser(Base):
     updated_at: Mapped[datetime | None] = mapped_column(
         UtcDateTime, onupdate=func.now()
     )
+    password_changed_at: Mapped[datetime | None] = mapped_column(UtcDateTime, nullable=True)
 
     role: Mapped[Role] = relationship(back_populates="users")
     patron: Mapped[Patron | None] = relationship(
