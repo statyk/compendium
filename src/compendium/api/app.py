@@ -7,6 +7,7 @@ from fastapi import FastAPI, Request
 from fastapi.responses import HTMLResponse, RedirectResponse
 from fastapi.staticfiles import StaticFiles
 from starlette.middleware.base import BaseHTTPMiddleware
+from starlette.middleware.trustedhost import TrustedHostMiddleware
 
 from compendium.api.routes import (
     audit,
@@ -61,6 +62,10 @@ class _SecurityHeadersMiddleware(BaseHTTPMiddleware):
         response.headers.setdefault("X-Frame-Options", "DENY")
         response.headers.setdefault("X-Content-Type-Options", "nosniff")
         response.headers.setdefault("Referrer-Policy", "no-referrer")
+        if request.url.scheme == "https":
+            response.headers.setdefault(
+                "Strict-Transport-Security", "max-age=63072000; includeSubDomains"
+            )
         response.headers.setdefault(
             "Content-Security-Policy",
             "default-src 'self'; img-src 'self' data: https://covers.openlibrary.org "
@@ -135,6 +140,11 @@ def create_app() -> FastAPI:
 
     app = FastAPI(title="Compendium", version="0.1.0")
     app.add_middleware(_SecurityHeadersMiddleware)
+    allowed_hosts_raw = get_settings().allowed_hosts
+    if allowed_hosts_raw:
+        hosts = [h.strip() for h in allowed_hosts_raw.split(",") if h.strip()]
+        if hosts:
+            app.add_middleware(TrustedHostMiddleware, allowed_hosts=hosts)
 
     # JSON API routes
     app.include_router(branches.router, prefix="/branches", tags=["branches"])

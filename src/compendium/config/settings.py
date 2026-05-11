@@ -67,6 +67,11 @@ class Settings(BaseSettings):
     # editability would let a compromised admin token raise the cap to
     # bypass the protection.
     max_upload_bytes: int = 100 * 1024 * 1024
+    # Comma-separated list of allowed Host header values for TrustedHostMiddleware.
+    # When unset (the default), any Host is accepted — backwards-compatible.
+    # Production: set to your public hostname(s),
+    # e.g. COMPENDIUM_ALLOWED_HOSTS=library.example.org,www.library.example.org
+    allowed_hosts: str | None = None
     # Library name — printed on patron cards, shown in emails, and (future)
     # in the nav brand. First of several Settings that should migrate to a
     # DB-backed site_setting table when that slice lands; see CLAUDE.md.
