@@ -273,7 +273,7 @@ The primary book metadata adapter is chosen at runtime based on three factors:
 - Open Library primary → Google Books cover (via Volumes API; requires key).
 - Google Books primary → Open Library covers-by-ISBN endpoint (no key required; HEAD probe with `?default=false` to detect absence).
 
-**Cross-source miss fallback:** when Google Books is primary and returns a definitive not-found for an ISBN (common for long-tail/academic titles), `lookup_metadata` automatically tries Open Library as a secondary source. Both results are cached under their respective adapter namespaces.
+**Cross-source miss fallback:** when Google Books is primary and returns a definitive not-found for an ISBN (common for long-tail/academic titles) or raises an HTTP/transport error (e.g. HTTP 400 from a malformed API key, 429 rate-limit, 5xx), `lookup_metadata` automatically tries Open Library as a secondary source. Both results are cached under their respective adapter namespaces.
 
 ### Cover image (legacy note)
 

@@ -24,6 +24,7 @@ from compendium.repositories.base import (
 from compendium.services._normalization import compute_sort_title, normalize_creator_name
 from compendium.services.audit import AuditAction, AuditEntityType, AuditService
 from compendium.services.metadata import (
+    get_book_primary_adapter_name,
     lookup_cover_fallbacks,
     lookup_metadata,
     lookup_metadata_with_source,
@@ -436,7 +437,11 @@ class CatalogService:
                 ),
             )
 
-        intended_source = _SOURCE_FOR_MEDIA_TYPE.get(media_type_code, "external")
+        intended_source = (
+            get_book_primary_adapter_name()
+            if media_type_code == "book"
+            else _SOURCE_FOR_MEDIA_TYPE.get(media_type_code, "external")
+        )
         _session = self._works._s
         try:
             data, actual_source = lookup_metadata_with_source(
@@ -465,7 +470,6 @@ class CatalogService:
             )
 
         if media_type_code == "book" and not data.get("cover_image_url") and work.isbn:
-            from compendium.services.metadata import get_book_primary_adapter_name
             from compendium.services.site_settings import get_site_setting
 
             fallback = lookup_cover_fallbacks(
