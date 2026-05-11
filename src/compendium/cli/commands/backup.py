@@ -20,21 +20,25 @@ def backup_command(
     no_audit: bool = typer.Option(False, "--no-audit", help="Exclude the audit log from the backup."),
     include_secret_key: bool = typer.Option(
         False,
-        "--include-secret-key",
+        "--dangerously-include-secret-key",
         help=(
-            "Bundle COMPENDIUM_SECRET_KEY into the backup manifest. "
-            "Warning: this defeats encryption-at-rest if the backup file is exposed."
+            "Bundle COMPENDIUM_SECRET_KEY into the backup tarball. "
+            "Anyone with the file can decrypt every stored secret. "
+            "Prefer keeping the key out-of-band (e.g. in a password manager)."
         ),
     ),
+    yes: bool = typer.Option(False, "--yes", "-y", help="Skip the confirmation prompt."),
 ) -> None:
     """Write a portable backup tarball."""
     if include_secret_key:
         typer.echo(
-            "Warning: --include-secret-key bundles the encryption key with the backup. "
-            "Ensure the backup file is stored securely — it contains both the ciphertext "
-            "and the key needed to decrypt it.",
+            "WARNING: --dangerously-include-secret-key bundles the Fernet encryption key "
+            "into the backup tarball. Anyone with the file can decrypt every stored secret. "
+            "Prefer keeping the key out-of-band (e.g. in a password manager).",
             err=True,
         )
+        if not yes:
+            typer.confirm("Proceed anyway?", abort=True)
     settings = get_settings()
     to_stdout = is_stdio(output)
     with session_scope() as session:
