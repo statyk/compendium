@@ -198,6 +198,47 @@ docker compose exec compendium compendium maintenance send-queued-notifications
 docker compose exec compendium compendium maintenance expire-holds
 ```
 
+## Secret management
+
+By default secrets are passed as plain env vars via `.env`. This is
+convenient for quick-start and development, but the values are visible to
+anything that can run `docker inspect` or read `/proc/<pid>/environ` on the
+host.
+
+For production deployments Compendium supports the **`*_FILE`** pattern used
+by official Docker images (postgres, redis, etc.): set the env var to a
+**file path** and Compendium reads the secret from the file at startup. This
+allows you to use [Docker Swarm secrets](https://docs.docker.com/engine/swarm/secrets/)
+or simply world-unreadable files on disk.
+
+### Supported `*_FILE` variables
+
+| `*_FILE` env var | Populates setting |
+|---|---|
+| `COMPENDIUM_JWT_SECRET_KEY_FILE` | JWT signing key |
+| `COMPENDIUM_SECRET_KEY_FILE` | Fernet encryption key |
+| `COMPENDIUM_SMTP_PASSWORD_FILE` | SMTP password |
+| `COMPENDIUM_TMDB_API_KEY_FILE` | TMDb API key |
+| `COMPENDIUM_GOOGLE_BOOKS_API_KEY_FILE` | Google Books API key |
+| `POSTGRES_PASSWORD_FILE` | Postgres password (assembled into DATABASE_URL by entrypoint) |
+
+The direct env var always wins if both are set.
+
+### Quick setup with file-based secrets
+
+```bash
+mkdir -p docker/secrets
+chmod 700 docker/secrets
+printf 'my-strong-db-password'     > docker/secrets/postgres_password
+printf 'my-long-random-jwt-secret' > docker/secrets/compendium_jwt
+chmod 400 docker/secrets/*
+```
+
+Then edit `docker/docker-compose.yml`: uncomment the `secrets:` top-level
+block and the `*_FILE` env vars in each service, comment out the plain env
+var alternatives. The compose file contains inline comments showing exactly
+what to change.
+
 ## What's NOT exposed
 
 - The REST API (`/auth`, `/works/search`, `/items`, `/patrons`, …) is only

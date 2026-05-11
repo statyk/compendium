@@ -1,3 +1,4 @@
+import os
 from typing import Literal
 
 from pydantic import model_validator
@@ -5,6 +6,18 @@ from pydantic_settings import BaseSettings, SettingsConfigDict
 
 INSECURE_JWT_DEFAULT = "insecure-default-change-in-production"
 MIN_JWT_SECRET_LENGTH = 32
+
+# Mapping from pydantic field name → the *_FILE env var that can supply its value.
+# When the direct env var is absent/empty AND the _FILE var points to a readable
+# file, the file's contents (newline-stripped) are used as the field value.
+# This mirrors the pattern used by official Docker images (postgres, redis, etc.).
+_SECRET_FILE_ENV_MAP: dict[str, str] = {
+    "jwt_secret_key": "COMPENDIUM_JWT_SECRET_KEY_FILE",
+    "secret_key": "COMPENDIUM_SECRET_KEY_FILE",
+    "smtp_password": "COMPENDIUM_SMTP_PASSWORD_FILE",
+    "tmdb_api_key": "COMPENDIUM_TMDB_API_KEY_FILE",
+    "google_books_api_key": "COMPENDIUM_GOOGLE_BOOKS_API_KEY_FILE",
+}
 
 
 class InsecureConfigError(RuntimeError):
@@ -27,6 +40,30 @@ class Settings(BaseSettings):
         # fields fall back to their Python defaults instead of crashing.
         if isinstance(data, dict):
             return {k: v for k, v in data.items() if v != ""}
+        return data
+
+    @model_validator(mode="before")
+    @classmethod
+    def _load_secrets_from_files(cls, data: object) -> object:
+        """Honor *_FILE env-var variants for sensitive settings.
+
+        If e.g. COMPENDIUM_JWT_SECRET_KEY_FILE=/run/secrets/jwt_key is set and
+        COMPENDIUM_JWT_SECRET_KEY (or its field) is absent, the file's contents
+        are used. The direct env var always takes precedence over the file.
+        """
+        if not isinstance(data, dict):
+            return data
+        for field, file_env in _SECRET_FILE_ENV_MAP.items():
+            if field in data:
+                continue  # direct value wins
+            file_path = os.environ.get(file_env)
+            if not file_path:
+                continue
+            try:
+                with open(file_path) as fh:
+                    data[field] = fh.read().rstrip("\r\n")
+            except OSError:
+                pass  # missing or unreadable — leave unset, let normal validation handle it
         return data
 
     database_url: str = "sqlite:///compendium.db"

@@ -4,6 +4,19 @@ set -eu
 : "${COMPENDIUM_ADMIN_USERNAME:=admin}"
 : "${COMPENDIUM_ADMIN_ROLE:=Administrator}"
 
+# Support *_FILE variants for secrets (mirrors the pattern used by postgres/redis images).
+# If POSTGRES_PASSWORD_FILE is set and COMPENDIUM_DATABASE_URL is not already set,
+# assemble the database URL from the file contents.
+if [ -n "${POSTGRES_PASSWORD_FILE:-}" ] && [ -z "${COMPENDIUM_DATABASE_URL:-}" ]; then
+    if [ ! -r "${POSTGRES_PASSWORD_FILE}" ]; then
+        echo "[compendium] ERROR: POSTGRES_PASSWORD_FILE='${POSTGRES_PASSWORD_FILE}' is not readable." >&2
+        exit 1
+    fi
+    _pg_pass="$(cat "${POSTGRES_PASSWORD_FILE}")"
+    export COMPENDIUM_DATABASE_URL="postgresql+psycopg://compendium:${_pg_pass}@db:5432/compendium"
+    unset _pg_pass
+fi
+
 echo "[compendium] Running database migrations..."
 compendium db init
 
