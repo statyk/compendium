@@ -1002,6 +1002,114 @@ def _get_adapter(media_type_code: str) -> MetadataAdapter:
     return adapter
 
 
+def _adapter_source_name(adapter: "MetadataAdapter") -> str | None:
+    """Return the canonical source-name string for a known adapter, or None."""
+    if adapter is _GB_ADAPTER:
+        return "googlebooks"
+    if adapter is _OL_ADAPTER:
+        return "openlibrary"
+    return None
+
+
+def lookup_metadata_with_source(
+    media_type_code: str,
+    kind: str,
+    value: str,
+    *,
+    bypass_cache: bool = False,
+    session=None,
+    write_buffer=None,
+) -> tuple[dict | None, str | None]:
+    """Like ``lookup_metadata`` but also returns the name of the adapter that
+    produced the non-None result ('googlebooks', 'openlibrary', etc.), or None
+    when nothing was found.
+
+    When Google Books is the primary book adapter and it raises an
+    ``ExternalLookupError`` (e.g. HTTP 400 from a malformed key), this function
+    catches the error and falls back to Open Library rather than propagating the
+    exception — matching the existing None-result fallback behaviour."""
+    # Make the session visible to is_gb_quota_exhausted (called from _resolve_book_adapter
+    # inside _get_adapter) so it can piggyback on the open connection instead of opening
+    # a duplicate one.  _mark_gb_quota_exhausted intentionally does NOT use this — it
+    # opens its own short-lived session so the sentinel survives any outer rollback.
+    _tok = _active_lookup_session.set(session) if session is not None else None
+    try:
+        adapter = _get_adapter(media_type_code)
+        primary_source = _adapter_source_name(adapter)
+
+        gb_primary = media_type_code == "book" and adapter is _GB_ADAPTER
+
+        if session is None:
+            if gb_primary:
+                # Catch GB errors so we can fall through to OL; other adapters propagate.
+                try:
+                    result = adapter.lookup(kind, value)
+                except ExternalLookupError:
+                    result = None
+            else:
+                result = adapter.lookup(kind, value)
+            if result is not None:
+                return result, primary_source
+            # GB miss or error → try OL as a secondary source.
+            if gb_primary:
+                try:
+                    result = _OL_ADAPTER.lookup(kind, value)
+                except ExternalLookupError:
+                    result = None
+                if result is not None:
+                    return result, "openlibrary"
+            return None, None
+
+        from compendium.services.metadata_cache import get_or_fetch
+
+        adapter_name = type(adapter).__name__
+        if gb_primary:
+            try:
+                result = get_or_fetch(
+                    session,
+                    adapter_name,
+                    kind,
+                    value,
+                    lambda: adapter.lookup(kind, value),
+                    bypass_cache=bypass_cache,
+                    write_buffer=write_buffer,
+                )
+            except ExternalLookupError:
+                result = None
+        else:
+            result = get_or_fetch(
+                session,
+                adapter_name,
+                kind,
+                value,
+                lambda: adapter.lookup(kind, value),
+                bypass_cache=bypass_cache,
+                write_buffer=write_buffer,
+            )
+        if result is not None:
+            return result, primary_source
+        # GB miss or error → try OL; cache both under their own namespaces.
+        if gb_primary:
+            try:
+                result = get_or_fetch(
+                    session,
+                    type(_OL_ADAPTER).__name__,
+                    kind,
+                    value,
+                    lambda: _OL_ADAPTER.lookup(kind, value),
+                    bypass_cache=bypass_cache,
+                    write_buffer=write_buffer,
+                )
+            except ExternalLookupError:
+                result = None
+            if result is not None:
+                return result, "openlibrary"
+        return None, None
+    finally:
+        if _tok is not None:
+            _active_lookup_session.reset(_tok)
+
+
 def lookup_metadata(
     media_type_code: str,
     kind: str,
@@ -1011,45 +1119,10 @@ def lookup_metadata(
     session=None,
     write_buffer=None,
 ) -> dict | None:
-    # Make the session visible to is_gb_quota_exhausted (called from _resolve_book_adapter
-    # inside _get_adapter) so it can piggyback on the open connection instead of opening
-    # a duplicate one.  _mark_gb_quota_exhausted intentionally does NOT use this — it
-    # opens its own short-lived session so the sentinel survives any outer rollback.
-    _tok = _active_lookup_session.set(session) if session is not None else None
-    try:
-        adapter = _get_adapter(media_type_code)
-
-        if session is None:
-            result = adapter.lookup(kind, value)
-            # When GB is primary and returns None, try OL as a secondary source.
-            if result is None and media_type_code == "book" and adapter is _GB_ADAPTER:
-                result = _OL_ADAPTER.lookup(kind, value)
-            return result
-
-        from compendium.services.metadata_cache import get_or_fetch
-
-        adapter_name = type(adapter).__name__
-        result = get_or_fetch(
-            session,
-            adapter_name,
-            kind,
-            value,
-            lambda: adapter.lookup(kind, value),
-            bypass_cache=bypass_cache,
-            write_buffer=write_buffer,
-        )
-        # When GB is primary and returns None, try OL; cache both under their namespaces.
-        if result is None and media_type_code == "book" and adapter is _GB_ADAPTER:
-            result = get_or_fetch(
-                session,
-                type(_OL_ADAPTER).__name__,
-                kind,
-                value,
-                lambda: _OL_ADAPTER.lookup(kind, value),
-                bypass_cache=bypass_cache,
-                write_buffer=write_buffer,
-            )
-        return result
-    finally:
-        if _tok is not None:
-            _active_lookup_session.reset(_tok)
+    result, _ = lookup_metadata_with_source(
+        media_type_code, kind, value,
+        bypass_cache=bypass_cache,
+        session=session,
+        write_buffer=write_buffer,
+    )
+    return result
