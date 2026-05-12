@@ -1,6 +1,5 @@
 from collections.abc import Callable
 from contextlib import AbstractContextManager
-from contextvars import ContextVar
 from functools import lru_cache
 
 from sqlalchemy import Engine, create_engine, event
@@ -8,10 +7,8 @@ from sqlalchemy.orm import Session
 
 from compendium.config.settings import Settings
 
-_bound_engine: ContextVar[Engine | None] = ContextVar("_bound_engine", default=None)
-_bound_session_scope: ContextVar[
-    Callable[[], AbstractContextManager[Session]] | None
-] = ContextVar("_bound_session_scope", default=None)
+_bound_engine: Engine | None = None
+_bound_session_scope: Callable[[], AbstractContextManager[Session]] | None = None
 
 
 def bind(
@@ -27,6 +24,11 @@ def bind(
     engine with its standard semantics (autoflush=False, expire_on_commit=False,
     commit on context exit, rollback on exception).
 
+    The binding is process-wide and visible from any thread — suitable for
+    desktop embedders that install the binding once at startup and then spin up
+    worker threads.  ``bind()`` is not safe to call from multiple threads
+    concurrently; the intended usage is a single call during application init.
+
     **Contract for host-supplied ``session_scope``:** the context manager MUST
     commit on normal exit and rollback on exception.  Compendium's internal
     writers (metadata_cache, GB quota sentinel, site_settings cache refresh)
@@ -37,22 +39,24 @@ def bind(
     Call ``bind()`` again to replace an existing binding.  Call ``unbind()``
     to revert to server-mode defaults.
     """
-    _bound_engine.set(engine)
-    _bound_session_scope.set(session_scope)
+    global _bound_engine, _bound_session_scope
+    _bound_engine = engine
+    _bound_session_scope = session_scope
 
 
 def unbind() -> None:
     """Revert to server-mode engine/session defaults."""
-    _bound_engine.set(None)
-    _bound_session_scope.set(None)
+    global _bound_engine, _bound_session_scope
+    _bound_engine = None
+    _bound_session_scope = None
 
 
 def bound_engine() -> Engine | None:
-    return _bound_engine.get()
+    return _bound_engine
 
 
 def bound_session_scope() -> Callable[[], AbstractContextManager[Session]] | None:
-    return _bound_session_scope.get()
+    return _bound_session_scope
 
 
 def make_engine(settings: Settings) -> Engine:
@@ -91,9 +95,8 @@ def get_settings() -> Settings:
 
 
 def get_engine() -> Engine:
-    bound = _bound_engine.get()
-    if bound is not None:
-        return bound
+    if _bound_engine is not None:
+        return _bound_engine
     return _server_engine()
 
 

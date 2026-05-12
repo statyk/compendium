@@ -7,10 +7,9 @@ behaviour is completely unchanged when no binding is installed.
 
 from __future__ import annotations
 
-import contextvars
-from contextlib import contextmanager
+import threading
 from collections.abc import Generator
-from unittest.mock import MagicMock
+from contextlib import contextmanager
 
 import pytest
 from sqlalchemy import create_engine, text
@@ -18,15 +17,15 @@ from sqlalchemy.orm import Session, sessionmaker
 
 from compendium.config.seed import seed_defaults
 from compendium.db.engine import (
+    _server_engine,
     bind,
     bound_engine,
     bound_session_scope,
     get_engine,
     unbind,
-    _server_engine,
 )
 from compendium.db.session import session_scope
-from compendium.domain.models import Base, SiteSetting
+from compendium.domain.models import Base
 from tests.helpers import setup_sqlite_fts
 
 
@@ -138,7 +137,7 @@ def test_site_settings_reads_land_on_bound_db(alt_engine):
     targets the bound engine when a binding is installed."""
     bind(alt_engine)
 
-    from compendium.services.site_settings import set_site_setting, get_site_setting
+    from compendium.services.site_settings import get_site_setting, set_site_setting
     with session_scope() as s:
         set_site_setting("metadata_cache_ttl_days", 60, session=s)
     val = get_site_setting("metadata_cache_ttl_days")
@@ -153,31 +152,23 @@ def test_site_settings_reads_land_on_bound_db(alt_engine):
 
 
 # ---------------------------------------------------------------------------
-# ContextVar isolation between tasks
+# Cross-thread visibility
 # ---------------------------------------------------------------------------
 
-def test_bind_in_child_context_does_not_bleed_to_sibling(alt_engine):
-    """bind() uses ContextVar, so a binding set inside a child context must
-    not be visible in a sibling context or in the parent after the child exits.
-    """
+def test_binding_is_visible_across_threads(alt_engine):
+    """bind() is process-wide — a binding installed on the main thread must be
+    visible from worker threads (the contract for desktop-embedder usage)."""
+    bind(alt_engine)
+
     results: dict[str, object] = {}
 
-    def _child():
-        bind(alt_engine)
-        results["child"] = get_engine()
+    def _worker() -> None:
+        results["bound"] = bound_engine()
+        results["get"] = get_engine()
 
-    def _sibling():
-        results["sibling"] = get_engine()
+    t = threading.Thread(target=_worker)
+    t.start()
+    t.join()
 
-    parent_ctx = contextvars.copy_context()
-
-    # Run child in an isolated copy — its bind() does not affect the copy.
-    child_ctx = contextvars.copy_context()
-    child_ctx.run(_child)
-
-    # Sibling and parent see no binding.
-    parent_ctx.run(_sibling)
-    assert results["sibling"] is _server_engine(), "sibling should see no binding"
-
-    # Parent context itself also unaffected.
-    assert bound_engine() is None
+    assert results["bound"] is alt_engine, "bound_engine() not visible in worker thread"
+    assert results["get"] is alt_engine, "get_engine() not visible in worker thread"
