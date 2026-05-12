@@ -1203,6 +1203,16 @@ article {
   box-shadow: var(--cmp-shadow-sm);
 }
 
+/* Article card headers/footers: override the broad `header` nav-color rule
+   so article section bands get palette surface colors, not the nav cream. */
+article > header,
+article > footer {
+  background: var(--cmp-color-surface-sunken);
+  color: var(--cmp-color-text);
+  border-color: var(--cmp-color-rule-soft);
+  box-shadow: none;
+}
+
 /* Work list cards — heritage surface + brass border on hover */
 .work-card-link {
   background: var(--cmp-color-surface-raised);
