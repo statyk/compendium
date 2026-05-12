@@ -15,7 +15,6 @@ from sqlalchemy import create_engine, text
 from sqlalchemy.orm import sessionmaker
 
 from compendium.config.seed import seed_defaults
-from compendium.config.settings import Settings
 from compendium.domain.models import AppUser, Patron
 from compendium.repositories.sql.branch_repository import SqlBranchRepository
 from compendium.repositories.sql.creator_repository import SqlCreatorRepository
@@ -95,7 +94,7 @@ def _backup_from(url: str, archive: Path) -> None:
     eng = create_engine(url)
     session = sessionmaker(bind=eng)()
     try:
-        BackupService(session, Settings(database_url=url)).create(archive)
+        BackupService(session).create(archive)
     finally:
         session.close()
         eng.dispose()
@@ -105,9 +104,7 @@ def _restore_to(url: str, archive: Path) -> None:
     eng = create_engine(url)
     session = sessionmaker(bind=eng)()
     try:
-        BackupService(session, Settings(database_url=url)).restore(
-            archive, include_covers=False
-        )
+        BackupService(session).restore(archive, include_covers=False)
     finally:
         session.close()
         eng.dispose()

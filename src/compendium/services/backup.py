@@ -206,12 +206,19 @@ class BackupService:
     def __init__(
         self,
         session: Session,
-        settings: Settings,
+        settings: Settings | None = None,
         migrations_dir: Path | None = None,
     ):
         self._session = session
         self._settings = settings
         self._migrations_dir = migrations_dir if migrations_dir is not None else _MIGRATIONS_DIR
+
+    def _database_url(self) -> str:
+        if self._settings is not None:
+            return self._settings.database_url
+        # render_as_string(hide_password=False) is required — str(url) masks
+        # passwords as "***", which breaks Alembic auth against Postgres.
+        return self._session.get_bind().url.render_as_string(hide_password=False)
 
     # ----- create -------------------------------------------------------------
 
@@ -276,7 +283,7 @@ class BackupService:
             manifest: dict[str, Any] = {
                 "compendium_version": _compendium_version(),
                 "alembic_head": revision,
-                "source_backend": _detect_backend(self._settings.database_url),
+                "source_backend": _detect_backend(self._database_url()),
                 "created_at": datetime.now(timezone.utc).isoformat(),
                 "tables": counts,
                 "include_audit": include_audit,
@@ -332,7 +339,7 @@ class BackupService:
                 raise BackupError(f"Backup file not found: {input_path}")
 
         engine = self._session.get_bind()
-        db_url = self._settings.database_url
+        db_url = self._database_url()
 
         with tempfile.TemporaryDirectory() as td:
             staging = Path(td)

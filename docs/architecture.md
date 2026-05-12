@@ -122,6 +122,8 @@ Maintenance tasks are CLI subcommands invoked externally by cron, systemd timers
 
 A host application (e.g. LitCat, a desktop GUI) can import Compendium as a Python library and supply its own engine + session_scope via `compendium.db.engine.bind()`. Without a binding, Compendium falls back to server-mode defaults (reads `Settings()`, constructs its own SQLite engine). With a binding, all internal DB access — `site_settings`, `metadata_cache`, GB quota sentinel, backup — routes through the host's engine.
 
+`BackupService` accepts an optional `Settings` argument. When omitted (or `None`), the database URL is derived from the session's bound engine via `session.get_bind().url` — so library-mode callers do not need to construct a Compendium `Settings` object just to run backups. Server-mode callers continue to pass `settings` explicitly.
+
 ```python
 from compendium.db.engine import bind
 

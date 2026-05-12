@@ -491,6 +491,62 @@ class TestBackupServiceMigrationsDirSeam:
         assert svc._migrations_dir == _MIGRATIONS_DIR
 
 
+class TestBackupServiceSettingsOptional:
+    """BackupService works without a Settings object; URL is derived from the engine."""
+
+    def test_create_and_restore_without_settings(self, tmp_path):
+        src_db = tmp_path / "source.db"
+        dst_db = tmp_path / "dest.db"
+        archive = tmp_path / "backup.tar.gz"
+
+        src_engine = _upgraded_engine(src_db)
+        src_session = sessionmaker(bind=src_engine, autoflush=False, expire_on_commit=False)()
+        _seed_sample_data(src_session)
+        src_session.close()
+
+        src_session = sessionmaker(bind=src_engine)()
+        manifest = BackupService(src_session).create(archive)
+        src_session.close()
+        src_engine.dispose()
+
+        assert manifest["source_backend"] == "sqlite"
+
+        # Fresh, empty DB — restore initialises and migrates it via Alembic.
+        dst_engine = create_engine(f"sqlite:///{dst_db}")
+        dst_session = sessionmaker(bind=dst_engine)()
+        BackupService(dst_session).restore(archive, include_covers=False)
+        dst_session.close()
+        dst_engine.dispose()
+
+        restored_engine = create_engine(f"sqlite:///{dst_db}")
+        with restored_engine.connect() as conn:
+            from sqlalchemy import text
+            count = conn.execute(text("SELECT COUNT(*) FROM work")).scalar()
+        restored_engine.dispose()
+        assert count >= 1
+
+    def test_database_url_helper_prefers_settings_when_provided(self, tmp_path):
+        src_db = tmp_path / "src.db"
+        engine = _upgraded_engine(src_db)
+        session = sessionmaker(bind=engine)()
+        explicit_url = f"sqlite:///{src_db}"
+        svc = BackupService(session, Settings(database_url=explicit_url))
+        assert svc._database_url() == explicit_url
+        session.close()
+        engine.dispose()
+
+    def test_database_url_helper_falls_back_to_engine_url(self, tmp_path):
+        src_db = tmp_path / "src.db"
+        engine = _upgraded_engine(src_db)
+        session = sessionmaker(bind=engine)()
+        svc = BackupService(session)
+        url = svc._database_url()
+        assert url.startswith("sqlite:///")
+        assert str(src_db) in url
+        session.close()
+        engine.dispose()
+
+
 def _rewrite_manifest_revision(archive: Path, new_revision: str) -> None:
     """Open a tar.gz backup, rewrite meta.json's alembic_head, and repack."""
     import shutil

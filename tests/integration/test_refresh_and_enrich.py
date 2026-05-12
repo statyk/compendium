@@ -98,7 +98,7 @@ def test_refresh_dry_run_no_diff_when_nothing_missing(session):
     fixture = dict(_DUNE)
     fixture["isbn"] = work.isbn
     with patch(
-        "compendium.services.catalog.lookup_metadata", return_value=fixture
+        "compendium.services.catalog.lookup_metadata_with_source", return_value=(fixture, "openlibrary")
     ):
         report = _catalog(session).refresh_metadata(work_id, dry_run=True)
     assert report.found is True
@@ -115,7 +115,7 @@ def test_refresh_dry_run_fills_missing_text_field(session):
     fixture["isbn"] = work.isbn
 
     with patch(
-        "compendium.services.catalog.lookup_metadata", return_value=fixture
+        "compendium.services.catalog.lookup_metadata_with_source", return_value=(fixture, "openlibrary")
     ):
         report = _catalog(session).refresh_metadata(work_id, dry_run=True)
     assert "description" in report.planned
@@ -133,7 +133,7 @@ def test_refresh_dry_run_does_not_overwrite_existing_text_field(session):
     fixture["isbn"] = work.isbn
 
     with patch(
-        "compendium.services.catalog.lookup_metadata", return_value=fixture
+        "compendium.services.catalog.lookup_metadata_with_source", return_value=(fixture, "openlibrary")
     ):
         report = _catalog(session).refresh_metadata(work_id, dry_run=True)
     assert "description" not in report.planned
@@ -147,7 +147,7 @@ def test_refresh_dry_run_replaces_cover_when_upstream_differs(session):
     fixture["cover_image_url"] = "https://covers.openlibrary.org/b/id/99999-L.jpg"
 
     with patch(
-        "compendium.services.catalog.lookup_metadata", return_value=fixture
+        "compendium.services.catalog.lookup_metadata_with_source", return_value=(fixture, "openlibrary")
     ):
         report = _catalog(session).refresh_metadata(work_id, dry_run=True)
     assert "cover_image_url" in report.planned
@@ -165,7 +165,7 @@ def test_refresh_falls_back_to_google_books_when_ol_has_no_cover(session, monkey
     fixture["cover_image_url"] = None  # OL miss
 
     with patch(
-        "compendium.services.catalog.lookup_metadata", return_value=fixture
+        "compendium.services.catalog.lookup_metadata_with_source", return_value=(fixture, "openlibrary")
     ), patch(
         "compendium.services.catalog.lookup_cover_fallbacks",
         return_value="http://books.google.com/books/content?id=X",
@@ -185,7 +185,7 @@ def test_refresh_skips_fallback_when_ol_returns_cover(session):
     fixture["isbn"] = work.isbn  # cover_image_url already set in _DUNE
 
     with patch(
-        "compendium.services.catalog.lookup_metadata", return_value=fixture
+        "compendium.services.catalog.lookup_metadata_with_source", return_value=(fixture, "openlibrary")
     ), patch(
         "compendium.services.catalog.lookup_cover_fallbacks"
     ) as mock_fb:
@@ -215,7 +215,7 @@ def test_refresh_apply_commits_and_invalidates_cache(session, tmp_path, monkeypa
     new_path.write_bytes(b"new-bytes")
 
     with patch(
-        "compendium.services.catalog.lookup_metadata", return_value=fixture
+        "compendium.services.catalog.lookup_metadata_with_source", return_value=(fixture, "openlibrary")
     ):
         report = _catalog(session, audit=True).refresh_metadata(
             work_id, dry_run=False
@@ -248,7 +248,7 @@ def test_refresh_apply_busts_cache_even_when_url_unchanged(
     cached.write_bytes(b"stale")
 
     with patch(
-        "compendium.services.catalog.lookup_metadata", return_value=fixture
+        "compendium.services.catalog.lookup_metadata_with_source", return_value=(fixture, "openlibrary")
     ):
         report = _catalog(session, audit=True).refresh_metadata(
             work_id, dry_run=False
@@ -279,7 +279,7 @@ def test_refresh_emits_audit_on_apply(session):
         source="test",
     )
     with patch(
-        "compendium.services.catalog.lookup_metadata", return_value=fixture
+        "compendium.services.catalog.lookup_metadata_with_source", return_value=(fixture, "openlibrary")
     ):
         catalog.refresh_metadata(work_id, dry_run=False)
     session.flush()
@@ -306,7 +306,7 @@ def test_refresh_no_lookup_key_returns_error(session):
 def test_refresh_upstream_error_returns_error_report(session):
     work_id = _seed_dune(session)
     with patch(
-        "compendium.services.catalog.lookup_metadata",
+        "compendium.services.catalog.lookup_metadata_with_source",
         side_effect=ExternalLookupError("openlibrary unreachable"),
     ):
         report = _catalog(session).refresh_metadata(work_id, dry_run=True)

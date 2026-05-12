@@ -77,10 +77,10 @@ def test_cli_refresh_metadata_dry_run_reports_no_writes(session):
     fixture = dict(_DUNE)
 
     def fake_lookup(_media_type, _kind, value, **_kwargs):
-        return {**fixture, "isbn": value, "description": "filled in"}
+        return ({**fixture, "isbn": value, "description": "filled in"}, "openlibrary")
 
     with patch(
-        "compendium.services.catalog.lookup_metadata", side_effect=fake_lookup
+        "compendium.services.catalog.lookup_metadata_with_source", side_effect=fake_lookup
     ):
         result = _run_cli(session, ["refresh-metadata", "--dry-run", "--limit", "5"])
 
@@ -99,10 +99,10 @@ def test_cli_refresh_metadata_apply_writes_changes(session):
     fixture = dict(_DUNE)
 
     def fake_lookup(_media_type, _kind, value, **_kwargs):
-        return {**fixture, "isbn": value, "description": "filled in by upstream"}
+        return ({**fixture, "isbn": value, "description": "filled in by upstream"}, "openlibrary")
 
     with patch(
-        "compendium.services.catalog.lookup_metadata", side_effect=fake_lookup
+        "compendium.services.catalog.lookup_metadata_with_source", side_effect=fake_lookup
     ):
         result = _run_cli(session, ["refresh-metadata", "--limit", "5"])
 
@@ -125,10 +125,10 @@ def test_cli_refresh_metadata_emits_per_work_progress_lines(session):
     fixture = dict(_DUNE)
 
     def fake_lookup(_media_type, _kind, value, **_kwargs):
-        return {**fixture, "isbn": value, "description": "filled"}
+        return ({**fixture, "isbn": value, "description": "filled"}, "openlibrary")
 
     with patch(
-        "compendium.services.catalog.lookup_metadata", side_effect=fake_lookup
+        "compendium.services.catalog.lookup_metadata_with_source", side_effect=fake_lookup
     ):
         result = _run_cli(session, ["refresh-metadata", "--dry-run"])
 
@@ -146,10 +146,10 @@ def test_cli_refresh_metadata_quiet_suppresses_per_work_lines(session):
     fixture = dict(_DUNE)
 
     def fake_lookup(_media_type, _kind, value, **_kwargs):
-        return {**fixture, "isbn": value, "description": "filled"}
+        return ({**fixture, "isbn": value, "description": "filled"}, "openlibrary")
 
     with patch(
-        "compendium.services.catalog.lookup_metadata", side_effect=fake_lookup
+        "compendium.services.catalog.lookup_metadata_with_source", side_effect=fake_lookup
     ):
         result = _run_cli(session, ["refresh-metadata", "--dry-run", "--quiet"])
 
@@ -166,7 +166,7 @@ def test_cli_refresh_metadata_quiet_still_prints_errored_lines(session):
     def boom(_media_type, _kind, _value, **_kwargs):
         raise RuntimeError("boom — adapter blew up")
 
-    with patch("compendium.services.catalog.lookup_metadata", side_effect=boom):
+    with patch("compendium.services.catalog.lookup_metadata_with_source", side_effect=boom):
         result = _run_cli(session, ["refresh-metadata", "--dry-run", "--quiet"])
 
     assert result.exit_code == 0, result.output
@@ -191,7 +191,7 @@ def test_cli_refresh_metadata_all_flag_includes_complete_works(session):
     session.flush()
 
     with patch(
-        "compendium.services.catalog.lookup_metadata", return_value=fixture
+        "compendium.services.catalog.lookup_metadata_with_source", return_value=(fixture, "openlibrary")
     ):
         result = _run_cli(session, ["refresh-metadata", "--all", "--dry-run"])
 
