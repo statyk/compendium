@@ -104,21 +104,27 @@ def _run(session, *, dry_run: bool, adapter) -> ImportService:
 
 
 def test_dry_run_populates_write_buffer(session):
-    """Dry-run with enrichment buffers cache entries (flush() called after rollback)."""
+    """Dry-run with enrichment buffers cache entries; flush_metadata_cache() writes them."""
     counter: list[int] = []
     adapter = _make_adapter(counter)
 
-    flushed_entries: list = []
+    svc = _run(session, dry_run=True, adapter=adapter)
 
-    def fake_flush(self):
-        flushed_entries.extend(self._entries)
+    # Entries are buffered but not yet written (flush is now caller's responsibility).
+    assert counter == [1, 1], "adapter called once per row"
+    assert len(svc._cache_buffer._entries) == 2, "two cache entries buffered"
+    assert all(not e.is_negative for e in svc._cache_buffer._entries)
+
+    # Calling flush_metadata_cache() writes them (using a test-bound session factory).
+    flushed: list = []
+
+    def fake_flush(buf):
+        flushed.extend(buf._entries)
 
     with patch.object(WriteBuffer, "flush", fake_flush):
-        _run(session, dry_run=True, adapter=adapter)
+        svc.flush_metadata_cache()
 
-    assert counter == [1, 1], "adapter called once per row"
-    assert len(flushed_entries) == 2, "two cache entries buffered"
-    assert all(not e.is_negative for e in flushed_entries)
+    assert len(flushed) == 2, "flush() called with the two buffered entries"
 
 
 # ---------------------------------------------------------------------------

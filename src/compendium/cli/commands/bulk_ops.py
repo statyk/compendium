@@ -216,6 +216,7 @@ def import_csv_cmd(
                     "file is not clean UTF-8.",
                 )
             _print_report(report, quiet=quiet)
+        importer.flush_metadata_cache()
     except DomainError as exc:
         typer.echo(f"Error: {exc}", err=True)
         raise typer.Exit(1) from exc
@@ -309,6 +310,7 @@ def import_librarything_cmd(
                     "file is not clean UTF-8.",
                 )
             _print_report(report, quiet=quiet)
+        importer.flush_metadata_cache()
     except DomainError as exc:
         typer.echo(f"Error: {exc}", err=True)
         raise typer.Exit(1) from exc
@@ -402,6 +404,7 @@ def import_goodreads_cmd(
                     "file is not clean UTF-8.",
                 )
             _print_report(report, quiet=quiet)
+        importer.flush_metadata_cache()
     except DomainError as exc:
         typer.echo(f"Error: {exc}", err=True)
         raise typer.Exit(1) from exc
@@ -461,6 +464,7 @@ def import_marc_cmd(
                 else:
                     report = importer.import_marc(stream, options, filename=label)
             _print_report(report, quiet=quiet)
+        importer.flush_metadata_cache()
     except DomainError as exc:
         typer.echo(f"Error: {exc}", err=True)
         raise typer.Exit(1) from exc

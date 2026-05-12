@@ -118,6 +118,21 @@ One installed command (`compendium`), three behaviors:
 
 Maintenance tasks are CLI subcommands invoked externally by cron, systemd timers, or Windows Task Scheduler — not run inside the daemon. This means tasks run even when the daemon is down, are manually runnable, and work for CLI-only deployments. See `docs/crontab.sample` and `docs/compendium.service.sample`.
 
+### Embedding Compendium as a library
+
+A host application (e.g. LitCat, a desktop GUI) can import Compendium as a Python library and supply its own engine + session_scope via `compendium.db.engine.bind()`. Without a binding, Compendium falls back to server-mode defaults (reads `Settings()`, constructs its own SQLite engine). With a binding, all internal DB access — `site_settings`, `metadata_cache`, GB quota sentinel, backup — routes through the host's engine.
+
+```python
+from compendium.db.engine import bind
+
+# Call once at startup, after constructing your engine.
+bind(your_engine, session_scope=your_session_scope)
+```
+
+**Contract for host-supplied `session_scope`:** the context manager *must* commit on normal exit and roll back on exception. Compendium's internal writers enter the scope, do writes, and exit normally without calling `session.commit()` themselves. A scope that does not auto-commit will silently lose those writes.
+
+**Import flush contract:** when using `ImportService`, callers must invoke `svc.flush_metadata_cache()` *after* the outer session scope exits (commit or rollback), not before. The `WriteBuffer` opens a parallel session to write cache entries; calling it while the outer transaction is open causes a SQLite write-lock conflict. On Postgres this is not a locking issue, but the post-settle pattern is correct on both backends.
+
 ---
 
 ## Database backends
@@ -328,7 +343,7 @@ Successful external lookups (and definitive not-found responses) are persisted i
 - **Dedup** by ISBN/UPC only; no fuzzy title matching. Conflict modes: `append` (add a copy to the existing work — default), `skip-duplicates`, `error-on-conflict`.
 - **Barcode generation**: by default, any barcode/accession_number supplied in a CSV row is discarded and a fresh conformant 10/14-digit code is minted via `format_item_barcode()`. Pass `--preserve-barcodes` (CLI/API) or check the web checkbox to instead validate and keep the supplied codes (requires valid Compendium 10/14-digit format with Luhn check).
 - **Encoding** (CSV + GoodReads CSV + LibraryThing TSV): UTF-8 is preferred, but stray non-UTF-8 bytes are tolerated by default — invalid bytes are replaced with U+FFFD and a warning is added to the report. Pass `--strict-encoding` (CLI), `strict_encoding=true` (API), or check "strict encoding" (Web) to fail the whole import on any bad byte. MARC has its own encoding semantics in the leader and is unaffected. Real-world LibraryThing exports often contain a handful of stray Latin-1/cp1252 bytes — the lenient default lets them in.
-- **Transaction ownership**: the importer flushes but never commits — the caller's session scope (or test fixture) controls commit/rollback. Dry-run rolls back. Per-row errors are collected into an `ImportReport`; barcode/accession uniqueness is pre-validated at the application layer to avoid IntegrityError rollbacks mid-batch.
+- **Transaction ownership**: the importer flushes but never commits — the caller's session scope (or test fixture) controls commit/rollback. Dry-run rolls back. Per-row errors are collected into an `ImportReport`; barcode/accession uniqueness is pre-validated at the application layer to avoid IntegrityError rollbacks mid-batch. After the outer session scope exits, callers must call `svc.flush_metadata_cache()` to write buffered metadata-cache entries — see "Embedding Compendium as a library" above for details.
 - **Audit**: one summary `BULK_IMPORT` AuditLog entry per run (not per row), carrying counts and filename.
 
 ### CSV schema (item-centric)

@@ -865,7 +865,6 @@ class ImportService:
 
         if options.dry_run:
             self._session.rollback()
-            self._cache_buffer.flush()
             return report
         self._session.flush()
         if self._audit is not None:
@@ -887,8 +886,26 @@ class ImportService:
                 },
             )
             self._session.flush()
-        self._cache_buffer.flush()
         return report
+
+    def flush_metadata_cache(self) -> None:
+        """Flush deferred metadata-cache writes to the database.
+
+        The import service collects upstream-fetched metadata in an in-memory
+        buffer during enrichment and writes it to ``metadata_cache`` via a
+        separate, short-lived session after the outer transaction settles.
+        Callers must invoke this *after* their ``session_scope`` block exits
+        (commit or rollback) so the cache write targets a free connection.
+
+        On SQLite this avoids a write-lock conflict: the outer session holds
+        the lock until it commits/rolls back, and the buffer's parallel
+        ``session_scope()`` would otherwise block until ``busy_timeout`` and
+        raise ``OperationalError: database is locked``.
+
+        Safe to call multiple times; subsequent calls are no-ops if the buffer
+        is already empty.
+        """
+        self._cache_buffer.flush()
 
     def _process_csv_row(
         self,

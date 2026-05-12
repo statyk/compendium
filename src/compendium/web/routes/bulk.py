@@ -211,6 +211,9 @@ async def import_submit(
         ctx["error"] = str(exc)
         return _render("admin/import.html", request, ctx, status_code=400)
 
+    session.commit()
+    importer.flush_metadata_cache()
+
     if replaced:
         report.warnings.insert(
             0,

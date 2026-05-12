@@ -181,6 +181,8 @@ async def import_csv(
             f"Decoded with {replaced} byte replacement(s); "
             "file is not clean UTF-8.",
         )
+    session.commit()
+    importer.flush_metadata_cache()
     return _report_to_response(report)
 
 
@@ -246,6 +248,8 @@ async def import_librarything(
             f"Decoded with {replaced} byte replacement(s); "
             "file is not clean UTF-8.",
         )
+    session.commit()
+    importer.flush_metadata_cache()
     return _report_to_response(report)
 
 
@@ -311,6 +315,8 @@ async def import_goodreads(
             f"Decoded with {replaced} byte replacement(s); "
             "file is not clean UTF-8.",
         )
+    session.commit()
+    importer.flush_metadata_cache()
     return _report_to_response(report)
 
 
@@ -351,6 +357,8 @@ async def import_marc(
             report = importer.import_marc(stream, options, filename=file.filename)
     except ValidationError as exc:
         raise HTTPException(status_code=422, detail=str(exc)) from exc
+    session.commit()
+    importer.flush_metadata_cache()
     return _report_to_response(report)
 
 
