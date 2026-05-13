@@ -423,7 +423,7 @@ class FailedLogin(Base):
 
 
 class MetadataCache(Base):
-    """Persistent cache for external metadata lookups (Open Library, MusicBrainz, TMDb, etc.).
+    """Persistent cache for external metadata lookups (Google Books, Open Library, MusicBrainz, TMDb, etc.).
 
     Keyed on (adapter, kind, lookup_value) so adapter-source switching never
     causes cross-namespace pollution. payload is JSON-encoded; NULL on

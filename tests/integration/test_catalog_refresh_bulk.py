@@ -155,9 +155,12 @@ def test_refresh_metadata_bulk_dry_run_buckets_outcomes(session):
 
     def fake_lookup(_media_type, kind, value, **_kwargs):
         # Return a fresh description so refresh_metadata sees a planned diff.
-        return {**fixture, "isbn": value, "description": "filled in by upstream"}
+        return ({**fixture, "isbn": value, "description": "filled in by upstream"}, "openlibrary")
 
-    with patch("compendium.services.catalog.lookup_metadata", side_effect=fake_lookup):
+    with (
+        patch("compendium.services.catalog.lookup_metadata_with_source", side_effect=fake_lookup),
+        patch("compendium.services.metadata_cache.WriteBuffer.flush"),
+    ):
         report = _catalog(session, audit=True).refresh_metadata_bulk(dry_run=True)
 
     assert report.dry_run is True
@@ -181,9 +184,12 @@ def test_refresh_metadata_bulk_apply_writes_and_audits(session):
     fixture = dict(_DUNE)
 
     def fake_lookup(_media_type, kind, value, **_kwargs):
-        return {**fixture, "isbn": value, "description": "filled in by upstream"}
+        return ({**fixture, "isbn": value, "description": "filled in by upstream"}, "openlibrary")
 
-    with patch("compendium.services.catalog.lookup_metadata", side_effect=fake_lookup):
+    with (
+        patch("compendium.services.catalog.lookup_metadata_with_source", side_effect=fake_lookup),
+        patch("compendium.services.metadata_cache.WriteBuffer.flush"),
+    ):
         report = _catalog(session, audit=True).refresh_metadata_bulk(dry_run=False)
 
     assert report.refreshed == 1
@@ -212,9 +218,12 @@ def test_refresh_metadata_bulk_no_change_when_upstream_is_blank(session):
     sparse = {**_DUNE, "description": None, "cover_image_url": None}
 
     def fake_lookup(_media_type, kind, value, **_kwargs):
-        return {**sparse, "isbn": value}
+        return ({**sparse, "isbn": value}, "openlibrary")
 
-    with patch("compendium.services.catalog.lookup_metadata", side_effect=fake_lookup):
+    with (
+        patch("compendium.services.catalog.lookup_metadata_with_source", side_effect=fake_lookup),
+        patch("compendium.services.metadata_cache.WriteBuffer.flush"),
+    ):
         report = _catalog(session).refresh_metadata_bulk(dry_run=True)
 
     assert report.total_considered == 1
@@ -224,7 +233,10 @@ def test_refresh_metadata_bulk_no_change_when_upstream_is_blank(session):
 
 def test_refresh_metadata_bulk_not_found_bucketed(session):
     _seed(session, description="")
-    with patch("compendium.services.catalog.lookup_metadata", return_value=None):
+    with (
+        patch("compendium.services.catalog.lookup_metadata_with_source", return_value=(None, None)),
+        patch("compendium.services.metadata_cache.WriteBuffer.flush"),
+    ):
         report = _catalog(session).refresh_metadata_bulk(dry_run=True)
     assert report.total_considered == 1
     assert report.not_found == 1
@@ -237,9 +249,12 @@ def test_refresh_metadata_bulk_respects_limit(session):
     _seed(session, description="")
 
     def fake_lookup(_media_type, kind, value, **_kwargs):
-        return {**_DUNE, "isbn": value, "description": "x"}
+        return ({**_DUNE, "isbn": value, "description": "x"}, "openlibrary")
 
-    with patch("compendium.services.catalog.lookup_metadata", side_effect=fake_lookup):
+    with (
+        patch("compendium.services.catalog.lookup_metadata_with_source", side_effect=fake_lookup),
+        patch("compendium.services.metadata_cache.WriteBuffer.flush"),
+    ):
         report = _catalog(session).refresh_metadata_bulk(limit=2, dry_run=True)
     assert report.total_considered == 2
 
@@ -256,7 +271,7 @@ def test_refresh_metadata_bulk_on_progress_fires_per_iteration_with_indices(sess
     fixture = dict(_DUNE)
 
     def fake_lookup(_media_type, _kind, value, **_kwargs):
-        return {**fixture, "isbn": value, "description": "filled"}
+        return ({**fixture, "isbn": value, "description": "filled"}, "openlibrary")
 
     calls: list[tuple[int, int, int, bool]] = []
 
@@ -265,7 +280,10 @@ def test_refresh_metadata_bulk_on_progress_fires_per_iteration_with_indices(sess
         # tuple JSON-friendly so failures print readably.
         calls.append((index, total, work.id, bool(per and per.planned)))
 
-    with patch("compendium.services.catalog.lookup_metadata", side_effect=fake_lookup):
+    with (
+        patch("compendium.services.catalog.lookup_metadata_with_source", side_effect=fake_lookup),
+        patch("compendium.services.metadata_cache.WriteBuffer.flush"),
+    ):
         _catalog(session).refresh_metadata_bulk(
             dry_run=True, on_progress=on_progress
         )
@@ -286,11 +304,11 @@ def test_refresh_metadata_bulk_on_progress_buckets_match_report(session):
 
     def fake_lookup(_media_type, _kind, value, **_kwargs):
         if value == refresh_isbn:
-            return {**fixture, "isbn": value, "description": "filled"}
+            return ({**fixture, "isbn": value, "description": "filled"}, "openlibrary")
         if value == not_found_isbn:
-            return None
+            return (None, None)
         # complete work — return same data as already stored, no diff
-        return {**fixture, "isbn": value}
+        return ({**fixture, "isbn": value}, "openlibrary")
 
     seen: dict[int, str] = {}
 
@@ -313,7 +331,10 @@ def test_refresh_metadata_bulk_on_progress_buckets_match_report(session):
         else:
             seen[work.id] = "no_change"
 
-    with patch("compendium.services.catalog.lookup_metadata", side_effect=fake_lookup):
+    with (
+        patch("compendium.services.catalog.lookup_metadata_with_source", side_effect=fake_lookup),
+        patch("compendium.services.metadata_cache.WriteBuffer.flush"),
+    ):
         report = _catalog(session).refresh_metadata_bulk(
             missing_only=False, dry_run=True, on_progress=on_progress
         )

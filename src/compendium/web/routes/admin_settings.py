@@ -104,6 +104,23 @@ _PAGES: dict[str, dict[str, Any]] = {
 }
 
 _SYSTEM_PAGES: dict[str, dict[str, Any]] = {
+    "metadata": {
+        "title": "Metadata sources",
+        "scope_perm": "system.manage",
+        "intro": (
+            "Book metadata source configuration. "
+            "'Book Metadata Source' sets which service is tried first for ISBN lookups. "
+            "When 'Enable Fallback' is on (the default), the other service is tried "
+            "automatically on any miss, making the fallback symmetric in both directions. "
+            "Metadata Cache TTL controls how long successful lookups are stored in the DB "
+            "before a refresh against the upstream service."
+        ),
+        "keys": [
+            "book_metadata_source_preference",
+            "book_metadata_fallback_enabled",
+            "metadata_cache_ttl_days",
+        ],
+    },
     "smtp": {
         "title": "SMTP / email delivery",
         "scope_perm": "system.manage",
@@ -190,6 +207,10 @@ def _build_rows(keys: list[str]) -> list[dict[str, Any]]:
         # Form-rendering helpers
         type_repr = _type_repr(desc.type)
         choices = _literal_choices(desc.type)
+        # Availability hint (for conditional greying of specific choices)
+        hint = desc.availability_hint() if desc.availability_hint is not None else None
+        unavailable_choices: set[str] = set(hint.unavailable_choices) if hint else set()
+        availability_warning: str | None = hint.warning if hint else None
         rows.append(
             {
                 "key": key,
@@ -205,6 +226,8 @@ def _build_rows(keys: list[str]) -> list[dict[str, Any]]:
                 "is_literal": choices is not None,
                 "is_int": desc.type is int,
                 "is_list": str(desc.type).startswith("list["),
+                "unavailable_choices": unavailable_choices,
+                "availability_warning": availability_warning,
             }
         )
     return rows
@@ -577,6 +600,39 @@ async def security_post(
     )
 
 
+@router.get("/admin/system/metadata")
+def metadata_get(
+    request: Request,
+    message: str | None = Query(default=None),
+    error: str | None = Query(default=None),
+    user: AppUser = Depends(require_web_permission("system.manage")),
+):
+    return _show_page(
+        "metadata", _SYSTEM_PAGES["metadata"], request, message, error, user
+    )
+
+
+@router.post("/admin/system/metadata")
+async def metadata_post(
+    request: Request,
+    user: AppUser = Depends(require_web_permission("system.manage")),
+    session: Session = Depends(get_session),
+):
+    form = await request.form()
+    check_csrf_form(request, form.get("csrf_token", ""))
+    reset_keys = form.getlist("reset")
+    form_values = {k: v for k, v in form.items() if k not in ("csrf_token", "reset")}
+    return _post_handler(
+        "metadata",
+        _SYSTEM_PAGES["metadata"],
+        request,
+        form_values,
+        reset_keys,
+        session,
+        user,
+    )
+
+
 # ── Secrets page ──────────────────────────────────────────────────────────────
 
 
@@ -632,8 +688,26 @@ def secrets_get(
             "rows": rows,
             "message": message,
             "error": error,
+            "validation_failures": {},
         },
     )
+
+
+_SECRET_VALIDATORS: dict[str, Any] = {}
+
+
+def _register_secret_validators() -> None:
+    """Populate the secret pre-save validator registry.
+
+    Kept as a function (called once at import time) so validators can import
+    service code without creating import cycles at module load.
+    """
+    from compendium.services.metadata import validate_google_books_key
+
+    _SECRET_VALIDATORS["google_books_api_key"] = validate_google_books_key
+
+
+_register_secret_validators()
 
 
 @router.post("/admin/system/secrets")
@@ -663,6 +737,9 @@ async def secrets_post(
         if delete_site_setting(key, session=session, audit_svc=audit, actor=user, source="web"):
             changed += 1
 
+    # Track per-key validation failures that the user may want to override.
+    validation_failures: dict[str, str] = {}
+
     # Sets
     for key, desc in secret_descs.items():
         if key in clear_keys:
@@ -672,6 +749,19 @@ async def secrets_post(
         raw = form.get(key, "").strip()
         if not raw:
             continue
+
+        # Run pre-save validator if registered for this key.
+        validator = _SECRET_VALIDATORS.get(key)
+        override_field = f"override_validation_{key}"
+        if validator is not None and not form.get(override_field):
+            result = validator(raw)
+            if not result.ok:
+                validation_failures[key] = result.reason or "validation failed"
+                continue
+            if result.warning:
+                # Valid but quota-exhausted — save with a warning surfaced later.
+                errors.append(f"{desc.resolved_display_name()}: {result.warning}")
+
         try:
             set_site_setting(
                 key,
@@ -687,6 +777,35 @@ async def secrets_post(
             errors.append(str(exc))
         except Exception as exc:
             errors.append(f"{key}: {exc}")
+
+    if validation_failures:
+        # Re-render the secrets page with validation error details so the user
+        # can decide whether to override.
+        from compendium.services.secrets import CanaryResult, check_canary, secret_key_configured
+
+        key_configured = secret_key_configured()
+        canary = check_canary(session) if key_configured else CanaryResult.NO_KEY
+        rows = _build_secrets_rows(session)
+        validation_error = "; ".join(
+            f"{k}: {v}" for k, v in validation_failures.items()
+        )
+        return _render(
+            "admin/settings_secrets.html",
+            request,
+            {
+                "request": request,
+                "user": user,
+                "key_configured": key_configured,
+                "canary_ok": canary in (CanaryResult.OK, CanaryResult.MISSING),
+                "canary_mismatch": canary == CanaryResult.MISMATCH,
+                "rows": rows,
+                "message": None,
+                "error": None,
+                "validation_failures": validation_failures,
+                "validation_error": validation_error,
+                "form_values": dict(form),
+            },
+        )
 
     if errors:
         qs = f"?error={quote('; '.join(errors))}"

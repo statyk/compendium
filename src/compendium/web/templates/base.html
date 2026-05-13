@@ -116,6 +116,7 @@
               <ul>
                 {% if has_permission(user, 'user.manage') %}<li><a href="/ui/users">Users</a></li>{% endif %}
                 {% if has_permission(user, 'role.manage') %}<li><a href="/ui/roles">Roles</a></li>{% endif %}
+                {% if has_permission(user, 'system.manage') %}<li><a href="/ui/admin/system/metadata">Metadata Sources</a></li>{% endif %}
                 {% if has_permission(user, 'system.manage') %}<li><a href="/ui/admin/system/smtp">SMTP</a></li>{% endif %}
                 {% if has_permission(user, 'system.manage') %}<li><a href="/ui/admin/system/secrets">Secrets</a></li>{% endif %}
                 {% if has_permission(user, 'system.manage') %}<li><a href="/ui/admin/system/retention">Retention</a></li>{% endif %}

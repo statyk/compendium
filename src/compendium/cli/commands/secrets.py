@@ -78,11 +78,20 @@ def list_secrets() -> None:
         typer.echo(f"{key:<28} {env_var:<38} {source:<10} {display}")
 
 
+def _get_secret_validators() -> dict:
+    """Return the pre-save validator registry for secrets."""
+    from compendium.web.routes.admin_settings import _SECRET_VALIDATORS
+    return _SECRET_VALIDATORS
+
+
 @app.command("set")
 def set_secret(
     key: str = typer.Argument(..., help="Secret key to set (e.g. smtp_password)."),
     value: str | None = typer.Option(
         None, "--value", hide_input=True, help="Value to store (prompted if omitted)."
+    ),
+    force: bool = typer.Option(
+        False, "--force", help="Skip pre-save validation (e.g. GB key live test)."
     ),
 ) -> None:
     """Encrypt and store a secret in the DB. COMPENDIUM_SECRET_KEY must be set."""
@@ -98,6 +107,23 @@ def set_secret(
 
     if value is None:
         value = typer.prompt(f"Value for {key}", hide_input=True, confirmation_prompt=True)
+
+    # Run pre-save validator if registered for this key.
+    if not force and value:
+        validators = _get_secret_validators()
+        validator = validators.get(key)
+        if validator is not None:
+            typer.echo(f"Validating {key}…")
+            result = validator(value)
+            if result.warning:
+                typer.echo(f"Warning: {result.warning}", err=True)
+            if not result.ok:
+                typer.echo(f"Validation failed: {result.reason}", err=True)
+                save_anyway = typer.confirm("Save anyway?", default=False)
+                if not save_anyway:
+                    raise typer.Exit(1)
+            elif not result.warning:
+                typer.echo("  Key validated successfully.")
 
     try:
         with session_scope() as session:

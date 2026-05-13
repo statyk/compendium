@@ -22,6 +22,8 @@ app = typer.Typer(help="Catalog item commands.")
 
 _TITLE_SEARCH_SOURCES: dict[str, tuple[str, str, str]] = {
     # media_type -> (source_label, identifier_kind_for_picks, search_fn_name)
+    # Note: book title-search is OL-only (no equivalent GB title-search endpoint).
+    # Once an ISBN is picked, the actual metadata lookup uses the configured primary source.
     "book": ("Open Library", "isbn", "open_library"),
     "vinyl": ("MusicBrainz", "mbid", "musicbrainz"),
     "cd": ("MusicBrainz", "mbid", "musicbrainz"),
@@ -141,7 +143,9 @@ def add_item(
         typer.echo(f"Looking up {kind} {value}…")
     elif isbn is not None:
         kind, value, mt_code = "isbn", isbn.strip(), "book"
-        typer.echo(f"Looking up ISBN {isbn} on Open Library…")
+        from compendium.services.metadata import get_book_primary_adapter_name
+        _src = get_book_primary_adapter_name()
+        typer.echo(f"Looking up ISBN {isbn} on {_src}…")
     elif upc is not None:
         if not media_type:
             typer.echo(

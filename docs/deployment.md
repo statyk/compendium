@@ -74,6 +74,7 @@ COMPENDIUM_SECURE_COOKIES=true            # default; set `false` for plain-HTTP 
 # COMPENDIUM_TMDB_API_KEY=
 # COMPENDIUM_GOOGLE_BOOKS_API_KEY=          # enables GB as primary book metadata source
 # COMPENDIUM_BOOK_METADATA_SOURCE_PREFERENCE=googlebooks  # or 'openlibrary'
+# COMPENDIUM_BOOK_METADATA_FALLBACK_ENABLED=true  # set 'false' to disable secondary-source fallback
 # COMPENDIUM_METADATA_CACHE_TTL_DAYS=30  # positive-hit TTL for metadata cache (days)
 ```
 

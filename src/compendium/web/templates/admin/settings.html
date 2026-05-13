@@ -122,9 +122,14 @@
           {% elif row.is_literal %}
             <select name="{{ row.key }}" {% if row.env_overridden %}disabled{% endif %}>
               {% for choice in row.choices %}
-              <option value="{{ choice }}" {% if row.value == choice %}selected{% endif %}>{{ choice }}</option>
+              <option value="{{ choice }}"
+                      {% if row.value == choice %}selected{% endif %}
+                      {% if choice in row.unavailable_choices %}disabled{% endif %}>{{ choice }}</option>
               {% endfor %}
             </select>
+            {% if row.availability_warning %}
+            <small class="env-warning">{{ row.availability_warning | safe }}</small>
+            {% endif %}
           {% else %}
             <input type="{% if row.is_int %}number{% else %}text{% endif %}"
                    name="{{ row.key }}"

@@ -152,14 +152,22 @@ def _serialize_refresh_report(report) -> dict:
 @router.get("/{work_id}/refresh-metadata")
 def preview_refresh_metadata(
     work_id: int,
+    source: str | None = None,
     session: Session = Depends(get_session),
     user: AppUser = Depends(require_permission("work.edit")),
 ) -> dict:
-    """Dry-run a metadata refresh — returns the planned diff without committing."""
+    """Dry-run a metadata refresh — returns the planned diff without committing.
+
+    Pass ``?source=googlebooks`` or ``?source=openlibrary`` (books only) to
+    target a specific adapter, bypassing the configured primary/fallback chain.
+    """
     try:
         report = _catalog(session, user).refresh_metadata(
-            work_id, dry_run=True, bypass_cache=True
+            work_id, dry_run=True, bypass_cache=True,
+            source=source if source else None,
         )
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
     except NotFoundError as exc:
         raise HTTPException(status_code=404, detail=str(exc)) from exc
     return _serialize_refresh_report(report)
@@ -168,14 +176,22 @@ def preview_refresh_metadata(
 @router.post("/{work_id}/refresh-metadata")
 def apply_refresh_metadata(
     work_id: int,
+    source: str | None = None,
     session: Session = Depends(get_session),
     user: AppUser = Depends(require_permission("work.edit")),
 ) -> dict:
-    """Apply a metadata refresh: commits fill-missing diff + busts cover cache."""
+    """Apply a metadata refresh: commits fill-missing diff + busts cover cache.
+
+    Pass ``?source=googlebooks`` or ``?source=openlibrary`` (books only) to
+    target a specific adapter, bypassing the configured primary/fallback chain.
+    """
     try:
         report = _catalog(session, user).refresh_metadata(
-            work_id, dry_run=False, bypass_cache=True
+            work_id, dry_run=False, bypass_cache=True,
+            source=source if source else None,
         )
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
     except NotFoundError as exc:
         raise HTTPException(status_code=404, detail=str(exc)) from exc
     return _serialize_refresh_report(report)

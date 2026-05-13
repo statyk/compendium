@@ -389,6 +389,15 @@ def refresh_metadata_cmd(
         "--apply",
         help="Commit the changes. Without this flag, the command runs in dry-run mode and prints what would change.",
     ),
+    source: str | None = typer.Option(
+        None,
+        "--source",
+        help=(
+            "Force a specific metadata source (books only: 'googlebooks' or 'openlibrary'). "
+            "Bypasses the configured primary/fallback chain. "
+            "Also implies --bypass-cache."
+        ),
+    ),
 ) -> None:
     """Re-fetch metadata for a work from its external source.
 
@@ -400,8 +409,11 @@ def refresh_metadata_cmd(
     try:
         with session_scope() as session:
             report = _catalog(session, audit=apply).refresh_metadata(
-                work_id, dry_run=not apply
+                work_id, dry_run=not apply, source=source if source else None,
             )
+    except ValueError as exc:
+        typer.echo(f"Error: {exc}", err=True)
+        raise typer.Exit(1) from exc
     except NotFoundError as exc:
         typer.echo(f"Error: {exc}", err=True)
         raise typer.Exit(1) from exc

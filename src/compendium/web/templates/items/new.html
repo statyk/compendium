@@ -31,8 +31,11 @@
   </form>
   {% if has_permission(user, 'system.manage') %}
   <p class="field-hint" style="margin-top:.75rem">
-    Tip: book / film metadata lookups are richer when Google Books and TMDb
-    API keys are configured on the <a href="/ui/admin/system/secrets">Secrets page</a>.
+    Tip: book metadata uses Open Library by default (no key required). Configuring a
+    Google Books API key on the <a href="/ui/admin/system/secrets">Secrets page</a>
+    lets you switch the primary source on the
+    <a href="/ui/admin/system/metadata">Metadata Sources</a> page.
+    Film metadata is richer with a TMDb API key.
   </p>
   {% endif %}
 </article>

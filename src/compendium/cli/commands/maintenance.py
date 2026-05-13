@@ -428,7 +428,7 @@ def refresh_metadata_cmd(
 
     Iterates Works with an ISBN/UPC and (by default) at least one missing
     core field, calls the appropriate external adapter per Work
-    (Open Library / MusicBrainz / TMDb), and applies fill-missing updates.
+    (Google Books / Open Library / MusicBrainz / TMDb), and applies fill-missing updates.
     Cover-image URLs replace when upstream differs. Errors are counted, not
     raised — exit code is always 0 so cron schedules don't break.
     """

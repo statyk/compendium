@@ -297,17 +297,24 @@ Note: TMDb does not index physical-disc UPCs, so film items are added via a titl
 
 ### Book metadata source preference and rate-limit handling
 
-The primary book metadata adapter is chosen at runtime based on three factors:
+The primary book metadata adapter is chosen at runtime based on four factors:
 
-1. **`book_metadata_source_preference`** site setting (default `"googlebooks"`, DB-editable at **Admin → System**, env `COMPENDIUM_BOOK_METADATA_SOURCE_PREFERENCE`). Valid values: `"googlebooks"`, `"openlibrary"`.
-2. **`google_books_api_key`** — if the preference is `"googlebooks"` but no key is configured, Open Library is used silently.
-3. **Quota circuit breaker** — Google Books free tier allows 1 000 requests/day. When the daily cap is hit (HTTP 403 `dailyLimitExceeded`), a sentinel row is written to `metadata_cache` under the key `("GoogleBooksAdapter", "_quota", "exhausted")` with a 24-hour TTL. All subsequent book lookups fall back to Open Library until the TTL expires. Use `compendium metadata gb-quota status` to inspect and `compendium metadata gb-quota clear` to force an early reset.
+1. **`book_metadata_source_preference`** site setting (default `"googlebooks"`, DB-editable at **Admin → System → Metadata Sources**, env `COMPENDIUM_BOOK_METADATA_SOURCE_PREFERENCE`). Valid values: `"googlebooks"`, `"openlibrary"`. The Google Books radio button is greyed out with an explanatory note when no API key is configured.
+2. **`google_books_api_key`** — if the preference is `"googlebooks"` but no key is configured, Open Library is used silently as the primary.
+3. **`book_metadata_fallback_enabled`** site setting (default `true`, DB-editable at **Admin → System → Metadata Sources**, env `COMPENDIUM_BOOK_METADATA_FALLBACK_ENABLED`). When `true`, a miss from the primary adapter automatically tries the secondary. When `false`, only the primary is consulted. See "Cross-source miss fallback" below.
+4. **Quota circuit breaker** — Google Books free tier allows 1 000 requests/day. When the daily cap is hit (HTTP 403 `dailyLimitExceeded`), a sentinel row is written to `metadata_cache` under the key `("GoogleBooksAdapter", "_quota", "exhausted")` with a 24-hour TTL. All subsequent book lookups fall back to Open Library until the TTL expires (or use `compendium metadata gb-quota status` / `gb-quota clear`). When GB is secondary (OL primary), an exhausted-quota sentinel suppresses the GB fallback attempt for the same TTL window.
 
 **Cover fallback symmetry:** when the primary adapter returns no cover URL, the *other* source is consulted:
 - Open Library primary → Google Books cover (via Volumes API; requires key).
 - Google Books primary → Open Library covers-by-ISBN endpoint (no key required; HEAD probe with `?default=false` to detect absence).
 
-**Cross-source miss fallback:** when Google Books is primary and returns a definitive not-found for an ISBN (common for long-tail/academic titles) or raises an HTTP/transport error (e.g. HTTP 400 from a malformed API key, 429 rate-limit, 5xx), `lookup_metadata` automatically tries Open Library as a secondary source. Both results are cached under their respective adapter namespaces.
+**Cross-source miss fallback:** when `book_metadata_fallback_enabled` is `true` (the default), a definitive not-found from the primary adapter automatically tries the secondary. This is now symmetric:
+- Google Books primary miss → Open Library secondary (unchanged from before).
+- Open Library primary miss → Google Books secondary (new; only when a key is configured and the daily quota is not exhausted).
+
+Both results are cached under their respective adapter namespaces so a preference flip doesn't serve stale cache from the former primary. GB HTTP/transport errors are swallowed and the chain continues to Open Library; OL/non-GB transport errors propagate.
+
+**Per-source manual refresh:** the Work edit page (`/ui/catalog/{id}/edit`) shows three refresh buttons for book items: the default (configured primary), "Refresh from Google Books", and "Refresh from Open Library". Non-book media types show a single default button. The source can also be specified on the API (`?source=googlebooks` or `?source=openlibrary`) and the CLI (`compendium work refresh-metadata --source openlibrary`). Per-source refresh always bypasses the cache (`bypass_cache=True`).
 
 ### Cover image (legacy note)
 

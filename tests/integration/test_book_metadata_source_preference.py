@@ -372,3 +372,164 @@ def test_import_report_gb_quota_not_tripped_when_pre_existing(session):
         )
 
     assert report.gb_quota_tripped is False
+
+
+# ---------------------------------------------------------------------------
+# OL primary → GB fallback (lookup_metadata_with_source integration path)
+# ---------------------------------------------------------------------------
+
+def test_ol_primary_gb_fallback_when_ol_misses(session):
+    """OL primary + GB key + quota OK + OL miss → GB hit, source='googlebooks'."""
+    from compendium.services.metadata import lookup_metadata_with_source
+
+    def _setting(k, **kw):
+        if k == "book_metadata_fallback_enabled":
+            return True
+        if k == "google_books_api_key":
+            return "fake-key"
+        return None
+
+    ol_lookup = MagicMock(return_value=None)
+    gb_lookup = MagicMock(return_value=dict(_GB_META))
+
+    with (
+        patch("compendium.services.metadata._resolve_book_adapter", return_value=_OL_ADAPTER),
+        patch("compendium.services.metadata.OpenLibraryAdapter.lookup", ol_lookup),
+        patch("compendium.services.metadata.GoogleBooksAdapter.lookup", gb_lookup),
+        patch("compendium.services.site_settings.get_site_setting", side_effect=_setting),
+        patch("compendium.services.metadata.is_gb_quota_exhausted", return_value=False),
+        patch("compendium.services.metadata_cache.WriteBuffer.flush"),
+    ):
+        result, source = lookup_metadata_with_source("book", "isbn", "9780441013593", session=session)
+
+    assert source == "googlebooks"
+    assert result["description"] == "From Google Books."
+    ol_lookup.assert_called_once()
+    gb_lookup.assert_called_once()
+
+
+def test_ol_primary_gb_fallback_writes_gb_namespace(session):
+    """When OL misses and GB hits, the cache entry is stored under the GB adapter namespace."""
+    from compendium.services.metadata import lookup_metadata_with_source
+
+    def _setting(k, **kw):
+        if k == "book_metadata_fallback_enabled":
+            return True
+        if k == "google_books_api_key":
+            return "fake-key"
+        return None
+
+    # Patch lookup methods on the real singletons so type(adapter).__name__ is correct.
+    with (
+        patch("compendium.services.metadata._resolve_book_adapter", return_value=_OL_ADAPTER),
+        patch("compendium.services.metadata.OpenLibraryAdapter.lookup", return_value=None),
+        patch("compendium.services.metadata.GoogleBooksAdapter.lookup", return_value=dict(_GB_META)),
+        patch("compendium.services.site_settings.get_site_setting", side_effect=_setting),
+        patch("compendium.services.metadata.is_gb_quota_exhausted", return_value=False),
+    ):
+        lookup_metadata_with_source("book", "isbn", "9780441013593", session=session)
+        session.flush()
+
+    # GB result should be cached under the GoogleBooksAdapter namespace.
+    row = session.get(MetadataCache, ("GoogleBooksAdapter", "isbn", "9780441013593"))
+    assert row is not None
+    assert row.payload is not None
+
+    # OL namespace should have a negative sentinel for the miss.
+    ol_row = session.get(MetadataCache, ("OpenLibraryAdapter", "isbn", "9780441013593"))
+    if ol_row is not None:
+        assert ol_row.is_negative or ol_row.payload is None
+
+
+# ---------------------------------------------------------------------------
+# Cache namespace isolation (preference flip)
+# ---------------------------------------------------------------------------
+
+def test_cache_namespace_isolation_on_preference_flip(session):
+    """OL cache hit does not satisfy a GB-primary lookup and vice versa."""
+    from compendium.services.metadata import lookup_metadata_with_source
+    from datetime import datetime, timezone
+
+    # Write a successful OL result directly into the OL cache namespace.
+    ol_cache_entry = MetadataCache(
+        adapter="OpenLibraryAdapter",
+        kind="isbn",
+        lookup_value="9780441013593",
+        is_negative=False,
+        payload=json.dumps(_OL_META),
+        fetched_at=datetime.now(timezone.utc).replace(tzinfo=None),
+    )
+    from compendium.services.metadata_cache import _upsert_to_session
+    _upsert_to_session(session, ol_cache_entry)
+    session.flush()
+
+    # Now lookup with GB primary — should NOT serve the OL cache entry.
+    gb_lookup = MagicMock(return_value=dict(_GB_META))
+
+    def _gb_setting(k, **kw):
+        if k == "book_metadata_fallback_enabled":
+            return False  # GB only, no fallback
+        if k == "google_books_api_key":
+            return "fake-key"
+        return None
+
+    with (
+        patch("compendium.services.metadata._resolve_book_adapter", return_value=_GB_ADAPTER),
+        patch("compendium.services.metadata.GoogleBooksAdapter.lookup", gb_lookup),
+        patch("compendium.services.site_settings.get_site_setting", side_effect=_gb_setting),
+        patch("compendium.services.metadata.is_gb_quota_exhausted", return_value=False),
+    ):
+        result, source = lookup_metadata_with_source("book", "isbn", "9780441013593", session=session)
+
+    # The GB adapter must have been called (not served from OL cache).
+    gb_lookup.assert_called_once()
+    assert source == "googlebooks"
+    assert result["description"] == "From Google Books."
+
+    # And the OL cache entry remains untouched with its original data.
+    ol_row = session.get(MetadataCache, ("OpenLibraryAdapter", "isbn", "9780441013593"))
+    assert ol_row is not None
+    assert "Open Library" in json.loads(ol_row.payload)["description"]
+
+
+# ---------------------------------------------------------------------------
+# Dry-run: _mark_gb_quota_exhausted is called even when the outer tx rolls back
+# ---------------------------------------------------------------------------
+
+def test_dry_run_calls_mark_quota_exhausted(session):
+    """During a dry-run import, _mark_gb_quota_exhausted is invoked when GB quota trips.
+
+    The sentinel is written in its own independent session (not the dry-run session),
+    so it persists at runtime even when the outer transaction rolls back.  We cannot
+    verify that persistence with SQLite in-memory test DBs (different engine instances
+    don't share state); instead we verify the call is made and would commit independently.
+    """
+    from compendium.domain.errors import GoogleBooksQuotaExhausted
+
+    svc = _make_importer(session)
+
+    def _setting(k, **kw):
+        if k == "book_metadata_fallback_enabled":
+            return True
+        if k == "google_books_api_key":
+            return "fake-key"
+        return None
+
+    with (
+        patch("compendium.services.metadata._resolve_book_adapter", return_value=_GB_ADAPTER),
+        # Mock at lookup_google_books level so the real adapter.lookup() exception handler fires.
+        patch(
+            "compendium.services.metadata.lookup_google_books",
+            side_effect=GoogleBooksQuotaExhausted("daily limit"),
+        ),
+        patch("compendium.services.metadata.OpenLibraryAdapter.lookup", return_value=dict(_OL_META)),
+        patch("compendium.services.site_settings.get_site_setting", side_effect=_setting),
+        patch("compendium.services.metadata_cache.WriteBuffer.flush"),
+        patch("compendium.services.metadata._mark_gb_quota_exhausted") as mock_mark,
+    ):
+        svc.import_csv(
+            io.StringIO(_CSV),
+            ImportOptions(enrich_from_external=True, dry_run=True),
+        )
+
+    mock_mark.assert_called()

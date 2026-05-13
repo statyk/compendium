@@ -237,3 +237,155 @@ def test_audit_log_redacts_secret(client, s_session, monkeypatch):
     assert log.details.get("before") == "***"
     assert log.details.get("after") == "***"
     assert "hunter2" not in str(log.details)
+
+
+# ── GB API key pre-save validation ───────────────────────────────────────────
+
+
+def test_invalid_gb_key_blocks_save_with_banner(client, s_session, monkeypatch):
+    """Posting a bad GB key shows a validation banner; the key is NOT saved."""
+    from unittest.mock import patch
+    from compendium.services.metadata import KeyValidationResult
+
+    monkeypatch.setenv("COMPENDIUM_SECRET_KEY", _FERNET_KEY)
+    _, token = _make_admin(s_session)
+    raw_csrf, signed_csrf = _csrf_pair()
+
+    bad_result = KeyValidationResult(ok=False, reason="API key not valid")
+
+    with patch(
+        "compendium.web.routes.admin_settings._SECRET_VALIDATORS",
+        {"google_books_api_key": lambda _: bad_result},
+    ):
+        resp = client.post(
+            "/ui/admin/system/secrets",
+            data={"csrf_token": raw_csrf, "google_books_api_key": "bad-key"},
+            cookies={AUTH_COOKIE: token, CSRF_COOKIE: signed_csrf},
+        )
+
+    # Should re-render the page (200), not redirect.
+    assert resp.status_code == 200
+    assert "API key not valid" in resp.text
+
+    # The key must NOT have been saved.
+    from sqlalchemy.orm import Session
+    with Session(s_session.get_bind()) as s:
+        row = SqlSiteSettingRepository(s).get("google_books_api_key")
+    assert row is None
+
+
+def test_override_checkbox_forces_save_despite_validation_failure(client, s_session, monkeypatch):
+    """Checking override_validation_google_books_api_key bypasses the validator and saves."""
+    from unittest.mock import patch
+    from compendium.services.metadata import KeyValidationResult
+
+    monkeypatch.setenv("COMPENDIUM_SECRET_KEY", _FERNET_KEY)
+    _, token = _make_admin(s_session)
+    raw_csrf, signed_csrf = _csrf_pair()
+
+    bad_result = KeyValidationResult(ok=False, reason="API key not valid")
+
+    with patch(
+        "compendium.web.routes.admin_settings._SECRET_VALIDATORS",
+        {"google_books_api_key": lambda _: bad_result},
+    ):
+        resp = client.post(
+            "/ui/admin/system/secrets",
+            data={
+                "csrf_token": raw_csrf,
+                "google_books_api_key": "forced-key",
+                "override_validation_google_books_api_key": "1",
+            },
+            cookies={AUTH_COOKIE: token, CSRF_COOKIE: signed_csrf},
+        )
+
+    # Should redirect on successful save.
+    assert resp.status_code == 303
+
+    from sqlalchemy.orm import Session
+    with Session(s_session.get_bind()) as s:
+        row = SqlSiteSettingRepository(s).get("google_books_api_key")
+    assert row is not None
+
+
+def test_valid_gb_key_saves_cleanly(client, s_session, monkeypatch):
+    """A key that passes validation is saved without any banner."""
+    from unittest.mock import patch
+    from compendium.services.metadata import KeyValidationResult
+
+    monkeypatch.setenv("COMPENDIUM_SECRET_KEY", _FERNET_KEY)
+    _, token = _make_admin(s_session)
+    raw_csrf, signed_csrf = _csrf_pair()
+
+    good_result = KeyValidationResult(ok=True)
+
+    with patch(
+        "compendium.web.routes.admin_settings._SECRET_VALIDATORS",
+        {"google_books_api_key": lambda _: good_result},
+    ):
+        resp = client.post(
+            "/ui/admin/system/secrets",
+            data={"csrf_token": raw_csrf, "google_books_api_key": "good-key"},
+            cookies={AUTH_COOKIE: token, CSRF_COOKIE: signed_csrf},
+        )
+
+    assert resp.status_code == 303
+    assert "validation" not in resp.headers.get("location", "")
+
+
+def test_quota_exhausted_key_saves_with_warning(client, s_session, monkeypatch):
+    """A quota-exhausted key (ok=True, warning set) is saved but shows a warning in redirect."""
+    from unittest.mock import patch
+    from compendium.services.metadata import KeyValidationResult
+
+    monkeypatch.setenv("COMPENDIUM_SECRET_KEY", _FERNET_KEY)
+    _, token = _make_admin(s_session)
+    raw_csrf, signed_csrf = _csrf_pair()
+
+    quota_result = KeyValidationResult(ok=True, warning="Quota exhausted; key is valid but temporarily blocked.")
+
+    with patch(
+        "compendium.web.routes.admin_settings._SECRET_VALIDATORS",
+        {"google_books_api_key": lambda _: quota_result},
+    ):
+        resp = client.post(
+            "/ui/admin/system/secrets",
+            data={"csrf_token": raw_csrf, "google_books_api_key": "quota-key"},
+            cookies={AUTH_COOKIE: token, CSRF_COOKIE: signed_csrf},
+        )
+
+    # Should redirect (save succeeded) with error/warning in query string.
+    assert resp.status_code == 303
+    assert "error=" in resp.headers["location"]
+
+    from sqlalchemy.orm import Session
+    with Session(s_session.get_bind()) as s:
+        row = SqlSiteSettingRepository(s).get("google_books_api_key")
+    assert row is not None
+
+
+def test_missing_secret_key_env_surfaces_before_validation(client, s_session):
+    """When COMPENDIUM_SECRET_KEY is not set, save fails with a storage error (not a validation error)."""
+    from unittest.mock import patch
+    from compendium.services.metadata import KeyValidationResult
+
+    # No COMPENDIUM_SECRET_KEY in env (already ensured by _env_isolation autouse).
+    _, token = _make_admin(s_session)
+    raw_csrf, signed_csrf = _csrf_pair()
+
+    good_result = KeyValidationResult(ok=True)
+
+    with patch(
+        "compendium.web.routes.admin_settings._SECRET_VALIDATORS",
+        {"google_books_api_key": lambda _: good_result},
+    ):
+        resp = client.post(
+            "/ui/admin/system/secrets",
+            data={"csrf_token": raw_csrf, "google_books_api_key": "any-key"},
+            cookies={AUTH_COOKIE: token, CSRF_COOKIE: signed_csrf},
+        )
+
+    # Save is blocked by the missing encryption key, not a validation failure.
+    assert resp.status_code == 303
+    assert "error=" in resp.headers["location"]
+    assert "validation" not in resp.headers["location"]

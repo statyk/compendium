@@ -53,6 +53,7 @@ class SettingResponse(BaseModel):
 
 class SettingPatch(BaseModel):
     value: Any | None = None  # None means "reset to default"
+    force_skip_validation: bool = False  # Skip pre-save validators (e.g. GB key live check)
 
 
 def _scope_perm(scope: str) -> str:
@@ -149,6 +150,21 @@ def patch_setting(
             key, session=session, audit_svc=audit_svc, actor=user, source="api"
         )
         return _serialize(desc, value=desc.default)
+
+    # Run pre-save validator if registered for this key.
+    if not body.force_skip_validation and body.value is not None and desc.secret:
+        from compendium.web.routes.admin_settings import _SECRET_VALIDATORS
+        validator = _SECRET_VALIDATORS.get(key)
+        if validator is not None:
+            result = validator(str(body.value))
+            if not result.ok:
+                raise HTTPException(
+                    status_code=422,
+                    detail={
+                        "error": "validation_failed",
+                        "reason": result.reason,
+                    },
+                )
 
     try:
         set_site_setting(

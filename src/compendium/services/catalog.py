@@ -27,6 +27,7 @@ from compendium.services.metadata import (
     get_book_primary_adapter_name,
     lookup_cover_fallbacks,
     lookup_metadata,
+    lookup_metadata_from_source,
     lookup_metadata_with_source,
     normalize_isbn,
     normalize_upc,
@@ -60,7 +61,7 @@ class RefreshReport:
     was removed (apply-mode only)."""
 
     work_id: int
-    source: str | None  # "openlibrary" / "musicbrainz" / "tmdb" / None
+    source: str | None  # "googlebooks" / "openlibrary" / "musicbrainz" / "tmdb" / None
     lookup_kind: str | None  # "isbn" / "upc" / "mbid" / "tmdb_id" / None
     lookup_value: str | None
     found: bool
@@ -101,10 +102,10 @@ _DEFAULT_CREATOR_ROLE: dict[str, str] = {
     "vhs": "director",
 }
 
-# Human-friendly source label per media type — used in the refresh-metadata
-# preview page header and audit details.
+# Human-friendly source label per non-book media type — used in the refresh-
+# metadata preview page header and audit details. Books are resolved dynamically
+# via get_book_primary_adapter_name() so there is no "book" entry here.
 _SOURCE_FOR_MEDIA_TYPE: dict[str, str] = {
-    "book": "openlibrary",
     "vinyl": "musicbrainz",
     "cd": "musicbrainz",
     "dvd": "tmdb",
@@ -390,13 +391,16 @@ class CatalogService:
         *,
         dry_run: bool = True,
         bypass_cache: bool = False,
+        source: str | None = None,
     ) -> RefreshReport:
         """Re-fetch metadata for an existing Work and (optionally) apply.
 
         Strategy:
         - Pick a lookup key from the work — preferring ``external_ids``
           (mbid / tmdb_id) over isbn/upc, since those are more specific.
-        - Call the appropriate adapter via ``lookup_metadata``.
+        - Call the appropriate adapter via ``lookup_metadata``. If ``source``
+          is given, that specific adapter is used directly (bypassing the
+          primary/fallback resolver); useful for per-source manual refresh.
         - Build a fill-missing diff for text fields (only update where the
           current value is null or empty).
         - Cover URL is exempt: replace if upstream has one and it differs
@@ -407,6 +411,8 @@ class CatalogService:
 
         ``dry_run=True`` (default) returns the planned changes without
         committing. Use ``dry_run=False`` to apply.
+        When ``source`` is set, ``bypass_cache`` defaults to True implicitly
+        (caller is choosing a source precisely to bypass the cached primary).
         """
         work = self._works.get(work_id)
         if work is None:
@@ -438,15 +444,37 @@ class CatalogService:
             )
 
         intended_source = (
-            get_book_primary_adapter_name()
-            if media_type_code == "book"
-            else _SOURCE_FOR_MEDIA_TYPE.get(media_type_code, "external")
+            source
+            if source is not None
+            else (
+                get_book_primary_adapter_name()
+                if media_type_code == "book"
+                else _SOURCE_FOR_MEDIA_TYPE.get(media_type_code, "external")
+            )
         )
         _session = self._works._s
+        # When a specific source is requested, bypass cache by default — the
+        # caller is explicitly choosing an alternative to the cached primary.
+        effective_bypass = bypass_cache or (source is not None)
         try:
-            data, actual_source = lookup_metadata_with_source(
-                media_type_code, kind, value,
-                bypass_cache=bypass_cache, session=_session,
+            if source is not None:
+                data, actual_source = lookup_metadata_from_source(
+                    media_type_code, kind, value, source,
+                    session=_session, bypass_cache=effective_bypass,
+                )
+            else:
+                data, actual_source = lookup_metadata_with_source(
+                    media_type_code, kind, value,
+                    bypass_cache=effective_bypass, session=_session,
+                )
+        except ValueError as exc:
+            return RefreshReport(
+                work_id=work_id,
+                source=intended_source,
+                lookup_kind=kind,
+                lookup_value=value,
+                found=False,
+                error=str(exc),
             )
         except ExternalLookupError as exc:
             return RefreshReport(

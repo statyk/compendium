@@ -93,7 +93,9 @@ def _run(session, *, dry_run: bool, adapter) -> ImportService:
     """Run an import pass and return the service (so callers can inspect _cache_buffer)."""
     svc = _make_importer(session)
     opts = ImportOptions(enrich_from_external=True, dry_run=dry_run)
-    with patch("compendium.services.metadata._resolve_book_adapter", return_value=adapter):
+    # Patch _resolve_book_chain (not _resolve_book_adapter) so the chain includes
+    # the mock adapter directly, bypassing the GB/OL identity checks.
+    with patch("compendium.services.metadata._resolve_book_chain", return_value=[adapter]):
         svc.import_csv(io.StringIO(_CSV), opts, filename="test.csv")
     return svc
 
@@ -200,12 +202,11 @@ def test_refresh_metadata_bypass_cache_hits_adapter(session):
     adapter = _make_adapter(counter)
 
     svc = _make_importer(session)
-    with patch("compendium.services.metadata._resolve_book_adapter", return_value=adapter):
-        with patch("compendium.services.metadata_cache.WriteBuffer.flush"):
-            svc.import_csv(
-                io.StringIO(_CSV),
-                ImportOptions(enrich_from_external=False, dry_run=False),
-            )
+    with patch("compendium.services.metadata_cache.WriteBuffer.flush"):
+        svc.import_csv(
+            io.StringIO(_CSV),
+            ImportOptions(enrich_from_external=False, dry_run=False),
+        )
 
     work_repo = SqlWorkRepository(session)
     all_works = work_repo.search("Dune")
@@ -228,7 +229,7 @@ def test_refresh_metadata_bypass_cache_hits_adapter(session):
     counter.clear()
     catalog_svc = _make_catalog(session)
 
-    with patch("compendium.services.metadata._resolve_book_adapter", return_value=adapter):
+    with patch("compendium.services.metadata._resolve_book_chain", return_value=[adapter]):
         catalog_svc.refresh_metadata(work.id, dry_run=True, bypass_cache=True)
 
     assert len(counter) >= 1, "bypass_cache=True must hit adapter even on cache hit"

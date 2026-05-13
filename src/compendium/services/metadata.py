@@ -972,6 +972,37 @@ def _resolve_book_adapter() -> MetadataAdapter:
     return _GB_ADAPTER
 
 
+def _resolve_book_chain() -> list[MetadataAdapter]:
+    """Return the ordered list of book adapters to try (primary first).
+
+    Secondary availability uses the same gating as primary: GB requires a key
+    AND an un-exhausted quota. OL is always available. Fallback is skipped
+    entirely when ``book_metadata_fallback_enabled`` is false.
+
+    Must be called AFTER ``_active_lookup_session`` is set so the quota check
+    inside ``is_gb_quota_exhausted`` piggybacks on the caller's session.
+    """
+    from compendium.services.site_settings import get_site_setting
+
+    primary = _resolve_book_adapter()
+    fallback_enabled = get_site_setting("book_metadata_fallback_enabled")
+    if fallback_enabled is None:
+        fallback_enabled = True
+
+    if not fallback_enabled:
+        return [primary]
+
+    if primary is _GB_ADAPTER:
+        # OL is always available as secondary.
+        return [_GB_ADAPTER, _OL_ADAPTER]
+
+    # primary is OL; GB is secondary only if key present and quota not exhausted.
+    gb_key = get_site_setting("google_books_api_key")
+    if gb_key and not is_gb_quota_exhausted():
+        return [_OL_ADAPTER, _GB_ADAPTER]
+    return [_OL_ADAPTER]
+
+
 def get_book_primary_adapter_name() -> str:
     """Return 'googlebooks' or 'openlibrary' based on current runtime config."""
     return "googlebooks" if _resolve_book_adapter() is _GB_ADAPTER else "openlibrary"
@@ -998,6 +1029,130 @@ def _adapter_source_name(adapter: "MetadataAdapter") -> str | None:
     return None
 
 
+def _adapter_for_source(source: str) -> MetadataAdapter:
+    """Return the adapter singleton for a named source string."""
+    if source == "googlebooks":
+        return _GB_ADAPTER
+    if source == "openlibrary":
+        return _OL_ADAPTER
+    if source == "musicbrainz":
+        return _ADAPTERS["vinyl"]
+    if source == "tmdb":
+        return _tmdb_adapter
+    from compendium.domain.errors import ExternalLookupError as _ELE
+    raise _ELE(f"Unknown metadata source: '{source}'")
+
+
+# Valid source names per media type — used by lookup_metadata_from_source.
+_VALID_SOURCES_FOR_MEDIA: dict[str, frozenset] = {
+    "book": frozenset({"googlebooks", "openlibrary"}),
+    "vinyl": frozenset({"musicbrainz"}),
+    "cd": frozenset({"musicbrainz"}),
+    "dvd": frozenset({"tmdb"}),
+    "bluray": frozenset({"tmdb"}),
+    "vhs": frozenset({"tmdb"}),
+}
+
+
+# ---------------------------------------------------------------------------
+# API-key validation
+# ---------------------------------------------------------------------------
+
+class KeyValidationResult:
+    """Result of validate_google_books_key."""
+
+    __slots__ = ("ok", "status_code", "reason", "warning")
+
+    def __init__(
+        self,
+        ok: bool,
+        *,
+        status_code: int | None = None,
+        reason: str | None = None,
+        warning: str | None = None,
+    ) -> None:
+        self.ok = ok
+        self.status_code = status_code
+        self.reason = reason
+        self.warning = warning
+
+
+def validate_google_books_key(
+    key: str, *, sample_isbn: str = "9780441013593"
+) -> KeyValidationResult:
+    """Test a Google Books API key with a live lookup against a known ISBN.
+
+    Returns ``ok=True`` if the key is accepted. Quota-exhausted (daily limit)
+    also returns ``ok=True`` with a ``warning`` — the key is valid, just
+    temporarily blocked. All other errors return ``ok=False`` with ``reason``.
+    """
+    try:
+        lookup_google_books(sample_isbn, key)
+        return KeyValidationResult(ok=True)
+    except GoogleBooksQuotaExhausted:
+        return KeyValidationResult(
+            ok=True,
+            warning=(
+                "Google Books daily quota is currently exhausted. The key is valid "
+                "but lookups will fail until it resets (typically 24 hours)."
+            ),
+        )
+    except ExternalLookupError as exc:
+        return KeyValidationResult(ok=False, reason=str(exc))
+
+
+# ---------------------------------------------------------------------------
+# Per-source forced lookup
+# ---------------------------------------------------------------------------
+
+def lookup_metadata_from_source(
+    media_type_code: str,
+    kind: str,
+    value: str,
+    source: str,
+    *,
+    session=None,
+    bypass_cache: bool = True,
+) -> tuple[dict | None, str | None]:
+    """Fetch metadata from a specific named source, bypassing the primary/fallback resolver.
+
+    ``bypass_cache`` defaults to True because callers typically choose a source
+    to override a cached result they distrust.
+
+    Raises ``ValueError`` if *source* is not valid for *media_type_code*.
+    Raises ``ExternalLookupError`` on transport failure (not swallowed here —
+    the caller decides how to present the error).
+    """
+    valid = _VALID_SOURCES_FOR_MEDIA.get(media_type_code)
+    if valid is None:
+        raise ValueError(
+            f"No external metadata adapters for media type '{media_type_code}'"
+        )
+    if source not in valid:
+        raise ValueError(
+            f"Source '{source}' is not available for media type '{media_type_code}'. "
+            f"Valid sources: {sorted(valid)}"
+        )
+
+    adapter = _adapter_for_source(source)
+
+    if session is None:
+        result = adapter.lookup(kind, value)
+        return (result, source) if result is not None else (None, None)
+
+    from compendium.services.metadata_cache import get_or_fetch
+
+    result = get_or_fetch(
+        session,
+        type(adapter).__name__,
+        kind,
+        value,
+        lambda: adapter.lookup(kind, value),
+        bypass_cache=bypass_cache,
+    )
+    return (result, source) if result is not None else (None, None)
+
+
 def lookup_metadata_with_source(
     media_type_code: str,
     kind: str,
@@ -1011,48 +1166,43 @@ def lookup_metadata_with_source(
     produced the non-None result ('googlebooks', 'openlibrary', etc.), or None
     when nothing was found.
 
-    When Google Books is the primary book adapter and it raises an
-    ``ExternalLookupError``, this function catches the error and falls back to
-    Open Library rather than propagating the exception — matching the existing
-    None-result fallback behaviour. This covers any transport or HTTP failure
-    (400 bad key, 429 rate-limit, 5xx, network timeout), not just the
-    not-found case."""
-    # Make the session visible to is_gb_quota_exhausted (called from _resolve_book_adapter
-    # inside _get_adapter) so it can piggyback on the open connection instead of opening
-    # a duplicate one.  _mark_gb_quota_exhausted intentionally does NOT use this — it
-    # opens its own short-lived session so the sentinel survives any outer rollback.
+    For books, tries adapters in the order returned by ``_resolve_book_chain``
+    (primary, then optional secondary when ``book_metadata_fallback_enabled``
+    is true and a secondary is available). Google Books transport errors
+    (``ExternalLookupError``) are swallowed regardless of whether GB is primary
+    or secondary — a transient error should not abort an OL fallback. Non-GB
+    adapter errors propagate so callers can detect genuine failures."""
+    # Make the session visible to is_gb_quota_exhausted (called from the chain
+    # resolver) so it can piggyback on the open connection instead of opening a
+    # duplicate one.  _mark_gb_quota_exhausted intentionally does NOT use this —
+    # it opens its own short-lived session so the sentinel survives outer rollback.
     _tok = _active_lookup_session.set(session) if session is not None else None
     try:
-        adapter = _get_adapter(media_type_code)
-        primary_source = _adapter_source_name(adapter)
-
-        gb_primary = media_type_code == "book" and adapter is _GB_ADAPTER
+        if media_type_code == "book":
+            # Chain must be computed after ContextVar is set (quota check uses it).
+            chain = _resolve_book_chain()
+        else:
+            chain = [_get_adapter(media_type_code)]
 
         if session is None:
-            if gb_primary:
-                # Catch GB errors so we can fall through to OL; other adapters propagate.
+            for adapter in chain:
+                is_gb = adapter is _GB_ADAPTER
                 try:
                     result = adapter.lookup(kind, value)
                 except ExternalLookupError:
-                    result = None
-            else:
-                result = adapter.lookup(kind, value)
-            if result is not None:
-                return result, primary_source
-            # GB miss or error → try OL as a secondary source.
-            if gb_primary:
-                try:
-                    result = _OL_ADAPTER.lookup(kind, value)
-                except ExternalLookupError:
-                    result = None
+                    if is_gb:
+                        result = None
+                    else:
+                        raise
                 if result is not None:
-                    return result, "openlibrary"
+                    return result, _adapter_source_name(adapter)
             return None, None
 
         from compendium.services.metadata_cache import get_or_fetch
 
-        adapter_name = type(adapter).__name__
-        if gb_primary:
+        for adapter in chain:
+            is_gb = adapter is _GB_ADAPTER
+            adapter_name = type(adapter).__name__
             try:
                 result = get_or_fetch(
                     session,
@@ -1064,35 +1214,12 @@ def lookup_metadata_with_source(
                     write_buffer=write_buffer,
                 )
             except ExternalLookupError:
-                result = None
-        else:
-            result = get_or_fetch(
-                session,
-                adapter_name,
-                kind,
-                value,
-                lambda: adapter.lookup(kind, value),
-                bypass_cache=bypass_cache,
-                write_buffer=write_buffer,
-            )
-        if result is not None:
-            return result, primary_source
-        # GB miss or error → try OL; cache both under their own namespaces.
-        if gb_primary:
-            try:
-                result = get_or_fetch(
-                    session,
-                    type(_OL_ADAPTER).__name__,
-                    kind,
-                    value,
-                    lambda: _OL_ADAPTER.lookup(kind, value),
-                    bypass_cache=bypass_cache,
-                    write_buffer=write_buffer,
-                )
-            except ExternalLookupError:
-                result = None
+                if is_gb:
+                    result = None
+                else:
+                    raise
             if result is not None:
-                return result, "openlibrary"
+                return result, _adapter_source_name(adapter)
         return None, None
     finally:
         if _tok is not None:

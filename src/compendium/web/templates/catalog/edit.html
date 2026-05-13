@@ -82,15 +82,27 @@
 <h3>Refresh metadata</h3>
 <p>
   <small>
-    Re-fetch this work's metadata from its external source (Open Library,
-    MusicBrainz, or TMDb depending on media type). You'll see a preview of
-    what would change before anything is committed. Text fields are only
-    filled when the current value is empty; the cover URL is replaced if
-    upstream offers a new one.
+    Re-fetch this work's metadata from an external source (Google Books,
+    Open Library, MusicBrainz, or TMDb depending on media type). You'll see
+    a preview of what would change before anything is committed. Text fields
+    are only filled when the current value is empty; the cover URL is
+    replaced if upstream offers a new one.
   </small>
 </p>
-<a href="/ui/catalog/{{ work.id }}/refresh-metadata" role="button" class="outline">
-  Refresh from external source
-</a>
+{% if work.media_type and work.media_type.code == 'book' %}
+  <a href="/ui/catalog/{{ work.id }}/refresh-metadata" role="button" class="outline">
+    Refresh (configured: {{ book_primary_source | default('default') }})
+  </a>
+  <a href="/ui/catalog/{{ work.id }}/refresh-metadata?source=googlebooks" role="button" class="outline secondary" style="margin-left:0.5rem">
+    Refresh from Google Books
+  </a>
+  <a href="/ui/catalog/{{ work.id }}/refresh-metadata?source=openlibrary" role="button" class="outline secondary" style="margin-left:0.5rem">
+    Refresh from Open Library
+  </a>
+{% else %}
+  <a href="/ui/catalog/{{ work.id }}/refresh-metadata" role="button" class="outline">
+    Refresh from external source
+  </a>
+{% endif %}
 {% endif %}
 {% endblock %}

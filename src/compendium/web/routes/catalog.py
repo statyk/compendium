@@ -339,10 +339,17 @@ def work_edit_form(
             {"request": request, "user": user, "message": "Work not found"},
             status_code=404,
         )
+    from compendium.services.metadata import get_book_primary_adapter_name
     return _render(
         "catalog/edit.html",
         request,
-        {"request": request, "user": user, "work": work, "error": None},
+        {
+            "request": request,
+            "user": user,
+            "work": work,
+            "error": None,
+            "book_primary_source": get_book_primary_adapter_name(),
+        },
     )
 
 
@@ -366,6 +373,8 @@ def work_edit_submit(
 ):
     check_csrf_form(request, csrf_token)
 
+    from compendium.services.metadata import get_book_primary_adapter_name as _gbpan
+
     year_val: int | None = None
     if publication_year.strip():
         try:
@@ -375,8 +384,13 @@ def work_edit_submit(
             return _render(
                 "catalog/edit.html",
                 request,
-                {"request": request, "user": user, "work": work,
-                 "error": "Publication year must be a number."},
+                {
+                    "request": request,
+                    "user": user,
+                    "work": work,
+                    "error": "Publication year must be a number.",
+                    "book_primary_source": _gbpan(),
+                },
             )
 
     try:
@@ -405,7 +419,13 @@ def work_edit_submit(
         return _render(
             "catalog/edit.html",
             request,
-            {"request": request, "user": user, "work": work, "error": str(exc)},
+            {
+                "request": request,
+                "user": user,
+                "work": work,
+                "error": str(exc),
+                "book_primary_source": _gbpan(),
+            },
         )
     return RedirectResponse(
         f"/ui/catalog/{work_id}?message=Work+updated.", status_code=303
@@ -416,13 +436,15 @@ def work_edit_submit(
 def work_refresh_preview(
     work_id: int,
     request: Request,
+    source: str | None = Query(default=None),
     user: AppUser = Depends(require_web_permission("work.edit")),
     session: Session = Depends(get_session),
 ):
     """Preview a metadata refresh — fetches upstream + computes diff. No DB writes."""
     try:
         report = _catalog_svc(session, user).refresh_metadata(
-            work_id, dry_run=True, bypass_cache=True
+            work_id, dry_run=True, bypass_cache=True,
+            source=source if source else None,
         )
     except NotFoundError:
         return _render(
@@ -449,6 +471,7 @@ def work_refresh_apply(
     work_id: int,
     request: Request,
     csrf_token: str = Form(default=""),
+    source: str | None = Form(default=None),
     user: AppUser = Depends(require_web_permission("work.edit")),
     session: Session = Depends(get_session),
 ):
@@ -456,7 +479,8 @@ def work_refresh_apply(
     check_csrf_form(request, csrf_token)
     try:
         report = _catalog_svc(session, user).refresh_metadata(
-            work_id, dry_run=False, bypass_cache=True
+            work_id, dry_run=False, bypass_cache=True,
+            source=source if source else None,
         )
     except NotFoundError:
         return _render(

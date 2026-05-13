@@ -230,8 +230,9 @@ Most settings (library name, theme, fine thresholds, hold/overdue defaults, kios
 | `COMPENDIUM_SECRET_KEY` | Encryption key for secrets stored in the DB (SMTP password, API keys). Optional — set to enable the `/ui/admin/system/secrets` page. Generate with `compendium keygen --secret`. |
 | `COMPENDIUM_TMDB_API_KEY` | TMDb API key. Override — also settable via Admin → System → Secrets when `COMPENDIUM_SECRET_KEY` is configured. |
 | `COMPENDIUM_GOOGLE_BOOKS_API_KEY` | Google Books API key (primary book metadata source when set). Override — also settable via Admin → System → Secrets when `COMPENDIUM_SECRET_KEY` is configured. |
-| `COMPENDIUM_BOOK_METADATA_SOURCE_PREFERENCE` | Primary book metadata source: `googlebooks` (default; uses GB when key is set, else OL) or `openlibrary`. DB-editable at **System** settings. |
-| `COMPENDIUM_METADATA_CACHE_TTL_DAYS` | Positive-hit TTL for the metadata cache in days (default 30). Negative (not-found) entries always expire after 24 hours. DB-editable at **System** settings. |
+| `COMPENDIUM_BOOK_METADATA_SOURCE_PREFERENCE` | Primary book metadata source: `googlebooks` (default; uses GB when key is set, else OL) or `openlibrary`. DB-editable at **Admin → System → Metadata Sources**. |
+| `COMPENDIUM_BOOK_METADATA_FALLBACK_ENABLED` | When `true` (default), a miss from the primary book adapter automatically tries the secondary (GB→OL and OL→GB symmetric). Set `false` to disable. DB-editable at **Admin → System → Metadata Sources**. |
+| `COMPENDIUM_METADATA_CACHE_TTL_DAYS` | Positive-hit TTL for the metadata cache in days (default 30). Negative (not-found) entries always expire after 24 hours. DB-editable at **Admin → System → Metadata Sources**. |
 | `COMPENDIUM_SMTP_PASSWORD` | SMTP password. Override — also settable via Admin → System → Secrets when `COMPENDIUM_SECRET_KEY` is configured. |
 | `COMPENDIUM_MAX_UPLOAD_BYTES` | Hard cap on bulk-import upload size (default 100 MB / 104857600). Env-only so a compromised admin token can't raise it. |
 | `COMPENDIUM_LOGIN_MAX_FAILURES` | Max consecutive failed logins before the identity is throttled (default 10). DB-editable at **System → Security**. |

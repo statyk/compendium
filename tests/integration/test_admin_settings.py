@@ -588,3 +588,133 @@ class TestRegistryNullable:
 
         with pytest.raises(SettingValidationError):
             set_site_setting("library_name", None, session=s_session)
+
+
+# ──────────────────────────────────────────────────────────────────────────
+# Metadata sources admin page
+# ──────────────────────────────────────────────────────────────────────────
+
+
+class TestMetadataSourcesPage:
+    def _admin_cookies(self, client, s_session):
+        _, tok = _make_user(s_session, role_name="Administrator", username="meta_admin")
+        from compendium.web.deps import AUTH_COOKIE
+        raw, signed = _make_csrf_pair()
+        return {AUTH_COOKIE: tok}, raw, signed
+
+    def test_get_renders(self, client, s_session):
+        cookies, _, _ = self._admin_cookies(client, s_session)
+        resp = client.get("/ui/admin/system/metadata", cookies=cookies)
+        assert resp.status_code == 200
+        assert "book_metadata_source_preference" in resp.text
+
+    def test_get_shows_three_keys(self, client, s_session):
+        cookies, _, _ = self._admin_cookies(client, s_session)
+        resp = client.get("/ui/admin/system/metadata", cookies=cookies)
+        assert "book_metadata_fallback_enabled" in resp.text
+        assert "metadata_cache_ttl_days" in resp.text
+
+    def test_post_persists_preference(self, client, s_session):
+        cookies, raw_csrf, signed_csrf = self._admin_cookies(client, s_session)
+        from compendium.web.csrf import _COOKIE as CSRF_COOKIE
+
+        resp = client.post(
+            "/ui/admin/system/metadata",
+            data={"csrf_token": raw_csrf, "book_metadata_source_preference": "openlibrary"},
+            cookies={**cookies, CSRF_COOKIE: signed_csrf},
+        )
+        assert resp.status_code == 303
+        ss.invalidate_cache()
+        assert get_site_setting("book_metadata_source_preference") == "openlibrary"
+
+    def test_post_persists_fallback_toggle(self, client, s_session):
+        """Submitting without the fallback checkbox sets the setting to False."""
+        cookies, raw_csrf, signed_csrf = self._admin_cookies(client, s_session)
+        from compendium.web.csrf import _COOKIE as CSRF_COOKIE
+
+        # Bool settings follow checkbox semantics: key absent from form → False.
+        resp = client.post(
+            "/ui/admin/system/metadata",
+            data={
+                "csrf_token": raw_csrf,
+                "book_metadata_source_preference": "openlibrary",
+                "metadata_cache_ttl_days": "30",
+                # book_metadata_fallback_enabled omitted → False
+            },
+            cookies={**cookies, CSRF_COOKIE: signed_csrf},
+        )
+        assert resp.status_code == 303
+        ss.invalidate_cache()
+        assert get_site_setting("book_metadata_fallback_enabled") is False
+
+    def test_gb_radio_disabled_when_no_key(self, client, s_session, monkeypatch):
+        """GB option is greyed-out (disabled) in the metadata page when no GB key is configured."""
+        monkeypatch.delenv("COMPENDIUM_GOOGLE_BOOKS_API_KEY", raising=False)
+        cookies, _, _ = self._admin_cookies(client, s_session)
+        resp = client.get("/ui/admin/system/metadata", cookies=cookies)
+        assert resp.status_code == 200
+        # The unavailable choice should be rendered as disabled.
+        assert "disabled" in resp.text
+
+    def test_metadata_page_in_nav(self, client, s_session):
+        cookies, _, _ = self._admin_cookies(client, s_session)
+        resp = client.get("/ui/admin/system/metadata", cookies=cookies)
+        assert "Metadata Sources" in resp.text
+
+
+# ──────────────────────────────────────────────────────────────────────────
+# API PATCH — force_skip_validation
+# ──────────────────────────────────────────────────────────────────────────
+
+
+class TestSettingsApiValidation:
+    def _admin_token(self, s_session):
+        _, tok = _make_user(s_session, role_name="Administrator", username="api_val_admin")
+        return tok
+
+    def test_patch_gb_key_invalid_returns_422(self, client, s_session, monkeypatch):
+        """PATCH google_books_api_key with a bad value and force_skip_validation=false → 422."""
+        from compendium.services.metadata import KeyValidationResult
+
+        monkeypatch.setenv("COMPENDIUM_SECRET_KEY", "Fernet_key_placeholder")
+        tok = self._admin_token(s_session)
+
+        bad_result = KeyValidationResult(ok=False, reason="keyInvalid")
+
+        with patch(
+            "compendium.web.routes.admin_settings._SECRET_VALIDATORS",
+            {"google_books_api_key": lambda _: bad_result},
+        ):
+            r = client.patch(
+                "/settings/google_books_api_key",
+                json={"value": "bad-key", "force_skip_validation": False},
+                headers={"Authorization": f"Bearer {tok}"},
+            )
+        assert r.status_code == 422
+        body = r.json()
+        assert body["detail"]["error"] == "validation_failed"
+        assert "keyInvalid" in body["detail"]["reason"]
+
+    def test_patch_gb_key_force_skip_saves(self, client, s_session, monkeypatch):
+        """PATCH google_books_api_key with force_skip_validation=true bypasses validator."""
+        from compendium.services.metadata import KeyValidationResult
+        from cryptography.fernet import Fernet
+
+        fernet_key = Fernet.generate_key().decode()
+        monkeypatch.setenv("COMPENDIUM_SECRET_KEY", fernet_key)
+        # Reset the settings isolation so the new key is picked up.
+        monkeypatch.setattr("compendium.db.engine.get_engine", lambda: s_session.get_bind())
+
+        tok = self._admin_token(s_session)
+        bad_result = KeyValidationResult(ok=False, reason="keyInvalid")
+
+        with patch(
+            "compendium.web.routes.admin_settings._SECRET_VALIDATORS",
+            {"google_books_api_key": lambda _: bad_result},
+        ):
+            r = client.patch(
+                "/settings/google_books_api_key",
+                json={"value": "forced-key", "force_skip_validation": True},
+                headers={"Authorization": f"Bearer {tok}"},
+            )
+        assert r.status_code == 200

@@ -251,7 +251,8 @@ def import_librarything_cmd(
         "--enrich",
         help=(
             "When a row has an ISBN, fill missing fields from the relevant "
-            "external source (Open Library for books). Default off."
+            "external source (Google Books / Open Library for books, "
+            "MusicBrainz for music, TMDb for film). Default off."
         ),
     ),
     preserve_barcodes: bool = typer.Option(
@@ -345,7 +346,8 @@ def import_goodreads_cmd(
         "--enrich",
         help=(
             "When a row has an ISBN, fill missing fields from the relevant "
-            "external source (Open Library for books). Default off."
+            "external source (Google Books / Open Library for books, "
+            "MusicBrainz for music, TMDb for film). Default off."
         ),
     ),
     preserve_barcodes: bool = typer.Option(

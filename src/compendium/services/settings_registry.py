@@ -23,6 +23,16 @@ class SettingsRegistryError(Exception):
     pass
 
 
+@dataclass
+class AvailabilityHint:
+    """Signals that certain choices for a setting are unavailable.
+
+    Used by the admin UI to grey out options and display a contextual warning.
+    """
+    unavailable_choices: frozenset
+    warning: str
+
+
 class UnknownSettingError(SettingsRegistryError, KeyError):
     """Raised when a key isn't registered."""
 
@@ -44,6 +54,7 @@ class SettingDescriptor:
     nullable: bool = False  # If True, an empty string parses to None.
     widget: str | None = None  # Hint for custom UI rendering (e.g. "shortcut_picker").
     secret: bool = False  # If True, value is encrypted at rest; never echoed in UI.
+    availability_hint: Callable[[], "AvailabilityHint | None"] | None = field(default=None)
 
     def resolved_env_var(self) -> str:
         return self.env_var or f"COMPENDIUM_{self.key.upper()}"
@@ -780,36 +791,70 @@ def _register_builtins() -> None:
             scope="system",
             secret=True,
             help_text=(
-                "API key for the Google Books API. When set (and "
-                "'book_metadata_source_preference' is 'googlebooks'), Google Books "
-                "is the primary source for book metadata and covers, with Open Library "
-                "as fallback. Obtain a key at "
-                "console.cloud.google.com → APIs & Services → Credentials. "
+                "API key for the Google Books API. When set and "
+                "'book_metadata_source_preference' is 'googlebooks', Google Books "
+                "is the primary source for book metadata. "
+                "When 'book_metadata_fallback_enabled' is true (the default), the other "
+                "source is tried automatically on any miss. "
+                "Obtain a key at console.cloud.google.com → APIs & Services → Credentials. "
                 "Free tier: 1 000 requests/day. "
                 "Stored encrypted at rest. "
                 "Environment variable COMPENDIUM_GOOGLE_BOOKS_API_KEY takes precedence if set."
             ),
         )
     )
+
+    def _gb_key_availability_hint() -> "AvailabilityHint | None":
+        from compendium.services.site_settings import get_site_setting
+        try:
+            key = get_site_setting("google_books_api_key")
+        except Exception:
+            key = None
+        if not key:
+            return AvailabilityHint(
+                unavailable_choices=frozenset({"googlebooks"}),
+                warning=(
+                    "Google Books requires an API key. Configure it on the "
+                    "<a href='/ui/admin/system/secrets'>Secrets</a> page to use "
+                    "Google Books as primary."
+                ),
+            )
+        return None
+
     register(
         SettingDescriptor(
             key="book_metadata_source_preference",
-            display_name="Book Metadata Source Preference",
-            type=str,
+            display_name="Book Metadata Source",
+            type=Literal["googlebooks", "openlibrary"],
             default="googlebooks",
             scope="system",
             help_text=(
-                "Which source to use as the primary metadata adapter for books. "
-                "'googlebooks' uses Google Books when an API key is configured, "
-                "falling back to Open Library otherwise. "
-                "'openlibrary' always uses Open Library as primary regardless of "
-                "whether a Google Books key is present. "
-                "The other source is consulted for cover images when the primary "
-                "has none. "
+                "Primary metadata adapter for books. "
+                "'googlebooks' requires an API key (see Secrets page); "
+                "'openlibrary' is always available without a key. "
+                "When 'book_metadata_fallback_enabled' is on, the other source is "
+                "tried automatically on any miss — making the fallback symmetric in both directions. "
                 "Environment variable COMPENDIUM_BOOK_METADATA_SOURCE_PREFERENCE "
                 "takes precedence if set."
             ),
-            validator=_one_of("googlebooks", "openlibrary"),
+            availability_hint=_gb_key_availability_hint,
+        )
+    )
+    register(
+        SettingDescriptor(
+            key="book_metadata_fallback_enabled",
+            display_name="Enable Fallback to Secondary Source",
+            type=bool,
+            default=True,
+            scope="system",
+            help_text=(
+                "When enabled (the default), if the primary book metadata source returns "
+                "no data for an ISBN, the other source is tried automatically. "
+                "Disable this to use only the configured primary source with no fallback "
+                "(e.g. 'Google Books only, do not try Open Library'). "
+                "Environment variable COMPENDIUM_BOOK_METADATA_FALLBACK_ENABLED "
+                "takes precedence if set."
+            ),
         )
     )
     register(
@@ -821,9 +866,10 @@ def _register_builtins() -> None:
             scope="system",
             help_text=(
                 "How long to keep successful external metadata lookups cached in "
-                "the database (Open Library, MusicBrainz, TMDb). Negative (not-found) "
-                "responses are always cached for 24 hours. Set to a higher value to "
-                "reduce network calls; lower to pick up upstream corrections sooner. "
+                "the database (Google Books, Open Library, MusicBrainz, TMDb). "
+                "Negative (not-found) responses are always cached for 24 hours. "
+                "Set to a higher value to reduce network calls; lower to pick up "
+                "upstream corrections sooner. "
                 "Environment variable COMPENDIUM_METADATA_CACHE_TTL_DAYS takes precedence if set."
             ),
             validator=_positive_int,

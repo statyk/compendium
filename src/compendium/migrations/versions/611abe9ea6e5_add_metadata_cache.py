@@ -4,7 +4,7 @@ Revision ID: 611abe9ea6e5
 Revises: fab1c2d3e4f5
 Create Date: 2026-05-09 15:27:17.498719
 
-Persistent cache for external metadata lookups (Open Library, MusicBrainz, TMDb).
+Persistent cache for external metadata lookups (Google Books, Open Library, MusicBrainz, TMDb).
 Keyed on (adapter, kind, lookup_value); payload is JSON-encoded; NULL on negative rows.
 """
 from typing import Sequence, Union
