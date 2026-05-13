@@ -84,74 +84,9 @@
     warning is shown.
   </label>
 
-  <button type="submit">Upload</button>
+  <button type="submit" style="width:auto">Upload</button>
+  <small style="color:var(--pico-muted-color); margin-left:.75rem">
+    Imports run in the background — you'll see a live progress page immediately after upload.
+  </small>
 </form>
-
-{% if report %}
-<hr>
-<h3>Import report</h3>
-{% if report.dry_run %}
-<p class="success-banner">
-  Dry-run complete — no changes were written. Uncheck <em>Dry run</em> and re-upload to apply.
-</p>
-{% else %}
-<p class="success-banner">
-  Import applied.
-  {% if report.created_works or report.added_copies %}
-  <a href="/ui/catalog" role="button" class="outline" style="margin-left:.75rem">Browse catalog</a>
-  {% endif %}
-</p>
-{% endif %}
-
-{% if report.gb_quota_tripped %}
-<p class="warning-banner">
-  Google Books daily quota was exhausted during this import. Remaining rows
-  used Open Library as fallback. Quota resets ~24 h after the first hit.
-  Run this import again tomorrow to fill those rows with Google Books metadata.
-</p>
-{% endif %}
-
-{% if report.warnings %}
-<div class="warning-banner">
-  <strong>Warnings ({{ report.warnings | length }}):</strong>
-  <ul style="margin:.4rem 0 0 1.2rem">
-    {% for w in report.warnings[:50] %}<li>{{ w }}</li>{% endfor %}
-    {% if report.warnings | length > 50 %}
-    <li>… and {{ report.warnings | length - 50 }} more</li>
-    {% endif %}
-  </ul>
-</div>
-{% endif %}
-
-<dl>
-  <dt>Source</dt><dd>{{ report.source }}{% if report.filename %} ({{ report.filename }}){% endif %}</dd>
-  <dt>Total rows/records</dt><dd>{{ report.total_rows }}</dd>
-  <dt>Works created</dt><dd>{{ report.created_works }}</dd>
-  <dt>Added copies (existing work)</dt><dd>{{ report.added_copies }}</dd>
-  <dt>Skipped duplicates</dt><dd>{{ report.skipped_duplicates }}</dd>
-  {% if report.enriched_rows %}<dt>Enriched rows</dt><dd>{{ report.enriched_rows }}</dd>{% endif %}
-  <dt>Errors</dt><dd>{{ report.errors | length }}</dd>
-</dl>
-
-{% if report.errors %}
-<h4>Errors</h4>
-<figure>
-<table>
-  <thead><tr><th>Row</th><th>Identifier</th><th>Message</th></tr></thead>
-  <tbody>
-    {% for err in report.errors[:200] %}
-    <tr>
-      <td>{{ err.row_number }}</td>
-      <td><code>{{ err.identifier }}</code></td>
-      <td>{{ err.message }}</td>
-    </tr>
-    {% endfor %}
-  </tbody>
-</table>
-{% if report.errors | length > 200 %}
-<figcaption>(Showing first 200 of {{ report.errors | length }} errors)</figcaption>
-{% endif %}
-</figure>
-{% endif %}
-{% endif %}
 {% endblock %}

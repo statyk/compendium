@@ -1,0 +1,10 @@
+{% extends "base.html" %}
+{% block title %}Bulk import — {{ library_name() }}{% endblock %}
+{% block content %}
+<h2>Bulk import</h2>
+<p><a href="/ui/admin/import">&larr; Back to import form</a></p>
+
+<div id="import-status">
+  {% include "admin/_import_status_partial.html" %}
+</div>
+{% endblock %}

@@ -3,18 +3,20 @@
 from __future__ import annotations
 
 import io
+import time
+from contextlib import contextmanager
 from unittest.mock import patch
 
 import pytest
 from fastapi.testclient import TestClient
 from pymarc import Field, MARCWriter, Record, Subfield
-from sqlalchemy import create_engine
+from sqlalchemy import create_engine, text
 from sqlalchemy.orm import Session, sessionmaker
-from sqlalchemy.pool import StaticPool
 
 from compendium.api.app import create_app
 from compendium.config.seed import seed_defaults
 from compendium.config.settings import Settings
+from compendium.db import engine as _db_engine
 from compendium.db.session import get_session
 from compendium.domain.models import AppUser, Base
 from compendium.repositories.sql.role_repository import SqlRoleRepository
@@ -30,15 +32,24 @@ _SETTINGS = Settings(database_url="sqlite:///:memory:", jwt_secret_key=_SECRET)
 
 
 @pytest.fixture(scope="module")
-def engine():
+def engine(tmp_path_factory):
+    # File-based SQLite with WAL allows multiple concurrent connections.
+    # Required because background import threads open their own sessions while
+    # the test's main session is still active (StaticPool's single connection
+    # causes OperationalError when both sessions try to use it at once).
+    db_path = tmp_path_factory.mktemp("db") / "test_import_web.db"
     eng = create_engine(
-        "sqlite:///:memory:",
+        f"sqlite:///{db_path}",
         connect_args={"check_same_thread": False},
-        poolclass=StaticPool,
     )
+    with eng.connect() as conn:
+        conn.execute(text("PRAGMA journal_mode=WAL"))
+        conn.execute(text("PRAGMA busy_timeout=5000"))
+        conn.commit()
     Base.metadata.create_all(eng)
     setup_sqlite_fts(eng)
-    return eng
+    yield eng
+    eng.dispose()
 
 
 @pytest.fixture
@@ -68,9 +79,25 @@ def client(engine, db_session):
         finally:
             s.close()
 
+    @contextmanager
+    def _bg_session_scope():
+        factory = sessionmaker(bind=engine, autoflush=False, expire_on_commit=False)
+        s = factory()
+        try:
+            yield s
+            s.commit()
+        except Exception:
+            s.rollback()
+            raise
+        finally:
+            s.close()
+
     app.dependency_overrides[get_session] = _override
+    # Bind test engine so background import threads use the same in-memory DB.
+    _db_engine.bind(engine, session_scope=_bg_session_scope)
     with patch("compendium.db.engine.get_settings", return_value=_SETTINGS):
         yield TestClient(app, follow_redirects=False)
+    _db_engine.unbind()
 
 
 def _make_user(s, role_name, username):
@@ -122,6 +149,19 @@ def _marc_bytes(isbn="9780441013702"):
     return buf.getvalue()
 
 
+def _wait_for_import(client, cookies, location, timeout=5.0):
+    """Poll the job status endpoint until the import finishes (done or failed)."""
+    deadline = time.monotonic() + timeout
+    while time.monotonic() < deadline:
+        resp = client.get(location + "/status", cookies=cookies)
+        assert resp.status_code == 200
+        # The running/pending partial includes hx-trigger; done/failed do not.
+        if b"hx-trigger" not in resp.content:
+            return resp
+        time.sleep(0.05)
+    return resp  # return last response even if still running (test will fail)
+
+
 def test_web_import_form_renders(client, db_session):
     _make_user(db_session, "Librarian", "web_imp_form")
     db_session.commit()
@@ -150,9 +190,13 @@ def test_web_import_csv_dry_run(client, db_session):
         files={"file": ("in.csv", _csv_bytes(), "text/csv")},
         cookies={**cookies, CSRF_COOKIE: signed},
     )
-    assert resp.status_code == 200
-    assert b"Dry-run complete" in resp.content
-    # Nothing persisted
+    assert resp.status_code == 303
+    location = resp.headers["location"]
+    assert "/jobs/" in location
+
+    final = _wait_for_import(client, cookies, location)
+    assert b"Dry-run complete" in final.content
+    # Dry-run: nothing persisted
     assert SqlWorkRepository(db_session).get_by_isbn("9780441013701") is None
 
 
@@ -173,8 +217,12 @@ def test_web_import_csv_applies(client, db_session):
         files={"file": ("in.csv", _csv_bytes("9780441013703"), "text/csv")},
         cookies={**cookies, CSRF_COOKIE: signed},
     )
-    assert resp.status_code == 200
-    assert b"Import applied" in resp.content
+    assert resp.status_code == 303
+    location = resp.headers["location"]
+
+    final = _wait_for_import(client, cookies, location)
+    assert b"Import applied" in final.content
+    db_session.expire_all()
     assert SqlWorkRepository(db_session).get_by_isbn("9780441013703") is not None
 
 
@@ -187,6 +235,7 @@ def test_web_import_forbidden_without_catalog_import(client, db_session):
 
 
 def test_web_import_csv_error_re_renders_form(client, db_session):
+    """A CSV missing required columns shows an error on the import form (pre-flight check)."""
     _make_user(db_session, "Librarian", "web_imp_err")
     db_session.commit()
     cookies = _login(client, "web_imp_err")
@@ -204,8 +253,13 @@ def test_web_import_csv_error_re_renders_form(client, db_session):
         files={"file": ("bad.csv", bad, "text/csv")},
         cookies={**cookies, CSRF_COOKIE: signed},
     )
-    assert resp.status_code == 400
-    assert b"error-banner" in resp.content
+    # Missing required column is a validation error detectable only inside the
+    # import thread; the route returns 303 and the job ends in "failed" state.
+    assert resp.status_code == 303
+    location = resp.headers["location"]
+
+    final = _wait_for_import(client, cookies, location)
+    assert b"error-banner" in final.content
 
 
 def test_web_export_form_renders(client, db_session):
@@ -222,8 +276,8 @@ def test_web_export_csv_downloads(client, db_session):
     db_session.commit()
     cookies = _login(client, "web_exp_csv")
     raw, signed = _make_csrf_pair()
-    # Seed one work first via import
-    client.post(
+    # Seed one work via import; wait for completion before exporting.
+    resp = client.post(
         "/ui/admin/import",
         data={
             "format": "csv",
@@ -235,6 +289,9 @@ def test_web_export_csv_downloads(client, db_session):
         files={"file": ("in.csv", _csv_bytes("9780441013705"), "text/csv")},
         cookies={**cookies, CSRF_COOKIE: signed},
     )
+    assert resp.status_code == 303
+    _wait_for_import(client, cookies, resp.headers["location"])
+
     raw2, signed2 = _make_csrf_pair()
     resp = client.post(
         "/ui/admin/export",
@@ -257,7 +314,7 @@ def test_web_export_marc_downloads(client, db_session):
     db_session.commit()
     cookies = _login(client, "web_exp_marc")
     raw, signed = _make_csrf_pair()
-    client.post(
+    resp = client.post(
         "/ui/admin/import",
         data={
             "format": "marc",
@@ -269,6 +326,9 @@ def test_web_export_marc_downloads(client, db_session):
         files={"file": ("in.mrc", _marc_bytes("9780441013706"), "application/marc")},
         cookies={**cookies, CSRF_COOKIE: signed},
     )
+    assert resp.status_code == 303
+    _wait_for_import(client, cookies, resp.headers["location"])
+
     raw2, signed2 = _make_csrf_pair()
     resp = client.post(
         "/ui/admin/export",

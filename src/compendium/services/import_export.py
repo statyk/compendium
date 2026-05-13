@@ -25,6 +25,7 @@ import re
 from dataclasses import dataclass, field, replace
 from datetime import datetime
 from enum import Enum
+from collections.abc import Callable
 from typing import IO
 
 from pymarc import Field, MARCReader, MARCWriter, Record, Subfield, parse_xml_to_array
@@ -478,6 +479,7 @@ class ImportService:
         stream: IO[str],
         options: ImportOptions,
         filename: str | None = None,
+        on_progress: Callable[[ImportReport], None] | None = None,
     ) -> ImportReport:
         reader = csv.DictReader(stream)
         if not reader.fieldnames:
@@ -525,6 +527,8 @@ class ImportService:
                     )
                 )
                 continue
+            if on_progress and report.total_rows % 5 == 0:
+                on_progress(report)
 
         return self._finalize(report, options)
 
@@ -533,6 +537,7 @@ class ImportService:
         stream: IO[str],
         options: ImportOptions,
         filename: str | None = None,
+        on_progress: Callable[[ImportReport], None] | None = None,
     ) -> ImportReport:
         """Import a LibraryThing TSV export.
 
@@ -627,6 +632,8 @@ class ImportService:
                         )
                     )
                     break
+            if on_progress and report.total_rows % 5 == 0:
+                on_progress(report)
 
         return self._finalize(report, options)
 
@@ -635,6 +642,7 @@ class ImportService:
         stream: IO[str],
         options: ImportOptions,
         filename: str | None = None,
+        on_progress: Callable[[ImportReport], None] | None = None,
     ) -> ImportReport:
         """Import a GoodReads library export CSV.
 
@@ -731,6 +739,8 @@ class ImportService:
                         )
                     )
                     break
+            if on_progress and report.total_rows % 5 == 0:
+                on_progress(report)
 
         return self._finalize(report, options)
 
@@ -739,6 +749,7 @@ class ImportService:
         stream: IO[bytes],
         options: ImportOptions,
         filename: str | None = None,
+        on_progress: Callable[[ImportReport], None] | None = None,
     ) -> ImportReport:
         data = stream.read()
         reader = MARCReader(io.BytesIO(data))
@@ -754,6 +765,8 @@ class ImportService:
                 )
                 continue
             self._ingest_marc_record(record, idx, options, report)
+            if on_progress and report.total_rows % 5 == 0:
+                on_progress(report)
         return self._finalize(report, options)
 
     def import_marcxml(
@@ -761,6 +774,7 @@ class ImportService:
         stream: IO[bytes],
         options: ImportOptions,
         filename: str | None = None,
+        on_progress: Callable[[ImportReport], None] | None = None,
     ) -> ImportReport:
         report = ImportReport(
             source="marcxml", filename=filename, dry_run=options.dry_run
@@ -776,6 +790,8 @@ class ImportService:
             raise ValidationError(f"Malformed MARCXML: {exc}") from exc
         for idx, record in enumerate(records, start=1):
             self._ingest_marc_record(record, idx, options, report)
+            if on_progress and report.total_rows % 5 == 0:
+                on_progress(report)
         return self._finalize(report, options)
 
     def _ingest_marc_record(

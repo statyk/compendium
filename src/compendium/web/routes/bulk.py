@@ -2,11 +2,15 @@
 
 from __future__ import annotations
 
+import collections
 import io
+import threading
+import uuid
+from dataclasses import dataclass, field as _field
 from datetime import datetime
 
 from fastapi import APIRouter, Depends, File, Form, Header, HTTPException, Request, UploadFile
-from fastapi.responses import Response
+from fastapi.responses import RedirectResponse, Response
 from sqlalchemy.orm import Session
 
 from compendium.api.uploads import read_upload_bounded
@@ -29,6 +33,7 @@ from compendium.services.import_export import (
     ExportService,
     ImportMode,
     ImportOptions,
+    ImportReport,
     ImportService,
     decode_text_bytes,
 )
@@ -38,8 +43,50 @@ from compendium.web.jinja import templates
 
 router = APIRouter()
 
+# ---------------------------------------------------------------------------
+# In-memory job store for background imports
+# ---------------------------------------------------------------------------
 
-def _make_importer(session: Session, user: AppUser) -> ImportService:
+@dataclass
+class _JobState:
+    status: str          # "pending" | "running" | "done" | "failed"
+    filename: str | None
+    format: str
+    user_id: int         # owner; only this user can poll the job
+    processed_rows: int = 0
+    created_works: int = 0
+    added_copies: int = 0
+    skipped_duplicates: int = 0
+    enriched_rows: int = 0
+    report: ImportReport | None = None
+    error: str | None = None
+    lock: threading.Lock = _field(default_factory=threading.Lock, repr=False)
+
+
+_JOBS: collections.OrderedDict[str, _JobState] = collections.OrderedDict()
+_JOBS_LOCK = threading.Lock()
+_MAX_JOBS = 200
+
+
+def _create_job(state: _JobState) -> str:
+    job_id = str(uuid.uuid4())
+    with _JOBS_LOCK:
+        _JOBS[job_id] = state
+        while len(_JOBS) > _MAX_JOBS:
+            _JOBS.popitem(last=False)
+    return job_id
+
+
+def _get_job(job_id: str) -> _JobState | None:
+    with _JOBS_LOCK:
+        return _JOBS.get(job_id)
+
+
+# ---------------------------------------------------------------------------
+# Background import thread
+# ---------------------------------------------------------------------------
+
+def _make_importer_for_session(session: Session, actor: AppUser | None) -> ImportService:
     catalog = CatalogService(
         work_repo=SqlWorkRepository(session),
         item_repo=SqlItemRepository(session),
@@ -55,9 +102,110 @@ def _make_importer(session: Session, user: AppUser) -> ImportService:
         work_repo=SqlWorkRepository(session),
         item_repo=SqlItemRepository(session),
         audit_svc=AuditService(SqlAuditLogRepository(session)),
-        actor=user,
+        actor=actor,
         source="web",
     )
+
+
+def _run_import_job(
+    state: _JobState,
+    fmt: str,
+    payload: str | bytes,
+    options: ImportOptions,
+    replaced: int,
+) -> None:
+    """payload is str for csv/librarything/goodreads, bytes for marc/marcxml."""
+
+    def on_progress(report: ImportReport) -> None:
+        with state.lock:
+            state.processed_rows = report.total_rows
+            state.created_works = report.created_works
+            state.added_copies = report.added_copies
+            state.skipped_duplicates = report.skipped_duplicates
+            state.enriched_rows = report.enriched_rows
+
+    with state.lock:
+        state.status = "running"
+
+    importer: ImportService | None = None
+    report: ImportReport | None = None
+    try:
+        from compendium.db.session import session_scope
+
+        with session_scope() as session:
+            actor = session.get(AppUser, state.user_id)
+            importer = _make_importer_for_session(session, actor)
+            if fmt == "csv":
+                report = importer.import_csv(
+                    io.StringIO(payload),  # type: ignore[arg-type]
+                    options,
+                    filename=state.filename,
+                    on_progress=on_progress,
+                )
+            elif fmt == "librarything":
+                report = importer.import_librarything(
+                    io.StringIO(payload),  # type: ignore[arg-type]
+                    options,
+                    filename=state.filename,
+                    on_progress=on_progress,
+                )
+            elif fmt == "goodreads":
+                report = importer.import_goodreads(
+                    io.StringIO(payload),  # type: ignore[arg-type]
+                    options,
+                    filename=state.filename,
+                    on_progress=on_progress,
+                )
+            elif fmt == "marcxml":
+                report = importer.import_marcxml(
+                    io.BytesIO(payload),  # type: ignore[arg-type]
+                    options,
+                    filename=state.filename,
+                    on_progress=on_progress,
+                )
+            else:  # marc
+                report = importer.import_marc(
+                    io.BytesIO(payload),  # type: ignore[arg-type]
+                    options,
+                    filename=state.filename,
+                    on_progress=on_progress,
+                )
+            # session_scope commits on normal exit
+
+        if replaced:
+            report.warnings.insert(
+                0,
+                f"Decoded with {replaced} byte replacement(s); "
+                "file is not clean UTF-8.",
+            )
+        with state.lock:
+            state.status = "done"
+            state.report = report
+            state.processed_rows = report.total_rows
+            state.created_works = report.created_works
+            state.added_copies = report.added_copies
+            state.skipped_duplicates = report.skipped_duplicates
+            state.enriched_rows = report.enriched_rows
+    except Exception as exc:
+        with state.lock:
+            state.status = "failed"
+            state.error = str(exc)
+    finally:
+        # Flush cache entries collected during enrichment regardless of outcome;
+        # upstream API responses already fetched are valid and worth keeping.
+        if importer is not None:
+            try:
+                importer.flush_metadata_cache()
+            except Exception:
+                pass
+
+
+# ---------------------------------------------------------------------------
+# Route helpers
+# ---------------------------------------------------------------------------
+
+def _make_importer(session: Session, user: AppUser) -> ImportService:
+    return _make_importer_for_session(session, user)
 
 
 def _render(name: str, request: Request, ctx: dict, status_code: int = 200):
@@ -85,6 +233,10 @@ def _gb_quota_warning() -> str | None:
     return None
 
 
+# ---------------------------------------------------------------------------
+# Import form + async submission
+# ---------------------------------------------------------------------------
+
 @router.get("/admin/import")
 def import_form(
     request: Request,
@@ -102,7 +254,6 @@ def import_form(
             "media_types": media_types,
             "branches": branches,
             "mode_choices": _MODE_CHOICES,
-            "report": None,
             "error": None,
             "gb_quota_warning": _gb_quota_warning(),
         },
@@ -131,21 +282,26 @@ async def import_submit(
     media_types = SqlMediaTypeRepository(session).list()
     branches = SqlBranchRepository(session).list()
 
-    ctx = {
-        "request": request,
-        "user": user,
-        "media_types": media_types,
-        "branches": branches,
-        "mode_choices": _MODE_CHOICES,
-        "report": None,
-        "error": None,
-        "gb_quota_warning": _gb_quota_warning(),
-    }
+    def _err(msg: str, code: int = 400):
+        return _render(
+            "admin/import.html",
+            request,
+            {
+                "request": request,
+                "user": user,
+                "media_types": media_types,
+                "branches": branches,
+                "mode_choices": _MODE_CHOICES,
+                "error": msg,
+                "gb_quota_warning": _gb_quota_warning(),
+            },
+            status_code=code,
+        )
+
     try:
         mode_enum = ImportMode(mode)
     except ValueError:
-        ctx["error"] = f"Unknown mode '{mode}'. Valid: {_MODE_CHOICES}"
-        return _render("admin/import.html", request, ctx, status_code=400)
+        return _err(f"Unknown mode '{mode}'. Valid: {_MODE_CHOICES}")
 
     strict_encoding_bool = bool(strict_encoding)
     options = ImportOptions(
@@ -164,65 +320,100 @@ async def import_submit(
         )
     except HTTPException as exc:
         if exc.status_code == 413:
-            ctx["error"] = exc.detail
-            return _render("admin/import.html", request, ctx, status_code=413)
+            return _err(exc.detail, code=413)
         raise
-    importer = _make_importer(session, user)
+
+    # Normalize marcxml by filename extension (matches old route logic).
+    fmt = format
+    if fmt == "marc" and file.filename and file.filename.lower().endswith((".xml", ".marcxml")):
+        fmt = "marcxml"
+
+    # Decode text formats synchronously so encoding errors surface immediately.
     replaced = 0
-    try:
-        if format in ("csv", "librarything", "goodreads"):
-            try:
-                text, replaced = decode_text_bytes(data, strict=strict_encoding_bool)
-            except UnicodeDecodeError as exc:
-                ctx["error"] = (
-                    f"File is not valid UTF-8: {exc}. Uncheck "
-                    "'strict encoding' to import anyway."
-                )
-                return _render("admin/import.html", request, ctx, status_code=400)
-            stream = io.StringIO(text)
-            if format == "csv":
-                report = importer.import_csv(stream, options, filename=file.filename)
-            elif format == "librarything":
-                report = importer.import_librarything(
-                    stream, options, filename=file.filename
-                )
-            else:
-                report = importer.import_goodreads(
-                    stream, options, filename=file.filename
-                )
-        elif format == "marcxml" or (
-            format == "marc"
-            and file.filename
-            and file.filename.lower().endswith((".xml", ".marcxml"))
-        ):
-            report = importer.import_marcxml(
-                io.BytesIO(data), options, filename=file.filename
+    if fmt in ("csv", "librarything", "goodreads"):
+        try:
+            payload_str, replaced = decode_text_bytes(data, strict=strict_encoding_bool)
+        except UnicodeDecodeError as exc:
+            return _err(
+                f"File is not valid UTF-8: {exc}. Uncheck "
+                "'strict encoding' to import anyway."
             )
-        elif format == "marc":
-            report = importer.import_marc(
-                io.BytesIO(data), options, filename=file.filename
-            )
-        else:
-            ctx["error"] = (
-                f"Unknown format '{format}'. Valid: csv, goodreads, librarything, marc, marcxml"
-            )
-            return _render("admin/import.html", request, ctx, status_code=400)
-    except ValidationError as exc:
-        ctx["error"] = str(exc)
-        return _render("admin/import.html", request, ctx, status_code=400)
+        payload: str | bytes = payload_str
+    else:
+        payload = data
 
-    session.commit()
-    importer.flush_metadata_cache()
+    state = _JobState(
+        status="pending",
+        filename=file.filename,
+        format=fmt,
+        user_id=user.id,
+    )
+    job_id = _create_job(state)
 
-    if replaced:
-        report.warnings.insert(
-            0,
-            f"Decoded with {replaced} byte replacement(s); "
-            "file is not clean UTF-8.",
+    t = threading.Thread(
+        target=_run_import_job,
+        args=(state, fmt, payload, options, replaced),
+        daemon=True,
+    )
+    t.start()
+
+    return RedirectResponse(f"/ui/admin/import/jobs/{job_id}", status_code=303)
+
+
+# ---------------------------------------------------------------------------
+# Import job status routes
+# ---------------------------------------------------------------------------
+
+@router.get("/admin/import/jobs/{job_id}")
+def import_job_page(
+    job_id: str,
+    request: Request,
+    user: AppUser = Depends(require_web_permission("catalog.import")),
+):
+    state = _get_job(job_id)
+    if state is None or state.user_id != user.id:
+        raise HTTPException(status_code=404, detail="Import job not found.")
+    return _render(
+        "admin/import_job.html",
+        request,
+        {"request": request, "user": user, "job_id": job_id, "state": state},
+    )
+
+
+@router.get("/admin/import/jobs/{job_id}/status")
+def import_job_status(
+    job_id: str,
+    request: Request,
+    user: AppUser = Depends(require_web_permission("catalog.import")),
+):
+    state = _get_job(job_id)
+    if state is None or state.user_id != user.id:
+        raise HTTPException(status_code=404, detail="Import job not found.")
+    # Snapshot under the lock to avoid torn reads.
+    with state.lock:
+        snap = _JobState(
+            status=state.status,
+            filename=state.filename,
+            format=state.format,
+            user_id=state.user_id,
+            processed_rows=state.processed_rows,
+            created_works=state.created_works,
+            added_copies=state.added_copies,
+            skipped_duplicates=state.skipped_duplicates,
+            enriched_rows=state.enriched_rows,
+            report=state.report,
+            error=state.error,
         )
-    ctx["report"] = report
-    return _render("admin/import.html", request, ctx)
+    return _render(
+        "admin/_import_status_partial.html",
+        request,
+        {"request": request, "user": user, "job_id": job_id, "state": snap},
+    )
 
+
+# ---------------------------------------------------------------------------
+# Export routes (unchanged)
+# ---------------------------------------------------------------------------
 
 @router.get("/admin/export")
 def export_form(

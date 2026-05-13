@@ -1,0 +1,26 @@
+{% if state.status in ('pending', 'running') %}
+<div id="import-status"
+     hx-get="/ui/admin/import/jobs/{{ job_id }}/status"
+     hx-trigger="every 1500ms"
+     hx-swap="outerHTML">
+  <p aria-busy="true">Importing <strong>{{ state.filename or "file" }}</strong>&hellip;</p>
+  <p>{{ state.processed_rows }} row{{ "s" if state.processed_rows != 1 else "" }} processed</p>
+  <dl>
+    <dt>Works created</dt><dd>{{ state.created_works }}</dd>
+    <dt>Copies added</dt><dd>{{ state.added_copies }}</dd>
+    <dt>Skipped duplicates</dt><dd>{{ state.skipped_duplicates }}</dd>
+    {% if state.enriched_rows %}<dt>Enriched</dt><dd>{{ state.enriched_rows }}</dd>{% endif %}
+  </dl>
+</div>
+{% elif state.status == 'failed' %}
+<div id="import-status">
+  <p class="error-banner">Import failed: {{ state.error }}</p>
+  <p><a href="/ui/admin/import">&larr; Back to import form</a></p>
+</div>
+{% else %}
+<div id="import-status">
+  <hr>
+  <h3>Import report</h3>
+  {% with report = state.report %}{% include "admin/_import_report.html" %}{% endwith %}
+</div>
+{% endif %}
