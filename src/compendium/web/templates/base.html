@@ -367,7 +367,10 @@
   <script nonce="{{ csp_nonce(request) }}">
     document.body.addEventListener('htmx:beforeRequest', function (e) {
       var t = e.detail.target;
-      if (t) t.setAttribute('aria-busy', 'true');
+      if (!t) return;
+      var trig = t.getAttribute('hx-trigger') || '';
+      if (trig.indexOf('every') !== -1) return;
+      t.setAttribute('aria-busy', 'true');
     });
     document.body.addEventListener('htmx:afterRequest', function (e) {
       var t = e.detail.target;

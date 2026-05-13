@@ -3,7 +3,7 @@
      hx-get="/ui/admin/import/jobs/{{ job_id }}/status"
      hx-trigger="every 1500ms"
      hx-swap="outerHTML">
-  <p aria-busy="true">Importing <strong>{{ state.filename or "file" }}</strong>&hellip;</p>
+  <p id="import-spinner" hx-preserve="true" aria-busy="true">Importing <strong>{{ state.filename or "file" }}</strong>&hellip;</p>
   <p>{{ state.processed_rows }} row{{ "s" if state.processed_rows != 1 else "" }} processed</p>
   <dl>
     <dt>Works created</dt><dd>{{ state.created_works }}</dd>
