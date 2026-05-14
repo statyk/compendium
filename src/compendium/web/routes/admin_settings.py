@@ -126,8 +126,7 @@ _SYSTEM_PAGES: dict[str, dict[str, Any]] = {
         "scope_perm": "system.manage",
         "intro": (
             "Outbound email configuration for hold-ready, due-soon, and "
-            "overdue notices. Set the SMTP password on the "
-            "<a href='/ui/admin/system/secrets'>Secrets</a> page."
+            "overdue notices. Set the SMTP password in the API Keys section below."
         ),
         "keys": [
             "smtp_host",
@@ -284,23 +283,26 @@ def _show_page(
     message: str | None,
     error: str | None,
     user: AppUser,
+    extra_ctx: dict[str, Any] | None = None,
 ):
     rows = _build_rows(page_meta["keys"])
-    return _render(
-        "admin/settings.html",
-        request,
-        {
-            "request": request,
-            "user": user,
-            "page_key": page_key,
-            "title": page_meta["title"],
-            "intro": page_meta["intro"],
-            "rows": rows,
-            "is_system": page_key in _SYSTEM_PAGES,
-            "message": message,
-            "error": error,
-        },
-    )
+    ctx: dict[str, Any] = {
+        "request": request,
+        "user": user,
+        "page_key": page_key,
+        "title": page_meta["title"],
+        "intro": page_meta["intro"],
+        "rows": rows,
+        "is_system": page_key in _SYSTEM_PAGES,
+        "message": message,
+        "error": error,
+        "secret_rows": [],
+        "key_configured": False,
+        "canary_mismatch": False,
+    }
+    if extra_ctx:
+        ctx.update(extra_ctx)
+    return _render("admin/settings.html", request, ctx)
 
 
 def _apply_form(
@@ -515,8 +517,13 @@ def smtp_get(
     message: str | None = Query(default=None),
     error: str | None = Query(default=None),
     user: AppUser = Depends(require_web_permission("system.manage")),
+    session: Session = Depends(get_session),
 ):
-    return _show_page("smtp", _SYSTEM_PAGES["smtp"], request, message, error, user)
+    secret_rows = _build_secrets_rows_filtered(["smtp_password"], session)
+    extra = _secrets_banner_ctx(session)
+    extra["secret_rows"] = secret_rows
+    extra["secrets_redirect_to"] = "/ui/admin/system/smtp"
+    return _show_page("smtp", _SYSTEM_PAGES["smtp"], request, message, error, user, extra_ctx=extra)
 
 
 @router.post("/admin/system/smtp")
@@ -606,9 +613,16 @@ def metadata_get(
     message: str | None = Query(default=None),
     error: str | None = Query(default=None),
     user: AppUser = Depends(require_web_permission("system.manage")),
+    session: Session = Depends(get_session),
 ):
+    secret_rows = _build_secrets_rows_filtered(
+        ["google_books_api_key", "tmdb_api_key"], session
+    )
+    extra = _secrets_banner_ctx(session)
+    extra["secret_rows"] = secret_rows
+    extra["secrets_redirect_to"] = "/ui/admin/system/metadata"
     return _show_page(
-        "metadata", _SYSTEM_PAGES["metadata"], request, message, error, user
+        "metadata", _SYSTEM_PAGES["metadata"], request, message, error, user, extra_ctx=extra
     )
 
 
@@ -631,6 +645,44 @@ async def metadata_post(
         session,
         user,
     )
+
+
+def _build_secrets_rows_filtered(keys: list[str], session) -> list[dict]:
+    """Build secrets rows for a specific subset of secret keys."""
+    from compendium.repositories.sql.site_setting_repository import SqlSiteSettingRepository
+    from compendium.services.settings_registry import all_descriptors
+
+    repo = SqlSiteSettingRepository(session)
+    by_key = {d.key: d for d in all_descriptors() if d.secret}
+    rows = []
+    for key in keys:
+        desc = by_key.get(key)
+        if desc is None:
+            continue
+        db_row = repo.get(desc.key)
+        rows.append(
+            {
+                "key": desc.key,
+                "display_name": desc.resolved_display_name(),
+                "desc": desc,
+                "env_var": desc.resolved_env_var(),
+                "env_overridden": desc.env_overridden(),
+                "db_set": db_row is not None and bool(db_row.value),
+            }
+        )
+    return rows
+
+
+def _secrets_banner_ctx(session) -> dict[str, Any]:
+    """Return key_configured / canary_mismatch flags for the secrets banner."""
+    from compendium.services.secrets import CanaryResult, check_canary, secret_key_configured
+
+    key_configured = secret_key_configured()
+    canary = check_canary(session) if key_configured else CanaryResult.NO_KEY
+    return {
+        "key_configured": key_configured,
+        "canary_mismatch": canary.value == "mismatch",
+    }
 
 
 # ── Secrets page ──────────────────────────────────────────────────────────────
@@ -666,31 +718,10 @@ def _build_secrets_rows(session) -> list[dict]:
 @router.get("/admin/system/secrets")
 def secrets_get(
     request: Request,
-    message: str | None = Query(default=None),
-    error: str | None = Query(default=None),
     user: AppUser = Depends(require_web_permission("system.manage")),
-    session: Session = Depends(get_session),
 ):
-    from compendium.services.secrets import CanaryResult, check_canary, secret_key_configured
-
-    key_configured = secret_key_configured()
-    canary = check_canary(session) if key_configured else CanaryResult.NO_KEY
-    rows = _build_secrets_rows(session)
-    return _render(
-        "admin/settings_secrets.html",
-        request,
-        {
-            "request": request,
-            "user": user,
-            "key_configured": key_configured,
-            "canary_ok": canary in (CanaryResult.OK, CanaryResult.MISSING),
-            "canary_mismatch": canary == CanaryResult.MISMATCH,
-            "rows": rows,
-            "message": message,
-            "error": error,
-            "validation_failures": {},
-        },
-    )
+    # API keys now live on their respective settings pages.
+    return RedirectResponse("/ui/admin/system/metadata", status_code=301)
 
 
 _SECRET_VALIDATORS: dict[str, Any] = {}
@@ -721,8 +752,18 @@ async def secrets_post(
     from compendium.services.secrets import SecretKeyMissingError, SecretKeyMismatchError
     from compendium.services.settings_registry import all_descriptors
 
+    _SECRETS_REDIRECT_WHITELIST = {
+        "/ui/admin/system/metadata",
+        "/ui/admin/system/smtp",
+    }
+
     form = await request.form()
     check_csrf_form(request, form.get("csrf_token", ""))
+
+    # Page that the secrets form was embedded in — redirect there on completion.
+    redirect_to = form.get("redirect_to", "").strip()
+    if redirect_to not in _SECRETS_REDIRECT_WHITELIST:
+        redirect_to = "/ui/admin/system/metadata"
 
     secret_descs = {d.key: d for d in all_descriptors() if d.secret}
     audit = _audit_svc(session)
@@ -779,33 +820,9 @@ async def secrets_post(
             errors.append(f"{key}: {exc}")
 
     if validation_failures:
-        # Re-render the secrets page with validation error details so the user
-        # can decide whether to override.
-        from compendium.services.secrets import CanaryResult, check_canary, secret_key_configured
-
-        key_configured = secret_key_configured()
-        canary = check_canary(session) if key_configured else CanaryResult.NO_KEY
-        rows = _build_secrets_rows(session)
-        validation_error = "; ".join(
-            f"{k}: {v}" for k, v in validation_failures.items()
-        )
-        return _render(
-            "admin/settings_secrets.html",
-            request,
-            {
-                "request": request,
-                "user": user,
-                "key_configured": key_configured,
-                "canary_ok": canary in (CanaryResult.OK, CanaryResult.MISSING),
-                "canary_mismatch": canary == CanaryResult.MISMATCH,
-                "rows": rows,
-                "message": None,
-                "error": None,
-                "validation_failures": validation_failures,
-                "validation_error": validation_error,
-                "form_values": dict(form),
-            },
-        )
+        validation_error = "; ".join(f"{k}: {v}" for k, v in validation_failures.items())
+        qs = f"?error={quote(validation_error)}"
+        return RedirectResponse(redirect_to + qs, status_code=303)
 
     if errors:
         qs = f"?error={quote('; '.join(errors))}"
@@ -813,4 +830,4 @@ async def secrets_post(
         qs = f"?message={quote(f'Saved {changed} change(s).')}"
     else:
         qs = "?message=Nothing+to+save."
-    return RedirectResponse("/ui/admin/system/secrets" + qs, status_code=303)
+    return RedirectResponse(redirect_to + qs, status_code=303)

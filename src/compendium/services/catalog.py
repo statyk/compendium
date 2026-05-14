@@ -953,12 +953,18 @@ class CatalogService:
         )
         return result
 
-    def add_item_to_work(self, work_id: int, location: str | None = None) -> Item:
+    def add_item_to_work(
+        self,
+        work_id: int,
+        location: str | None = None,
+        call_number: str | None = None,
+        condition: str | None = None,
+    ) -> Item:
         """Add another physical copy of an existing Work."""
         work = self._works.get(work_id)
         if work is None:
             raise NotFoundError(f"No Work with id={work_id}")
-        item = self._create_item(work, location=location)
+        item = self._create_item(work, location=location, call_number=call_number, condition=condition)
         self._record(
             AuditEntityType.ITEM, item.id, AuditAction.CREATE,
             {"snapshot": {"barcode": item.barcode, "work_id": work.id}},

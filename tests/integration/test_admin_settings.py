@@ -423,8 +423,8 @@ class TestSettingsWeb:
         r = client.get("/ui/admin/system/smtp", cookies=cookies)
         assert r.status_code == 200
         assert b"smtp_host" in r.content
-        # SMTP password row should not exist as an input
-        assert b'name="smtp_password"' not in r.content
+        # SMTP password appears in the API Keys section (secrets dispersal)
+        assert b'name="smtp_password"' in r.content
 
     def test_retention_page_renders_for_admin(self, client, s_session):
         _make_user(s_session, role_name="Administrator", username="admin_ret")

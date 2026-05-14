@@ -109,10 +109,23 @@ def client(s_engine, s_session):
 # ── GET /admin/system/secrets ─────────────────────────────────────────────
 
 
-def test_secrets_page_renders_disabled_banner_without_key(client, s_session):
+def test_secrets_page_redirects_to_metadata(client, s_session):
+    # The old /secrets URL now permanently redirects to Metadata Sources.
     _, token = _make_admin(s_session)
     resp = client.get(
         "/ui/admin/system/secrets",
+        cookies={AUTH_COOKIE: token},
+        follow_redirects=False,
+    )
+    assert resp.status_code == 301
+    assert "/ui/admin/system/metadata" in resp.headers["location"]
+
+
+def test_secrets_banner_disabled_shown_on_metadata_page(client, s_session):
+    # When secret key is not configured the banner appears on the metadata page.
+    _, token = _make_admin(s_session)
+    resp = client.get(
+        "/ui/admin/system/metadata",
         cookies={AUTH_COOKIE: token},
     )
     assert resp.status_code == 200
@@ -120,18 +133,18 @@ def test_secrets_page_renders_disabled_banner_without_key(client, s_session):
     assert "disabled" in resp.text
 
 
-def test_secrets_page_renders_enabled_without_banner(client, s_session, monkeypatch):
+def test_secrets_banner_absent_when_key_configured(client, s_session, monkeypatch):
     monkeypatch.setenv("COMPENDIUM_SECRET_KEY", _FERNET_KEY)
     _, token = _make_admin(s_session)
     resp = client.get(
-        "/ui/admin/system/secrets",
+        "/ui/admin/system/metadata",
         cookies={AUTH_COOKIE: token},
     )
     assert resp.status_code == 200
     assert "Secret storage is disabled" not in resp.text
 
 
-def test_secrets_page_shows_mismatch_banner(client, s_session, monkeypatch):
+def test_secrets_mismatch_banner_shown_on_metadata_page(client, s_session, monkeypatch):
     # Write a canary with one key, then switch to another.
     monkeypatch.setenv("COMPENDIUM_SECRET_KEY", _FERNET_KEY)
     with Session(s_session.get_bind()) as check_s:
@@ -144,7 +157,7 @@ def test_secrets_page_shows_mismatch_banner(client, s_session, monkeypatch):
 
     _, token = _make_admin(s_session)
     resp = client.get(
-        "/ui/admin/system/secrets",
+        "/ui/admin/system/metadata",
         cookies={AUTH_COOKIE: token},
     )
     assert resp.status_code == 200
@@ -243,7 +256,7 @@ def test_audit_log_redacts_secret(client, s_session, monkeypatch):
 
 
 def test_invalid_gb_key_blocks_save_with_banner(client, s_session, monkeypatch):
-    """Posting a bad GB key shows a validation banner; the key is NOT saved."""
+    """Posting a bad GB key redirects with an error; the key is NOT saved."""
     from unittest.mock import patch
     from compendium.services.metadata import KeyValidationResult
 
@@ -263,9 +276,9 @@ def test_invalid_gb_key_blocks_save_with_banner(client, s_session, monkeypatch):
             cookies={AUTH_COOKIE: token, CSRF_COOKIE: signed_csrf},
         )
 
-    # Should re-render the page (200), not redirect.
-    assert resp.status_code == 200
-    assert "API key not valid" in resp.text
+    # Should redirect with an error, not save.
+    assert resp.status_code == 303
+    assert "error=" in resp.headers["location"]
 
     # The key must NOT have been saved.
     from sqlalchemy.orm import Session

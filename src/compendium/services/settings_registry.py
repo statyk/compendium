@@ -378,7 +378,7 @@ def _register_builtins() -> None:
             key="custom_shortcuts",
             display_name="Nav Shortcuts",
             type=list[str],
-            default=[],
+            default=["/ui/circ", "/ui/items/new", "/ui/patrons", "/ui/admin/holds", "/ui/admin/loans"],
             scope="librarian",
             help_text=(
                 "Up to 5 quick-access links shown in the nav bar for logged-in "
@@ -814,9 +814,8 @@ def _register_builtins() -> None:
             return AvailabilityHint(
                 unavailable_choices=frozenset({"googlebooks"}),
                 warning=(
-                    "Google Books requires an API key. Configure it on the "
-                    "<a href='/ui/admin/system/secrets'>Secrets</a> page to use "
-                    "Google Books as primary."
+                    "Google Books requires an API key. Configure it in the "
+                    "API Keys section on this page to use Google Books as primary."
                 ),
             )
         return None
@@ -830,7 +829,7 @@ def _register_builtins() -> None:
             scope="system",
             help_text=(
                 "Primary metadata adapter for books. "
-                "'googlebooks' requires an API key (see Secrets page); "
+                "'googlebooks' requires an API key (configure it in the API Keys section below); "
                 "'openlibrary' is always available without a key. "
                 "When 'book_metadata_fallback_enabled' is on, the other source is "
                 "tried automatically on any miss — making the fallback symmetric in both directions. "

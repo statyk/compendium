@@ -4,6 +4,14 @@
 <h2>Add Item Manually</h2>
 <p><small>Use this form for items that external lookup can't find (obscure releases, zines, self-published works, etc.). <a href="/ui/items/new">Back to lookup</a>.</small></p>
 
+{% if added_barcode %}
+<p class="success-banner">
+  <strong>&#10003; Added</strong>
+  <small>(<code>{{ added_barcode }}</code>)</small>
+  &middot; <a href="/ui/items/{{ added_barcode }}">View item</a>
+</p>
+{% endif %}
+
 {% if error %}<p class="error-banner">{{ error }}</p>{% endif %}
 
 <form method="post" action="/ui/items/new/manual">

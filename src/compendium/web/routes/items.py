@@ -123,9 +123,29 @@ def _detect_kind(raw: str, media_type: str) -> tuple[str, str]:
 @router.get("/items/new")
 def item_new_form(
     request: Request,
+    work_id: int | None = Query(default=None),
+    media_type: str | None = Query(default=None),
+    added: str | None = Query(default=None),
     user: AppUser = Depends(require_web_permission(_PERM_MANAGE)),
+    session: Session = Depends(get_session),
 ):
-    return _render("items/new.html", request, {"request": request, "user": user, "error": None})
+    ctx: dict = {
+        "request": request,
+        "user": user,
+        "error": None,
+        "preset_media_type": media_type or "book",
+        "added_barcode": added,
+        "added_title": None,
+        "added_work_id": work_id,
+        "copy_work": None,
+    }
+    if work_id:
+        work = SqlWorkRepository(session).get(work_id)
+        if added:
+            ctx["added_title"] = work.title if work else None
+        else:
+            ctx["copy_work"] = work
+    return _render("items/new.html", request, ctx)
 
 
 @router.post("/items/lookup", response_class=HTMLResponse)
@@ -226,12 +246,20 @@ def item_lookup(
 @router.get("/items/new/manual")
 def item_new_manual_form(
     request: Request,
+    media_type: str | None = Query(default=None),
+    added: str | None = Query(default=None),
     user: AppUser = Depends(require_web_permission(_PERM_MANAGE)),
 ):
     return _render(
         "items/new_manual.html",
         request,
-        {"request": request, "user": user, "error": None, "form": {}},
+        {
+            "request": request,
+            "user": user,
+            "error": None,
+            "form": {"media_type": media_type or "book"},
+            "added_barcode": added,
+        },
     )
 
 
@@ -300,7 +328,11 @@ def item_create_manual(
         )
     if call_number.strip():
         item.call_number = call_number.strip()
-    return RedirectResponse(f"/ui/items/{item.barcode}", status_code=303)
+    mt = media_type.strip()
+    return RedirectResponse(
+        f"/ui/items/new/manual?media_type={quote(mt)}&added={quote(item.barcode)}",
+        status_code=303,
+    )
 
 
 @router.post("/items/new")
@@ -312,13 +344,34 @@ def item_create(
     location: str = Form(default=""),
     call_number: str = Form(default=""),
     condition: str = Form(default=""),
+    copy_work_id: str = Form(default=""),
     csrf_token: str = Form(default=""),
     user: AppUser = Depends(require_web_permission(_PERM_MANAGE)),
     session: Session = Depends(get_session),
 ):
     check_csrf_form(request, csrf_token)
+    svc = _catalog_svc(session, user)
+    if copy_work_id.strip():
+        # Fast path: add another copy of a known work by its DB id.
+        try:
+            wid = int(copy_work_id.strip())
+            item = svc.add_item_to_work(
+                wid,
+                location=location.strip() or None,
+                call_number=call_number.strip() or None,
+                condition=condition.strip() or None,
+            )
+        except (BusinessRuleError, NotFoundError, ValidationError) as exc:
+            return _render(
+                "items/new.html",
+                request,
+                {"request": request, "user": user, "error": str(exc),
+                 "preset_media_type": "book", "copy_work": None,
+                 "added_barcode": None, "added_title": None, "added_work_id": None},
+            )
+        return RedirectResponse(f"/ui/catalog/{wid}?message=Copy+added.", status_code=303)
     try:
-        work, item = _catalog_svc(session, user).add_from_lookup(
+        work, item = svc.add_from_lookup(
             media_type.strip(),
             identifier_kind.strip(),
             identifier_value.strip(),
@@ -328,13 +381,19 @@ def item_create(
         return _render(
             "items/new.html",
             request,
-            {"request": request, "user": user, "error": str(exc)},
+            {"request": request, "user": user, "error": str(exc),
+             "preset_media_type": media_type.strip() or "book",
+             "copy_work": None, "added_barcode": None, "added_title": None, "added_work_id": None},
         )
     if call_number.strip():
         item.call_number = call_number.strip()
     if condition.strip():
         item.condition = condition.strip()
-    return RedirectResponse(f"/ui/items/{item.barcode}", status_code=303)
+    mt = media_type.strip()
+    return RedirectResponse(
+        f"/ui/items/new?media_type={quote(mt)}&added={quote(item.barcode)}&work_id={work.id}",
+        status_code=303,
+    )
 
 
 @router.get("/items/{barcode}")

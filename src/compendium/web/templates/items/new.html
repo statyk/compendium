@@ -1,10 +1,62 @@
 {% extends "base.html" %}
+{% from "_macros.html" import cover_url %}
 {% block title %}Add Item — {{ library_name() }}{% endblock %}
 {% block content %}
 <h2>Add Item</h2>
 
+{% if added_barcode %}
+<p class="success-banner">
+  <strong>&#10003; Added{% if added_title %}: {{ added_title }}{% endif %}</strong>
+  <small>(<code>{{ added_barcode }}</code>)</small>
+  &middot; <a href="/ui/items/{{ added_barcode }}">View item</a>
+  {% if added_work_id %}&middot; <a href="/ui/catalog/{{ added_work_id }}">View work</a>{% endif %}
+</p>
+{% endif %}
+
 {% if error %}<p class="error-banner">{{ error }}</p>{% endif %}
 
+{% if copy_work %}
+
+{# ── Streamlined add-copy form (arrived from a work detail page) ─────────── #}
+<article>
+  <header><strong>Add copy</strong></header>
+  <div style="display:flex; gap:1rem; align-items:flex-start; margin-bottom:1rem">
+    {% if copy_work.cover_image_url %}
+    <img src="{{ cover_url(copy_work.cover_image_url, copy_work.updated_at) }}" alt="Cover" style="width:60px; flex-shrink:0; border-radius:4px">
+    {% endif %}
+    <div>
+      <strong>{{ copy_work.title }}</strong>
+      {% if copy_work.subtitle %}<br><em>{{ copy_work.subtitle }}</em>{% endif %}
+      {% if copy_work.creators %}<br><small>{% for wc in copy_work.creators %}{{ wc.creator.display_name }}{% if not loop.last %}, {% endif %}{% endfor %}</small>{% endif %}
+      {% if copy_work.publication_year %}<br><small>{{ copy_work.publication_year }}</small>{% endif %}
+    </div>
+  </div>
+  <form method="post" action="/ui/items/new">
+    <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+    <input type="hidden" name="copy_work_id" value="{{ copy_work.id }}">
+    <label for="ac-location">Location <small>(optional)</small></label>
+    <input type="text" id="ac-location" name="location" placeholder="e.g. Shelf A3" autocomplete="off" autofocus>
+    <label for="ac-call-number">Call number <small>(optional)</small></label>
+    <input type="text" id="ac-call-number" name="call_number" autocomplete="off">
+    <label for="ac-condition">Condition <small>(optional)</small></label>
+    <select id="ac-condition" name="condition">
+      <option value="">—</option>
+      <option>New</option>
+      <option>Good</option>
+      <option>Fair</option>
+      <option>Poor</option>
+    </select>
+    <div style="margin-top:1rem; display:flex; gap:1rem; align-items:center">
+      <button type="submit" style="width:auto">Add Copy</button>
+      <a href="/ui/catalog/{{ copy_work.id }}">Cancel</a>
+    </div>
+  </form>
+</article>
+
+{% else %}
+
+{# ── Normal identifier-lookup form ─────────────────────────────────────────── #}
+{% set _pm = preset_media_type or 'book' %}
 <article>
   <header><strong>Look up by identifier</strong></header>
   <form
@@ -15,12 +67,12 @@
     <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
     <fieldset>
       <legend>Media type</legend>
-      <label><input type="radio" name="media_type" value="book" checked> <span>Book <small>(title or ISBN)</small></span></label>
-      <label><input type="radio" name="media_type" value="vinyl"> <span>Vinyl Record <small>(title, UPC, or MusicBrainz ID)</small></span></label>
-      <label><input type="radio" name="media_type" value="cd"> <span>CD <small>(title, UPC, or MusicBrainz ID)</small></span></label>
-      <label><input type="radio" name="media_type" value="dvd"> <span>DVD <small>(title or TMDb ID)</small></span></label>
-      <label><input type="radio" name="media_type" value="bluray"> <span>Blu-ray <small>(title or TMDb ID)</small></span></label>
-      <label><input type="radio" name="media_type" value="vhs"> <span>VHS <small>(title or TMDb ID)</small></span></label>
+      <label><input type="radio" name="media_type" value="book" {% if _pm == 'book' %}checked{% endif %}> <span>Book <small>(title or ISBN)</small></span></label>
+      <label><input type="radio" name="media_type" value="vinyl" {% if _pm == 'vinyl' %}checked{% endif %}> <span>Vinyl Record <small>(title, UPC, or MusicBrainz ID)</small></span></label>
+      <label><input type="radio" name="media_type" value="cd" {% if _pm == 'cd' %}checked{% endif %}> <span>CD <small>(title, UPC, or MusicBrainz ID)</small></span></label>
+      <label><input type="radio" name="media_type" value="dvd" {% if _pm == 'dvd' %}checked{% endif %}> <span>DVD <small>(title or TMDb ID)</small></span></label>
+      <label><input type="radio" name="media_type" value="bluray" {% if _pm == 'bluray' %}checked{% endif %}> <span>Blu-ray <small>(title or TMDb ID)</small></span></label>
+      <label><input type="radio" name="media_type" value="vhs" {% if _pm == 'vhs' %}checked{% endif %}> <span>VHS <small>(title or TMDb ID)</small></span></label>
     </fieldset>
     <label for="identifier">Identifier</label>
     <fieldset role="group">
@@ -32,9 +84,8 @@
   {% if has_permission(user, 'system.manage') %}
   <p class="field-hint" style="margin-top:.75rem">
     Tip: book metadata uses Open Library by default (no key required). Configuring a
-    Google Books API key on the <a href="/ui/admin/system/secrets">Secrets page</a>
-    lets you switch the primary source on the
-    <a href="/ui/admin/system/metadata">Metadata Sources</a> page.
+    Google Books API key on the <a href="/ui/admin/system/metadata">Metadata Sources</a> page
+    lets you switch the primary source and unlock richer book data.
     Film metadata is richer with a TMDb API key.
   </p>
   {% endif %}
@@ -42,11 +93,14 @@
 
 <div id="item-preview"></div>
 
-<p><small>Can't find it? <a href="/ui/items/new/manual">Enter manually</a> instead.</small></p>
+<p><small>Can't find it? <a href="/ui/items/new/manual{% if preset_media_type and preset_media_type != 'book' %}?media_type={{ preset_media_type }}{% endif %}">Enter manually</a> instead.</small></p>
 
 {% include "_partials/scanner_dialog.html" %}
+{% endif %}
 {% endblock %}
 
 {% block scripts %}
+{% if not copy_work %}
 {% include "_partials/scanner_scripts.html" %}
+{% endif %}
 {% endblock %}

@@ -334,7 +334,7 @@ class TestNavPages:
     def test_all_pages_have_section(self):
         from compendium.web.nav_pages import NAV_PAGES
 
-        valid = {"Catalog", "Circulation", "Cataloging", "Admin", "System", "Self-service"}
+        valid = {"Catalog", "Circulation", "Cataloging", "Admin", "Settings", "Self-service"}
         for p in NAV_PAGES:
             assert p.get("section") in valid, p
 

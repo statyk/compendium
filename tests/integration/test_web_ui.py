@@ -1109,9 +1109,15 @@ def test_manual_add_creates_item_and_redirects(web_client, librarian):
         cookies={**auth_cookies, CSRF_COOKIE: signed},
     )
     assert resp.status_code == 303
-    assert "/ui/items/" in resp.headers["location"]
+    # Redirects back to the manual form with success banner and the new barcode.
+    location = resp.headers["location"]
+    assert "/ui/items/new/manual" in location
+    assert "added=" in location
 
-    detail = web_client.get(resp.headers["location"], cookies=auth_cookies)
+    # Extract barcode and verify item was created.
+    from urllib.parse import parse_qs, urlparse
+    barcode = parse_qs(urlparse(location).query)["added"][0]
+    detail = web_client.get(f"/ui/items/{barcode}", cookies=auth_cookies)
     assert detail.status_code == 200
     assert b"Obscure Zine Issue 3" in detail.content
     assert b"Zine Shelf" in detail.content
