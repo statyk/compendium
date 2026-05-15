@@ -16,7 +16,7 @@ from __future__ import annotations
 from typing import Any
 from urllib.parse import quote
 
-from fastapi import APIRouter, Depends, Query, Request
+from fastapi import APIRouter, Depends, HTTPException, Query, Request
 from fastapi.responses import RedirectResponse
 from sqlalchemy.orm import Session
 
@@ -38,7 +38,8 @@ from compendium.services.site_settings import (
     set_site_setting,
 )
 from compendium.web.csrf import check_csrf_form, ensure_csrf, set_csrf_cookie
-from compendium.web.deps import require_web_permission
+from compendium.services.auth import has_permission
+from compendium.web.deps import require_web_permission, require_web_user
 from compendium.web.jinja import templates
 
 router = APIRouter()
@@ -175,6 +176,23 @@ _SYSTEM_PAGES: dict[str, dict[str, Any]] = {
 
 _ALL_PAGES = {**_PAGES, **_SYSTEM_PAGES}
 
+# Flat ordered list consumed by the settings sidebar and hub.
+SETTINGS_PAGES: list[dict[str, Any]] = [
+    {
+        "slug": slug,
+        "url": (
+            f"/ui/admin/system/{slug}"
+            if slug in _SYSTEM_PAGES
+            else f"/ui/admin/settings/{slug}"
+        ),
+        "title": meta["title"],
+        "intro": meta["intro"],
+        "scope_perm": meta["scope_perm"],
+        "tier": "system" if slug in _SYSTEM_PAGES else "librarian",
+    }
+    for slug, meta in _ALL_PAGES.items()
+]
+
 
 def _audit_svc(session: Session) -> AuditService:
     return AuditService(SqlAuditLogRepository(session))
@@ -299,6 +317,7 @@ def _show_page(
         "secret_rows": [],
         "key_configured": False,
         "canary_mismatch": False,
+        "settings_pages": SETTINGS_PAGES,
     }
     if extra_ctx:
         ctx.update(extra_ctx)
@@ -387,6 +406,39 @@ def _post_handler(
         else (f"?error={quote(err)}" if err else "")
     )
     return RedirectResponse(target + qs, status_code=303)
+
+
+# ── Settings hub ──────────────────────────────────────────────────────────
+
+
+def _require_settings_access(
+    request: Request,
+    user: AppUser = Depends(require_web_user),
+) -> AppUser:
+    if not any(
+        has_permission(user.role.permissions, p)
+        for p in ("patron.manage", "branch.edit", "system.manage")
+    ):
+        raise HTTPException(status_code=403, detail="Forbidden")
+    return user
+
+
+@router.get("/admin/settings")
+def settings_hub_get(
+    request: Request,
+    user: AppUser = Depends(_require_settings_access),
+):
+    pages = [
+        p for p in SETTINGS_PAGES
+        if has_permission(user.role.permissions, p["scope_perm"])
+    ]
+    ctx: dict[str, Any] = {
+        "request": request,
+        "user": user,
+        "pages": pages,
+        "settings_pages": SETTINGS_PAGES,
+    }
+    return _render("admin/settings_index.html", request, ctx)
 
 
 # ── Librarian-tier pages ──────────────────────────────────────────────────

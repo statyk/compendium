@@ -2,10 +2,14 @@
 {% block title %}{{ title }} settings — {{ library_name() }}{% endblock %}
 {% block content %}
 
+<div class="settings-layout">
+{% include "_partials/settings_sidebar.html" %}
+<div class="settings-main">
+
 <nav aria-label="breadcrumb">
   <ul>
     <li><a href="/ui/catalog">Home</a></li>
-    <li>{% if is_system %}System{% else %}Admin{% endif %}</li>
+    <li><a href="/ui/admin/settings">Settings</a></li>
     <li>{{ title }}</li>
   </ul>
 </nav>
@@ -241,5 +245,8 @@
   Backup: use <code>compendium backup --include-secret-key</code> to bundle the encryption
   key with the backup file, or manage it separately (recommended).</small></p>
 {% endif %}
+
+</div><!-- .settings-main -->
+</div><!-- .settings-layout -->
 
 {% endblock %}

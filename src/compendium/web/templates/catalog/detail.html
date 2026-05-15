@@ -34,8 +34,8 @@
 
 {% if has_permission(user, 'work.edit') %}
 <p>
-  <a href="/ui/catalog/{{ work.id }}/edit" role="button" class="outline">Edit work</a>
-  <a href="/ui/catalog/{{ work.id }}/creators" role="button" class="outline">Manage creators</a>
+  <a href="/ui/catalog/{{ work.id }}/edit" role="button" class="outline"><span class="btn-icon" aria-hidden="true">✏</span>Edit work</a>
+  <a href="/ui/catalog/{{ work.id }}/creators" role="button" class="outline"><span class="btn-icon" aria-hidden="true">👥</span>Manage creators</a>
 </p>
 {% endif %}
 
@@ -78,9 +78,9 @@
       <dt>Type</dt><dd>{{ media_pill(work.media_type) }}</dd>
       {% if work.publisher %}<dt>Publisher</dt><dd>{{ work.publisher }}</dd>{% endif %}
       {% if work.publication_year %}<dt>Year</dt><dd>{{ work.publication_year }}</dd>{% endif %}
-      {% if work.isbn %}<dt>ISBN</dt><dd>{{ work.isbn }}</dd>{% endif %}
-      {% if work.upc %}<dt>UPC</dt><dd>{{ work.upc }}</dd>{% endif %}
-      {% if work.classification_code %}<dt>Classification</dt><dd>{{ work.classification_scheme | upper }}: {{ work.classification_code }}</dd>{% endif %}
+      {% if work.isbn %}<dt>ISBN</dt><dd><code class="identifier">{{ work.isbn }}</code></dd>{% endif %}
+      {% if work.upc %}<dt>UPC</dt><dd><code class="identifier">{{ work.upc }}</code></dd>{% endif %}
+      {% if work.classification_code %}<dt>Classification</dt><dd><span class="call-number">{{ work.classification_scheme | upper }}: {{ work.classification_code }}</span></dd>{% endif %}
       {% if work.extra_metadata and work.extra_metadata.get('format') %}<dt>Format</dt><dd>{{ work.extra_metadata['format'] }}</dd>{% endif %}
       {% if work.extra_metadata and work.extra_metadata.get('runtime_minutes') %}<dt>Runtime</dt><dd>{{ work.extra_metadata['runtime_minutes'] }} min</dd>{% endif %}
       {% if work.extra_metadata and work.extra_metadata.get('genres') %}<dt>Genres</dt><dd>{{ work.extra_metadata['genres'] | join(", ") }}</dd>{% endif %}
@@ -110,7 +110,7 @@
           <br><small style="color:var(--pico-muted-color)">due {{ item_due[item.id].strftime("%Y-%m-%d") }}</small>
           {% endif %}
         </td>
-        <td data-label="Call #">{{ item.call_number or "—" }}</td>
+        <td data-label="Call #"><span class="call-number">{{ item.call_number or "—" }}</span></td>
       </tr>
       {% endfor %}
     </tbody>

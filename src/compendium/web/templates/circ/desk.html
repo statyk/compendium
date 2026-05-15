@@ -6,7 +6,9 @@
 
   <article>
     <header><strong>Check Out</strong></header>
-    <form class="circ-form" hx-post="/ui/circ/checkout" hx-target="#circ-result" hx-swap="innerHTML" hx-include="[name='csrf_token']" hx-indicator="#circ-ind">
+    <form class="circ-form" hx-post="/ui/circ/checkout" hx-target="#circ-result" hx-swap="innerHTML" hx-include="[name='csrf_token']" hx-indicator="#circ-ind"
+          hx-on::before-request="document.getElementById('circ-result').innerHTML=''"
+          hx-on::after-request="document.getElementById('co-barcode').focus()">
       <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
       <label for="co-barcode">Item barcode</label>
       <fieldset role="group">
@@ -24,7 +26,9 @@
 
   <article>
     <header><strong>Check In</strong></header>
-    <form class="circ-form" hx-post="/ui/circ/checkin" hx-target="#circ-result" hx-swap="innerHTML" hx-include="[name='csrf_token']" hx-indicator="#circ-ind">
+    <form class="circ-form" hx-post="/ui/circ/checkin" hx-target="#circ-result" hx-swap="innerHTML" hx-include="[name='csrf_token']" hx-indicator="#circ-ind"
+          hx-on::before-request="document.getElementById('circ-result').innerHTML=''"
+          hx-on::after-request="document.getElementById('ci-barcode').focus()">
       <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
       <label for="ci-barcode">Item barcode</label>
       <fieldset role="group">
@@ -37,7 +41,9 @@
 
   <article>
     <header><strong>Renew</strong></header>
-    <form class="circ-form" hx-post="/ui/circ/renew" hx-target="#circ-result" hx-swap="innerHTML" hx-include="[name='csrf_token']" hx-indicator="#circ-ind">
+    <form class="circ-form" hx-post="/ui/circ/renew" hx-target="#circ-result" hx-swap="innerHTML" hx-include="[name='csrf_token']" hx-indicator="#circ-ind"
+          hx-on::before-request="document.getElementById('circ-result').innerHTML=''"
+          hx-on::after-request="document.getElementById('rn-barcode').focus()">
       <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
       <label for="rn-barcode">Item barcode</label>
       <fieldset role="group">

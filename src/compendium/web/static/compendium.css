@@ -260,6 +260,7 @@
 body {
   background: var(--cmp-color-surface);
   color: var(--cmp-color-text);
+  font-family: var(--cmp-font-body);
 }
 h1, h2, h3, h4, h5, h6 {
   font-family: var(--cmp-font-display);
@@ -288,6 +289,13 @@ nav .brand { font-variation-settings: 'opsz' 18; font-weight: 700; }
 
 /* Tabular numerals in data-dense contexts */
 table, dl, .pill, .responsive-table { font-variant-numeric: tabular-nums; }
+
+/* Monospace for call numbers, barcodes, and identifier codes */
+.call-number, .barcode, code.identifier {
+  font-family: ui-monospace, "SF Mono", "Cascadia Code", Menlo, Consolas, monospace;
+  letter-spacing: 0.01em;
+  font-size: 0.92em;
+}
 
 /* ── Brand & nav ─────────────────────────────────────────────── */
 header {
@@ -660,23 +668,27 @@ nav details.dropdown form.dropdown-form button:hover {
 .work-list > li { margin-bottom: 0.5rem; }
 
 .work-card-link {
+  position: relative;
   display: flex; gap: 1.1rem; align-items: stretch;
-  padding: 0.9rem 1rem; border-radius: 8px;
-  border: 1px solid var(--pico-muted-border-color);
-  background: var(--pico-card-background-color);
+  padding: 0.9rem 1rem 0.9rem 1.3rem;
+  background: var(--cmp-color-surface-raised);
+  border: 1px solid var(--cmp-color-rule-soft);
+  border-left: 3px solid var(--cmp-color-accent);
+  border-radius: 4px;
   text-decoration: none; color: inherit;
-  transition: box-shadow 150ms ease, border-color 150ms ease;
-}
-@media (prefers-reduced-motion: no-preference) {
-  .work-card-link { transition: box-shadow 150ms ease, border-color 150ms ease; }
+  transition: box-shadow 0.15s ease, border-color 0.15s ease, transform 0.15s ease;
 }
 .work-card-link:hover {
-  box-shadow: 0 3px 14px rgba(0,0,0,0.1);
-  border-color: var(--pico-primary-border);
+  transform: translateY(-1px);
+  border-color: var(--cmp-color-rule);
+  box-shadow: var(--cmp-shadow-md);
 }
-[data-theme="dark"] .work-card-link:hover { box-shadow: 0 3px 14px rgba(0,0,0,0.35); }
-@media (prefers-color-scheme: dark) {
-  :root:not([data-theme]) .work-card-link:hover { box-shadow: 0 3px 14px rgba(0,0,0,0.35); }
+.work-card-punch {
+  position: absolute; top: 0.6rem; right: 0.7rem;
+  width: 0.5rem; height: 0.5rem;
+  border-radius: 50%;
+  background: var(--cmp-color-muted);
+  opacity: 0.35;
 }
 
 .work-card-link .cover-thumb { width: 90px; flex-shrink: 0; }
@@ -820,6 +832,11 @@ nav details.dropdown form.dropdown-form button:hover {
 #nav-shortcuts { display: flex; align-items: center; gap: 0.5rem; padding: 0; }
 #nav-shortcuts-edit { text-decoration: none; color: var(--pico-muted-color); font-size: 0.9em; }
 #nav-shortcuts-edit:hover { color: var(--pico-color); }
+#nav-shortcuts-edit .nav-shortcuts-edit-label { display: none; margin-left: 0.2rem; }
+@media (min-width: 721px) { #nav-shortcuts-edit .nav-shortcuts-edit-label { display: inline; } }
+
+/* Button icon glyphs (work detail, confirm pages, etc.) */
+.btn-icon { margin-right: 0.35rem; }
 
 /* ── Kiosk layout ─────────────────────────────────────────────── */
 body.kiosk-page { max-width: none; }
@@ -875,6 +892,39 @@ body.kiosk-page { max-width: none; }
   .catalog-main { order: 1; }
   .catalog-facets { order: 2; flex: 0 0 auto; }
   .facet-drawer > summary { display: list-item; cursor: pointer; padding: 0.5rem 0; font-weight: bold; }
+}
+
+/* ── Settings sidebar & hub ───────────────────────────────────── */
+.settings-layout { display: flex; gap: 1.5rem; align-items: flex-start; }
+.settings-sidebar { flex: 0 0 13rem; }
+.settings-sidebar nav { display: flex; flex-direction: column; gap: 0.15rem; }
+.settings-sidebar a {
+  display: block;
+  color: var(--cmp-color-muted);
+  padding: 0.4rem 0.65rem; border-radius: 4px; text-decoration: none;
+}
+.settings-sidebar a:hover { background: var(--cmp-color-surface-sunken); color: var(--cmp-color-text); }
+.settings-sidebar a[aria-current="page"] {
+  background: var(--cmp-color-surface-sunken);
+  color: var(--cmp-color-brand); font-weight: 600;
+  border-left: 2px solid var(--cmp-color-accent);
+  padding-left: calc(0.65rem - 2px);
+}
+.settings-sidebar hr { margin: 0.5rem 0; border-color: var(--cmp-color-rule-soft); }
+.settings-main { flex: 1; min-width: 0; }
+.settings-cards {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(16rem, 1fr));
+  gap: 1rem;
+  margin-top: 1rem;
+}
+.settings-card { padding: 1rem 1.1rem; margin: 0; }
+.settings-card h3 { margin: 0 0 0.4rem 0; font-size: 1.1rem; }
+.settings-card h3 a { text-decoration: none; }
+.settings-card p { margin: 0; color: var(--cmp-color-muted); font-size: 0.92rem; }
+@media (max-width: 720px) {
+  .settings-layout { flex-direction: column; }
+  .settings-sidebar { flex: none; }
 }
 
 /* ── Discovery shelves ────────────────────────────────────────── */
@@ -1213,12 +1263,3 @@ article > footer {
   box-shadow: none;
 }
 
-/* Work list cards — heritage surface + brass border on hover */
-.work-card-link {
-  background: var(--cmp-color-surface-raised);
-  border-color: var(--cmp-color-rule-soft);
-}
-.work-card-link:hover {
-  border-color: var(--cmp-color-rule);
-  box-shadow: var(--cmp-shadow-md);
-}

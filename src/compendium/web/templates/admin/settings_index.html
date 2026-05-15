@@ -1,0 +1,29 @@
+{% extends "base.html" %}
+{% block title %}Settings — {{ library_name() }}{% endblock %}
+{% block content %}
+
+<nav aria-label="breadcrumb">
+  <ul>
+    <li><a href="/ui/catalog">Home</a></li>
+    <li>Settings</li>
+  </ul>
+</nav>
+
+<div class="settings-layout">
+  {% include "_partials/settings_sidebar.html" %}
+  <div class="settings-main">
+    <h2>Settings</h2>
+    <p>Configure library behaviour, circulation rules, metadata sources, and system options.</p>
+
+    <div class="settings-cards">
+      {% for page in pages %}
+      <article class="settings-card">
+        <h3><a href="{{ page.url }}">{{ page.title }}</a></h3>
+        <p>{{ page.intro }}</p>
+      </article>
+      {% endfor %}
+    </div>
+  </div>
+</div>
+
+{% endblock %}

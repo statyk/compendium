@@ -1,0 +1,17 @@
+{% set _show_lib = namespace(v=false) %}
+{% set _show_sys = namespace(v=false) %}
+{% for page in settings_pages %}
+  {% if page.tier == 'librarian' and has_permission(user, page.scope_perm) %}{% set _show_lib.v = true %}{% endif %}
+  {% if page.tier == 'system'    and has_permission(user, page.scope_perm) %}{% set _show_sys.v = true %}{% endif %}
+{% endfor %}
+<aside class="settings-sidebar">
+  <nav aria-label="Settings navigation">
+    {% for page in settings_pages if page.tier == 'librarian' and has_permission(user, page.scope_perm) %}
+    <a href="{{ page.url }}"{% if request.url.path == page.url %} aria-current="page"{% endif %}>{{ page.title }}</a>
+    {% endfor %}
+    {% if _show_lib.v and _show_sys.v %}<hr>{% endif %}
+    {% for page in settings_pages if page.tier == 'system' and has_permission(user, page.scope_perm) %}
+    <a href="{{ page.url }}"{% if request.url.path == page.url %} aria-current="page"{% endif %}>{{ page.title }}</a>
+    {% endfor %}
+  </nav>
+</aside>
