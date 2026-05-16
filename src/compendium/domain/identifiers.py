@@ -2,8 +2,8 @@
 
 Format
 ------
-10-digit (location disabled):  [type][slug x8][check]
-14-digit (location enabled):   [type][loc x4][slug x8][check]
+10-digit:  [type][slug x8][check]
+14-digit:  [type][loc x4][slug x8][check]
 
 Type prefix:  2 = patron card,  3 = item barcode
 Slug:         8 decimal digits, globally unique within type
