@@ -91,13 +91,11 @@ _PAGES: dict[str, dict[str, Any]] = {
         "intro": (
             "Barcode format for newly minted item barcodes and patron cards. "
             "Existing codes are not affected — both 10-digit and 14-digit "
-            "barcodes remain readable in any deployment. Set a Location Code "
-            "on each branch (under Admin → Branches) before enabling "
-            "'Embed Branch Location in Barcode'."
+            "barcodes remain readable in any deployment. 'Barcode Format' "
+            "selects between the 10-digit and 14-digit format for new mints."
         ),
         "keys": [
-            "barcode_length",
-            "barcode_location_enabled",
+            "barcode_format",
             "barcode_default_location_code",
             "barcode_symbology",
         ],

@@ -9,8 +9,9 @@ Type prefix:  2 = patron card,  3 = item barcode
 Slug:         8 decimal digits, globally unique within type
 Check digit:  mod-10 Luhn, encoding-neutral (works with Code 128, Code 39, Codabar)
 
-Both lengths coexist permanently in any deployment; the site setting
-`barcode_length` controls only new mints, not what the reader accepts.
+Both lengths coexist permanently in any deployment; the `barcode_format`
+setting controls whether newly minted codes are 10-digit or 14-digit;
+existing barcodes are unaffected.
 """
 
 from __future__ import annotations
