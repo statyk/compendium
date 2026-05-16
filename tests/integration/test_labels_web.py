@@ -240,12 +240,12 @@ class TestSymbologyBanner:
     @pytest.mark.parametrize(
         "url", ["/ui/labels", "/ui/labels/items", "/ui/labels/patrons"]
     )
-    def test_default_codabar_banner_present(self, url, lw_client, lw_session):
+    def test_default_code128_banner_present(self, url, lw_client, lw_session):
         cookies = _login(lw_client, lw_session, f"lwsym{_next()}")
         resp = lw_client.get(url, cookies=cookies)
         assert resp.status_code == 200, resp.text
         body = resp.content.decode()
-        assert "Codabar" in body
+        assert "Code 128" in body
         # Banner links to the settings page where the setting lives.
         assert "/ui/admin/settings/identifiers" in body
 
