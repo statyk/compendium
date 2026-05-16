@@ -330,11 +330,9 @@ def _draw_barcode_vertical(
     if not pattern:
         return
     module_height = height / len(pattern)
-    c.saveState()
     for i, bit in enumerate(pattern):
         if bit == "1":
             c.rect(x, y + i * module_height, width, module_height, fill=1, stroke=0)
-    c.restoreState()
 
 
 def _draw_barcode_ean13(
@@ -581,7 +579,7 @@ def _draw_item_label_content(
                     y + pad,
                     row.barcode,
                     inner_w,
-                    bc_strip - pad,
+                    bc_strip,
                     symbology=symbology,
                     human_readable=False,
                 )
