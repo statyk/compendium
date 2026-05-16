@@ -255,6 +255,27 @@ class TestItemMissingCallNumberDoesNotShiftLayout:
         assert pdf.startswith(b"%PDF-")
 
 
+class TestCode128SubsetCDensity:
+    """Code 128 Subset C encodes two digits per symbol, providing compact
+    encoding for numeric barcodes. This test verifies python-barcode's
+    built-in auto-detection of Subset C for all-digit inputs."""
+
+    def test_code128_uses_subset_c_for_digits(self):
+        """Code 128 Subset C encodes two digits per symbol.
+        14 digits → 7 data symbols + Start C + check + stop = 10 chars
+        = 9×11 + 13 = 112 modules. Allow ±10 for quiet zones / guard bars."""
+        import barcode
+
+        cls = barcode.get_barcode_class("code128")
+        pattern = "".join(cls("12345678901234", writer=None).build())
+        # Subset C: ~112 modules (excl. quiet zone). Subset B would be ~165+.
+        assert len(pattern) < 140, (
+            f"Code 128 pattern is {len(pattern)} modules — "
+            "expected ~112 (Subset C). python-barcode may not be auto-selecting "
+            "Subset C for all-digit inputs; add an explicit wrapper."
+        )
+
+
 class TestBarcodeSymbology:
     """Coverage for the Codabar / Code 39 / Code 128 selection added in
     the symbology slice. Tests use real Compendium-style decimal barcodes
