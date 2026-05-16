@@ -447,6 +447,7 @@ async def item_labels_post(
         use_isbn_barcode=use_isbn_barcode,
         start_label=start_label,
         fields=fields,
+        library_name=get_site_setting("library_name"),
     )
     return _pdf_response(pdf, "item-labels.pdf")
 

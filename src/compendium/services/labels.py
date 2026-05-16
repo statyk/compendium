@@ -164,7 +164,7 @@ REQUIRED_FIELDS: dict[str, frozenset[str]] = {
 OPTIONAL_FIELDS: dict[str, frozenset[str]] = {
     "spine-text":    frozenset({"location", "branch", "cutter", "year"}),
     "spine-barcode": frozenset({"location", "branch", "cutter", "year"}),
-    "pocket":        frozenset({"title", "author", "call_number", "cutter", "year", "branch"}),
+    "pocket":        frozenset({"title", "author", "call_number", "cutter", "year", "branch", "library_name"}),
     "barcode-only":  frozenset({"title", "human_readable"}),
     "full":          frozenset({"library_name", "subtitle", "patron_name", "expiry", "category"}),
     "sticker":       frozenset({"card_number", "patron_name"}),
@@ -467,6 +467,7 @@ def generate_item_labels(
     use_isbn_barcode: bool = False,
     start_label: int = 0,
     fields: frozenset[str] | None = None,
+    library_name: str | None = None,
 ) -> bytes:
     """Render item labels to PDF bytes.
 
@@ -526,7 +527,7 @@ def generate_item_labels(
         if page_idx != current_page:
             c.showPage()
             current_page = page_idx
-        _draw_item_label(c, row, x, y, template, format, use_isbn_barcode, symbology, effective_fields)
+        _draw_item_label(c, row, x, y, template, format, use_isbn_barcode, symbology, effective_fields, library_name)
 
     c.showPage()
     c.save()
@@ -543,6 +544,7 @@ def _draw_item_label(
     use_isbn: bool,
     symbology: BarcodeSymbology,
     fields: frozenset[str],
+    library_name: str | None = None,
 ) -> None:
     """Render one item label at the cell origin ``(x, y)``.
 
@@ -569,7 +571,7 @@ def _draw_item_label(
         x, y = 0.0, 0.0
 
     try:
-        _draw_item_label_content(c, row, x, y, lw, lh, fmt, use_isbn, symbology, rotated, fields)
+        _draw_item_label_content(c, row, x, y, lw, lh, fmt, use_isbn, symbology, rotated, fields, library_name)
     finally:
         if rotated:
             c.restoreState()
@@ -587,6 +589,7 @@ def _draw_item_label_content(
     symbology: BarcodeSymbology,
     rotated: bool,
     fields: frozenset[str],
+    library_name: str | None = None,
 ) -> None:
     pad = 4  # points
     inner_w = lw - 2 * pad
@@ -633,9 +636,14 @@ def _draw_item_label_content(
         line_h_cn = cn_font_size + 1
 
         # For spine-barcode, reserve a strip at the bottom of the cell for
-        # the barcode. The text block must end above this reserved strip.
-        bc_strip = 14 if fmt == "spine-barcode" else 0
-        text_bottom = y + pad + bc_strip
+        # the barcode. In rotated context the "bottom" is the long dim so we
+        # allocate 40% to give bars enough length to scan. Non-rotated keeps
+        # a fixed 14pt strip. Text must end above this reserved region.
+        if fmt == "spine-barcode":
+            bc_strip = (lh - 2 * pad) * 0.40 if rotated else 14
+        else:
+            bc_strip = 0
+        text_bottom = y + pad + bc_strip + (2 if bc_strip else 0)
 
         top = y + lh - pad
 
@@ -691,8 +699,8 @@ def _draw_item_label_content(
                     x + pad,
                     y + pad,
                     row.barcode,
-                    inner_w,                 # bar depth: full inner width
-                    lh - 2 * pad,            # bar length: full inner height
+                    inner_w,      # bar depth: full inner width
+                    bc_strip,     # bar length: reserved bottom portion (~40%)
                     symbology=symbology,
                 )
             else:
@@ -710,22 +718,40 @@ def _draw_item_label_content(
         return
 
     # pocket format:
-    #   top row:  title (+ author) — optional
+    #   header:   library name (optional, small, top)
+    #   top row:  title (+ author) — optional; width constrained when branch shown
     #   middle:   call number + cutter + year (one line)
-    #   corner:   branch (optional)
+    #   corner:   branch (optional, top-right)
     #   bottom:   barcode (required)
     title_size = 8
     info_size = 9
-    top_y = y + lh - pad - title_size
+
+    # Optional library-name header at the very top; pushes everything else down.
+    header_h = 0
+    if "library_name" in fields and library_name:
+        header_size = 7
+        header_h = header_size + 3
+        c.setFont(body_font, header_size)
+        c.drawString(
+            x + pad,
+            y + lh - pad - header_size,
+            _truncate(library_name, inner_w, body_font, header_size),
+        )
+
+    top_y = y + lh - pad - header_h - title_size
     mid_y = top_y - title_size - 4
 
-    # Title + optional author (top, full inner width)
+    # Reserve right corner for branch so title doesn't run into it.
+    branch_reserved = (inner_w / 3 + 6) if ("branch" in fields and row.branch_code) else 0
+    title_max_w = inner_w - branch_reserved
+
+    # Title + optional author
     if "title" in fields and row.title:
         c.setFont(body_font, title_size)
         title_text = row.title
         if "author" in fields and row.author_display:
             title_text = f"{row.title} — {row.author_display}"
-        c.drawString(x + pad, top_y, _truncate(title_text, inner_w, body_font, title_size))
+        c.drawString(x + pad, top_y, _truncate(title_text, title_max_w, body_font, title_size))
 
     # Call-number line: "PS3551 .E76 D8 · HER" style (middle)
     parts: list[str] = []
@@ -739,7 +765,7 @@ def _draw_item_label_content(
     c.setFont(font, info_size)
     c.drawString(x + pad, mid_y, _truncate(info_text, inner_w, font, info_size))
 
-    # Branch (small, top-right corner)
+    # Branch (small, top-right corner) — drawn at same baseline as title.
     if "branch" in fields and row.branch_code:
         br_size = 7
         c.setFont(body_font, br_size)

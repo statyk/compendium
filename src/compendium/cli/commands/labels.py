@@ -198,6 +198,7 @@ def _run_item_kind(
         use_isbn_barcode=use_isbn_barcode,
         start_label=start_label,
         fields=fields,
+        library_name=get_site_setting("library_name"),
     )
     to_stdout = is_stdio(output)
     with open_output(output, binary=True) as f:
@@ -382,7 +383,7 @@ def pocket_labels(
 ) -> None:
     """Generate pocket labels (title + call number + barcode).
 
-    Optional fields (use --show / --hide): title, author, call_number, cutter, year, branch.
+    Optional fields (use --show / --hide): title, author, call_number, cutter, year, branch, library_name.
     barcode is always shown.
     """
     _run_item_kind(
