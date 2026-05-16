@@ -214,6 +214,112 @@ class TestPatronForm:
         assert resp.content.startswith(b"%PDF-")
 
 
+class TestNewTemplates:
+    """Tests for new templates and formats added in the barcode-label-revamp."""
+
+    def test_new_templates_available_in_item_picker(self, lw_client, lw_session):
+        """GET /ui/labels/items should include the new template keys in the HTML."""
+        cookies = _login(lw_client, lw_session, f"lwnt{_next()}")
+        resp = lw_client.get("/ui/labels/items", cookies=cookies)
+        assert resp.status_code == 200
+        body = resp.content.decode()
+        assert "avery-5167-spine" in body
+        assert "avery-22805" in body
+        assert "avery-22806" in body
+
+    def test_rotated_template_not_in_patron_picker(self, lw_client, lw_session):
+        """GET /ui/labels/patrons should exclude rotated templates and include regular ones."""
+        cookies = _login(lw_client, lw_session, f"lwnt{_next()}")
+        resp = lw_client.get("/ui/labels/patrons", cookies=cookies)
+        assert resp.status_code == 200
+        body = resp.content.decode()
+        # Rotated spine template must NOT appear in patron card picker.
+        assert "avery-5167-spine" not in body
+        # Regular avery-5167 (non-rotated) must still appear.
+        assert "avery-5167" in body
+
+    def test_post_spine_text_format(self, lw_client, lw_session):
+        """POST /ui/labels/items with format=spine-text should return a PDF."""
+        cookies = _login(lw_client, lw_session, f"lwnt{_next()}")
+        _seed_item(lw_session)
+        raw, signed = _csrf_pair()
+        cookies[CSRF_COOKIE] = signed
+        resp = lw_client.post(
+            "/ui/labels/items",
+            data={
+                "template": "avery-5167",
+                "format": "spine-text",
+                "start_label": "0",
+                "csrf_token": raw,
+            },
+            cookies=cookies,
+        )
+        assert resp.status_code == 200
+        assert resp.headers["content-type"] == "application/pdf"
+        assert resp.content.startswith(b"%PDF-")
+
+    def test_post_spine_barcode_format(self, lw_client, lw_session):
+        """POST /ui/labels/items with format=spine-barcode should return a PDF."""
+        cookies = _login(lw_client, lw_session, f"lwnt{_next()}")
+        _seed_item(lw_session)
+        raw, signed = _csrf_pair()
+        cookies[CSRF_COOKIE] = signed
+        resp = lw_client.post(
+            "/ui/labels/items",
+            data={
+                "template": "avery-5167",
+                "format": "spine-barcode",
+                "start_label": "0",
+                "csrf_token": raw,
+            },
+            cookies=cookies,
+        )
+        assert resp.status_code == 200
+        assert resp.headers["content-type"] == "application/pdf"
+        assert resp.content.startswith(b"%PDF-")
+
+    def test_post_rotated_spine_template(self, lw_client, lw_session):
+        """POST /ui/labels/items with template=avery-5167-spine and format=spine-barcode
+        should return a valid PDF using the rotated rendering path."""
+        cookies = _login(lw_client, lw_session, f"lwnt{_next()}")
+        _seed_item(lw_session)
+        raw, signed = _csrf_pair()
+        cookies[CSRF_COOKIE] = signed
+        resp = lw_client.post(
+            "/ui/labels/items",
+            data={
+                "template": "avery-5167-spine",
+                "format": "spine-barcode",
+                "start_label": "0",
+                "csrf_token": raw,
+            },
+            cookies=cookies,
+        )
+        assert resp.status_code == 200
+        assert resp.headers["content-type"] == "application/pdf"
+        assert resp.content.startswith(b"%PDF-")
+
+    def test_post_spine_alias(self, lw_client, lw_session):
+        """POST with format=spine (the old alias) should succeed and return a PDF."""
+        cookies = _login(lw_client, lw_session, f"lwnt{_next()}")
+        _seed_item(lw_session)
+        raw, signed = _csrf_pair()
+        cookies[CSRF_COOKIE] = signed
+        resp = lw_client.post(
+            "/ui/labels/items",
+            data={
+                "template": "avery-5167",
+                "format": "spine",
+                "start_label": "0",
+                "csrf_token": raw,
+            },
+            cookies=cookies,
+        )
+        assert resp.status_code == 200
+        assert resp.headers["content-type"] == "application/pdf"
+        assert resp.content.startswith(b"%PDF-")
+
+
 class TestSymbologyBanner:
     """The label-form pages surface the active barcode_symbology setting
     so an operator sees which encoding their PDF will use without
