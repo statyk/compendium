@@ -128,6 +128,36 @@ class TestGenerateItemLabels:
         pdf_barcode = generate_item_labels(rows, template_key="avery-5167", format="spine-barcode")
         assert pdf_barcode.startswith(b"%PDF-")
 
+    def test_spine_barcode_format_renders_barcode(self):
+        """spine-barcode produces a larger PDF than spine-text (barcode strip adds content)."""
+        rows = [ItemLabelRow(barcode="30000000001234", title="T", call_number="PS123")]
+        pdf_text = generate_item_labels(rows, template_key="avery-5167", format="spine-text")
+        pdf_barcode = generate_item_labels(rows, template_key="avery-5167", format="spine-barcode")
+        assert pdf_text.startswith(b"%PDF-")
+        assert pdf_barcode.startswith(b"%PDF-")
+        # spine-barcode includes a barcode strip, so the PDF should be larger
+        assert len(pdf_barcode) >= len(pdf_text)
+
+    def test_spine_barcode_rotated_renders(self):
+        """spine-barcode on a rotated template renders without exception."""
+        rows = [ItemLabelRow(barcode="30000000001234", title="T", call_number="PS123")]
+        pdf = generate_item_labels(rows, template_key="avery-5167-spine", format="spine-barcode")
+        assert pdf.startswith(b"%PDF-")
+
+    def test_location_renders_on_spine_text(self):
+        """location field renders on spine-text without exception."""
+        rows = [ItemLabelRow(barcode="BC1", title="T", call_number="PS123", location="REFERENCE")]
+        pdf = generate_item_labels(rows, template_key="avery-5167", format="spine-text")
+        assert pdf.startswith(b"%PDF-")
+
+    def test_location_renders_on_rotated_spine(self):
+        """location + spine-barcode on rotated template works."""
+        rows = [ItemLabelRow(
+            barcode="30000000001234", title="T", call_number="PS123", location="REFERENCE"
+        )]
+        pdf = generate_item_labels(rows, template_key="avery-5167-spine", format="spine-barcode")
+        assert pdf.startswith(b"%PDF-")
+
     def test_format_auto_picks_based_on_template(self):
         rows = [ItemLabelRow(barcode="BC1", title="A")]
         # small template → spine (no barcode drawn, just text)

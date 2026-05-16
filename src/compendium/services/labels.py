@@ -312,6 +312,31 @@ def _draw_barcode(
     c.restoreState()
 
 
+def _draw_barcode_vertical(
+    c: canvas.Canvas,
+    x: float,
+    y: float,
+    value: str,
+    width: float,
+    height: float,
+    *,
+    symbology: BarcodeSymbology,
+) -> None:
+    """Render a barcode rotated 90°, distributing modules along the y-axis.
+    Use inside a saveState/restoreState block when the canvas is already rotated.
+    The barcode runs from y upward for ``height`` points; ``width`` is the bar depth.
+    No human-readable text (no space for it on a 0.5" label)."""
+    pattern = _module_pattern(value, symbology)
+    if not pattern:
+        return
+    module_height = height / len(pattern)
+    c.saveState()
+    for i, bit in enumerate(pattern):
+        if bit == "1":
+            c.rect(x, y + i * module_height, width, module_height, fill=1, stroke=0)
+    c.restoreState()
+
+
 def _draw_barcode_ean13(
     c: canvas.Canvas,
     x: float,
@@ -418,8 +443,49 @@ def _draw_item_label(
     use_isbn: bool,
     symbology: BarcodeSymbology,
 ) -> None:
+    """Render one item label at the cell origin ``(x, y)``.
+
+    For templates with ``orientation="rotated"`` (e.g. spine labels), the
+    canvas is rotated 90° CCW so all inner-content drawing code can use the
+    same coordinate system: a "tall" cell whose vertical extent is the
+    physical long dimension. After rotation, ``lw``/``lh`` are swapped so
+    that ``lw`` is the (narrow) horizontal extent and ``lh`` is the (long)
+    vertical extent in the rotated drawing context.
+    """
+    rotated = (t.orientation == "rotated")
     lw = t.label_width * inch
     lh = t.label_height * inch
+
+    if rotated:
+        c.saveState()
+        # Translate to bottom-right of the physical cell, then rotate 90° CCW.
+        # That maps the rotated drawing origin onto the bottom-left of the
+        # tall (portrait-oriented) cell, so all downstream code can draw
+        # top→bottom in a familiar coordinate system.
+        c.translate(x + lw, y)
+        c.rotate(90)
+        lw, lh = lh, lw  # swap: lw now physically-short, lh now physically-long
+        x, y = 0.0, 0.0
+
+    try:
+        _draw_item_label_content(c, row, x, y, lw, lh, fmt, use_isbn, symbology, rotated)
+    finally:
+        if rotated:
+            c.restoreState()
+
+
+def _draw_item_label_content(
+    c: canvas.Canvas,
+    row: ItemLabelRow,
+    x: float,
+    y: float,
+    lw: float,   # in points, already swapped for rotated context
+    lh: float,   # in points, already swapped for rotated context
+    fmt: ItemFormat,
+    use_isbn: bool,
+    symbology: BarcodeSymbology,
+    rotated: bool,
+) -> None:
     pad = 4  # points
     inner_w = lw - 2 * pad
 
@@ -446,21 +512,36 @@ def _draw_item_label(
         return
 
     if fmt in ("spine-text", "spine-barcode"):
-        # "spine-barcode" will get its own rendering in Task 8; for now it falls
-        # through to the same text-only rendering as "spine-text".
         # Fixed geometry so a missing call number doesn't shift the cutter/year
         # up (caller complaint: inconsistent placement across a batch).
-        # Reserve space for: up to 4 call-number lines, cutter line, year line.
+        # Reserve space for: optional location line, up to 4 call-number lines,
+        # cutter line, year line, and (for spine-barcode) a barcode strip at
+        # the bottom.
         cn_font_size = 9
         cutter_font_size = 10
         year_font_size = 9
         line_h_cn = cn_font_size + 1
-        # Call number block: top of label, up to 4 lines.
+
+        # For spine-barcode, reserve a strip at the bottom of the cell for
+        # the barcode. The text block must end above this reserved strip.
+        bc_strip = 14 if fmt == "spine-barcode" else 0
+        text_bottom = y + pad + bc_strip
+
+        # Optional location line at the very top (small uppercase).
         top = y + lh - pad
+        if row.location:
+            loc_size = 7
+            c.setFont(body_font, loc_size)
+            c.drawString(
+                x + pad,
+                top - loc_size,
+                _truncate(row.location.upper(), inner_w, body_font, loc_size),
+            )
+            top -= loc_size + 2
+
+        # Call number block: up to 4 lines below the location (or top).
         max_cn_lines = 4
         cn_slots = min(len(cn_lines), max_cn_lines)
-        # Walk down from the top: always reserve 4 line-heights so missing
-        # lines leave blank space rather than letting cutter/year float up.
         cursor = top - cn_font_size
         c.setFont(font, cn_font_size)
         for i in range(max_cn_lines):
@@ -470,11 +551,40 @@ def _draw_item_label(
         # Cutter (bold) + year (regular) on their own lines below the block.
         if cutter_str:
             c.setFont(font, cutter_font_size)
-            c.drawString(x + pad, cursor - 2, cutter_str)
+            c.drawString(x + pad, max(cursor - 2, text_bottom), cutter_str)
         cursor -= cutter_font_size + 2
         if year:
             c.setFont(body_font, year_font_size)
-            c.drawString(x + pad, cursor - 2, year)
+            c.drawString(x + pad, max(cursor - 2, text_bottom), year)
+
+        # Barcode strip at the bottom for spine-barcode.
+        if fmt == "spine-barcode":
+            if rotated:
+                # In a rotated drawing context, the local y-axis IS the
+                # physical long dimension (1.75"). Run the barcode along it
+                # so we have ~118pt of bar-distribution length instead of
+                # cramming 100+ modules into the 0.5" short dim.
+                _draw_barcode_vertical(
+                    c,
+                    x + pad,
+                    y + pad,
+                    row.barcode,
+                    inner_w,                 # bar depth: full inner width
+                    lh - 2 * pad,            # bar length: full inner height
+                    symbology=symbology,
+                )
+            else:
+                # Non-rotated spine: a horizontal strip at the bottom.
+                _draw_barcode(
+                    c,
+                    x + pad,
+                    y + pad,
+                    row.barcode,
+                    inner_w,
+                    bc_strip - pad,
+                    symbology=symbology,
+                    human_readable=False,
+                )
         return
 
     # pocket format — rework for better space use:
