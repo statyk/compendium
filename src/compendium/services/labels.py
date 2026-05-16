@@ -387,12 +387,12 @@ def generate_item_labels(
 ) -> bytes:
     """Render item labels to PDF bytes.
 
-    ``format`` defaults based on template size:
-      - narrow templates (≤2") → 'barcode-only' (just a scannable barcode +
-        human-readable number; good for small stickers affixed to spines/pockets)
-      - larger templates → 'pocket' (title + call number + cutter/year + barcode)
-    Caller may override. 'spine' format is text-only (no barcode), matching
-    traditional shelving-label convention.
+    ``format`` defaults based on template geometry:
+      - ``orientation="rotated"`` templates (e.g. avery-5167-spine) → 'spine-text'
+      - aspect ratio ≥ 3.0 (wide & short, e.g. avery-5167 at 3.5) → 'barcode-only'
+      - aspect ratio ≤ 0.67 (tall & narrow) → 'spine-text'
+      - otherwise → 'pocket' (title + call number + cutter/year + barcode)
+    Caller may override with an explicit ``format=`` argument.
 
     ``use_isbn_barcode`` makes the generator draw an EAN-13 for rows that
     carry a valid ISBN; falls back to the configured symbology over the
@@ -408,7 +408,16 @@ def generate_item_labels(
 
     template = TEMPLATES[template_key]
     if format is None:
-        format = "barcode-only" if template.label_width <= 2.0 else "pocket"
+        if template.orientation == "rotated":
+            format = "spine-text"
+        else:
+            aspect = template.label_width / template.label_height
+            if aspect >= 3.0:    # wide and short (e.g. 5167 at 1.75/0.5=3.5) → barcode strip
+                format = "barcode-only"
+            elif aspect <= 0.67:  # tall and narrow → spine text
+                format = "spine-text"
+            else:
+                format = "pocket"
 
     # Backward-compat alias: "spine" is the old name for "spine-text".
     if format == "spine":
