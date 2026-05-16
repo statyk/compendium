@@ -494,9 +494,10 @@ def _register_builtins() -> None:
             default="code128",
             scope="librarian",
             help_text=(
-                "Barcode symbology for printed labels. Code 128 packs two digits "
-                "per symbol — recommended for compact spine labels. Options: "
-                "codabar, code39, code128."
+                "Barcode symbology for printed labels. Code 128 is recommended — "
+                "it produces shorter barcodes than Codabar or Code 39, which "
+                "matters for compact spine labels. Match this setting to what "
+                "your scanner is configured to read."
             ),
         )
     )
