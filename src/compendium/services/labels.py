@@ -29,7 +29,7 @@ from reportlab.pdfbase.pdfmetrics import stringWidth
 BarcodeSymbology = Literal["codabar", "code39", "code128"]
 
 
-ItemFormat = Literal["spine", "pocket", "barcode-only"]
+ItemFormat = Literal["spine", "spine-text", "spine-barcode", "pocket", "barcode-only"]
 PatronFormat = Literal["full", "sticker"]
 
 # Minimum label height (inches) that can meaningfully fit a "full" patron card
@@ -136,6 +136,7 @@ class ItemLabelRow:
     publication_year: int | None = None
     isbn: str | None = None  # if present and use_isbn_barcode=True, EAN-13 is drawn
     branch_code: str | None = None
+    location: str | None = None  # e.g. "REFERENCE", "CHILDREN" — shown above call number on spine formats
 
 
 @dataclass
@@ -386,6 +387,10 @@ def generate_item_labels(
     if format is None:
         format = "barcode-only" if template.label_width <= 2.0 else "pocket"
 
+    # Backward-compat alias: "spine" is the old name for "spine-text".
+    if format == "spine":
+        format = "spine-text"
+
     buf = BytesIO()
     c = canvas.Canvas(buf, pagesize=(template.page_width * inch, template.page_height * inch))
     items_list = list(items)
@@ -440,7 +445,9 @@ def _draw_item_label(
             )
         return
 
-    if fmt == "spine":
+    if fmt in ("spine-text", "spine-barcode"):
+        # "spine-barcode" will get its own rendering in Task 8; for now it falls
+        # through to the same text-only rendering as "spine-text".
         # Fixed geometry so a missing call number doesn't shift the cutter/year
         # up (caller complaint: inconsistent placement across a batch).
         # Reserve space for: up to 4 call-number lines, cutter line, year line.

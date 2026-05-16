@@ -74,6 +74,8 @@ class TestGenerateItemLabels:
         assert len(pdf) > 500
 
     def test_spine_format_short_pdf(self):
+        # "spine" is a backward-compat alias for "spine-text"; kept to verify
+        # the alias continues to work as callers upgrade.
         rows = [
             ItemLabelRow(
                 barcode="BC000001",
@@ -84,6 +86,47 @@ class TestGenerateItemLabels:
         ]
         pdf = generate_item_labels(rows, template_key="avery-5167", format="spine")
         assert pdf.startswith(b"%PDF-")
+
+    def test_spine_text_format_renders(self):
+        rows = [
+            ItemLabelRow(
+                barcode="BC000001",
+                title="Dune",
+                author_display="Frank Herbert",
+                call_number="PS3551 .E76",
+            )
+        ]
+        pdf = generate_item_labels(rows, template_key="avery-5167", format="spine-text")
+        assert pdf.startswith(b"%PDF-")
+
+    def test_spine_barcode_format_renders(self):
+        rows = [
+            ItemLabelRow(
+                barcode="BC000001",
+                title="Dune",
+                author_display="Frank Herbert",
+                call_number="PS3551 .E76",
+            )
+        ]
+        pdf = generate_item_labels(rows, template_key="avery-5167", format="spine-barcode")
+        assert pdf.startswith(b"%PDF-")
+
+    def test_location_field_accepted(self):
+        # location is rendered in Task 8; for now verify the field is accepted
+        # on both spine-text and spine-barcode without raising and produces a PDF.
+        rows = [
+            ItemLabelRow(
+                barcode="BC000001",
+                title="Dune",
+                author_display="Frank Herbert",
+                call_number="PS3551 .E76",
+                location="REFERENCE",
+            )
+        ]
+        pdf_text = generate_item_labels(rows, template_key="avery-5167", format="spine-text")
+        assert pdf_text.startswith(b"%PDF-")
+        pdf_barcode = generate_item_labels(rows, template_key="avery-5167", format="spine-barcode")
+        assert pdf_barcode.startswith(b"%PDF-")
 
     def test_format_auto_picks_based_on_template(self):
         rows = [ItemLabelRow(barcode="BC1", title="A")]
