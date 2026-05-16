@@ -109,7 +109,7 @@ def _collect_item_rows(
                 publication_year=item.work.publication_year,
                 isbn=item.work.isbn,
                 branch_code=item.branch.code if item.branch else None,
-                location=item.location if item.location else None,
+                location=item.location,
             )
         )
     return rows
@@ -292,7 +292,8 @@ def patron_cards_post(
     session: Session = Depends(get_session),
 ):
     check_csrf_form(request, csrf_token)
-    if template not in TEMPLATES:
+    _patron_template_keys = {t.key for t in _PATRON_TEMPLATES}
+    if template not in _patron_template_keys:
         return _render(
             "labels/patrons.html",
             request,

@@ -63,7 +63,7 @@ def _collect_item_rows(
                 publication_year=item.work.publication_year,
                 isbn=item.work.isbn,
                 branch_code=item.branch.code if item.branch else None,
-                location=item.location if item.location else None,
+                location=item.location,
             )
         )
     return rows
