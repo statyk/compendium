@@ -237,8 +237,8 @@ class TestNewTemplates:
         # Regular avery-5167 (non-rotated) must still appear.
         assert "avery-5167" in body
 
-    def test_post_spine_text_format(self, lw_client, lw_session):
-        """POST /ui/labels/items with format=spine-text should return a PDF."""
+    def test_post_spine_format(self, lw_client, lw_session):
+        """POST /ui/labels/items with kind=spine should return a PDF."""
         cookies = _login(lw_client, lw_session, f"lwnt{_next()}")
         _seed_item(lw_session)
         raw, signed = _csrf_pair()
@@ -247,7 +247,7 @@ class TestNewTemplates:
             "/ui/labels/items",
             data={
                 "template": "avery-5167",
-                "format": "spine-text",
+                "kind": "spine",
                 "start_label": "0",
                 "csrf_token": raw,
             },
@@ -257,28 +257,35 @@ class TestNewTemplates:
         assert resp.headers["content-type"] == "application/pdf"
         assert resp.content.startswith(b"%PDF-")
 
-    def test_post_spine_barcode_format(self, lw_client, lw_session):
-        """POST /ui/labels/items with format=spine-barcode should return a PDF."""
+    def test_post_spine_with_barcode_field(self, lw_client, lw_session):
+        """POST /ui/labels/items with kind=spine and field_barcode=on produces a larger PDF."""
         cookies = _login(lw_client, lw_session, f"lwnt{_next()}")
         _seed_item(lw_session)
-        raw, signed = _csrf_pair()
-        cookies[CSRF_COOKIE] = signed
-        resp = lw_client.post(
+        raw_a, signed_a = _csrf_pair()
+        raw_b, signed_b = _csrf_pair()
+        cookies_a = dict(cookies); cookies_a[CSRF_COOKIE] = signed_a
+        cookies_b = dict(cookies); cookies_b[CSRF_COOKIE] = signed_b
+        base_data = {
+            "template": "avery-5167",
+            "kind": "spine",
+            "start_label": "0",
+        }
+        resp_no_bc = lw_client.post(
             "/ui/labels/items",
-            data={
-                "template": "avery-5167",
-                "format": "spine-barcode",
-                "start_label": "0",
-                "csrf_token": raw,
-            },
-            cookies=cookies,
+            data={**base_data, "csrf_token": raw_a},
+            cookies=cookies_a,
         )
-        assert resp.status_code == 200
-        assert resp.headers["content-type"] == "application/pdf"
-        assert resp.content.startswith(b"%PDF-")
+        resp_with_bc = lw_client.post(
+            "/ui/labels/items",
+            data={**base_data, "field_barcode": "on", "csrf_token": raw_b},
+            cookies=cookies_b,
+        )
+        assert resp_no_bc.status_code == 200
+        assert resp_with_bc.status_code == 200
+        assert resp_with_bc.content.startswith(b"%PDF-")
 
     def test_post_rotated_spine_template(self, lw_client, lw_session):
-        """POST /ui/labels/items with template=avery-5167-spine and format=spine-barcode
+        """POST /ui/labels/items with template=avery-5167-spine and kind=spine
         should return a valid PDF using the rotated rendering path."""
         cookies = _login(lw_client, lw_session, f"lwnt{_next()}")
         _seed_item(lw_session)
@@ -288,7 +295,8 @@ class TestNewTemplates:
             "/ui/labels/items",
             data={
                 "template": "avery-5167-spine",
-                "format": "spine-barcode",
+                "kind": "spine",
+                "field_barcode": "on",
                 "start_label": "0",
                 "csrf_token": raw,
             },

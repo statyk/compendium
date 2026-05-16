@@ -111,7 +111,7 @@ Run `compendium --help` for the full command tree, or `compendium <group> --help
 | Group | Common subcommands |
 |---|---|
 | `reports` | `checkouts`, `popular`, `dormant`, `overdues` (each supports `--format csv`) |
-| `labels` | `templates`, `spine`, `spine-barcode`, `pocket`, `barcode`, `patron-card`, `patron-sticker` (output `-o -` writes PDF to stdout; use `--show`/`--hide` for field toggles) |
+| `labels` | `templates`, `spine`, `pocket`, `barcode`, `patron-card`, `patron-sticker` (output `-o -` writes PDF to stdout; use `--show`/`--hide` for field toggles, e.g. `--show barcode` on spine) |
 | `audit` | `list` (filters: `--entity`, `--id`, `--user-id`, `--limit`) |
 
 **Operations**

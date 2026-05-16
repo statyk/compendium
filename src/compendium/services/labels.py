@@ -29,7 +29,7 @@ from reportlab.pdfbase.pdfmetrics import stringWidth
 BarcodeSymbology = Literal["codabar", "code39", "code128"]
 
 
-ItemFormat = Literal["spine", "spine-text", "spine-barcode", "pocket", "barcode-only"]
+ItemFormat = Literal["spine", "pocket", "barcode-only"]
 PatronFormat = Literal["full", "sticker"]
 
 # Minimum label height (inches) that can meaningfully fit a "full" patron card
@@ -130,10 +130,9 @@ TEMPLATES: dict[str, LabelTemplate] = {
 # ──────────────────────────────────────────────────────────────────────
 
 ITEM_KIND_TO_FORMAT: dict[str, str] = {
-    "spine":         "spine-text",
-    "spine-barcode": "spine-barcode",
-    "pocket":        "pocket",
-    "barcode-only":  "barcode-only",
+    "spine":        "spine",
+    "pocket":       "pocket",
+    "barcode-only": "barcode-only",
 }
 
 PATRON_KIND_TO_FORMAT: dict[str, str] = {
@@ -143,49 +142,35 @@ PATRON_KIND_TO_FORMAT: dict[str, str] = {
 
 KIND_DEFAULT_TEMPLATE: dict[str, str] = {
     "spine":          "avery-5167-spine",
-    "spine-barcode":  "avery-5167-spine",
     "pocket":         "avery-5160",
     "barcode-only":   "avery-5167",
     "patron-full":    "avery-5871",
     "patron-sticker": "avery-5167",
 }
 
-# Fields always drawn regardless of the ``fields`` arg.
-REQUIRED_FIELDS: dict[str, frozenset[str]] = {
-    "spine-text":    frozenset({"call_number"}),
-    "spine-barcode": frozenset({"call_number", "barcode"}),
-    "pocket":        frozenset({"barcode"}),
-    "barcode-only":  frozenset({"barcode"}),
-    "full":          frozenset({"barcode", "card_number"}),
-    "sticker":       frozenset({"barcode"}),
-}
-
-# Fields that can be toggled per-call or configured in admin defaults.
+# Every field is optional — callers choose what to draw; DEFAULT_FIELDS provides
+# sensible on-by-default choices that preserve existing visual behaviour.
 OPTIONAL_FIELDS: dict[str, frozenset[str]] = {
-    "spine-text":    frozenset({"location", "branch", "cutter", "year"}),
-    "spine-barcode": frozenset({"location", "branch", "cutter", "year"}),
-    "pocket":        frozenset({"title", "author", "call_number", "cutter", "year", "branch", "library_name"}),
-    "barcode-only":  frozenset({"title", "human_readable"}),
-    "full":          frozenset({"library_name", "subtitle", "patron_name", "expiry", "category"}),
-    "sticker":       frozenset({"card_number", "patron_name"}),
+    "spine":        frozenset({"call_number", "barcode", "location", "branch", "cutter", "year"}),
+    "pocket":       frozenset({"title", "author", "call_number", "barcode", "cutter", "year", "branch", "library_name"}),
+    "barcode-only": frozenset({"barcode", "title", "human_readable"}),
+    "full":         frozenset({"barcode", "card_number", "library_name", "subtitle", "patron_name", "expiry", "category"}),
+    "sticker":      frozenset({"barcode", "card_number", "patron_name"}),
 }
 
-# Code-level defaults — the optional fields shown if no admin setting is configured.
-# Required fields (REQUIRED_FIELDS) are always drawn on top of these; they do
-# not need to be repeated here.
+# Code-level defaults — fields on when no admin setting is configured.
 DEFAULT_FIELDS: dict[str, frozenset[str]] = {
-    "spine-text":    frozenset({"location", "cutter", "year"}),
-    "spine-barcode": frozenset({"location", "cutter", "year"}),
-    "pocket":        frozenset({"title", "author", "call_number", "cutter", "year"}),
-    "barcode-only":  frozenset({"human_readable"}),
-    "full":          frozenset({"library_name", "subtitle", "patron_name", "expiry"}),
-    "sticker":       frozenset({"card_number"}),
+    "spine":        frozenset({"call_number", "location", "cutter", "year"}),  # barcode off by default
+    "pocket":       frozenset({"barcode", "title", "author", "call_number", "cutter", "year"}),
+    "barcode-only": frozenset({"barcode", "human_readable"}),
+    "full":         frozenset({"barcode", "card_number", "library_name", "subtitle", "patron_name", "expiry"}),
+    "sticker":      frozenset({"barcode", "card_number"}),
 }
 
 
 def compatible_templates(kind: str) -> list[LabelTemplate]:
     """Return templates that make geometric sense for the given label kind."""
-    if kind in ("spine", "spine-barcode"):
+    if kind == "spine":
         return [t for t in TEMPLATES.values()
                 if t.orientation == "rotated"
                 or (t.label_width >= 2.0 and t.label_height <= 1.5)]
@@ -478,10 +463,10 @@ def generate_item_labels(
       - otherwise → 'pocket' (title + call number + cutter/year + barcode)
     Caller may override with an explicit ``format=`` argument.
 
-    ``fields`` controls which optional elements appear on each label.  Pass a
-    frozenset of field names from OPTIONAL_FIELDS[format]; omit to use the
-    deployment's admin-configured defaults (falling back to DEFAULT_FIELDS).
-    Required fields (REQUIRED_FIELDS[format]) are always drawn.
+    ``fields`` controls which elements appear on each label.  Pass a frozenset
+    of field names from OPTIONAL_FIELDS[format]; omit to use the deployment's
+    admin-configured defaults (falling back to DEFAULT_FIELDS).  Every field is
+    optional — an empty frozenset produces a valid (possibly blank) label.
 
     ``use_isbn_barcode`` makes the generator draw an EAN-13 for rows that
     carry a valid ISBN; falls back to the configured symbology over the
@@ -498,24 +483,21 @@ def generate_item_labels(
     template = TEMPLATES[template_key]
     if format is None:
         if template.orientation == "rotated":
-            format = "spine-text"
+            format = "spine"
         else:
             aspect = template.label_width / template.label_height
             if aspect >= 3.0:    # wide and short (e.g. 5167 at 1.75/0.5=3.5) → barcode strip
                 format = "barcode-only"
-            elif aspect <= 0.67:  # tall and narrow → spine text
-                format = "spine-text"
+            elif aspect <= 0.67:  # tall and narrow → spine
+                format = "spine"
             else:
                 format = "pocket"
 
-    # Backward-compat alias: "spine" is the old name for "spine-text".
-    if format == "spine":
-        format = "spine-text"
+    # Backward-compat aliases for the old split kind names.
+    if format in ("spine-text", "spine-barcode"):
+        format = "spine"
 
-    # Effective fields = required (always) ∪ caller-supplied optional (or code defaults).
-    _required = REQUIRED_FIELDS.get(format, frozenset())
-    _optional = fields if fields is not None else DEFAULT_FIELDS.get(format, frozenset())
-    effective_fields = _required | _optional
+    effective_fields = fields if fields is not None else DEFAULT_FIELDS.get(format, frozenset())
 
     buf = BytesIO()
     c = canvas.Canvas(buf, pagesize=(template.page_width * inch, template.page_height * inch))
@@ -609,37 +591,38 @@ def _draw_item_label_content(
             top_y = y + lh - pad - title_size
             c.setFont(body_font, title_size)
             c.drawString(x + pad, top_y, _truncate(row.title, inner_w, body_font, title_size))
-        hr = "human_readable" in fields
-        bc_h = max(8.0, lh - 2 * pad - 2 - title_reserved)
-        if use_isbn and row.isbn:
-            _draw_barcode_ean13(
-                c, x + pad, y + pad, row.isbn, inner_w, bc_h,
-                fallback_symbology=symbology,
-                human_readable=hr,
-            )
-        else:
-            _draw_barcode(
-                c, x + pad, y + pad, row.barcode, inner_w, bc_h,
-                symbology=symbology,
-                human_readable=hr,
-            )
+        if "barcode" in fields:
+            hr = "human_readable" in fields
+            bc_h = max(8.0, lh - 2 * pad - 2 - title_reserved)
+            if use_isbn and row.isbn:
+                _draw_barcode_ean13(
+                    c, x + pad, y + pad, row.isbn, inner_w, bc_h,
+                    fallback_symbology=symbology,
+                    human_readable=hr,
+                )
+            else:
+                _draw_barcode(
+                    c, x + pad, y + pad, row.barcode, inner_w, bc_h,
+                    symbology=symbology,
+                    human_readable=hr,
+                )
         return
 
-    if fmt in ("spine-text", "spine-barcode"):
+    if fmt == "spine":
         # Fixed geometry so a missing call number doesn't shift the cutter/year
-        # up (caller complaint: inconsistent placement across a batch).
-        # Reserve space for: optional branch/location lines, up to 4 call-number
-        # lines, cutter line, year line, and (for spine-barcode) a barcode strip.
+        # up: reserve space for optional branch/location, up to 4 call-number
+        # lines, cutter, year, and (if barcode enabled) a barcode strip at bottom.
         cn_font_size = 9
         cutter_font_size = 10
         year_font_size = 9
         line_h_cn = cn_font_size + 1
 
-        # For spine-barcode, reserve a strip at the bottom of the cell for
-        # the barcode. In rotated context the "bottom" is the long dim so we
-        # allocate 40% to give bars enough length to scan. Non-rotated keeps
-        # a fixed 14pt strip. Text must end above this reserved region.
-        if fmt == "spine-barcode":
+        # When barcode is enabled, reserve a strip at the bottom of the cell.
+        # In rotated context allocate 40% of the long dim so bars are tall
+        # enough to scan. Non-rotated gets a fixed 14pt strip. When barcode is
+        # off the strip collapses to zero and text reclaims the full height.
+        draw_barcode = "barcode" in fields
+        if draw_barcode:
             bc_strip = (lh - 2 * pad) * 0.40 if rotated else 14
         else:
             bc_strip = 0
@@ -669,15 +652,19 @@ def _draw_item_label_content(
             )
             top -= loc_size + 2
 
-        # Call number block: up to 4 lines (always drawn — required field).
+        # Call number block: up to 4 lines (optional; reserves fixed height so
+        # cutter/year don't shift when call number is absent from the data).
         max_cn_lines = 4
-        cn_slots = min(len(cn_lines), max_cn_lines)
         cursor = top - cn_font_size
-        c.setFont(font, cn_font_size)
-        for i in range(max_cn_lines):
-            if i < cn_slots:
-                c.drawString(x + pad, cursor, _truncate(cn_lines[i], inner_w, font, cn_font_size))
-            cursor -= line_h_cn
+        if "call_number" in fields:
+            cn_slots = min(len(cn_lines), max_cn_lines)
+            c.setFont(font, cn_font_size)
+            for i in range(max_cn_lines):
+                if i < cn_slots:
+                    c.drawString(x + pad, cursor, _truncate(cn_lines[i], inner_w, font, cn_font_size))
+                cursor -= line_h_cn
+        else:
+            cursor -= line_h_cn * max_cn_lines  # reclaim vertical space
         # Cutter (bold) + year (regular) on their own lines below the block.
         if "cutter" in fields and cutter_str:
             c.setFont(font, cutter_font_size)
@@ -687,8 +674,8 @@ def _draw_item_label_content(
             c.setFont(body_font, year_font_size)
             c.drawString(x + pad, max(cursor - 2, text_bottom), year)
 
-        # Barcode strip at the bottom for spine-barcode.
-        if fmt == "spine-barcode":
+        # Optional barcode strip at the bottom (when "barcode" field is enabled).
+        if draw_barcode:
             if rotated:
                 # In a rotated drawing context, the local y-axis IS the
                 # physical long dimension (1.75"). Run the barcode along it
@@ -775,19 +762,20 @@ def _draw_item_label_content(
             _truncate(row.branch_code.upper(), inner_w / 3, body_font, br_size),
         )
 
-    # Barcode at the bottom (required)
-    bc_h = 20
-    bc_y = y + pad
-    if use_isbn and row.isbn:
-        _draw_barcode_ean13(
-            c, x + pad, bc_y, row.isbn, inner_w, bc_h,
-            fallback_symbology=symbology,
-        )
-    else:
-        _draw_barcode(
-            c, x + pad, bc_y, row.barcode, inner_w, bc_h,
-            symbology=symbology,
-        )
+    # Barcode at the bottom (optional)
+    if "barcode" in fields:
+        bc_h = 20
+        bc_y = y + pad
+        if use_isbn and row.isbn:
+            _draw_barcode_ean13(
+                c, x + pad, bc_y, row.isbn, inner_w, bc_h,
+                fallback_symbology=symbology,
+            )
+        else:
+            _draw_barcode(
+                c, x + pad, bc_y, row.barcode, inner_w, bc_h,
+                symbology=symbology,
+            )
 
 
 # ──────────────────────────────────────────────────────────────────────
@@ -830,9 +818,7 @@ def generate_patron_cards(
             f"such as 'avery-5871' or 'avery-22806'."
         )
 
-    _required = REQUIRED_FIELDS.get(format, frozenset())
-    _optional = fields if fields is not None else DEFAULT_FIELDS.get(format, frozenset())
-    effective_fields = _required | _optional
+    effective_fields = fields if fields is not None else DEFAULT_FIELDS.get(format, frozenset())
 
     buf = BytesIO()
     c = canvas.Canvas(buf, pagesize=(template.page_width * inch, template.page_height * inch))
@@ -894,14 +880,15 @@ def _draw_patron_full(
         c.drawRightString(x + lw - pad, top - 22 - 9,
                           _truncate(row.category_display, inner_w / 2, "Helvetica", 7))
 
-    # Barcode + card number (required)
-    bc_h = 28
-    bc_y = y + pad + 12
-    bc_w = inner_w
-    _draw_barcode(
-        c, x + pad, bc_y, row.card_number, bc_w, bc_h,
-        symbology=symbology, human_readable=("card_number" in fields),
-    )
+    # Barcode (optional); card_number controls whether text is printed below the bars.
+    if "barcode" in fields:
+        bc_h = 28
+        bc_y = y + pad + 12
+        bc_w = inner_w
+        _draw_barcode(
+            c, x + pad, bc_y, row.card_number, bc_w, bc_h,
+            symbology=symbology, human_readable=("card_number" in fields),
+        )
 
     # Expiry (bottom-right corner, optional)
     if "expiry" in fields and row.expires_at:
@@ -933,9 +920,10 @@ def _draw_patron_sticker(
         c.setFont("Helvetica", name_size)
         c.drawString(x + pad, top_y, _truncate(row.full_name, inner_w, "Helvetica", name_size))
 
-    # Barcode fills the remaining space; card number below bars (optional).
-    bc_h = lh - 2 * pad - 2 - name_reserved
-    _draw_barcode(
-        c, x + pad, y + pad, row.card_number, inner_w, bc_h,
-        symbology=symbology, human_readable=("card_number" in fields),
-    )
+    # Barcode fills the remaining space (optional); card_number controls the text below.
+    if "barcode" in fields:
+        bc_h = lh - 2 * pad - 2 - name_reserved
+        _draw_barcode(
+            c, x + pad, y + pad, row.card_number, inner_w, bc_h,
+            symbology=symbology, human_readable=("card_number" in fields),
+        )

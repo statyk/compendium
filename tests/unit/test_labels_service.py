@@ -73,9 +73,7 @@ class TestGenerateItemLabels:
         assert pdf.startswith(b"%PDF-")
         assert len(pdf) > 500
 
-    def test_spine_format_short_pdf(self):
-        # "spine" is a backward-compat alias for "spine-text"; kept to verify
-        # the alias continues to work as callers upgrade.
+    def test_spine_format_renders(self):
         rows = [
             ItemLabelRow(
                 barcode="BC000001",
@@ -87,33 +85,14 @@ class TestGenerateItemLabels:
         pdf = generate_item_labels(rows, template_key="avery-5167", format="spine")
         assert pdf.startswith(b"%PDF-")
 
-    def test_spine_text_format_renders(self):
-        rows = [
-            ItemLabelRow(
-                barcode="BC000001",
-                title="Dune",
-                author_display="Frank Herbert",
-                call_number="PS3551 .E76",
-            )
-        ]
-        pdf = generate_item_labels(rows, template_key="avery-5167", format="spine-text")
-        assert pdf.startswith(b"%PDF-")
-
-    def test_spine_barcode_format_renders(self):
-        rows = [
-            ItemLabelRow(
-                barcode="BC000001",
-                title="Dune",
-                author_display="Frank Herbert",
-                call_number="PS3551 .E76",
-            )
-        ]
-        pdf = generate_item_labels(rows, template_key="avery-5167", format="spine-barcode")
-        assert pdf.startswith(b"%PDF-")
+    def test_spine_compat_aliases_accepted(self):
+        """Old spine-text and spine-barcode format strings are silently normalized."""
+        rows = [ItemLabelRow(barcode="BC000001", title="T", call_number="PS123")]
+        for alias in ("spine-text", "spine-barcode"):
+            pdf = generate_item_labels(rows, template_key="avery-5167", format=alias)  # type: ignore[arg-type]
+            assert pdf.startswith(b"%PDF-"), f"alias {alias!r} failed"
 
     def test_location_field_accepted(self):
-        # location is rendered in Task 8; for now verify the field is accepted
-        # on both spine-text and spine-barcode without raising and produces a PDF.
         rows = [
             ItemLabelRow(
                 barcode="BC000001",
@@ -123,39 +102,42 @@ class TestGenerateItemLabels:
                 location="REFERENCE",
             )
         ]
-        pdf_text = generate_item_labels(rows, template_key="avery-5167", format="spine-text")
-        assert pdf_text.startswith(b"%PDF-")
-        pdf_barcode = generate_item_labels(rows, template_key="avery-5167", format="spine-barcode")
-        assert pdf_barcode.startswith(b"%PDF-")
+        pdf = generate_item_labels(rows, template_key="avery-5167", format="spine")
+        assert pdf.startswith(b"%PDF-")
 
-    def test_spine_barcode_format_renders_barcode(self):
-        """spine-barcode produces a larger PDF than spine-text (barcode strip adds content)."""
+    def test_spine_barcode_field_larger_than_without(self):
+        """Spine PDF with barcode field on is larger than without."""
         rows = [ItemLabelRow(barcode="30000000001234", title="T", call_number="PS123")]
-        pdf_text = generate_item_labels(rows, template_key="avery-5167", format="spine-text")
-        pdf_barcode = generate_item_labels(rows, template_key="avery-5167", format="spine-barcode")
+        pdf_text = generate_item_labels(
+            rows, template_key="avery-5167", format="spine",
+            fields=frozenset({"call_number"}),
+        )
+        pdf_barcode = generate_item_labels(
+            rows, template_key="avery-5167", format="spine",
+            fields=frozenset({"call_number", "barcode"}),
+        )
         assert pdf_text.startswith(b"%PDF-")
         assert pdf_barcode.startswith(b"%PDF-")
-        # spine-barcode includes a barcode strip, so the PDF should be larger
         assert len(pdf_barcode) >= len(pdf_text)
 
     def test_spine_barcode_rotated_renders(self):
-        """spine-barcode on a rotated template renders without exception."""
+        """Spine with barcode on a rotated template renders without exception."""
         rows = [ItemLabelRow(barcode="30000000001234", title="T", call_number="PS123")]
-        pdf = generate_item_labels(rows, template_key="avery-5167-spine", format="spine-barcode")
-        assert pdf.startswith(b"%PDF-")
-
-    def test_location_renders_on_spine_text(self):
-        """location field renders on spine-text without exception."""
-        rows = [ItemLabelRow(barcode="BC1", title="T", call_number="PS123", location="REFERENCE")]
-        pdf = generate_item_labels(rows, template_key="avery-5167", format="spine-text")
+        pdf = generate_item_labels(
+            rows, template_key="avery-5167-spine", format="spine",
+            fields=frozenset({"call_number", "barcode"}),
+        )
         assert pdf.startswith(b"%PDF-")
 
     def test_location_renders_on_rotated_spine(self):
-        """location + spine-barcode on rotated template works."""
+        """location + barcode on rotated spine template works."""
         rows = [ItemLabelRow(
             barcode="30000000001234", title="T", call_number="PS123", location="REFERENCE"
         )]
-        pdf = generate_item_labels(rows, template_key="avery-5167-spine", format="spine-barcode")
+        pdf = generate_item_labels(
+            rows, template_key="avery-5167-spine", format="spine",
+            fields=frozenset({"call_number", "barcode", "location"}),
+        )
         assert pdf.startswith(b"%PDF-")
 
     def test_format_auto_picks_based_on_template(self):
@@ -170,8 +152,8 @@ class TestGenerateItemLabels:
         assert len(pdf_pocket) > len(pdf_barcode_only)
 
     @pytest.mark.parametrize("template_key,expected_format", [
-        # rotated orientation → spine-text regardless of dimensions
-        ("avery-5167-spine", "spine-text"),
+        # rotated orientation → spine regardless of dimensions
+        ("avery-5167-spine", "spine"),
         # aspect 1.75/0.5 = 3.5 ≥ 3.0 → barcode-only
         ("avery-5167",       "barcode-only"),
         # aspect 2.625/1.0 = 2.625, between 0.67 and 3.0 → pocket
@@ -579,7 +561,7 @@ class TestFieldGating:
     def test_spine_with_branch_hidden_by_default(self):
         from compendium.services.labels import DEFAULT_FIELDS
 
-        assert "branch" not in DEFAULT_FIELDS["spine-text"]
+        assert "branch" not in DEFAULT_FIELDS["spine"]
 
     def test_pocket_with_branch_field_renders(self):
         pdf = generate_item_labels(
@@ -590,29 +572,52 @@ class TestFieldGating:
         )
         assert pdf.startswith(b"%PDF-")
 
-    def test_spine_with_no_optional_fields(self):
-        pdf = generate_item_labels(
-            [self._ROW],
-            template_key="avery-5167-spine",
-            format="spine-text",
-            fields=frozenset(),
-        )
-        assert pdf.startswith(b"%PDF-")
-
-    def test_required_fields_always_drawn(self):
-        from compendium.services.labels import REQUIRED_FIELDS
-
-        # Even with empty optional fields, required fields are drawn (no crash).
-        for fmt, required in REQUIRED_FIELDS.items():
-            if "patron" in fmt or fmt in ("full", "sticker"):
-                continue  # patron formats tested separately
+    def test_empty_fields_produces_valid_pdf(self):
+        """Every format produces a valid (possibly blank) PDF with fields=frozenset()."""
+        for fmt, tmpl in [
+            ("spine", "avery-5167-spine"),
+            ("pocket", "avery-5160"),
+            ("barcode-only", "avery-5167"),
+        ]:
             pdf = generate_item_labels(
                 [self._ROW],
-                template_key="avery-5160",
+                template_key=tmpl,
                 format=fmt,
                 fields=frozenset(),
             )
             assert pdf.startswith(b"%PDF-"), f"format={fmt} failed"
+
+    def test_spine_call_number_off_reclaims_space(self):
+        """Spine PDF with call_number off is smaller (no 4-line CN block drawn)."""
+        pdf_with = generate_item_labels(
+            [self._ROW],
+            template_key="avery-5167-spine",
+            format="spine",
+            fields=frozenset({"call_number", "cutter", "year"}),
+        )
+        pdf_without = generate_item_labels(
+            [self._ROW],
+            template_key="avery-5167-spine",
+            format="spine",
+            fields=frozenset({"cutter", "year"}),
+        )
+        assert len(pdf_without) < len(pdf_with)
+
+    def test_spine_barcode_on_larger_than_off(self):
+        """Spine PDF with barcode field enabled is larger than without."""
+        pdf_with = generate_item_labels(
+            [self._ROW],
+            template_key="avery-5167-spine",
+            format="spine",
+            fields=frozenset({"call_number", "barcode"}),
+        )
+        pdf_without = generate_item_labels(
+            [self._ROW],
+            template_key="avery-5167-spine",
+            format="spine",
+            fields=frozenset({"call_number"}),
+        )
+        assert len(pdf_with) > len(pdf_without)
 
     def test_barcode_only_with_human_readable_off(self):
         pdf = generate_item_labels(

@@ -18,7 +18,6 @@ from compendium.services.labels import (
     KIND_DEFAULT_TEMPLATE,
     OPTIONAL_FIELDS,
     PATRON_KIND_TO_FORMAT,
-    REQUIRED_FIELDS,
     ItemLabelRow,
     PatronCardRow,
     TEMPLATES,
@@ -44,7 +43,6 @@ _SYMBOLOGY_LABELS = {
 # Map kind → admin setting key that stores the default field list.
 _KIND_SETTING: dict[str, str] = {
     "spine":          "label_spine_default_fields",
-    "spine-barcode":  "label_spine_barcode_default_fields",
     "pocket":         "label_pocket_default_fields",
     "barcode-only":   "label_barcode_only_default_fields",
     "patron-full":    "label_patron_full_default_fields",
@@ -53,10 +51,9 @@ _KIND_SETTING: dict[str, str] = {
 
 # Human-readable labels for each kind shown in the form's field-toggle UI.
 ITEM_KIND_LABELS: dict[str, str] = {
-    "spine":         "Spine label (text only)",
-    "spine-barcode": "Spine label with barcode strip",
-    "pocket":        "Pocket label (title + barcode)",
-    "barcode-only":  "Barcode-only sticker",
+    "spine":        "Spine label",
+    "pocket":       "Pocket label",
+    "barcode-only": "Barcode-only sticker",
 }
 
 PATRON_KIND_LABELS: dict[str, str] = {
@@ -80,6 +77,7 @@ FIELD_DISPLAY_NAMES: dict[str, str] = {
     "expiry": "Expiry date",
     "category": "Patron category",
     "card_number": "Card number below barcode",
+    "barcode": "Barcode",
 }
 
 
@@ -128,7 +126,6 @@ def _default_fields_for_kind(kind: str) -> frozenset[str]:
 def _fields_context_for_kind(kind: str) -> list[dict[str, Any]]:
     """Build the per-field checkbox data for a given kind."""
     fmt = ITEM_KIND_TO_FORMAT.get(kind) or PATRON_KIND_TO_FORMAT.get(kind, kind)
-    required = REQUIRED_FIELDS.get(fmt, frozenset())
     optional = OPTIONAL_FIELDS.get(fmt, frozenset())
     defaults = _default_fields_for_kind(kind)
     result = []

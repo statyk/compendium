@@ -106,13 +106,11 @@ _PAGES: dict[str, dict[str, Any]] = {
         "intro": (
             "Default fields shown on each label kind. These act as the starting "
             "point when the label form loads — staff can still toggle fields "
-            "per-generation. Required fields (e.g. call number on spine labels, "
-            "barcode on all labels) are always shown regardless of this setting. "
-            "Enter field names as a comma-separated list."
+            "per-generation. Every field is optional; disable any you never use "
+            "to keep the form tidy. Enter field names as a comma-separated list."
         ),
         "keys": [
             "label_spine_default_fields",
-            "label_spine_barcode_default_fields",
             "label_pocket_default_fields",
             "label_barcode_only_default_fields",
             "label_patron_full_default_fields",

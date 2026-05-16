@@ -525,29 +525,14 @@ def _register_builtins() -> None:
             key="label_spine_default_fields",
             display_name="Spine label — default fields",
             type=list[str],
-            default=["location", "cutter", "year"],
+            default=["call_number", "location", "cutter", "year"],
             scope="librarian",
             help_text=(
-                "Optional fields shown by default on spine labels. "
-                "Allowed: location, branch, cutter, year. "
-                "call_number is always shown. Enter as a comma-separated list."
+                "Fields shown by default on spine labels. "
+                "Allowed: call_number, barcode, location, branch, cutter, year. "
+                "Enter as a comma-separated list."
             ),
-            validator=_label_fields_validator("spine-text"),
-        )
-    )
-    register(
-        SettingDescriptor(
-            key="label_spine_barcode_default_fields",
-            display_name="Spine+barcode label — default fields",
-            type=list[str],
-            default=["location", "cutter", "year"],
-            scope="librarian",
-            help_text=(
-                "Optional fields shown by default on spine-with-barcode labels. "
-                "Allowed: location, branch, cutter, year. "
-                "call_number and barcode are always shown."
-            ),
-            validator=_label_fields_validator("spine-barcode"),
+            validator=_label_fields_validator("spine"),
         )
     )
     register(
@@ -555,12 +540,12 @@ def _register_builtins() -> None:
             key="label_pocket_default_fields",
             display_name="Pocket label — default fields",
             type=list[str],
-            default=["title", "author", "call_number", "cutter", "year"],
+            default=["barcode", "title", "author", "call_number", "cutter", "year"],
             scope="librarian",
             help_text=(
-                "Optional fields shown by default on pocket labels. "
-                "Allowed: title, author, call_number, cutter, year, branch. "
-                "barcode is always shown."
+                "Fields shown by default on pocket labels. "
+                "Allowed: title, author, call_number, barcode, cutter, year, branch, library_name. "
+                "Enter as a comma-separated list."
             ),
             validator=_label_fields_validator("pocket"),
         )
@@ -570,11 +555,12 @@ def _register_builtins() -> None:
             key="label_barcode_only_default_fields",
             display_name="Barcode-only label — default fields",
             type=list[str],
-            default=["human_readable"],
+            default=["barcode", "human_readable"],
             scope="librarian",
             help_text=(
-                "Optional fields shown by default on barcode-only stickers. "
-                "Allowed: title, human_readable. barcode is always shown."
+                "Fields shown by default on barcode-only stickers. "
+                "Allowed: barcode, title, human_readable. "
+                "Enter as a comma-separated list."
             ),
             validator=_label_fields_validator("barcode-only"),
         )
@@ -584,12 +570,12 @@ def _register_builtins() -> None:
             key="label_patron_full_default_fields",
             display_name="Patron full card — default fields",
             type=list[str],
-            default=["library_name", "subtitle", "patron_name", "expiry"],
+            default=["barcode", "card_number", "library_name", "subtitle", "patron_name", "expiry"],
             scope="librarian",
             help_text=(
-                "Optional fields shown by default on patron full cards. "
-                "Allowed: library_name, subtitle, patron_name, expiry, category. "
-                "barcode and card_number are always shown."
+                "Fields shown by default on patron full cards. "
+                "Allowed: barcode, card_number, library_name, subtitle, patron_name, expiry, category. "
+                "Enter as a comma-separated list."
             ),
             validator=_label_fields_validator("full"),
         )
@@ -599,11 +585,12 @@ def _register_builtins() -> None:
             key="label_patron_sticker_default_fields",
             display_name="Patron sticker — default fields",
             type=list[str],
-            default=["card_number"],
+            default=["barcode", "card_number"],
             scope="librarian",
             help_text=(
-                "Optional fields shown by default on patron stickers. "
-                "Allowed: card_number, patron_name. barcode is always shown."
+                "Fields shown by default on patron stickers. "
+                "Allowed: barcode, card_number, patron_name. "
+                "Enter as a comma-separated list."
             ),
             validator=_label_fields_validator("sticker"),
         )

@@ -16,7 +16,6 @@ from compendium.services.labels import (
     KIND_DEFAULT_TEMPLATE,
     OPTIONAL_FIELDS,
     PATRON_KIND_TO_FORMAT,
-    REQUIRED_FIELDS,
     ItemLabelRow,
     PatronCardRow,
     TEMPLATES,
@@ -121,12 +120,11 @@ def _resolve_fields(
 
     optional = OPTIONAL_FIELDS.get(fmt, frozenset())
     _kind_setting_map = {
-        "spine-text":    "label_spine_default_fields",
-        "spine-barcode": "label_spine_barcode_default_fields",
-        "pocket":        "label_pocket_default_fields",
-        "barcode-only":  "label_barcode_only_default_fields",
-        "full":          "label_patron_full_default_fields",
-        "sticker":       "label_patron_sticker_default_fields",
+        "spine":        "label_spine_default_fields",
+        "pocket":       "label_pocket_default_fields",
+        "barcode-only": "label_barcode_only_default_fields",
+        "full":         "label_patron_full_default_fields",
+        "sticker":      "label_patron_sticker_default_fields",
     }
 
     if no_defaults:
@@ -331,38 +329,13 @@ def spine_labels(
     barcodes: Optional[str] = _barcodes_opt(),
     start_label: int = _start_label_opt(),
 ) -> None:
-    """Generate spine labels (text only: call number, cutter, year).
+    """Generate spine labels.
 
-    Optional fields (use --show / --hide): location, branch, cutter, year.
-    call_number is always shown.
+    Optional fields (use --show / --hide): call_number, barcode, location, branch, cutter, year.
+    Use --show barcode to add a scannable barcode strip.
     """
     _run_item_kind(
         "spine", output, template, show, hide, no_defaults,
-        use_isbn_barcode, branch, media_type, since, barcodes, start_label,
-    )
-
-
-@app.command("spine-barcode")
-def spine_barcode_labels(
-    output: str = _output_opt(),
-    template: Optional[str] = _template_opt(),
-    show: list[str] = _show_opt(),
-    hide: list[str] = _hide_opt(),
-    no_defaults: bool = _no_defaults_opt(),
-    use_isbn_barcode: bool = typer.Option(False, "--use-isbn-barcode"),
-    branch: Optional[str] = _branch_opt(),
-    media_type: Optional[str] = _media_type_opt(),
-    since: Optional[str] = _since_opt(),
-    barcodes: Optional[str] = _barcodes_opt(),
-    start_label: int = _start_label_opt(),
-) -> None:
-    """Generate spine labels with a scannable barcode strip.
-
-    Optional fields (use --show / --hide): location, branch, cutter, year.
-    call_number and barcode are always shown.
-    """
-    _run_item_kind(
-        "spine-barcode", output, template, show, hide, no_defaults,
         use_isbn_barcode, branch, media_type, since, barcodes, start_label,
     )
 
@@ -383,8 +356,7 @@ def pocket_labels(
 ) -> None:
     """Generate pocket labels (title + call number + barcode).
 
-    Optional fields (use --show / --hide): title, author, call_number, cutter, year, branch, library_name.
-    barcode is always shown.
+    Optional fields (use --show / --hide): title, author, call_number, barcode, cutter, year, branch, library_name.
     """
     _run_item_kind(
         "pocket", output, template, show, hide, no_defaults,
@@ -408,8 +380,7 @@ def barcode_labels(
 ) -> None:
     """Generate barcode-only stickers.
 
-    Optional fields (use --show / --hide): title, human_readable.
-    barcode is always shown.
+    Optional fields (use --show / --hide): barcode, title, human_readable.
     """
     _run_item_kind(
         "barcode-only", output, template, show, hide, no_defaults,
@@ -434,8 +405,7 @@ def patron_card(
 ) -> None:
     """Generate full patron cards (library name + patron info + barcode).
 
-    Optional fields (use --show / --hide): library_name, subtitle, patron_name, expiry, category.
-    barcode and card_number are always shown.
+    Optional fields (use --show / --hide): barcode, card_number, library_name, subtitle, patron_name, expiry, category.
     """
     _run_patron_kind(
         "patron-full", output, template, show, hide, no_defaults,
@@ -457,8 +427,7 @@ def patron_sticker(
 ) -> None:
     """Generate patron stickers (barcode only — affix to pre-printed card).
 
-    Optional fields (use --show / --hide): card_number, patron_name.
-    barcode is always shown.
+    Optional fields (use --show / --hide): barcode, card_number, patron_name.
     """
     _run_patron_kind(
         "patron-sticker", output, template, show, hide, no_defaults,

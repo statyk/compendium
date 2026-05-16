@@ -245,29 +245,29 @@ class TestPatronCards:
 class TestNewFormats:
     """Tests for the new item label formats and templates added in barcode-label-revamp."""
 
-    def test_api_spine_text_format(self, lab_client, lab_session):
-        """GET /labels/items?format=spine-text should return a valid PDF."""
+    def test_api_spine_format(self, lab_client, lab_session):
+        """GET /labels/items?format=spine should return a valid PDF."""
         token = _librarian_token(lab_session)
         _seed_item(lab_session)
         resp = lab_client.get(
-            "/labels/items?format=spine-text",
+            "/labels/items?format=spine",
             headers={"Authorization": f"Bearer {token}"},
         )
         assert resp.status_code == 200
         assert resp.headers["content-type"] == "application/pdf"
         assert resp.content.startswith(b"%PDF-")
 
-    def test_api_spine_barcode_format(self, lab_client, lab_session):
-        """GET /labels/items?format=spine-barcode should return a valid PDF."""
+    def test_api_spine_compat_aliases(self, lab_client, lab_session):
+        """Old spine-text and spine-barcode format strings are normalized to spine."""
         token = _librarian_token(lab_session)
         _seed_item(lab_session)
-        resp = lab_client.get(
-            "/labels/items?format=spine-barcode",
-            headers={"Authorization": f"Bearer {token}"},
-        )
-        assert resp.status_code == 200
-        assert resp.headers["content-type"] == "application/pdf"
-        assert resp.content.startswith(b"%PDF-")
+        for alias in ("spine-text", "spine-barcode"):
+            resp = lab_client.get(
+                f"/labels/items?format={alias}",
+                headers={"Authorization": f"Bearer {token}"},
+            )
+            assert resp.status_code == 200, f"alias {alias!r} returned {resp.status_code}"
+            assert resp.content.startswith(b"%PDF-")
 
     @pytest.mark.parametrize("template_key", ["avery-5167-spine", "avery-22805", "avery-22806"])
     def test_api_new_templates(self, lab_client, lab_session, template_key):
