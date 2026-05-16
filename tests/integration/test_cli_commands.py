@@ -1530,7 +1530,7 @@ class TestLabelsCli:
             "compendium.cli.commands.labels",
         )
         assert r.exit_code == 0
-        for key in ("avery-5160", "avery-5167", "avery-5871", "avery-5390"):
+        for key in ("avery-5160", "avery-5167", "avery-5871", "avery-22806"):
             assert key in r.output
 
     def test_items_produces_pdf(self, session, tmp_path):

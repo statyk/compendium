@@ -53,7 +53,7 @@ class PatronService:
                 raise BusinessRuleError("This user account is already linked to another patron.")
         from compendium.services.site_settings import get_site_setting
 
-        if get_site_setting("barcode_location_enabled"):
+        if get_site_setting("barcode_format") == "14-digit":
             location_code: str | None = get_site_setting("barcode_default_location_code")
         else:
             location_code = None

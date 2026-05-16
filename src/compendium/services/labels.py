@@ -29,7 +29,7 @@ from reportlab.pdfbase.pdfmetrics import stringWidth
 BarcodeSymbology = Literal["codabar", "code39", "code128"]
 
 
-ItemFormat = Literal["spine", "pocket", "barcode-only"]
+ItemFormat = Literal["spine", "spine-text", "spine-barcode", "pocket", "barcode-only"]
 PatronFormat = Literal["full", "sticker"]
 
 # Minimum label height (inches) that can meaningfully fit a "full" patron card
@@ -54,6 +54,7 @@ class LabelTemplate:
     margin_top: float = 0.5
     col_gap: float = 0.125
     row_gap: float = 0.0
+    orientation: str = "landscape"
 
     @property
     def per_sheet(self) -> int:
@@ -78,7 +79,7 @@ TEMPLATES: dict[str, LabelTemplate] = {
     ),
     "avery-5167": LabelTemplate(
         key="avery-5167",
-        display="Return-address — 4×20, ½\" × 1¾\" (Avery 5167)",
+        display="Return-address / pocket label — 4×20, ½\" × 1¾\" (Avery 5167/8167)",
         cols=4, rows=20,
         label_width=1.75, label_height=0.5,
         margin_left=0.30, margin_top=0.5,
@@ -92,13 +93,30 @@ TEMPLATES: dict[str, LabelTemplate] = {
         margin_left=0.75, margin_top=0.5,
         col_gap=0.0, row_gap=0.0,
     ),
-    "avery-5390": LabelTemplate(
-        key="avery-5390",
-        display="Name badge — 4 columns × 2 rows, 3½\" × 2¼\" (Avery 5390 variant)",
-        cols=2, rows=4,
-        label_width=3.5, label_height=2.25,
-        margin_left=0.75, margin_top=0.5,
-        col_gap=0.0, row_gap=0.0,
+    "avery-5167-spine": LabelTemplate(
+        key="avery-5167-spine",
+        display="Spine label — 4×20, ½\" × 1¾\" rotated (Avery 5167/8167)",
+        cols=4, rows=20,
+        label_width=1.75, label_height=0.5,
+        margin_left=0.30, margin_top=0.5,
+        col_gap=0.30, row_gap=0.0,
+        orientation="rotated",
+    ),
+    "avery-22805": LabelTemplate(
+        key="avery-22805",
+        display="Square — 4×6, 1½\" × 1½\" (Avery 22805)",
+        cols=4, rows=6,
+        label_width=1.5, label_height=1.5,
+        margin_left=0.5, margin_top=1.0,
+        col_gap=0.5, row_gap=0.0,
+    ),
+    "avery-22806": LabelTemplate(
+        key="avery-22806",
+        display="Square — 3×4, 2\" × 2\" (Avery 22806)",
+        cols=3, rows=4,
+        label_width=2.0, label_height=2.0,
+        margin_left=1.25, margin_top=1.5,
+        col_gap=0.5, row_gap=0.0,
     ),
 }
 
@@ -118,6 +136,7 @@ class ItemLabelRow:
     publication_year: int | None = None
     isbn: str | None = None  # if present and use_isbn_barcode=True, EAN-13 is drawn
     branch_code: str | None = None
+    location: str | None = None  # e.g. "REFERENCE", "CHILDREN" — shown above call number on spine formats
 
 
 @dataclass
@@ -293,6 +312,29 @@ def _draw_barcode(
     c.restoreState()
 
 
+def _draw_barcode_vertical(
+    c: canvas.Canvas,
+    x: float,
+    y: float,
+    value: str,
+    width: float,
+    height: float,
+    *,
+    symbology: BarcodeSymbology,
+) -> None:
+    """Render a barcode rotated 90°, distributing modules along the y-axis.
+    Use inside a saveState/restoreState block when the canvas is already rotated.
+    The barcode runs from y upward for ``height`` points; ``width`` is the bar depth.
+    No human-readable text (no space for it on a 0.5" label)."""
+    pattern = _module_pattern(value, symbology)
+    if not pattern:
+        return
+    module_height = height / len(pattern)
+    for i, bit in enumerate(pattern):
+        if bit == "1":
+            c.rect(x, y + i * module_height, width, module_height, fill=1, stroke=0)
+
+
 def _draw_barcode_ean13(
     c: canvas.Canvas,
     x: float,
@@ -345,12 +387,12 @@ def generate_item_labels(
 ) -> bytes:
     """Render item labels to PDF bytes.
 
-    ``format`` defaults based on template size:
-      - narrow templates (≤2") → 'barcode-only' (just a scannable barcode +
-        human-readable number; good for small stickers affixed to spines/pockets)
-      - larger templates → 'pocket' (title + call number + cutter/year + barcode)
-    Caller may override. 'spine' format is text-only (no barcode), matching
-    traditional shelving-label convention.
+    ``format`` defaults based on template geometry:
+      - ``orientation="rotated"`` templates (e.g. avery-5167-spine) → 'spine-text'
+      - aspect ratio ≥ 3.0 (wide & short, e.g. avery-5167 at 3.5) → 'barcode-only'
+      - aspect ratio ≤ 0.67 (tall & narrow) → 'spine-text'
+      - otherwise → 'pocket' (title + call number + cutter/year + barcode)
+    Caller may override with an explicit ``format=`` argument.
 
     ``use_isbn_barcode`` makes the generator draw an EAN-13 for rows that
     carry a valid ISBN; falls back to the configured symbology over the
@@ -366,7 +408,20 @@ def generate_item_labels(
 
     template = TEMPLATES[template_key]
     if format is None:
-        format = "barcode-only" if template.label_width <= 2.0 else "pocket"
+        if template.orientation == "rotated":
+            format = "spine-text"
+        else:
+            aspect = template.label_width / template.label_height
+            if aspect >= 3.0:    # wide and short (e.g. 5167 at 1.75/0.5=3.5) → barcode strip
+                format = "barcode-only"
+            elif aspect <= 0.67:  # tall and narrow → spine text
+                format = "spine-text"
+            else:
+                format = "pocket"
+
+    # Backward-compat alias: "spine" is the old name for "spine-text".
+    if format == "spine":
+        format = "spine-text"
 
     buf = BytesIO()
     c = canvas.Canvas(buf, pagesize=(template.page_width * inch, template.page_height * inch))
@@ -395,8 +450,49 @@ def _draw_item_label(
     use_isbn: bool,
     symbology: BarcodeSymbology,
 ) -> None:
+    """Render one item label at the cell origin ``(x, y)``.
+
+    For templates with ``orientation="rotated"`` (e.g. spine labels), the
+    canvas is rotated 90° CCW so all inner-content drawing code can use the
+    same coordinate system: a "tall" cell whose vertical extent is the
+    physical long dimension. After rotation, ``lw``/``lh`` are swapped so
+    that ``lw`` is the (narrow) horizontal extent and ``lh`` is the (long)
+    vertical extent in the rotated drawing context.
+    """
+    rotated = (t.orientation == "rotated")
     lw = t.label_width * inch
     lh = t.label_height * inch
+
+    if rotated:
+        c.saveState()
+        # Translate to bottom-right of the physical cell, then rotate 90° CCW.
+        # That maps the rotated drawing origin onto the bottom-left of the
+        # tall (portrait-oriented) cell, so all downstream code can draw
+        # top→bottom in a familiar coordinate system.
+        c.translate(x + lw, y)
+        c.rotate(90)
+        lw, lh = lh, lw  # swap: lw now physically-short, lh now physically-long
+        x, y = 0.0, 0.0
+
+    try:
+        _draw_item_label_content(c, row, x, y, lw, lh, fmt, use_isbn, symbology, rotated)
+    finally:
+        if rotated:
+            c.restoreState()
+
+
+def _draw_item_label_content(
+    c: canvas.Canvas,
+    row: ItemLabelRow,
+    x: float,
+    y: float,
+    lw: float,   # in points, already swapped for rotated context
+    lh: float,   # in points, already swapped for rotated context
+    fmt: ItemFormat,
+    use_isbn: bool,
+    symbology: BarcodeSymbology,
+    rotated: bool,
+) -> None:
     pad = 4  # points
     inner_w = lw - 2 * pad
 
@@ -422,20 +518,37 @@ def _draw_item_label(
             )
         return
 
-    if fmt == "spine":
+    if fmt in ("spine-text", "spine-barcode"):
         # Fixed geometry so a missing call number doesn't shift the cutter/year
         # up (caller complaint: inconsistent placement across a batch).
-        # Reserve space for: up to 4 call-number lines, cutter line, year line.
+        # Reserve space for: optional location line, up to 4 call-number lines,
+        # cutter line, year line, and (for spine-barcode) a barcode strip at
+        # the bottom.
         cn_font_size = 9
         cutter_font_size = 10
         year_font_size = 9
         line_h_cn = cn_font_size + 1
-        # Call number block: top of label, up to 4 lines.
+
+        # For spine-barcode, reserve a strip at the bottom of the cell for
+        # the barcode. The text block must end above this reserved strip.
+        bc_strip = 14 if fmt == "spine-barcode" else 0
+        text_bottom = y + pad + bc_strip
+
+        # Optional location line at the very top (small uppercase).
         top = y + lh - pad
+        if row.location:
+            loc_size = 7
+            c.setFont(body_font, loc_size)
+            c.drawString(
+                x + pad,
+                top - loc_size,
+                _truncate(row.location.upper(), inner_w, body_font, loc_size),
+            )
+            top -= loc_size + 2
+
+        # Call number block: up to 4 lines below the location (or top).
         max_cn_lines = 4
         cn_slots = min(len(cn_lines), max_cn_lines)
-        # Walk down from the top: always reserve 4 line-heights so missing
-        # lines leave blank space rather than letting cutter/year float up.
         cursor = top - cn_font_size
         c.setFont(font, cn_font_size)
         for i in range(max_cn_lines):
@@ -445,11 +558,40 @@ def _draw_item_label(
         # Cutter (bold) + year (regular) on their own lines below the block.
         if cutter_str:
             c.setFont(font, cutter_font_size)
-            c.drawString(x + pad, cursor - 2, cutter_str)
+            c.drawString(x + pad, max(cursor - 2, text_bottom), cutter_str)
         cursor -= cutter_font_size + 2
         if year:
             c.setFont(body_font, year_font_size)
-            c.drawString(x + pad, cursor - 2, year)
+            c.drawString(x + pad, max(cursor - 2, text_bottom), year)
+
+        # Barcode strip at the bottom for spine-barcode.
+        if fmt == "spine-barcode":
+            if rotated:
+                # In a rotated drawing context, the local y-axis IS the
+                # physical long dimension (1.75"). Run the barcode along it
+                # so we have ~118pt of bar-distribution length instead of
+                # cramming 100+ modules into the 0.5" short dim.
+                _draw_barcode_vertical(
+                    c,
+                    x + pad,
+                    y + pad,
+                    row.barcode,
+                    inner_w,                 # bar depth: full inner width
+                    lh - 2 * pad,            # bar length: full inner height
+                    symbology=symbology,
+                )
+            else:
+                # Non-rotated spine: a horizontal strip at the bottom.
+                _draw_barcode(
+                    c,
+                    x + pad,
+                    y + pad,
+                    row.barcode,
+                    inner_w,
+                    bc_strip,
+                    symbology=symbology,
+                    human_readable=False,
+                )
         return
 
     # pocket format — rework for better space use:
@@ -532,7 +674,7 @@ def generate_patron_cards(
             f"Template '{template_key}' is too small for 'full' format "
             f"(label height {template.label_height}\" < {_FULL_CARD_MIN_HEIGHT}\"). "
             f"Use 'sticker' format on this template, or pick a larger template "
-            f"such as 'avery-5871' or 'avery-5390'."
+            f"such as 'avery-5871' or 'avery-22806'."
         )
     buf = BytesIO()
     c = canvas.Canvas(buf, pagesize=(template.page_width * inch, template.page_height * inch))

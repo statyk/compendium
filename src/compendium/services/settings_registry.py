@@ -458,31 +458,16 @@ def _register_builtins() -> None:
     # ── Identifiers & barcodes ─────────────────────────────────────────────
     register(
         SettingDescriptor(
-            key="barcode_length",
-            display_name="Barcode Length",
-            type=Literal["10", "14"],
-            default="10",
+            key="barcode_format",
+            display_name="Barcode Format",
+            type=Literal["10-digit", "14-digit"],
+            default="10-digit",
             scope="librarian",
             help_text=(
-                "Number of digits in minted barcodes. '10' omits the branch "
-                "location prefix; '14' embeds the 4-digit branch location code. "
-                "Both lengths remain readable in any deployment — this setting "
-                "controls only newly minted codes."
-            ),
-        )
-    )
-    register(
-        SettingDescriptor(
-            key="barcode_location_enabled",
-            display_name="Embed Branch Location in Barcode",
-            type=bool,
-            default=False,
-            scope="librarian",
-            help_text=(
-                "When enabled, the 4-digit branch location code is embedded in "
-                "newly minted 14-digit barcodes. Requires Barcode Length to be "
-                "set to '14' and each branch to have a Location Code configured. "
-                "Items with no branch use the Default Location Code."
+                "Format for newly minted item barcodes and patron card numbers. "
+                "'10-digit' omits the branch location prefix; '14-digit' embeds "
+                "a 4-digit branch location code before the unique slug. Existing "
+                "barcodes are unaffected — both lengths remain scannable."
             ),
         )
     )
@@ -506,12 +491,13 @@ def _register_builtins() -> None:
             key="barcode_symbology",
             display_name="Barcode Symbology",
             type=Literal["codabar", "code39", "code128"],
-            default="codabar",
+            default="code128",
             scope="librarian",
             help_text=(
-                "Visual encoding used when rendering item and patron barcodes "
-                "on printed labels. Pick the symbology your scanner is "
-                "configured to read. Does not affect the stored barcode value."
+                "Barcode symbology for printed labels. Code 128 is recommended — "
+                "it produces shorter barcodes than Codabar or Code 39, which "
+                "matters for compact spine labels. Match this setting to what "
+                "your scanner is configured to read."
             ),
         )
     )

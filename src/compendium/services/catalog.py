@@ -1171,7 +1171,7 @@ class CatalogService:
             return self._resolve_location_via_session(db, branch)
         from compendium.services.site_settings import get_site_setting
 
-        if not get_site_setting("barcode_location_enabled"):
+        if get_site_setting("barcode_format") != "14-digit":
             return None
         if branch is not None and getattr(branch, "location_code", None):
             return branch.location_code
@@ -1199,7 +1199,7 @@ class CatalogService:
                 return parse_setting(desc, row.value)
             return desc.default
 
-        if not _read("barcode_location_enabled"):
+        if _read("barcode_format") != "14-digit":
             return None
         if branch is not None and getattr(branch, "location_code", None):
             return branch.location_code

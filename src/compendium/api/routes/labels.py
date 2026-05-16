@@ -63,6 +63,7 @@ def _collect_item_rows(
                 publication_year=item.work.publication_year,
                 isbn=item.work.isbn,
                 branch_code=item.branch.code if item.branch else None,
+                location=item.location,
             )
         )
     return rows
@@ -110,7 +111,7 @@ def _csv(s: str | None) -> list[str] | None:
 @router.get("/items")
 def item_labels(
     template: str = Query("avery-5160"),
-    format: str | None = Query(None, pattern="^(spine|pocket|barcode-only)$"),
+    format: str | None = Query(None, pattern="^(spine|spine-text|spine-barcode|pocket|barcode-only)$"),
     use_isbn_barcode: bool = False,
     branch: str | None = None,
     media_type: str | None = None,

@@ -97,6 +97,27 @@ class TestDescriptorLookup:
             )
 
 
+class TestBarcodeIdentifierDescriptors:
+    def test_barcode_format_registered(self):
+        desc = get_descriptor("barcode_format")
+        assert desc.default == "10-digit"
+        assert desc.scope == "librarian"
+        assert desc.type == Literal["10-digit", "14-digit"]
+
+    def test_barcode_length_not_registered(self):
+        with pytest.raises(UnknownSettingError):
+            get_descriptor("barcode_length")
+
+    def test_barcode_location_enabled_not_registered(self):
+        with pytest.raises(UnknownSettingError):
+            get_descriptor("barcode_location_enabled")
+
+    def test_barcode_symbology_default_is_code128(self):
+        desc = get_descriptor("barcode_symbology")
+        assert desc.default == "code128"
+        assert desc.type == Literal["codabar", "code39", "code128"]
+
+
 class TestCoercion:
     def test_str_passthrough(self):
         desc = get_descriptor("library_name")

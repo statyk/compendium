@@ -240,3 +240,53 @@ class TestPatronCards:
         )
         assert resp.status_code == 422
         assert "too small" in resp.json()["detail"]
+
+
+class TestNewFormats:
+    """Tests for the new item label formats and templates added in barcode-label-revamp."""
+
+    def test_api_spine_text_format(self, lab_client, lab_session):
+        """GET /labels/items?format=spine-text should return a valid PDF."""
+        token = _librarian_token(lab_session)
+        _seed_item(lab_session)
+        resp = lab_client.get(
+            "/labels/items?format=spine-text",
+            headers={"Authorization": f"Bearer {token}"},
+        )
+        assert resp.status_code == 200
+        assert resp.headers["content-type"] == "application/pdf"
+        assert resp.content.startswith(b"%PDF-")
+
+    def test_api_spine_barcode_format(self, lab_client, lab_session):
+        """GET /labels/items?format=spine-barcode should return a valid PDF."""
+        token = _librarian_token(lab_session)
+        _seed_item(lab_session)
+        resp = lab_client.get(
+            "/labels/items?format=spine-barcode",
+            headers={"Authorization": f"Bearer {token}"},
+        )
+        assert resp.status_code == 200
+        assert resp.headers["content-type"] == "application/pdf"
+        assert resp.content.startswith(b"%PDF-")
+
+    @pytest.mark.parametrize("template_key", ["avery-5167-spine", "avery-22805", "avery-22806"])
+    def test_api_new_templates(self, lab_client, lab_session, template_key):
+        """Each new template key should be accepted by the API and return a valid PDF."""
+        token = _librarian_token(lab_session)
+        _seed_item(lab_session)
+        resp = lab_client.get(
+            f"/labels/items?template={template_key}",
+            headers={"Authorization": f"Bearer {token}"},
+        )
+        assert resp.status_code == 200
+        assert resp.headers["content-type"] == "application/pdf"
+        assert resp.content.startswith(b"%PDF-")
+
+    def test_api_invalid_format_rejected(self, lab_client, lab_session):
+        """GET /labels/items?format=invalid-format should return 422."""
+        token = _librarian_token(lab_session)
+        resp = lab_client.get(
+            "/labels/items?format=invalid-format",
+            headers={"Authorization": f"Bearer {token}"},
+        )
+        assert resp.status_code == 422

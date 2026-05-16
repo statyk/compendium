@@ -27,6 +27,10 @@ router = APIRouter()
 
 _PERM = "labels.generate"
 
+# Templates suitable for patron cards: exclude rotated-orientation templates
+# (spine-rotated labels are for item spines only and don't render patron cards).
+_PATRON_TEMPLATES = [t for t in TEMPLATES.values() if t.orientation != "rotated"]
+
 _SYMBOLOGY_LABELS = {
     "codabar": "Codabar",
     "code39": "Code 39",
@@ -105,6 +109,7 @@ def _collect_item_rows(
                 publication_year=item.work.publication_year,
                 isbn=item.work.isbn,
                 branch_code=item.branch.code if item.branch else None,
+                location=item.location,
             )
         )
     return rows
@@ -266,7 +271,7 @@ def patron_cards_form(
         {
             "request": request,
             "user": user,
-            "templates": list(TEMPLATES.values()),
+            "templates": _PATRON_TEMPLATES,
             "categories": _categories(session),
             "error": None,
         },
@@ -287,14 +292,15 @@ def patron_cards_post(
     session: Session = Depends(get_session),
 ):
     check_csrf_form(request, csrf_token)
-    if template not in TEMPLATES:
+    _patron_template_keys = {t.key for t in _PATRON_TEMPLATES}
+    if template not in _patron_template_keys:
         return _render(
             "labels/patrons.html",
             request,
             {
                 "request": request,
                 "user": user,
-                "templates": list(TEMPLATES.values()),
+                "templates": _PATRON_TEMPLATES,
                 "categories": _categories(session),
                 "error": f"Unknown template '{template}'",
             },
@@ -314,7 +320,7 @@ def patron_cards_post(
             {
                 "request": request,
                 "user": user,
-                "templates": list(TEMPLATES.values()),
+                "templates": _PATRON_TEMPLATES,
                 "categories": _categories(session),
                 "error": "No patrons matched the filter.",
             },
@@ -334,7 +340,7 @@ def patron_cards_post(
             {
                 "request": request,
                 "user": user,
-                "templates": list(TEMPLATES.values()),
+                "templates": _PATRON_TEMPLATES,
                 "categories": _categories(session),
                 "error": str(exc),
             },

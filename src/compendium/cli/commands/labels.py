@@ -59,6 +59,7 @@ def _collect_items(
                 publication_year=item.work.publication_year,
                 isbn=item.work.isbn,
                 branch_code=item.branch.code if item.branch else None,
+                location=item.location,
             )
         )
     return rows
@@ -108,7 +109,7 @@ def items_labels(
     format: str | None = typer.Option(
         None,
         "--format",
-        help="spine (text-only) | pocket (info + barcode) | barcode-only (inferred from template if omitted)",
+        help="spine-text (text-only spine) | spine-barcode (spine + barcode strip) | pocket (info + barcode) | barcode-only (inferred from template if omitted). 'spine' is an alias for 'spine-text'.",
     ),
     use_isbn_barcode: bool = typer.Option(
         False, "--use-isbn-barcode",
@@ -126,8 +127,11 @@ def items_labels(
     if template not in TEMPLATES:
         typer.echo(f"Error: unknown template '{template}'. Use 'labels templates' to list.", err=True)
         raise typer.Exit(1)
-    if format is not None and format not in ("spine", "pocket", "barcode-only"):
-        typer.echo("Error: --format must be 'spine', 'pocket', or 'barcode-only'.", err=True)
+    if format is not None and format not in ("spine", "spine-text", "spine-barcode", "pocket", "barcode-only"):
+        typer.echo(
+            "Error: --format must be 'spine', 'spine-text', 'spine-barcode', 'pocket', or 'barcode-only'.",
+            err=True,
+        )
         raise typer.Exit(1)
     barcode_list = [b.strip() for b in barcodes.split(",")] if barcodes else None
     with session_scope() as session:
