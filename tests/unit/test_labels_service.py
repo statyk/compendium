@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from datetime import date
 
+import barcode as _barcode_lib
 import pytest
 
 from compendium.services.labels import (
@@ -258,10 +259,9 @@ class TestItemMissingCallNumberDoesNotShiftLayout:
 def test_code128_uses_subset_c_for_digits():
     """Code 128 Subset C encodes two digits per symbol.
     14 digits → 7 data symbols + Start C + check + stop = 10 chars
-    = 9×11 + 13 = 112 modules. Allow ±10 for quiet zones / guard bars."""
-    import barcode
-
-    cls = barcode.get_barcode_class("code128")
+    = 9×11 + 13 = 112 modules. Threshold of 140 keeps clear separation
+    from Subset B's ~165 floor."""
+    cls = _barcode_lib.get_barcode_class("code128")
     pattern = "".join(cls("12345678901234", writer=None).build())
     # Subset C: ~112 modules (excl. quiet zone). Subset B would be ~165+.
     assert len(pattern) < 140, (
