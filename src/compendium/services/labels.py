@@ -54,6 +54,7 @@ class LabelTemplate:
     margin_top: float = 0.5
     col_gap: float = 0.125
     row_gap: float = 0.0
+    orientation: str = "landscape"
 
     @property
     def per_sheet(self) -> int:
@@ -78,7 +79,7 @@ TEMPLATES: dict[str, LabelTemplate] = {
     ),
     "avery-5167": LabelTemplate(
         key="avery-5167",
-        display="Return-address — 4×20, ½\" × 1¾\" (Avery 5167)",
+        display="Return-address / pocket label — 4×20, ½\" × 1¾\" (Avery 5167/8167)",
         cols=4, rows=20,
         label_width=1.75, label_height=0.5,
         margin_left=0.30, margin_top=0.5,
@@ -92,13 +93,30 @@ TEMPLATES: dict[str, LabelTemplate] = {
         margin_left=0.75, margin_top=0.5,
         col_gap=0.0, row_gap=0.0,
     ),
-    "avery-5390": LabelTemplate(
-        key="avery-5390",
-        display="Name badge — 4 columns × 2 rows, 3½\" × 2¼\" (Avery 5390 variant)",
-        cols=2, rows=4,
-        label_width=3.5, label_height=2.25,
-        margin_left=0.75, margin_top=0.5,
-        col_gap=0.0, row_gap=0.0,
+    "avery-5167-spine": LabelTemplate(
+        key="avery-5167-spine",
+        display="Spine label — 4×20, ½\" × 1¾\" rotated (Avery 5167/8167)",
+        cols=4, rows=20,
+        label_width=1.75, label_height=0.5,
+        margin_left=0.30, margin_top=0.5,
+        col_gap=0.30, row_gap=0.0,
+        orientation="rotated",
+    ),
+    "avery-22805": LabelTemplate(
+        key="avery-22805",
+        display="Square — 4×6, 1½\" × 1½\" (Avery 22805)",
+        cols=4, rows=6,
+        label_width=1.5, label_height=1.5,
+        margin_left=0.5, margin_top=1.0,
+        col_gap=0.5, row_gap=0.0,
+    ),
+    "avery-22806": LabelTemplate(
+        key="avery-22806",
+        display="Square — 3×4, 2\" × 2\" (Avery 22806)",
+        cols=3, rows=4,
+        label_width=2.0, label_height=2.0,
+        margin_left=1.25, margin_top=1.5,
+        col_gap=0.5, row_gap=0.0,
     ),
 }
 
@@ -532,7 +550,7 @@ def generate_patron_cards(
             f"Template '{template_key}' is too small for 'full' format "
             f"(label height {template.label_height}\" < {_FULL_CARD_MIN_HEIGHT}\"). "
             f"Use 'sticker' format on this template, or pick a larger template "
-            f"such as 'avery-5871' or 'avery-5390'."
+            f"such as 'avery-5871' or 'avery-22806'."
         )
     buf = BytesIO()
     c = canvas.Canvas(buf, pagesize=(template.page_width * inch, template.page_height * inch))

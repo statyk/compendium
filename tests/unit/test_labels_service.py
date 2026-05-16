@@ -181,7 +181,7 @@ class TestPatronFullCardSizeValidation:
 
     def test_sticker_works_on_any_template(self):
         rows = [PatronCardRow(card_number="1", full_name="X")]
-        for key in ("avery-5160", "avery-5167", "avery-5871", "avery-5390"):
+        for key in ("avery-5160", "avery-5167", "avery-5871", "avery-22806"):
             pdf = generate_patron_cards(rows, template_key=key, format="sticker")
             assert pdf.startswith(b"%PDF-")
 
@@ -189,7 +189,7 @@ class TestPatronFullCardSizeValidation:
         assert not TEMPLATES["avery-5167"].supports_full_card
         assert not TEMPLATES["avery-5160"].supports_full_card
         assert TEMPLATES["avery-5871"].supports_full_card
-        assert TEMPLATES["avery-5390"].supports_full_card
+        assert TEMPLATES["avery-22806"].supports_full_card
 
 
 class TestItemBarcodeOnlyFormat:
@@ -398,3 +398,14 @@ class TestTemplates:
             # opposite margin. Allow 1/8" slack for float arithmetic.
             assert used_w <= t.page_width + 0.125
             assert used_h <= t.page_height + 0.125
+
+    def test_avery_5390_removed(self):
+        assert "avery-5390" not in TEMPLATES
+
+    def test_avery_5167_spine_has_rotated_orientation(self):
+        assert TEMPLATES["avery-5167-spine"].orientation == "rotated"
+
+    def test_new_templates_present(self):
+        assert TEMPLATES["avery-5167-spine"].key == "avery-5167-spine"
+        assert TEMPLATES["avery-22805"].key == "avery-22805"
+        assert TEMPLATES["avery-22806"].key == "avery-22806"
