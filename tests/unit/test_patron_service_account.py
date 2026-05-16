@@ -153,8 +153,8 @@ class TestCreateAccountForPatron:
 
 def _fake_setting(key: str):
     """Minimal stub for get_site_setting so card number generation works."""
-    if key == "barcode_location_enabled":
-        return False
+    if key == "barcode_format":
+        return "10-digit"
     if key == "barcode_default_location_code":
         return None
     return None
