@@ -100,6 +100,25 @@ _PAGES: dict[str, dict[str, Any]] = {
             "barcode_symbology",
         ],
     },
+    "labels": {
+        "title": "Label defaults",
+        "scope_perm": "labels.generate",
+        "intro": (
+            "Default fields shown on each label kind. These act as the starting "
+            "point when the label form loads — staff can still toggle fields "
+            "per-generation. Required fields (e.g. call number on spine labels, "
+            "barcode on all labels) are always shown regardless of this setting. "
+            "Enter field names as a comma-separated list."
+        ),
+        "keys": [
+            "label_spine_default_fields",
+            "label_spine_barcode_default_fields",
+            "label_pocket_default_fields",
+            "label_barcode_only_default_fields",
+            "label_patron_full_default_fields",
+            "label_patron_sticker_default_fields",
+        ],
+    },
 }
 
 _SYSTEM_PAGES: dict[str, dict[str, Any]] = {
@@ -555,6 +574,31 @@ async def identifiers_post(
         reset_keys,
         session,
         user,
+    )
+
+
+@router.get("/admin/settings/labels")
+def labels_settings_get(
+    request: Request,
+    message: str | None = Query(default=None),
+    error: str | None = Query(default=None),
+    user: AppUser = Depends(require_web_permission("labels.generate")),
+):
+    return _show_page("labels", _PAGES["labels"], request, message, error, user)
+
+
+@router.post("/admin/settings/labels")
+async def labels_settings_post(
+    request: Request,
+    user: AppUser = Depends(require_web_permission("labels.generate")),
+    session: Session = Depends(get_session),
+):
+    form = await request.form()
+    check_csrf_form(request, form.get("csrf_token", ""))
+    reset_keys = form.getlist("reset")
+    form_values = {k: v for k, v in form.items() if k not in ("csrf_token", "reset")}
+    return _post_handler(
+        "labels", _PAGES["labels"], request, form_values, reset_keys, session, user
     )
 
 

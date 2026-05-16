@@ -10,59 +10,133 @@
 
 {% include "labels/_symbology_banner.html" %}
 
-<form method="post" action="/ui/labels/items">
+<form method="post" action="/ui/labels/items" id="item-labels-form">
   <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
 
-  <label>Template
-    <select name="template">
-      {% for t in templates %}
-      <option value="{{ t.key }}"{% if t.key == "avery-5160" %} selected{% endif %}>{{ t.display }}</option>
-      {% endfor %}
-    </select>
-  </label>
+  {# ── Step 1: What kind of label? ─────────────────────────────────── #}
+  <fieldset>
+    <legend>What kind of label?</legend>
+    {% for k in item_kind_order %}
+    <label>
+      <input type="radio" name="kind" value="{{ k }}"
+             data-kind-switch
+             {% if k == selected_kind %} checked{% endif %}>
+      {{ item_kinds[k].label }}
+    </label>
+    {% endfor %}
+  </fieldset>
 
-  <label>Format
-    <select name="format">
-      <option value="">Auto (small → barcode-only, larger → pocket)</option>
-      <option value="spine">Spine — text only (call number + author indicator + year, no barcode)</option>
-      <option value="pocket">Pocket — title + call number + barcode (best for 1"×2⅝")</option>
-      <option value="barcode-only">Barcode-only — scannable barcode + digits (best for small ½"×1¾" stickers)</option>
-    </select>
-  </label>
-
-  <label>
-    <input type="checkbox" name="use_isbn_barcode">
-    Use EAN-13 barcode for items with an ISBN (other items use the configured barcode symbology)
-  </label>
-
-  <details>
-    <summary>Filter which items to print</summary>
+  {# ── Step 2: Items to print ──────────────────────────────────────── #}
+  <section>
+    <h3>Items to print</h3>
     {% if branches|length > 1 %}
     <label>Branch
       <select name="branch">
-        <option value="">All branches</option>
-        {% for b in branches %}<option value="{{ b.code }}">{{ b.name }}</option>{% endfor %}
+        <option value=""{% if not filter_branch %} selected{% endif %}>All branches</option>
+        {% for b in branches %}<option value="{{ b.code }}"{% if filter_branch == b.code %} selected{% endif %}>{{ b.name }}</option>{% endfor %}
       </select>
     </label>
     {% endif %}
     <label>Media type
       <select name="media_type">
-        <option value="">All media</option>
-        {% for mt in media_types %}<option value="{{ mt.code }}">{{ mt.display_name }}</option>{% endfor %}
+        <option value=""{% if not filter_media_type %} selected{% endif %}>All media</option>
+        {% for mt in media_types %}<option value="{{ mt.code }}"{% if filter_media_type == mt.code %} selected{% endif %}>{{ mt.display_name }}</option>{% endfor %}
       </select>
     </label>
     <label>Items added since
-      <input type="date" name="since">
+      <input type="date" name="since" value="{{ filter_since }}">
     </label>
     <label>Or, exact barcodes <span class="field-hint" data-tooltip="Enter barcodes separated by commas. When provided, all other filters above are ignored.">ⓘ</span>
-      <textarea name="barcodes" rows="3" placeholder="BC000001, BC000002, ..."></textarea>
+      <textarea name="barcodes" rows="3" placeholder="BC000001, BC000002, ...">{{ filter_barcodes }}</textarea>
     </label>
-  </details>
+    {% if item_count is not none %}
+    <p><small>{{ item_count }} item{{ "s" if item_count != 1 else "" }} match current filters.</small></p>
+    {% endif %}
+  </section>
 
-  <label>Start at label # <span class="field-hint" data-tooltip="Skip this many label positions on the first sheet — useful when printing on a partially-used sheet.">ⓘ</span>
-    <input type="number" name="start_label" min="0" value="0" style="max-width:6rem">
-  </label>
+  {# ── Step 3: Sheet template (per-kind) ──────────────────────────── #}
+  <section>
+    <h3>Sheet template</h3>
+    {% for k in item_kind_order %}
+    <div data-kind="{{ k }}"{% if k != selected_kind %} hidden{% endif %}>
+      <select name="{{ 'template' if k == selected_kind else 'template_' ~ k }}"
+              id="template-select-{{ k }}"
+              {% if k != selected_kind %} disabled{% endif %}>
+        {% for t in item_kinds[k].templates %}
+        <option value="{{ t.key }}"{% if t.key == item_kinds[k].default_template %} selected{% endif %}>{{ t.display }}</option>
+        {% endfor %}
+      </select>
+    </div>
+    {% endfor %}
+  </section>
+
+  {# ── Step 4: Fields shown (per-kind) ─────────────────────────────── #}
+  <section>
+    <h3>Fields shown on each label</h3>
+    {% for k in item_kind_order %}
+    <fieldset data-kind="{{ k }}"{% if k != selected_kind %} hidden{% endif %}>
+      {% for f in item_kinds[k].fields %}
+      <label>
+        <input type="checkbox" name="field_{{ f.name }}"{% if f.checked_by_default %} checked{% endif %}
+               {% if k != selected_kind %} disabled{% endif %}>
+        {{ f.label }}
+      </label>
+      {% endfor %}
+      {% if not item_kinds[k].fields %}
+      <p><small>No optional fields for this label kind.</small></p>
+      {% endif %}
+    </fieldset>
+    {% endfor %}
+  </section>
+
+  {# ── Step 5: Print options ───────────────────────────────────────── #}
+  <section>
+    <h3>Print options</h3>
+    <label>
+      <input type="checkbox" name="use_isbn_barcode">
+      Use EAN-13 barcode for items with an ISBN (other items use the configured barcode symbology)
+    </label>
+    <label>Start at label # <span class="field-hint" data-tooltip="Skip this many label positions on the first sheet — useful when printing on a partially-used sheet.">ⓘ</span>
+      <input type="number" name="start_label" min="0" value="0" style="max-width:6rem">
+    </label>
+  </section>
 
   <button type="submit">Generate PDF</button>
 </form>
+{% endblock %}
+
+{% block scripts %}
+<script nonce="{{ csp_nonce(request) }}">
+(function () {
+  var form = document.getElementById('item-labels-form');
+  if (!form) return;
+
+  function activateKind(k) {
+    // Toggle template selects: only the active kind's <select> is enabled and named "template".
+    form.querySelectorAll('[data-kind]').forEach(function (el) {
+      var elKind = el.getAttribute('data-kind');
+      var isActive = elKind === k;
+      el.hidden = !isActive;
+      // Enable/disable child inputs and selects so only active kind submits.
+      el.querySelectorAll('input, select').forEach(function (child) {
+        child.disabled = !isActive;
+      });
+      // Rename template select so only the active one is named "template".
+      var sel = el.querySelector('select[id^="template-select-"]');
+      if (sel) sel.name = isActive ? 'template' : 'template_' + elKind;
+    });
+  }
+
+  // Wire radio buttons.
+  form.querySelectorAll('input[data-kind-switch]').forEach(function (radio) {
+    radio.addEventListener('change', function () {
+      if (this.checked) activateKind(this.value);
+    });
+  });
+
+  // Apply initial state (in case the page loaded with a non-default kind selected).
+  var checked = form.querySelector('input[data-kind-switch]:checked');
+  if (checked) activateKind(checked.value);
+}());
+</script>
 {% endblock %}

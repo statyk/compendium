@@ -502,6 +502,113 @@ def _register_builtins() -> None:
         )
     )
 
+    # ── Label defaults ─────────────────────────────────────────────────────
+    # Each setting stores the list of optional fields shown by default for
+    # one label kind. Required fields (e.g. call_number for spine) are always
+    # drawn regardless. Admins can change these here; per-call form/CLI flags
+    # still override per-generation.
+    def _label_fields_validator(kind_format: str):
+        from compendium.services.labels import OPTIONAL_FIELDS
+        allowed = OPTIONAL_FIELDS.get(kind_format, frozenset())
+
+        def _validate(v: list) -> None:
+            bad = [f for f in v if f not in allowed]
+            if bad:
+                raise ValueError(
+                    f"unknown field(s) for {kind_format!r}: {bad!r}. "
+                    f"Allowed: {sorted(allowed)}"
+                )
+        return _validate
+
+    register(
+        SettingDescriptor(
+            key="label_spine_default_fields",
+            display_name="Spine label — default fields",
+            type=list[str],
+            default=["location", "cutter", "year"],
+            scope="librarian",
+            help_text=(
+                "Optional fields shown by default on spine labels. "
+                "Allowed: location, branch, cutter, year. "
+                "call_number is always shown. Enter as a comma-separated list."
+            ),
+            validator=_label_fields_validator("spine-text"),
+        )
+    )
+    register(
+        SettingDescriptor(
+            key="label_spine_barcode_default_fields",
+            display_name="Spine+barcode label — default fields",
+            type=list[str],
+            default=["location", "cutter", "year"],
+            scope="librarian",
+            help_text=(
+                "Optional fields shown by default on spine-with-barcode labels. "
+                "Allowed: location, branch, cutter, year. "
+                "call_number and barcode are always shown."
+            ),
+            validator=_label_fields_validator("spine-barcode"),
+        )
+    )
+    register(
+        SettingDescriptor(
+            key="label_pocket_default_fields",
+            display_name="Pocket label — default fields",
+            type=list[str],
+            default=["title", "author", "call_number", "cutter", "year"],
+            scope="librarian",
+            help_text=(
+                "Optional fields shown by default on pocket labels. "
+                "Allowed: title, author, call_number, cutter, year, branch. "
+                "barcode is always shown."
+            ),
+            validator=_label_fields_validator("pocket"),
+        )
+    )
+    register(
+        SettingDescriptor(
+            key="label_barcode_only_default_fields",
+            display_name="Barcode-only label — default fields",
+            type=list[str],
+            default=["human_readable"],
+            scope="librarian",
+            help_text=(
+                "Optional fields shown by default on barcode-only stickers. "
+                "Allowed: title, human_readable. barcode is always shown."
+            ),
+            validator=_label_fields_validator("barcode-only"),
+        )
+    )
+    register(
+        SettingDescriptor(
+            key="label_patron_full_default_fields",
+            display_name="Patron full card — default fields",
+            type=list[str],
+            default=["library_name", "subtitle", "patron_name", "expiry"],
+            scope="librarian",
+            help_text=(
+                "Optional fields shown by default on patron full cards. "
+                "Allowed: library_name, subtitle, patron_name, expiry, category. "
+                "barcode and card_number are always shown."
+            ),
+            validator=_label_fields_validator("full"),
+        )
+    )
+    register(
+        SettingDescriptor(
+            key="label_patron_sticker_default_fields",
+            display_name="Patron sticker — default fields",
+            type=list[str],
+            default=["card_number"],
+            scope="librarian",
+            help_text=(
+                "Optional fields shown by default on patron stickers. "
+                "Allowed: card_number, patron_name. barcode is always shown."
+            ),
+            validator=_label_fields_validator("sticker"),
+        )
+    )
+
     # ── System-tier (infrastructure) ───────────────────────────────────────
     register(
         SettingDescriptor(

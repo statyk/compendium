@@ -10,52 +10,117 @@
 
 {% include "labels/_symbology_banner.html" %}
 
-<form method="post" action="/ui/labels/patrons">
+<form method="post" action="/ui/labels/patrons" id="patron-cards-form">
   <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
 
-  <label>Template
-    <select name="template" id="template-select">
-      <optgroup label="Card-sized (full card or sticker)">
-        {% for t in templates if t.supports_full_card %}
-        <option value="{{ t.key }}"{% if t.key == "avery-5871" %} selected{% endif %}>{{ t.display }}</option>
-        {% endfor %}
-      </optgroup>
-      <optgroup label="Small labels (sticker only — too small for full card)">
-        {% for t in templates if not t.supports_full_card %}
-        <option value="{{ t.key }}">{{ t.display }}</option>
-        {% endfor %}
-      </optgroup>
-    </select>
-  </label>
+  {# ── Step 1: What kind of card? ──────────────────────────────────── #}
+  <fieldset>
+    <legend>What kind of card?</legend>
+    {% for k in patron_kind_order %}
+    <label>
+      <input type="radio" name="kind" value="{{ k }}"
+             data-kind-switch
+             {% if k == selected_kind %} checked{% endif %}>
+      {{ patron_kinds[k].label }}
+    </label>
+    {% endfor %}
+  </fieldset>
 
-  <label>Format
-    <select name="format" id="format-select">
-      <option value="full">Full card — library name + patron info + barcode (needs a card-sized template)</option>
-      <option value="sticker">Sticker — barcode + card number only (affix to pre-made card; works on any template)</option>
-    </select>
-  </label>
-
-  <details>
-    <summary>Filter which patrons to print</summary>
+  {# ── Step 2: Patrons to print ────────────────────────────────────── #}
+  <section>
+    <h3>Patrons to print</h3>
     <label>Category
       <select name="category">
-        <option value="">All categories</option>
-        {% for c in categories %}<option value="{{ c.code }}">{{ c.display_name }}</option>{% endfor %}
+        <option value=""{% if not filter_category %} selected{% endif %}>All categories</option>
+        {% for c in categories %}<option value="{{ c.code }}"{% if filter_category == c.code %} selected{% endif %}>{{ c.display_name }}</option>{% endfor %}
       </select>
     </label>
     <label>
-      <input type="checkbox" name="active_only">
+      <input type="checkbox" name="active_only"{% if filter_active_only %} checked{% endif %}>
       Active patrons only
     </label>
     <label>Or, exact card numbers <span class="field-hint" data-tooltip="Enter library card numbers separated by commas. When provided, all other filters above are ignored.">ⓘ</span>
-      <textarea name="cards" rows="3" placeholder="00000001, 00000002, ..."></textarea>
+      <textarea name="cards" rows="3" placeholder="00000001, 00000002, ...">{{ filter_cards }}</textarea>
     </label>
-  </details>
+    {% if patron_count is not none %}
+    <p><small>{{ patron_count }} patron{{ "s" if patron_count != 1 else "" }} match current filters.</small></p>
+    {% endif %}
+  </section>
 
-  <label>Start at label # <span class="field-hint" data-tooltip="Skip this many label positions on the first sheet — useful when printing on a partially-used sheet.">ⓘ</span>
-    <input type="number" name="start_label" min="0" value="0" style="max-width:6rem">
-  </label>
+  {# ── Step 3: Sheet template (per-kind) ──────────────────────────── #}
+  <section>
+    <h3>Sheet template</h3>
+    {% for k in patron_kind_order %}
+    <div data-kind="{{ k }}"{% if k != selected_kind %} hidden{% endif %}>
+      <select name="{{ 'template' if k == selected_kind else 'template_' ~ k }}"
+              id="template-select-{{ k }}"
+              {% if k != selected_kind %} disabled{% endif %}>
+        {% for t in patron_kinds[k].templates %}
+        <option value="{{ t.key }}"{% if t.key == patron_kinds[k].default_template %} selected{% endif %}>{{ t.display }}</option>
+        {% endfor %}
+      </select>
+    </div>
+    {% endfor %}
+  </section>
+
+  {# ── Step 4: Fields shown (per-kind) ─────────────────────────────── #}
+  <section>
+    <h3>Fields shown on each card</h3>
+    {% for k in patron_kind_order %}
+    <fieldset data-kind="{{ k }}"{% if k != selected_kind %} hidden{% endif %}>
+      {% for f in patron_kinds[k].fields %}
+      <label>
+        <input type="checkbox" name="field_{{ f.name }}"{% if f.checked_by_default %} checked{% endif %}
+               {% if k != selected_kind %} disabled{% endif %}>
+        {{ f.label }}
+      </label>
+      {% endfor %}
+      {% if not patron_kinds[k].fields %}
+      <p><small>No optional fields for this card kind.</small></p>
+      {% endif %}
+    </fieldset>
+    {% endfor %}
+  </section>
+
+  {# ── Step 5: Print options ───────────────────────────────────────── #}
+  <section>
+    <h3>Print options</h3>
+    <label>Start at label # <span class="field-hint" data-tooltip="Skip this many label positions on the first sheet — useful when printing on a partially-used sheet.">ⓘ</span>
+      <input type="number" name="start_label" min="0" value="0" style="max-width:6rem">
+    </label>
+  </section>
 
   <button type="submit">Generate PDF</button>
 </form>
+{% endblock %}
+
+{% block scripts %}
+<script nonce="{{ csp_nonce(request) }}">
+(function () {
+  var form = document.getElementById('patron-cards-form');
+  if (!form) return;
+
+  function activateKind(k) {
+    form.querySelectorAll('[data-kind]').forEach(function (el) {
+      var elKind = el.getAttribute('data-kind');
+      var isActive = elKind === k;
+      el.hidden = !isActive;
+      el.querySelectorAll('input, select').forEach(function (child) {
+        child.disabled = !isActive;
+      });
+      var sel = el.querySelector('select[id^="template-select-"]');
+      if (sel) sel.name = isActive ? 'template' : 'template_' + elKind;
+    });
+  }
+
+  form.querySelectorAll('input[data-kind-switch]').forEach(function (radio) {
+    radio.addEventListener('change', function () {
+      if (this.checked) activateKind(this.value);
+    });
+  });
+
+  var checked = form.querySelector('input[data-kind-switch]:checked');
+  if (checked) activateKind(checked.value);
+}());
+</script>
 {% endblock %}

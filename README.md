@@ -111,7 +111,7 @@ Run `compendium --help` for the full command tree, or `compendium <group> --help
 | Group | Common subcommands |
 |---|---|
 | `reports` | `checkouts`, `popular`, `dormant`, `overdues` (each supports `--format csv`) |
-| `labels` | `templates`, `items`, `patrons` (output `-o -` writes PDF to stdout) |
+| `labels` | `templates`, `spine`, `spine-barcode`, `pocket`, `barcode`, `patron-card`, `patron-sticker` (output `-o -` writes PDF to stdout; use `--show`/`--hide` for field toggles) |
 | `audit` | `list` (filters: `--entity`, `--id`, `--user-id`, `--limit`) |
 
 **Operations**
@@ -126,7 +126,7 @@ Run `compendium --help` for the full command tree, or `compendium <group> --help
 | `compendium metadata cache stats` | Show metadata cache row counts by adapter and TTL status |
 | `compendium metadata cache clear` | Delete all metadata cache rows (audited) |
 
-File-argument commands (`backup`, `restore`, `import`, `export`, `labels items/patrons`) accept `-` for stdin/stdout. Status messages are routed to stderr in stdio mode so they don't corrupt binary output.
+File-argument commands (`backup`, `restore`, `import`, `export`, `labels spine/pocket/barcode/patron-card/patron-sticker`) accept `-` for stdin/stdout. Status messages are routed to stderr in stdio mode so they don't corrupt binary output.
 
 ## Web UI
 

@@ -128,14 +128,13 @@ class TestAuth:
 
 
 class TestIndex:
-    def test_index_lists_templates(self, lw_client, lw_session):
+    def test_index_shows_cards(self, lw_client, lw_session):
         cookies = _login(lw_client, lw_session, "lw1")
         resp = lw_client.get("/ui/labels", cookies=cookies)
         assert resp.status_code == 200
         body = resp.content.decode()
         assert "Item labels" in body
         assert "Patron cards" in body
-        assert "avery-5160" in body
 
 
 class TestItemForm:
@@ -145,7 +144,7 @@ class TestItemForm:
         assert resp.status_code == 200
         body = resp.content.decode()
         assert 'name="template"' in body
-        assert 'name="format"' in body
+        assert 'name="kind"' in body
         assert 'name="barcodes"' in body
 
     def test_post_returns_pdf(self, lw_client, lw_session):
@@ -156,8 +155,8 @@ class TestItemForm:
         resp = lw_client.post(
             "/ui/labels/items",
             data={
+                "kind": "pocket",
                 "template": "avery-5160",
-                "format": "pocket",
                 "start_label": "0",
                 "csrf_token": raw,
             },
@@ -192,7 +191,7 @@ class TestPatronForm:
         assert resp.status_code == 200
         body = resp.content.decode()
         assert 'name="template"' in body
-        assert 'name="format"' in body
+        assert 'name="kind"' in body
 
     def test_post_returns_pdf(self, lw_client, lw_session):
         cookies = _login(lw_client, lw_session, "lw6")
@@ -202,8 +201,8 @@ class TestPatronForm:
         resp = lw_client.post(
             "/ui/labels/patrons",
             data={
+                "kind": "patron-full",
                 "template": "avery-5871",
-                "format": "full",
                 "start_label": "0",
                 "csrf_token": raw,
             },

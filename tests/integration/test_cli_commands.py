@@ -1533,42 +1533,74 @@ class TestLabelsCli:
         for key in ("avery-5160", "avery-5167", "avery-5871", "avery-22806"):
             assert key in r.output
 
-    def test_items_produces_pdf(self, session, tmp_path):
+    def test_pocket_produces_pdf(self, session, tmp_path):
         _seed_work(session)
         out = tmp_path / "items.pdf"
         r = _invoke(
             session,
-            ["labels", "items", "--output", str(out), "--template", "avery-5160"],
+            ["labels", "pocket", "--output", str(out), "--template", "avery-5160"],
             "compendium.cli.commands.labels",
         )
         assert r.exit_code == 0, r.output
         assert out.exists()
         assert out.read_bytes().startswith(b"%PDF-")
 
-    def test_items_unknown_template_fails(self, session, tmp_path):
+    def test_spine_produces_pdf(self, session, tmp_path):
+        _seed_work(session)
+        out = tmp_path / "spine.pdf"
+        r = _invoke(
+            session,
+            ["labels", "spine", "--output", str(out)],
+            "compendium.cli.commands.labels",
+        )
+        assert r.exit_code == 0, r.output
+        assert out.read_bytes().startswith(b"%PDF-")
+
+    def test_barcode_produces_pdf(self, session, tmp_path):
+        _seed_work(session)
+        out = tmp_path / "barcodes.pdf"
+        r = _invoke(
+            session,
+            ["labels", "barcode", "--output", str(out)],
+            "compendium.cli.commands.labels",
+        )
+        assert r.exit_code == 0, r.output
+        assert out.read_bytes().startswith(b"%PDF-")
+
+    def test_pocket_show_branch(self, session, tmp_path):
+        _seed_work(session)
+        out = tmp_path / "branch.pdf"
+        r = _invoke(
+            session,
+            ["labels", "pocket", "--output", str(out), "--show", "branch"],
+            "compendium.cli.commands.labels",
+        )
+        assert r.exit_code == 0, r.output
+        assert out.read_bytes().startswith(b"%PDF-")
+
+    def test_pocket_unknown_template_fails(self, session, tmp_path):
         out = tmp_path / "items.pdf"
         r = _invoke(
             session,
-            ["labels", "items", "--output", str(out), "--template", "nope"],
+            ["labels", "pocket", "--output", str(out), "--template", "nope"],
             "compendium.cli.commands.labels",
         )
         assert r.exit_code == 1
         assert not out.exists()
 
-    def test_items_no_match_fails(self, session, tmp_path):
+    def test_pocket_no_match_fails(self, session, tmp_path):
         out = tmp_path / "items.pdf"
         r = _invoke(
             session,
             [
-                "labels", "items", "--output", str(out),
+                "labels", "pocket", "--output", str(out),
                 "--barcodes", "DOESNOTEXIST",
             ],
             "compendium.cli.commands.labels",
         )
         assert r.exit_code == 1
 
-    def test_patrons_produces_pdf(self, session, tmp_path):
-        # Seed a patron
+    def test_patron_card_produces_pdf(self, session, tmp_path):
         from compendium.domain.models import Patron as _Patron
         p = _Patron(library_card_number="LABCLI01", full_name="CLI Label")
         session.add(p)
@@ -1576,14 +1608,13 @@ class TestLabelsCli:
         out = tmp_path / "patrons.pdf"
         r = _invoke(
             session,
-            ["labels", "patrons", "--output", str(out), "--template", "avery-5871",
-             "--format", "full"],
+            ["labels", "patron-card", "--output", str(out), "--template", "avery-5871"],
             "compendium.cli.commands.labels",
         )
         assert r.exit_code == 0, r.output
         assert out.read_bytes().startswith(b"%PDF-")
 
-    def test_patrons_sticker_format(self, session, tmp_path):
+    def test_patron_sticker_produces_pdf(self, session, tmp_path):
         from compendium.domain.models import Patron as _Patron
         p = _Patron(library_card_number="LABCLI02", full_name="Sticker")
         session.add(p)
@@ -1591,8 +1622,7 @@ class TestLabelsCli:
         out = tmp_path / "stickers.pdf"
         r = _invoke(
             session,
-            ["labels", "patrons", "--output", str(out), "--template", "avery-5167",
-             "--format", "sticker"],
+            ["labels", "patron-sticker", "--output", str(out), "--template", "avery-5167"],
             "compendium.cli.commands.labels",
         )
         assert r.exit_code == 0, r.output

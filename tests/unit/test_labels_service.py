@@ -509,3 +509,185 @@ class TestTemplates:
         assert TEMPLATES["avery-5167-spine"].key == "avery-5167-spine"
         assert TEMPLATES["avery-22805"].key == "avery-22805"
         assert TEMPLATES["avery-22806"].key == "avery-22806"
+
+
+class TestCompatibleTemplates:
+    def test_spine_includes_rotated_template(self):
+        from compendium.services.labels import compatible_templates
+
+        keys = [t.key for t in compatible_templates("spine")]
+        assert "avery-5167-spine" in keys
+
+    def test_spine_excludes_small_non_rotated(self):
+        from compendium.services.labels import compatible_templates
+
+        keys = [t.key for t in compatible_templates("spine")]
+        # avery-5167 is non-rotated and narrow (1.75" wide) — not suitable for spine.
+        assert "avery-5167" not in keys
+
+    def test_patron_full_excludes_small_templates(self):
+        from compendium.services.labels import compatible_templates
+
+        for t in compatible_templates("patron-full"):
+            assert t.supports_full_card, f"{t.key} doesn't support_full_card but is in patron-full set"
+
+    def test_patron_full_excludes_rotated(self):
+        from compendium.services.labels import compatible_templates
+
+        for t in compatible_templates("patron-full"):
+            assert t.orientation != "rotated"
+
+    def test_barcode_only_excludes_rotated(self):
+        from compendium.services.labels import compatible_templates
+
+        for t in compatible_templates("barcode-only"):
+            assert t.orientation != "rotated"
+
+    def test_unknown_kind_raises(self):
+        from compendium.services.labels import compatible_templates
+
+        with pytest.raises(ValueError, match="unknown label kind"):
+            compatible_templates("banana")
+
+    def test_spine_5167_and_5167_spine_same_cell_origins(self):
+        """avery-5167 and avery-5167-spine share the same sheet geometry —
+        only the content is rotated. _iter_label_positions should return
+        identical cell origins for both."""
+        from compendium.services.labels import _iter_label_positions
+
+        positions_flat = list(zip(range(20), _iter_label_positions(TEMPLATES["avery-5167"])))
+        positions_rotated = list(zip(range(20), _iter_label_positions(TEMPLATES["avery-5167-spine"])))
+        for (_, (_, xf, yf, pf)), (_, (_, xr, yr, pr)) in zip(positions_flat, positions_rotated):
+            assert abs(xf - xr) < 0.01
+            assert abs(yf - yr) < 0.01
+            assert pf == pr
+
+
+class TestFieldGating:
+    """Tests that the fields= parameter properly gates which elements appear."""
+
+    _ROW = ItemLabelRow(
+        barcode="3000000017",
+        title="Dune",
+        author_display="Frank Herbert",
+        call_number="PS3551 .E76",
+        publication_year=1965,
+        branch_code="NORTH",
+        location="REFERENCE",
+    )
+
+    def test_spine_with_branch_hidden_by_default(self):
+        from compendium.services.labels import DEFAULT_FIELDS
+
+        assert "branch" not in DEFAULT_FIELDS["spine-text"]
+
+    def test_pocket_with_branch_field_renders(self):
+        pdf = generate_item_labels(
+            [self._ROW],
+            template_key="avery-5160",
+            format="pocket",
+            fields=frozenset({"barcode", "title", "branch"}),
+        )
+        assert pdf.startswith(b"%PDF-")
+
+    def test_spine_with_no_optional_fields(self):
+        pdf = generate_item_labels(
+            [self._ROW],
+            template_key="avery-5167-spine",
+            format="spine-text",
+            fields=frozenset(),
+        )
+        assert pdf.startswith(b"%PDF-")
+
+    def test_required_fields_always_drawn(self):
+        from compendium.services.labels import REQUIRED_FIELDS
+
+        # Even with empty optional fields, required fields are drawn (no crash).
+        for fmt, required in REQUIRED_FIELDS.items():
+            if "patron" in fmt or fmt in ("full", "sticker"):
+                continue  # patron formats tested separately
+            pdf = generate_item_labels(
+                [self._ROW],
+                template_key="avery-5160",
+                format=fmt,
+                fields=frozenset(),
+            )
+            assert pdf.startswith(b"%PDF-"), f"format={fmt} failed"
+
+    def test_barcode_only_with_human_readable_off(self):
+        pdf = generate_item_labels(
+            [self._ROW],
+            template_key="avery-5167",
+            format="barcode-only",
+            fields=frozenset(),
+        )
+        assert pdf.startswith(b"%PDF-")
+
+    def test_patron_full_with_category(self):
+        row = PatronCardRow(
+            card_number="2000000001",
+            full_name="Alice Smith",
+            expires_at=date(2027, 1, 1),
+            category_display="Adult",
+        )
+        pdf = generate_patron_cards(
+            [row],
+            template_key="avery-5871",
+            format="full",
+            fields=frozenset({"library_name", "patron_name", "barcode", "card_number", "expiry", "category"}),
+        )
+        assert pdf.startswith(b"%PDF-")
+
+    def test_patron_sticker_with_patron_name(self):
+        row = PatronCardRow(card_number="2000000002", full_name="Bob")
+        pdf = generate_patron_cards(
+            [row],
+            template_key="avery-5167",
+            format="sticker",
+            fields=frozenset({"barcode", "card_number", "patron_name"}),
+        )
+        assert pdf.startswith(b"%PDF-")
+
+
+class TestLabelSettingsValidator:
+    """Tests for the per-kind field validator in settings_registry."""
+
+    def test_valid_spine_fields_pass(self):
+        from compendium.services.settings_registry import get_descriptor, parse
+
+        desc = get_descriptor("label_spine_default_fields")
+        result = parse(desc, "location, cutter, year")
+        assert set(result) <= {"location", "cutter", "year"}
+
+    def test_invalid_field_rejected(self):
+        from compendium.services.settings_registry import (
+            SettingValidationError,
+            get_descriptor,
+            parse,
+        )
+
+        desc = get_descriptor("label_spine_default_fields")
+        with pytest.raises(SettingValidationError, match="unknown field"):
+            parse(desc, "title")  # "title" is not optional for spine
+
+    def test_patron_full_fields_roundtrip(self):
+        from compendium.services.settings_registry import (
+            get_descriptor,
+            parse,
+            encode_for_storage,
+        )
+
+        desc = get_descriptor("label_patron_full_default_fields")
+        original = ["library_name", "patron_name", "expiry"]
+        encoded = encode_for_storage(original, desc.type)
+        decoded = parse(desc, encoded)
+        assert set(decoded) == set(original)
+
+    def test_all_label_settings_have_valid_defaults(self):
+        from compendium.services.settings_registry import all_descriptors, validate
+
+        for desc in all_descriptors():
+            if not desc.key.startswith("label_") or not desc.key.endswith("_fields"):
+                continue
+            if desc.validator and desc.default is not None:
+                desc.validator(desc.default)

@@ -9,7 +9,7 @@
 <div class="grid">
   <article>
     <header><strong>Item labels</strong></header>
-    <p>Call number, author indicator, and (on larger templates) a scannable barcode. Filter by branch, media type, or explicit barcodes.</p>
+    <p>Spine labels, pocket labels, or barcode-only stickers — choose the label kind, filter which items to print, and pick which fields to show.</p>
     <a href="/ui/labels/items" role="button" class="outline">Open</a>
   </article>
   <article>
@@ -19,13 +19,5 @@
   </article>
 </div>
 
-<h3>Available templates</h3>
-<table>
-  <thead><tr><th>Key</th><th>Description</th><th>Per sheet</th></tr></thead>
-  <tbody>
-    {% for t in templates %}
-    <tr><td><code>{{ t.key }}</code></td><td>{{ t.display }}</td><td>{{ t.per_sheet }}</td></tr>
-    {% endfor %}
-  </tbody>
-</table>
+<p><small><a href="/ui/admin/settings/labels">Label defaults</a> — configure which fields appear by default on each label kind. <a href="/ui/admin/settings/identifiers">Identifiers &amp; barcodes</a> — change the barcode symbology.</small></p>
 {% endblock %}
