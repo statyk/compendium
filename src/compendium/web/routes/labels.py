@@ -342,8 +342,6 @@ def _preview_context(kind: str, template_key: str, fields: frozenset[str]) -> di
     if template_key not in compatible:
         fallback = compatible[0] if compatible else "avery-5160"
         template_key = KIND_DEFAULT_TEMPLATE.get(kind, fallback)
-    if not fields:
-        fields = DEFAULT_FIELDS.get(ITEM_KIND_TO_FORMAT.get(kind, kind), frozenset())
     symbology = get_site_setting("barcode_symbology")
     svg = render_item_label_svg(
         kind=kind,

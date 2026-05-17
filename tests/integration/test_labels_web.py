@@ -462,3 +462,19 @@ class TestItemPreviewEndpoint:
         body = resp.text
         assert 'id="label-preview"' in body
         assert "hx-get" in body
+
+    def test_preview_with_no_field_params_does_not_fall_back_to_defaults(self, lw_client, lw_session):
+        """GET preview with no field_* params must render a blank label (no
+        optional text), not silently substitute DEFAULT_FIELDS."""
+        cookies = _login(lw_client, lw_session, f"lw_prev{_next()}")
+        resp = lw_client.get(
+            "/ui/labels/items/preview",
+            params={"kind": "pocket", "template": "avery-5160"},
+            cookies=cookies,
+        )
+        assert resp.status_code == 200
+        body = resp.text
+        assert "<svg" in body
+        # The sample row's year and title must NOT appear when no fields are posted.
+        assert "1965" not in body
+        assert "Lord of the Rings" not in body

@@ -1308,3 +1308,265 @@ class TestHRTextInsideCell:
         )
         assert expected_hr in svg, \
             f"HR text '{expected_hr}' not found in barcode-only SVG preview"
+
+
+# ──────────────────────────────────────────────────────────────────────
+# Font-aware recorder (extends _FullRecorder with per-call font size)
+# ──────────────────────────────────────────────────────────────────────
+
+
+class _FontAwareRecorder(_FullRecorder):
+    """Like _FullRecorder but records the active font size alongside each draw."""
+
+    def __init__(self):
+        super().__init__()
+        self.strings_with_font: list[tuple[float, float, str, float]] = []
+        self.centred_with_font: list[tuple[float, float, str, float]] = []
+
+    def drawString(self, x: float, y: float, text: str) -> None:
+        super().drawString(x, y, text)
+        self.strings_with_font.append((x, y, str(text), self._font_size))
+
+    def drawCentredString(self, x: float, y: float, text: str) -> None:
+        super().drawCentredString(x, y, text)
+        self.centred_with_font.append((x, y, str(text), self._font_size))
+
+
+def _render_pocket_on(
+    template_key: str,
+    fields: frozenset[str],
+    *,
+    library_name: str | None = None,
+) -> _FontAwareRecorder:
+    """Render one pocket label on the given template and return a font-aware recorder."""
+    from compendium.services.labels import _draw_item_label_content
+
+    row = ItemLabelRow(
+        barcode="BC000001",
+        title="The Luminaries",
+        author_display="Eleanor Catton",
+        call_number="PR9639.4 .C38 L86 2013",
+        publication_year=2013,
+        branch_code="MAIN",
+        location="FICTION",
+    )
+    tmpl = TEMPLATES[template_key]
+    lw = tmpl.label_width * inch
+    lh = tmpl.label_height * inch
+    rec = _FontAwareRecorder()
+    _draw_item_label_content(
+        rec, row, 0.0, 0.0, lw, lh,
+        "pocket", False, "code128", False, fields,
+        library_name=library_name,
+    )
+    return rec
+
+
+def _render_spine_on(
+    template_key: str,
+    fields: frozenset[str],
+    *,
+    rotated_ctx: bool = False,
+) -> _FullRecorder:
+    """Render one spine label with branch+location set and return recorder."""
+    from compendium.services.labels import _draw_item_label_content
+
+    row = ItemLabelRow(
+        barcode="BC000001",
+        title="Dune",
+        author_display="Frank Herbert",
+        call_number="PS3551 .E76 D8",
+        publication_year=1965,
+        branch_code="MAIN",
+        location="FICTION",
+    )
+    tmpl = TEMPLATES[template_key]
+    lw = tmpl.label_width * inch
+    lh = tmpl.label_height * inch
+    if rotated_ctx:
+        lw, lh = lh, lw
+    rec = _FullRecorder()
+    _draw_item_label_content(
+        rec, row, 0.0, 0.0, lw, lh,
+        "spine", False, "code128", rotated_ctx, fields,
+    )
+    return rec
+
+
+# ──────────────────────────────────────────────────────────────────────
+# Fix A: preview field fallback removed — empty fields means empty
+# ──────────────────────────────────────────────────────────────────────
+
+
+class TestPreviewEmptyFieldsNoFallback:
+    """render_item_label_svg with empty fields must produce a blank label —
+    no text drawn, matching what the PDF path does when no boxes are checked."""
+
+    def test_empty_fields_omits_sample_title(self):
+        svg = render_item_label_svg(
+            kind="pocket",
+            template_key="avery-5160",
+            fields=frozenset(),
+        )
+        assert "Lord of the Rings" not in svg
+
+    def test_empty_fields_omits_year(self):
+        svg = render_item_label_svg(
+            kind="pocket",
+            template_key="avery-5160",
+            fields=frozenset(),
+        )
+        assert "1965" not in svg
+
+    def test_year_field_alone_shows_year(self):
+        """With only 'year' checked (and call_number unchecked), year appears."""
+        svg = render_item_label_svg(
+            kind="pocket",
+            template_key="avery-5160",
+            fields=frozenset({"year"}),
+        )
+        assert "1965" in svg
+
+    def test_year_field_absent_when_call_number_also_present(self):
+        """When call_number is in fields, year must NOT appear as a separate
+        info-line entry. We verify this at the recorder level, not SVG string,
+        because the sample call_number itself ends in '1965'."""
+        from compendium.services.labels import _draw_item_label_content
+        from compendium.services.labels import _SAMPLE_ITEM_ROW
+
+        lw = TEMPLATES["avery-5160"].label_width * inch
+        lh = TEMPLATES["avery-5160"].label_height * inch
+        rec_both = _FontAwareRecorder()
+        _draw_item_label_content(
+            rec_both, _SAMPLE_ITEM_ROW, 0.0, 0.0, lw, lh,
+            "pocket", False, "code128", False,
+            frozenset({"year", "call_number"}),
+        )
+
+        rec_cn_only = _FontAwareRecorder()
+        _draw_item_label_content(
+            rec_cn_only, _SAMPLE_ITEM_ROW, 0.0, 0.0, lw, lh,
+            "pocket", False, "code128", False,
+            frozenset({"call_number"}),
+        )
+
+        # The info line text must be identical whether year is checked or not
+        # (year is suppressed whenever call_number is present).
+        both_texts = {t for (_, _, t, _) in rec_both.strings_with_font}
+        cn_texts   = {t for (_, _, t, _) in rec_cn_only.strings_with_font}
+        assert both_texts == cn_texts, (
+            "Info line changed when year toggled alongside call_number: "
+            f"with_year={both_texts}, cn_only={cn_texts}"
+        )
+
+
+# ──────────────────────────────────────────────────────────────────────
+# Fix B: pocket font scaling on larger templates
+# ──────────────────────────────────────────────────────────────────────
+
+
+class TestPocketFontScaling:
+    """Font sizes must grow proportionally with label height so larger
+    pocket templates (5871, 22805, 22806) don't leave half the cell blank."""
+
+    _TITLE_FIELDS = frozenset({"title"})
+
+    def _title_font_size(self, template_key: str) -> float:
+        rec = _render_pocket_on(template_key, self._TITLE_FIELDS)
+        title_calls = [fs for (_, _, text, fs) in rec.strings_with_font
+                       if "Luminaries" in text or "Lumin" in text]
+        assert title_calls, f"Title not drawn on {template_key}"
+        return title_calls[0]
+
+    def test_avery_5160_title_size_is_baseline_8pt(self):
+        assert self._title_font_size("avery-5160") == 8
+
+    def test_avery_22805_title_size_scales_to_12pt(self):
+        # 22805 is 1.5" tall → scale 1.5 → round(8 * 1.5) = 12
+        assert self._title_font_size("avery-22805") == 12
+
+    def test_avery_22806_title_size_scales_to_16pt(self):
+        # 22806 is 2.0" tall → scale 2.0 → round(8 * 2.0) = 16
+        assert self._title_font_size("avery-22806") == 16
+
+    def test_avery_5871_title_size_scales_to_16pt(self):
+        # 5871 is 2.0" tall → scale 2.0 → same as 22806
+        assert self._title_font_size("avery-5871") == 16
+
+    def test_avery_22806_barcode_height_scales_above_baseline(self):
+        """Barcode rect height on 22806 must exceed the 20pt baseline."""
+        rec = _render_pocket_on("avery-22806", frozenset({"barcode"}))
+        if not rec.rects:
+            pytest.skip("no rect calls — barcode may not have rendered")
+        max_bar_h = max(rh for (_, _, _, rh) in rec.rects)
+        assert max_bar_h > 20, f"Expected bar height > 20pt, got {max_bar_h:.1f}pt"
+
+
+# ──────────────────────────────────────────────────────────────────────
+# Fix C: spine branch + location merged onto one line
+# ──────────────────────────────────────────────────────────────────────
+
+
+class TestSpineBranchLocationSideBySide:
+    """When both branch and location are enabled, they should be drawn as one
+    combined string ("MAIN  ·  FICTION") rather than two separate stacked lines.
+    This reclaims 9pt of vertical space on the flat 5160, allowing at least one
+    call-number line to fit when all fields are enabled."""
+
+    def test_rotated_branch_only_appears_alone(self):
+        rec = _render_spine_on(
+            "avery-5167-spine",
+            frozenset({"branch"}),
+            rotated_ctx=True,
+        )
+        all_texts = [t for (_, _, t) in rec.strings]
+        assert any("MAIN" in t for t in all_texts)
+        assert not any("FICTION" in t for t in all_texts)
+
+    def test_rotated_location_only_appears_alone(self):
+        rec = _render_spine_on(
+            "avery-5167-spine",
+            frozenset({"location"}),
+            rotated_ctx=True,
+        )
+        all_texts = [t for (_, _, t) in rec.strings]
+        assert any("FICTION" in t for t in all_texts)
+        assert not any("MAIN" in t for t in all_texts)
+
+    def test_rotated_branch_and_location_on_single_line(self):
+        """Both names must appear together in ONE drawString call.
+        Use avery-5160-spine (64pt inner_w) so the combined string fits."""
+        rec = _render_spine_on(
+            "avery-5160-spine",
+            frozenset({"branch", "location"}),
+            rotated_ctx=True,
+        )
+        combined_calls = [t for (_, _, t) in rec.strings
+                          if "MAIN" in t and "FICTION" in t]
+        assert combined_calls, (
+            "Branch and location not combined; "
+            f"separate strings drawn: {[t for (_, _, t) in rec.strings]}"
+        )
+
+    def test_flat_5160_branch_and_location_on_single_line(self):
+        """On flat (non-rotated) spine, combined line uses drawCentredString."""
+        rec = _render_spine_on("avery-5160", frozenset({"branch", "location"}))
+        combined_calls = [t for (_, _, t) in rec.centred
+                          if "MAIN" in t and "FICTION" in t]
+        assert combined_calls, (
+            "Branch and location not combined on flat spine; "
+            f"centred strings: {[t for (_, _, t) in rec.centred]}"
+        )
+
+    def test_flat_5160_all_fields_includes_call_number(self):
+        """With every spine field enabled on flat 5160, the call number must
+        appear — the side-by-side branch+location frees the vertical space."""
+        rec = _render_spine_on(
+            "avery-5160",
+            frozenset({"branch", "location", "call_number", "cutter", "year", "barcode"}),
+        )
+        all_centred = [t for (_, _, t) in rec.centred]
+        assert any("PS3551" in t for t in all_centred), (
+            "Call number (PS3551) absent from flat 5160 with all fields; "
+            f"centred strings: {all_centred}"
+        )

@@ -704,16 +704,19 @@ def _draw_item_label_content(
         # The top of the text area (below the top pad).
         top = y + lh - pad
 
-        # ── Top-down: branch, location, then CN ─────────────────────────
-        if "branch" in fields and row.branch_code:
-            br_size = 7
-            _draw_text(top - br_size, body_font, br_size, row.branch_code.upper())
-            top -= br_size + 2
-
-        if "location" in fields and row.location:
-            loc_size = 7
-            _draw_text(top - loc_size, body_font, loc_size, row.location.upper())
-            top -= loc_size + 2
+        # ── Top-down: branch + location (side-by-side when both present), then CN
+        br_present  = ("branch"   in fields and bool(row.branch_code))
+        loc_present = ("location" in fields and bool(row.location))
+        if br_present or loc_present:
+            line_size = 7
+            if br_present and loc_present:
+                combined = f"{row.branch_code.upper()}  ·  {row.location.upper()}"  # type: ignore[union-attr]
+            elif br_present:
+                combined = row.branch_code.upper()  # type: ignore[union-attr]
+            else:
+                combined = row.location.upper()  # type: ignore[union-attr]
+            _draw_text(top - line_size, body_font, line_size, combined)
+            top -= line_size + 2
 
         # CN block: fill whatever vertical room remains above the cutter slot.
         # cn_floor is the lowest baseline the last CN line may occupy.
@@ -777,13 +780,21 @@ def _draw_item_label_content(
     #   middle:   call number + cutter + year (one line)
     #   corner:   branch (optional, top-right)
     #   bottom:   barcode (required)
-    title_size = 8
-    info_size = 9
+    #
+    # Fonts scale linearly with label height (baseline = 1" = 72pt).  Floor at
+    # the baseline values so small labels never shrink; cap at 2.5× for very
+    # tall templates.
+    _scale = max(1.0, min(lh / inch, 2.5))
+    title_size  = int(round(8  * _scale))
+    info_size   = int(round(9  * _scale))
+    author_size = int(round(7  * _scale))
+    header_size = int(round(7  * _scale))
+    br_size     = int(round(7  * _scale))
+    bc_h        = int(round(20 * _scale))
 
     # Optional library-name header at the very top; pushes everything else down.
     header_h = 0
     if "library_name" in fields and library_name:
-        header_size = 7
         header_h = header_size + 3
         c.setFont(body_font, header_size)
         c.drawString(
@@ -792,7 +803,6 @@ def _draw_item_label_content(
             _truncate(library_name, inner_w, body_font, header_size),
         )
 
-    author_size = 7
     author_h = (author_size + 2) if ("author" in fields and row.author_display) else 0
 
     top_y = y + lh - pad - header_h - title_size
@@ -829,7 +839,6 @@ def _draw_item_label_content(
 
     # Branch (small, top-right corner) — drawn at same baseline as title.
     if "branch" in fields and row.branch_code:
-        br_size = 7
         c.setFont(body_font, br_size)
         c.drawRightString(
             x + lw - pad,
@@ -839,7 +848,6 @@ def _draw_item_label_content(
 
     # Barcode at the bottom (optional)
     if "barcode" in fields:
-        bc_h = 20
         bc_y = y + pad
         if use_isbn and row.isbn:
             _draw_barcode_ean13(
