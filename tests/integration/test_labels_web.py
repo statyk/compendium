@@ -478,3 +478,28 @@ class TestItemPreviewEndpoint:
         # The sample row's year and title must NOT appear when no fields are posted.
         assert "1965" not in body
         assert "Lord of the Rings" not in body
+
+    def test_spine_field_checkboxes_render_in_label_order(self, lw_client, lw_session):
+        """Spine field checkboxes must appear in label-visual order (branch →
+        location → call_number → cutter → year → barcode), not alphabetically."""
+        import re
+        cookies = _login(lw_client, lw_session, f"lw_ord{_next()}")
+        resp = lw_client.get(
+            "/ui/labels/items",
+            params={"kind": "spine"},
+            cookies=cookies,
+        )
+        assert resp.status_code == 200
+        # The form renders per-kind fieldsets: <fieldset data-kind="spine">…</fieldset>.
+        # Extract that block so we don't match checkboxes from other kinds.
+        spine_section = re.search(
+            r'<fieldset data-kind="spine".*?</fieldset>',
+            resp.text,
+            re.DOTALL,
+        )
+        assert spine_section, "Could not locate <fieldset data-kind='spine'> in response"
+        names = re.findall(r'name="field_(\w+)"', spine_section.group())
+        expected = ["branch", "location", "call_number", "cutter", "year", "barcode"]
+        assert names == expected, (
+            f"Spine fields in wrong order: {names!r}, expected {expected!r}"
+        )

@@ -686,20 +686,28 @@ def _draw_item_label_content(
                 )
 
         # ── Bottom-up reservation ────────────────────────────────────────
-        # Reserve fixed slots for year and cutter from text_bottom upward so
-        # they always have guaranteed distinct baselines regardless of how many
-        # CN lines are drawn above them.
-        year_baseline: float | None = None
-        if "year" in fields and year:
-            year_baseline = text_bottom + 2
+        # When both cutter and year are present, draw them on a single line
+        # ("HER · 1965") to reclaim vertical space for the call number.
+        # Mirrors the branch+location side-by-side pattern above.
+        cut_present  = ("cutter" in fields and bool(cutter_str))
+        year_present = ("year"   in fields and bool(year))
 
-        cutter_baseline: float | None = None
-        if "cutter" in fields and cutter_str:
-            above_year = (
-                (year_baseline + year_font_size + 2) if year_baseline is not None
-                else text_bottom + 2
-            )
-            cutter_baseline = above_year
+        cutter_year_baseline: float | None = None
+        cutter_year_text: str = ""
+        cutter_year_font_size: int = 0
+
+        if cut_present and year_present:
+            cutter_year_text      = f"{cutter_str}  ·  {year}"
+            cutter_year_font_size = cutter_font_size   # 10pt (the larger of the two)
+            cutter_year_baseline  = text_bottom + 2
+        elif cut_present:
+            cutter_year_text      = cutter_str
+            cutter_year_font_size = cutter_font_size
+            cutter_year_baseline  = text_bottom + 2
+        elif year_present:
+            cutter_year_text      = year
+            cutter_year_font_size = year_font_size
+            cutter_year_baseline  = text_bottom + 2
 
         # The top of the text area (below the top pad).
         top = y + lh - pad
@@ -718,11 +726,10 @@ def _draw_item_label_content(
             _draw_text(top - line_size, body_font, line_size, combined)
             top -= line_size + 2
 
-        # CN block: fill whatever vertical room remains above the cutter slot.
-        # cn_floor is the lowest baseline the last CN line may occupy.
-        cn_floor = (cutter_baseline if cutter_baseline is not None
-                    else (year_baseline if year_baseline is not None
-                          else text_bottom)) + line_h_cn
+        # CN block: fill whatever vertical room remains above the cutter+year slot.
+        cn_floor = ((cutter_year_baseline + cutter_year_font_size)
+                    if cutter_year_baseline is not None
+                    else text_bottom) + 1
         max_cn_lines_dynamic = max(0, int((top - cn_floor) // line_h_cn))
 
         cursor = top - cn_font_size
@@ -738,11 +745,9 @@ def _draw_item_label_content(
                                         _truncate(cn_lines[i], inner_w, font, cn_font_size))
                 cursor -= line_h_cn
 
-        # ── Fixed-position: cutter then year ────────────────────────────
-        if cutter_baseline is not None:
-            _draw_text(cutter_baseline, font, cutter_font_size, cutter_str)
-        if year_baseline is not None:
-            _draw_text(year_baseline, body_font, year_font_size, year)
+        # ── Fixed-position: cutter+year combined line ─────────────────────
+        if cutter_year_baseline is not None:
+            _draw_text(cutter_year_baseline, body_font, cutter_year_font_size, cutter_year_text)
 
         # Optional barcode strip at the bottom (when "barcode" field is enabled).
         if draw_barcode:

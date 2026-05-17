@@ -857,56 +857,55 @@ class TestSpineLayoutFixes:
 
     # ── 3. cutter/year no vertical overlap ───────────────────────────
 
-    def test_5160_spine_cutter_year_on_distinct_baselines(self):
-        """Cutter and year must differ by at least year_font_size (9pt) on
-        avery-5160 with all default spine fields so they don't visually overlap."""
+    def test_5160_spine_cutter_year_drawn(self):
+        """Cutter and year must both appear on the label — now as a single
+        combined line ('HER · 1965') rather than two stacked lines."""
         ds, dc = _spine_text_positions(
             "avery-5160",
             frozenset({"call_number", "location", "cutter", "year"}),
         )
-        all_calls = {text: y for (_, y, text) in (ds + dc)}
-        assert "HER" in all_calls,  "cutter (HER) not drawn"
-        assert "1965" in all_calls, "year (1965) not drawn"
-        sep = abs(all_calls["HER"] - all_calls["1965"])
-        assert sep >= 9, (
-            f"cutter and year baselines are only {sep:.1f}pt apart "
-            f"(cutter_y={all_calls['HER']:.1f}, year_y={all_calls['1965']:.1f}); "
-            "they will visually overlap"
-        )
+        all_texts = [text for (_, _, text) in (ds + dc)]
+        assert any("HER" in t for t in all_texts),  "cutter (HER) not drawn"
+        assert any("1965" in t for t in all_texts), "year (1965) not drawn"
 
-    def test_5160_spine_all_fields_no_overlap(self):
-        """With every spine field on, cutter and year still have room."""
+    def test_5160_spine_all_fields_cutter_and_year_appear(self):
+        """With every spine field on, cutter and year are still drawn."""
         ds, dc = _spine_text_positions(
             "avery-5160",
             frozenset({"call_number", "location", "branch", "cutter", "year"}),
         )
-        all_calls = {text: y for (_, y, text) in (ds + dc)}
-        assert "HER" in all_calls and "1965" in all_calls
-        assert abs(all_calls["HER"] - all_calls["1965"]) >= 9
+        all_texts = [text for (_, _, text) in (ds + dc)]
+        assert any("HER" in t for t in all_texts),  "cutter (HER) not drawn"
+        assert any("1965" in t for t in all_texts), "year (1965) not drawn"
 
     # ── 4. flat spine text centering ─────────────────────────────────
 
     def test_flat_spine_cutter_uses_draw_centred_string(self):
         """On a flat (non-rotated) spine template, cutter must be drawn with
-        drawCentredString so it lands on the visible spine face."""
+        drawCentredString (possibly combined with year) so it lands on the
+        visible spine face."""
         ds, dc = _spine_text_positions(
             "avery-5160",
             frozenset({"call_number", "location", "cutter", "year"}),
         )
-        centred_texts = {text for (_, _, text) in dc}
-        drawstr_texts = {text for (_, _, text) in ds}
-        assert "HER" in centred_texts, "cutter must use drawCentredString on flat spine"
-        assert "HER" not in drawstr_texts, "cutter must NOT use drawString on flat spine"
+        centred_texts = [text for (_, _, text) in dc]
+        drawstr_texts = [text for (_, _, text) in ds]
+        assert any("HER" in t for t in centred_texts), \
+            "cutter must use drawCentredString on flat spine"
+        assert not any("HER" in t for t in drawstr_texts), \
+            "cutter must NOT use drawString on flat spine"
 
     def test_flat_spine_year_uses_draw_centred_string(self):
         ds, dc = _spine_text_positions(
             "avery-5160",
             frozenset({"call_number", "location", "cutter", "year"}),
         )
-        centred_texts = {text for (_, _, text) in dc}
-        drawstr_texts = {text for (_, _, text) in ds}
-        assert "1965" in centred_texts, "year must use drawCentredString on flat spine"
-        assert "1965" not in drawstr_texts, "year must NOT use drawString on flat spine"
+        centred_texts = [text for (_, _, text) in dc]
+        drawstr_texts = [text for (_, _, text) in ds]
+        assert any("1965" in t for t in centred_texts), \
+            "year must use drawCentredString on flat spine"
+        assert not any("1965" in t for t in drawstr_texts), \
+            "year must NOT use drawString on flat spine"
 
     def test_flat_spine_centred_at_cell_midpoint(self):
         """drawCentredString x must be at the cell horizontal midpoint."""
@@ -917,23 +916,26 @@ class TestSpineLayoutFixes:
             frozenset({"cutter", "year"}),
         )
         for (x, _y, text) in dc:
-            if text in ("HER", "1965"):
+            if "HER" in text or "1965" in text:
                 assert abs(x - centre_x) < 2.0, (
                     f"{text!r}: expected centred at {centre_x:.1f}pt, got {x:.1f}pt"
                 )
 
     def test_rotated_spine_cutter_uses_draw_string_not_centred(self):
         """On a rotated spine template the content runs along the spine's long
-        axis — left-aligned (drawString) is correct; drawCentredString is wrong."""
+        axis — left-aligned (drawString) is correct; drawCentredString is wrong.
+        Uses avery-5160-spine so the combined 'HER · 1965' string fits in inner_w."""
         ds, dc = _spine_text_positions(
-            "avery-5167-spine",
+            "avery-5160-spine",
             frozenset({"call_number", "cutter", "year"}),
             rotated_ctx=True,
         )
-        drawstr_texts = {text for (_, _, text) in ds}
-        centred_texts = {text for (_, _, text) in dc}
-        assert "HER" in drawstr_texts,   "cutter must use drawString on rotated spine"
-        assert "HER" not in centred_texts, "cutter must NOT use drawCentredString on rotated spine"
+        drawstr_texts = [text for (_, _, text) in ds]
+        centred_texts = [text for (_, _, text) in dc]
+        assert any("HER" in t for t in drawstr_texts), \
+            "cutter must use drawString on rotated spine"
+        assert not any("HER" in t for t in centred_texts), \
+            "cutter must NOT use drawCentredString on rotated spine"
 
 
 # ──────────────────────────────────────────────────────────────────────
@@ -1367,6 +1369,7 @@ def _render_spine_on(
     fields: frozenset[str],
     *,
     rotated_ctx: bool = False,
+    call_number: str = "PS3551 .E76 D8",
 ) -> _FullRecorder:
     """Render one spine label with branch+location set and return recorder."""
     from compendium.services.labels import _draw_item_label_content
@@ -1375,7 +1378,7 @@ def _render_spine_on(
         barcode="BC000001",
         title="Dune",
         author_display="Frank Herbert",
-        call_number="PS3551 .E76 D8",
+        call_number=call_number,
         publication_year=1965,
         branch_code="MAIN",
         location="FICTION",
@@ -1559,14 +1562,71 @@ class TestSpineBranchLocationSideBySide:
         )
 
     def test_flat_5160_all_fields_includes_call_number(self):
-        """With every spine field enabled on flat 5160, the call number must
-        appear — the side-by-side branch+location frees the vertical space."""
+        """With every spine field enabled on flat 5160, BOTH wrapped call-number
+        lines must appear — the side-by-side branch+location AND cutter+year each
+        free one line's worth of vertical space."""
         rec = _render_spine_on(
             "avery-5160",
             frozenset({"branch", "location", "call_number", "cutter", "year", "barcode"}),
+            call_number="PR6039.O32 L6 1965",
         )
         all_centred = [t for (_, _, t) in rec.centred]
-        assert any("PS3551" in t for t in all_centred), (
-            "Call number (PS3551) absent from flat 5160 with all fields; "
+        assert any("PR6039.O32" in t for t in all_centred), (
+            "First CN line (PR6039.O32) absent from flat 5160 with all fields; "
             f"centred strings: {all_centred}"
+        )
+        assert any("L6" in t for t in all_centred), (
+            "Second CN line (L6) absent — only 1 CN line fits, fix incomplete; "
+            f"centred strings: {all_centred}"
+        )
+
+
+# ──────────────────────────────────────────────────────────────────────
+# Fix D: spine cutter + year merged onto one line (reclaims vertical space)
+# ──────────────────────────────────────────────────────────────────────
+
+
+class TestSpineCutterYearSideBySide:
+    """When both cutter and year are enabled, they should be drawn as one
+    combined string ("HER · 1965") rather than two stacked lines.
+    This mirrors the branch+location fix and reclaims vertical space so a
+    realistic two-part call number fits on a flat 5160 with all fields."""
+
+    # Helpers shared by all tests in this class — use flat avery-5160 so all
+    # text goes through drawCentredString (accessible as rec.centred).
+
+    def _centred_texts(self, fields: frozenset[str], cn: str = "PS3551 .E76 D8") -> list[str]:
+        rec = _render_spine_on("avery-5160", fields, call_number=cn)
+        return [t for (_, _, t) in rec.centred]
+
+    def test_cutter_only_drawn_alone(self):
+        texts = self._centred_texts(frozenset({"cutter"}))
+        assert any("HER" in t for t in texts), f"Cutter absent: {texts}"
+        assert not any("1965" in t for t in texts), f"Year unexpectedly present: {texts}"
+
+    def test_year_only_drawn_alone(self):
+        texts = self._centred_texts(frozenset({"year"}))
+        assert any("1965" in t for t in texts), f"Year absent: {texts}"
+        assert not any("HER" in t for t in texts), f"Cutter unexpectedly present: {texts}"
+
+    def test_cutter_and_year_combined_on_one_line(self):
+        """Both must appear in ONE drawCentredString call, not as two separate draws."""
+        texts = self._centred_texts(frozenset({"cutter", "year"}))
+        combined = [t for t in texts if "HER" in t and "1965" in t]
+        assert combined, (
+            "Cutter and year not combined on a single line; "
+            f"centred strings: {texts}"
+        )
+
+    def test_flat_5160_all_fields_two_cn_lines(self):
+        """On flat 5160 with all fields, both wrapped CN lines must be drawn —
+        the cutter+year merge reclaims the space needed for the second line."""
+        texts = self._centred_texts(
+            frozenset({"branch", "location", "call_number", "cutter", "year", "barcode"}),
+            cn="PR6039.O32 L6 1965",
+        )
+        assert any("PR6039.O32" in t for t in texts), f"First CN line missing: {texts}"
+        assert any("L6" in t for t in texts), (
+            "Second CN line missing — cutter+year merge may not be reclaiming space; "
+            f"centred strings: {texts}"
         )

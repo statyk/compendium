@@ -81,6 +81,17 @@ FIELD_DISPLAY_NAMES: dict[str, str] = {
     "barcode": "Barcode",
 }
 
+# Checkbox order in the edit form, top-to-bottom, matching label render order.
+# Patron formats keep alphabetical (user didn't request reorder for those).
+FIELD_ORDER: dict[str, tuple[str, ...]] = {
+    "spine": ("branch", "location", "call_number", "cutter", "year", "barcode"),
+    "pocket": (
+        "library_name", "title", "author", "branch",
+        "call_number", "cutter", "year", "barcode",
+    ),
+    "barcode-only": ("title", "barcode", "human_readable"),
+}
+
 
 def _symbology_ctx() -> dict:
     code = get_site_setting("barcode_symbology")
@@ -129,14 +140,21 @@ def _fields_context_for_kind(kind: str) -> list[dict[str, Any]]:
     fmt = ITEM_KIND_TO_FORMAT.get(kind) or PATRON_KIND_TO_FORMAT.get(kind, kind)
     optional = OPTIONAL_FIELDS.get(fmt, frozenset())
     defaults = _default_fields_for_kind(kind)
-    result = []
-    for f in sorted(optional):
-        result.append({
+    ordering = FIELD_ORDER.get(fmt)
+    if ordering:
+        ordered = [f for f in ordering if f in optional]
+        leftover = sorted(optional - set(ordering))
+        names = ordered + leftover
+    else:
+        names = sorted(optional)
+    return [
+        {
             "name": f,
             "label": FIELD_DISPLAY_NAMES.get(f, f),
             "checked_by_default": f in defaults,
-        })
-    return result
+        }
+        for f in names
+    ]
 
 
 def _collect_item_rows(
