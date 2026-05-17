@@ -24,6 +24,7 @@ import os
 import socket
 import subprocess
 import sys
+import tempfile
 import time
 import urllib.request
 from pathlib import Path
@@ -34,8 +35,6 @@ PROJECT_ROOT = Path(__file__).parent.parent
 OUT_DIR = PROJECT_ROOT / "out" / "labels"
 ADMIN_USER = os.environ.get("COMPENDIUM_MATRIX_ADMIN_USER", "matrix_admin")
 ADMIN_PASS = os.environ.get("COMPENDIUM_MATRIX_ADMIN_PASS", "matrix-secret-1")
-DEFAULT_DB = "sqlite:////tmp/label_matrix.db"
-DB_URL = os.environ.get("COMPENDIUM_DATABASE_URL", DEFAULT_DB)
 
 ITEM_KINDS = ["spine", "pocket", "barcode-only"]
 
@@ -101,8 +100,17 @@ def _field_params(fields: frozenset[str]) -> dict[str, str]:
 
 def main() -> None:
     OUT_DIR.mkdir(parents=True, exist_ok=True)
+
+    # Always use a fresh temp DB so the script is idempotent — no stale-user errors
+    # on re-runs.  Create a temp path and remove the empty placeholder file so
+    # SQLite can create the real DB there.
+    fd, db_path = tempfile.mkstemp(suffix=".db", prefix="label_matrix_")
+    os.close(fd)
+    os.unlink(db_path)
+
+    db_url = os.environ.get("COMPENDIUM_DATABASE_URL", f"sqlite:///{db_path}")
     env = {
-        "COMPENDIUM_DATABASE_URL": DB_URL,
+        "COMPENDIUM_DATABASE_URL": db_url,
         "COMPENDIUM_ALLOW_INSECURE_JWT": "1",
     }
 
@@ -136,6 +144,10 @@ def main() -> None:
         server.terminate()
         server.wait(timeout=5)
         print("Server stopped.")
+        for suffix in ("", "-shm", "-wal"):
+            p = Path(db_path + suffix)
+            if p.exists():
+                p.unlink()
 
 
 def _render_all(base_url: str) -> None:
