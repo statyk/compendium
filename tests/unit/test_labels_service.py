@@ -1056,3 +1056,255 @@ class TestSampleItemRow:
     def test_barcode_is_not_ean13(self):
         digits = "".join(ch for ch in _SAMPLE_ITEM_ROW.barcode if ch.isdigit())
         assert len(digits) not in (12, 13), "Sample barcode must not match EAN-13 format"
+
+
+# ──────────────────────────────────────────────────────────────────────
+# Stub canvas that records all draw calls (no transforms applied —
+# used when _draw_item_label_content is called directly in a flat context)
+# ──────────────────────────────────────────────────────────────────────
+
+
+class _FullRecorder:
+    """LabelCanvas stub that records rect/text calls for inspection."""
+
+    def __init__(self):
+        self.rects: list[tuple[float, float, float, float]] = []
+        self.strings: list[tuple[float, float, str]] = []
+        self.centred: list[tuple[float, float, str]] = []
+        self.right: list[tuple[float, float, str]] = []
+        self._font_size: float = 10.0
+
+    def setFont(self, name: str, size: float) -> None:
+        self._font_size = size
+
+    def drawString(self, x: float, y: float, text: str) -> None:
+        self.strings.append((x, y, str(text)))
+
+    def drawCentredString(self, x: float, y: float, text: str) -> None:
+        self.centred.append((x, y, str(text)))
+
+    def drawRightString(self, x: float, y: float, text: str) -> None:
+        self.right.append((x, y, str(text)))
+
+    def rect(self, x: float, y: float, w: float, h: float,
+             fill: int = 0, stroke: int = 1) -> None:
+        self.rects.append((x, y, w, h))
+
+    def saveState(self) -> None:
+        pass
+
+    def restoreState(self) -> None:
+        pass
+
+    def translate(self, dx: float, dy: float) -> None:
+        pass
+
+    def rotate(self, degrees: float) -> None:
+        pass
+
+
+def _render_pocket(fields: frozenset[str], *, library_name: str | None = None) -> _FullRecorder:
+    """Render one pocket label via _draw_item_label_content and return the recorder."""
+    from compendium.services.labels import _draw_item_label_content
+
+    row = ItemLabelRow(
+        barcode="BC000001",
+        title="The Luminaries",
+        author_display="Eleanor Catton",
+        call_number="PR9639.4 .C38 L86 2013",
+        publication_year=2013,
+        branch_code="MAIN",
+        location="FICTION",
+    )
+    lw = TEMPLATES["avery-5160"].label_width * inch
+    lh = TEMPLATES["avery-5160"].label_height * inch
+    rec = _FullRecorder()
+    _draw_item_label_content(
+        rec, row, 0.0, 0.0, lw, lh,
+        "pocket", False, "code128", False, fields,
+        library_name=library_name,
+    )
+    return rec
+
+
+# ──────────────────────────────────────────────────────────────────────
+# Fix 1: library_name in SVG preview
+# ──────────────────────────────────────────────────────────────────────
+
+
+class TestLibraryNameInPreview:
+    def test_renders_library_name_when_field_enabled_and_provided(self):
+        svg = render_item_label_svg(
+            kind="pocket",
+            template_key="avery-5160",
+            fields=frozenset({"title", "library_name"}),
+            library_name="Riverdale Public Library",
+        )
+        assert "Riverdale Public Library" in svg
+
+    def test_omits_library_name_when_field_not_in_fields(self):
+        svg = render_item_label_svg(
+            kind="pocket",
+            template_key="avery-5160",
+            fields=frozenset({"title"}),
+            library_name="Riverdale Public Library",
+        )
+        assert "Riverdale Public Library" not in svg
+
+    def test_omits_library_name_when_not_provided(self):
+        svg = render_item_label_svg(
+            kind="pocket",
+            template_key="avery-5160",
+            fields=frozenset({"title", "library_name"}),
+            library_name=None,
+        )
+        assert "<svg" in svg  # renders without error
+
+
+# ──────────────────────────────────────────────────────────────────────
+# Fix 2: pocket — author on its own line
+# ──────────────────────────────────────────────────────────────────────
+
+
+class TestPocketAuthorOnOwnLine:
+    _ALL = frozenset({"title", "author", "branch", "call_number", "barcode"})
+
+    def test_title_and_author_drawn_as_separate_strings(self):
+        rec = _render_pocket(frozenset({"title", "author"}))
+        texts = [t for _, _, t in rec.strings]
+        assert any("The Luminaries" in t and "Eleanor Catton" not in t for t in texts), \
+            "title should be its own string, not concatenated with author"
+        assert any("Eleanor Catton" in t for t in texts), \
+            "author should be drawn as a separate string"
+
+    def test_no_emdash_concatenation(self):
+        rec = _render_pocket(frozenset({"title", "author"}))
+        all_text = " | ".join(t for _, _, t in rec.strings + rec.centred)
+        assert " — " not in all_text or "Eleanor Catton" not in all_text, \
+            "title and author should not be joined with ' — '"
+
+    def test_author_visible_when_branch_enabled(self):
+        rec = _render_pocket(self._ALL)
+        texts = [t for _, _, t in rec.strings]
+        assert any("Eleanor Catton" in t for t in texts)
+
+    def test_author_baseline_below_title_baseline(self):
+        rec = _render_pocket(frozenset({"title", "author"}))
+        title_y = next(y for _, y, t in rec.strings if "The Luminaries" in t)
+        author_y = next(y for _, y, t in rec.strings if "Eleanor Catton" in t)
+        assert author_y < title_y, "author baseline should be lower than title baseline (PDF y-up)"
+
+
+# ──────────────────────────────────────────────────────────────────────
+# Fix 3: spine barcode capped to 0.75 inch
+# ──────────────────────────────────────────────────────────────────────
+
+
+class TestSpineBarcodeCap:
+    def _render_spine_rects(
+        self, template_key: str, *, rotated_ctx: bool
+    ) -> list[tuple[float, float, float, float]]:
+        from compendium.services.labels import _draw_item_label_content
+
+        tmpl = TEMPLATES[template_key]
+        lw = tmpl.label_width * inch
+        lh = tmpl.label_height * inch
+        if rotated_ctx:
+            lw, lh = lh, lw
+        row = ItemLabelRow(barcode="BC000001", title="Dune",
+                           author_display="Frank Herbert", call_number="PS3551")
+        rec = _FullRecorder()
+        _draw_item_label_content(
+            rec, row, 0.0, 0.0, lw, lh,
+            "spine", False, "code128", rotated_ctx,
+            frozenset({"call_number", "barcode"}),
+        )
+        return rec.rects
+
+    def test_rotated_spine_barcode_capped_at_three_quarter_inch(self):
+        rects = self._render_spine_rects("avery-5160-spine", rotated_ctx=True)
+        max_y_extent = max(y + h for (_, y, _, h) in rects) if rects else 0
+        # barcode starts at y+pad=4, extends at most pad + 0.75*inch = 4 + 54 = 58pt
+        assert max_y_extent <= 4 + 0.75 * inch + 1, (
+            f"Rotated spine barcode upper extent {max_y_extent:.1f}pt "
+            f"exceeds 0.75\" cap ({0.75 * inch:.1f}pt)"
+        )
+
+    def test_short_rotated_spine_uses_available_not_cap(self):
+        # avery-5167-spine long axis 1.75" = 126pt; available = (126-8)*0.40 ≈ 47pt < cap
+        rects = self._render_spine_rects("avery-5167-spine", rotated_ctx=True)
+        max_y_extent = max(y + h for (_, y, _, h) in rects) if rects else 0
+        # available_strip ≈ 47.2pt, so bar top ≤ 4 + 47.2 ≈ 51.2pt
+        assert max_y_extent <= 4 + (126 - 8) * 0.40 + 2
+
+    def test_flat_spine_barcode_width_capped(self):
+        rects = self._render_spine_rects("avery-5160", rotated_ctx=False)
+        # flat spine: bar width (along x) should be ≤ 0.75"
+        max_bar_extent = max(x + w for (x, _, w, _) in rects) if rects else 0
+        min_bar_start = min(x for (x, _, _, _) in rects) if rects else 0
+        bar_span = max_bar_extent - min_bar_start
+        assert bar_span <= 0.75 * inch + 1, (
+            f"Flat spine barcode x-span {bar_span:.1f}pt exceeds 0.75\" cap"
+        )
+
+    def test_flat_spine_barcode_centered(self):
+        from compendium.services.labels import _draw_item_label_content
+
+        tmpl = TEMPLATES["avery-5160"]
+        lw = tmpl.label_width * inch
+        lh = tmpl.label_height * inch
+        row = ItemLabelRow(barcode="BC000001", title="Dune",
+                           author_display="Frank Herbert", call_number="PS3551")
+        rec = _FullRecorder()
+        _draw_item_label_content(
+            rec, row, 0.0, 0.0, lw, lh,
+            "spine", False, "code128", False,
+            frozenset({"call_number", "barcode"}),
+        )
+        inner_w = lw - 2 * 4  # pad = 4
+        bar_xs = [x for (x, _, _, _) in rec.rects]
+        bar_x_max = max(x + w for (x, _, w, _) in rec.rects)
+        bar_x_min = min(bar_xs)
+        bar_mid = (bar_x_min + bar_x_max) / 2
+        cell_mid = lw / 2
+        assert abs(bar_mid - cell_mid) < 5, (
+            f"Barcode center {bar_mid:.1f} not near cell center {cell_mid:.1f}"
+        )
+
+
+# ──────────────────────────────────────────────────────────────────────
+# Fix 4: HR text drawn inside the cell
+# ──────────────────────────────────────────────────────────────────────
+
+
+class TestHRTextInsideCell:
+    def _call_draw_barcode(
+        self, x: float, y: float, width: float, height: float
+    ) -> _FullRecorder:
+        from compendium.services.labels import _draw_barcode
+
+        rec = _FullRecorder()
+        _draw_barcode(rec, x, y, "BC000001", width, height,
+                      symbology="code128", human_readable=True)
+        return rec
+
+    def test_hr_text_y_inside_height_region(self):
+        rec = self._call_draw_barcode(x=10, y=5, width=100, height=30)
+        for _, cy, _ in rec.centred:
+            assert 5 <= cy <= 35, f"HR text y={cy} outside cell [5, 35]"
+
+    def test_bars_do_not_exceed_top_of_height(self):
+        rec = self._call_draw_barcode(x=10, y=5, width=100, height=30)
+        for (rx, ry, rw, rh) in rec.rects:
+            assert ry + rh <= 5 + 30 + 0.1, f"Bar top {ry+rh:.1f} exceeds y+height=35"
+
+    def test_barcode_only_preview_includes_hr_text_in_svg(self):
+        from compendium.services.labels import _human_readable_text
+        expected_hr = _human_readable_text("SAMPLE-001", "code128")
+        svg = render_item_label_svg(
+            kind="barcode-only",
+            template_key="avery-5167",
+            fields=frozenset({"barcode", "human_readable"}),
+        )
+        assert expected_hr in svg, \
+            f"HR text '{expected_hr}' not found in barcode-only SVG preview"

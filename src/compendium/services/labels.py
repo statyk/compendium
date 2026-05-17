@@ -28,6 +28,10 @@ from reportlab.pdfbase.pdfmetrics import stringWidth
 
 BarcodeSymbology = Literal["codabar", "code39", "code128"]
 
+# Maximum bar-distribution length for spine barcodes. A typical book spine is
+# 0.5"–1.5" wide; capping here keeps the barcode proportional to the spine face.
+SPINE_BARCODE_MAX_LENGTH_INCHES: float = 0.75
+
 
 class LabelCanvas(Protocol):
     """Structural protocol satisfied by both reportlab's Canvas (PDF) and
@@ -397,17 +401,19 @@ def _draw_barcode(
     pattern = _module_pattern(value, symbology)
     if not pattern:
         return
+    hr_band = 9 if human_readable else 0   # space reserved at bottom for HR text
+    bar_h = max(1.0, height - hr_band)
     module_width = width / len(pattern)
     c.saveState()
     for i, bit in enumerate(pattern):
         if bit == "1":
-            c.rect(x + i * module_width, y, module_width, height,
+            c.rect(x + i * module_width, y + hr_band, module_width, bar_h,
                    fill=1, stroke=0)
     if human_readable:
         c.setFont("Helvetica", 7)
         c.drawCentredString(
             x + width / 2.0,
-            y - 8,
+            y + 1,
             _human_readable_text(value, symbology),
         )
     c.restoreState()
@@ -649,11 +655,18 @@ def _draw_item_label_content(
         line_h_cn       = cn_font_size + 1
 
         # When barcode is enabled, reserve a strip at the bottom of the cell.
-        # In rotated context allocate 40% of the long dim so bars are tall
-        # enough to scan. Non-rotated gets a fixed 14pt strip.
+        # Rotated: 40% of the long dim (enough bar height to scan), capped at
+        # SPINE_BARCODE_MAX_LENGTH_INCHES so bars don't run beyond a typical
+        # book-spine width. Non-rotated: fixed 14pt bar height.
         draw_barcode = "barcode" in fields
         if draw_barcode:
-            bc_strip = (lh - 2 * pad) * 0.40 if rotated else 14
+            if rotated:
+                bc_strip = min(
+                    (lh - 2 * pad) * 0.40,
+                    SPINE_BARCODE_MAX_LENGTH_INCHES * inch,
+                )
+            else:
+                bc_strip = 14
         else:
             bc_strip = 0
         text_bottom = y + pad + bc_strip + (2 if bc_strip else 0)
@@ -744,12 +757,14 @@ def _draw_item_label_content(
                     symbology=symbology,
                 )
             else:
+                bar_w = min(inner_w, SPINE_BARCODE_MAX_LENGTH_INCHES * inch)
+                bar_x = x + pad + (inner_w - bar_w) / 2
                 _draw_barcode(
                     c,
-                    x + pad,
+                    bar_x,
                     y + pad,
                     row.barcode,
-                    inner_w,
+                    bar_w,
                     bc_strip,
                     symbology=symbology,
                     human_readable=False,
@@ -777,20 +792,28 @@ def _draw_item_label_content(
             _truncate(library_name, inner_w, body_font, header_size),
         )
 
+    author_size = 7
+    author_h = (author_size + 2) if ("author" in fields and row.author_display) else 0
+
     top_y = y + lh - pad - header_h - title_size
-    mid_y = top_y - title_size - 4
+    mid_y = top_y - title_size - 4 - author_h
 
     # Reserve right corner for branch so title doesn't run into it.
     branch_reserved = (inner_w / 3 + 6) if ("branch" in fields and row.branch_code) else 0
     title_max_w = inner_w - branch_reserved
 
-    # Title + optional author
+    # Title on its own line; author on the line below (full width).
     if "title" in fields and row.title:
         c.setFont(body_font, title_size)
-        title_text = row.title
-        if "author" in fields and row.author_display:
-            title_text = f"{row.title} — {row.author_display}"
-        c.drawString(x + pad, top_y, _truncate(title_text, title_max_w, body_font, title_size))
+        c.drawString(x + pad, top_y, _truncate(row.title, title_max_w, body_font, title_size))
+
+    if "author" in fields and row.author_display:
+        author_y = top_y - author_h
+        c.setFont(body_font, author_size)
+        c.drawString(
+            x + pad, author_y,
+            _truncate(row.author_display, inner_w, body_font, author_size),
+        )
 
     # Call-number line: "PS3551 .E76 D8 · HER" style (middle)
     parts: list[str] = []
@@ -1003,6 +1026,7 @@ def render_item_label_svg(
     template_key: str,
     fields: frozenset[str],
     symbology: str | None = None,
+    library_name: str | None = None,
 ) -> str:
     """Render a single sample item label as a standalone SVG string.
 
@@ -1022,5 +1046,6 @@ def render_item_label_svg(
     _draw_item_label(
         svg_canvas, _SAMPLE_ITEM_ROW, 0.0, 0.0, template, fmt,
         False, sym, fields,
+        library_name=library_name,
     )
     return svg_canvas.to_svg()

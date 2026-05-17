@@ -346,7 +346,11 @@ def _preview_context(kind: str, template_key: str, fields: frozenset[str]) -> di
         fields = DEFAULT_FIELDS.get(ITEM_KIND_TO_FORMAT.get(kind, kind), frozenset())
     symbology = get_site_setting("barcode_symbology")
     svg = render_item_label_svg(
-        kind=kind, template_key=template_key, fields=fields, symbology=symbology
+        kind=kind,
+        template_key=template_key,
+        fields=fields,
+        symbology=symbology,
+        library_name=get_site_setting("library_name"),
     )
     return {"svg": svg}
 
