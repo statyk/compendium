@@ -1536,19 +1536,24 @@ class TestSpineBranchLocationSideBySide:
         assert any("FICTION" in t for t in all_texts)
         assert not any("MAIN" in t for t in all_texts)
 
-    def test_rotated_branch_and_location_on_single_line(self):
-        """Both names must appear together in ONE drawString call.
-        Use avery-5160-spine (64pt inner_w) so the combined string fits."""
+    def test_rotated_branch_and_location_stacked_on_separate_lines(self):
+        """On rotated contexts, branch and location must NOT be combined.
+        Each must appear as its own drawString call (inner_w may be too narrow)."""
         rec = _render_spine_on(
             "avery-5160-spine",
             frozenset({"branch", "location"}),
             rotated_ctx=True,
         )
-        combined_calls = [t for (_, _, t) in rec.strings
-                          if "MAIN" in t and "FICTION" in t]
-        assert combined_calls, (
-            "Branch and location not combined; "
-            f"separate strings drawn: {[t for (_, _, t) in rec.strings]}"
+        all_texts = [t for (_, _, t) in rec.strings]
+        branch_only = [t for t in all_texts if "MAIN" in t and "FICTION" not in t]
+        location_only = [t for t in all_texts if "FICTION" in t and "MAIN" not in t]
+        assert branch_only, (
+            "Branch not drawn as its own string on rotated context; "
+            f"strings: {all_texts}"
+        )
+        assert location_only, (
+            "Location not drawn as its own string on rotated context; "
+            f"strings: {all_texts}"
         )
 
     def test_flat_5160_branch_and_location_on_single_line(self):
@@ -1630,3 +1635,70 @@ class TestSpineCutterYearSideBySide:
             "Second CN line missing — cutter+year merge may not be reclaiming space; "
             f"centred strings: {texts}"
         )
+
+
+# ──────────────────────────────────────────────────────────────────────
+# Fix E: rotated spine reverts to stacked layout (combined-line is
+#         flat-only — narrow inner_w on rotated templates can't fit it)
+# ──────────────────────────────────────────────────────────────────────
+
+
+class TestSpineRotatedStackedLayout:
+    """Rotated spine templates have narrow inner_w (28-64pt). The combined
+    branch+location and cutter+year strings that work on flat labels would be
+    truncated or invisible on rotated ones. Rotated context must keep the
+    original stacked layout."""
+
+    def test_rotated_5160spine_cutter_and_year_drawn_separately(self):
+        """On a rotated context, cutter and year must appear as TWO separate
+        drawString calls at different y-baselines — not one combined string."""
+        rec = _render_spine_on(
+            "avery-5160-spine",
+            frozenset({"cutter", "year"}),
+            rotated_ctx=True,
+        )
+        all_texts = [t for (_, _, t) in rec.strings]
+        cutter_calls = [t for t in all_texts if "HER" in t and "1965" not in t]
+        year_calls   = [t for t in all_texts if "1965" in t and "HER" not in t]
+        assert cutter_calls, (
+            "Cutter not drawn as a standalone string on rotated context; "
+            f"strings: {all_texts}"
+        )
+        assert year_calls, (
+            "Year not drawn as a standalone string on rotated context; "
+            f"strings: {all_texts}"
+        )
+
+    def test_avery_5167_spine_no_truncation_with_all_fields(self):
+        """avery-5167-spine has inner_w=28pt. With short-token fields, every
+        string must render without truncation (no '…' suffix).
+        We use "QA76 .D8" whose longest token ("QA76") is ~21pt at 9pt —
+        comfortably under 28pt — instead of a long LCC like "PS3551"."""
+        rec = _render_spine_on(
+            "avery-5167-spine",
+            frozenset({"branch", "location", "call_number", "cutter", "year", "barcode"}),
+            rotated_ctx=True,
+            call_number="QA76 .D8",
+        )
+        all_texts = [t for (_, _, t) in rec.strings]
+        truncated = [t for t in all_texts if t.endswith("…")]
+        assert not truncated, (
+            "Truncated strings found on avery-5167-spine with all fields; "
+            f"truncated: {truncated}, all strings: {all_texts}"
+        )
+
+    def test_avery_5167_spine_all_expected_fields_visible(self):
+        """On avery-5167-spine with all fields, every field token must appear
+        in the drawn strings. Uses "QA76 .D8" whose tokens fit in 28pt inner_w."""
+        rec = _render_spine_on(
+            "avery-5167-spine",
+            frozenset({"branch", "location", "call_number", "cutter", "year"}),
+            rotated_ctx=True,
+            call_number="QA76 .D8",
+        )
+        all_texts = [t for (_, _, t) in rec.strings]
+        assert any("MAIN" in t for t in all_texts), f"Branch missing: {all_texts}"
+        assert any("FICTION" in t for t in all_texts), f"Location missing: {all_texts}"
+        assert any("QA76" in t for t in all_texts), f"Call number missing: {all_texts}"
+        assert any("HER" in t for t in all_texts), f"Cutter missing: {all_texts}"
+        assert any("1965" in t for t in all_texts), f"Year missing: {all_texts}"

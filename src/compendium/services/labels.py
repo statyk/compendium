@@ -685,51 +685,84 @@ def _draw_item_label_content(
                     _truncate(text, inner_w, font_name, font_size),
                 )
 
-        # ── Bottom-up reservation ────────────────────────────────────────
-        # When both cutter and year are present, draw them on a single line
-        # ("HER · 1965") to reclaim vertical space for the call number.
-        # Mirrors the branch+location side-by-side pattern above.
+        # ── Bottom-up reservation: cutter / year ────────────────────────
+        # Flat (non-rotated): combine "CUT · YR" onto one line when both
+        # present — reclaims vertical space for the call number.
+        # Rotated: keep stacked (separate baselines) — inner_w may be as
+        # narrow as 28pt, too tight for a combined string.
         cut_present  = ("cutter" in fields and bool(cutter_str))
         year_present = ("year"   in fields and bool(year))
 
-        cutter_year_baseline: float | None = None
-        cutter_year_text: str = ""
-        cutter_year_font_size: int = 0
+        # Rotated path — separate per-field baselines.
+        cutter_baseline: float | None = None
+        year_baseline:   float | None = None
+        # Flat path — one shared baseline.
+        combined_cy_baseline: float | None = None
+        combined_cy_text: str = ""
+        combined_cy_size: int = 0
 
-        if cut_present and year_present:
-            cutter_year_text      = f"{cutter_str}  ·  {year}"
-            cutter_year_font_size = cutter_font_size   # 10pt (the larger of the two)
-            cutter_year_baseline  = text_bottom + 2
-        elif cut_present:
-            cutter_year_text      = cutter_str
-            cutter_year_font_size = cutter_font_size
-            cutter_year_baseline  = text_bottom + 2
-        elif year_present:
-            cutter_year_text      = year
-            cutter_year_font_size = year_font_size
-            cutter_year_baseline  = text_bottom + 2
+        if rotated:
+            if year_present:
+                year_baseline = text_bottom + 2
+            cy_anchor = (year_baseline + year_font_size) if year_baseline is not None else text_bottom
+            if cut_present:
+                cutter_baseline = cy_anchor + 2
+        else:
+            if cut_present and year_present:
+                combined_cy_text = f"{cutter_str}  ·  {year}"
+                combined_cy_size = cutter_font_size
+                combined_cy_baseline = text_bottom + 2
+            elif cut_present:
+                combined_cy_text = cutter_str
+                combined_cy_size = cutter_font_size
+                combined_cy_baseline = text_bottom + 2
+            elif year_present:
+                combined_cy_text = year
+                combined_cy_size = year_font_size
+                combined_cy_baseline = text_bottom + 2
 
         # The top of the text area (below the top pad).
         top = y + lh - pad
 
-        # ── Top-down: branch + location (side-by-side when both present), then CN
+        # ── Top-down: branch / location ──────────────────────────────────
+        # Flat: combine "BR · LOC" when both present (saves a line for CN).
+        # Rotated: keep stacked — narrow inner_w can't fit the combined string.
         br_present  = ("branch"   in fields and bool(row.branch_code))
         loc_present = ("location" in fields and bool(row.location))
-        if br_present or loc_present:
-            line_size = 7
-            if br_present and loc_present:
-                combined = f"{row.branch_code.upper()}  ·  {row.location.upper()}"  # type: ignore[union-attr]
-            elif br_present:
-                combined = row.branch_code.upper()  # type: ignore[union-attr]
-            else:
-                combined = row.location.upper()  # type: ignore[union-attr]
-            _draw_text(top - line_size, body_font, line_size, combined)
-            top -= line_size + 2
+        line_size = 7
 
-        # CN block: fill whatever vertical room remains above the cutter+year slot.
-        cn_floor = ((cutter_year_baseline + cutter_year_font_size)
-                    if cutter_year_baseline is not None
-                    else text_bottom) + 1
+        if rotated:
+            if br_present:
+                _draw_text(top - line_size, body_font, line_size,
+                           row.branch_code.upper())  # type: ignore[union-attr]
+                top -= line_size + 2
+            if loc_present:
+                _draw_text(top - line_size, body_font, line_size,
+                           row.location.upper())  # type: ignore[union-attr]
+                top -= line_size + 2
+        else:
+            if br_present or loc_present:
+                if br_present and loc_present:
+                    combined = f"{row.branch_code.upper()}  ·  {row.location.upper()}"  # type: ignore[union-attr]
+                elif br_present:
+                    combined = row.branch_code.upper()  # type: ignore[union-attr]
+                else:
+                    combined = row.location.upper()  # type: ignore[union-attr]
+                _draw_text(top - line_size, body_font, line_size, combined)
+                top -= line_size + 2
+
+        # CN block: fill whatever vertical room remains above the cutter/year slot.
+        if rotated:
+            cy_consume = 0.0
+            if cutter_baseline is not None:
+                cy_consume = max(cy_consume, cutter_baseline + cutter_font_size)
+            if year_baseline is not None:
+                cy_consume = max(cy_consume, year_baseline + year_font_size)
+            cn_floor = (cy_consume if cy_consume else text_bottom) + 1
+        else:
+            cn_floor = ((combined_cy_baseline + combined_cy_size)
+                        if combined_cy_baseline is not None
+                        else text_bottom) + 1
         max_cn_lines_dynamic = max(0, int((top - cn_floor) // line_h_cn))
 
         cursor = top - cn_font_size
@@ -745,9 +778,15 @@ def _draw_item_label_content(
                                         _truncate(cn_lines[i], inner_w, font, cn_font_size))
                 cursor -= line_h_cn
 
-        # ── Fixed-position: cutter+year combined line ─────────────────────
-        if cutter_year_baseline is not None:
-            _draw_text(cutter_year_baseline, body_font, cutter_year_font_size, cutter_year_text)
+        # ── Fixed-position: cutter / year ────────────────────────────────
+        if rotated:
+            if cutter_baseline is not None:
+                _draw_text(cutter_baseline, body_font, cutter_font_size, cutter_str)
+            if year_baseline is not None:
+                _draw_text(year_baseline, body_font, year_font_size, year)
+        else:
+            if combined_cy_baseline is not None:
+                _draw_text(combined_cy_baseline, body_font, combined_cy_size, combined_cy_text)
 
         # Optional barcode strip at the bottom (when "barcode" field is enabled).
         if draw_barcode:
