@@ -391,3 +391,74 @@ class TestSymbologyBanner:
         # Stale exact phrases that used to appear in the templates.
         assert "a Code 128 barcode" not in body
         assert "falls back to Code 128" not in body
+
+
+# ──────────────────────────────────────────────────────────────────────
+# Live SVG preview endpoint (Slice 2)
+# ──────────────────────────────────────────────────────────────────────
+
+
+class TestItemPreviewEndpoint:
+    """GET /ui/labels/items/preview — HTMX fragment returning inline SVG."""
+
+    def test_default_returns_200_with_svg(self, lw_client, lw_session):
+        cookies = _login(lw_client, lw_session, f"lw_prev{_next()}")
+        resp = lw_client.get("/ui/labels/items/preview", cookies=cookies)
+        assert resp.status_code == 200
+        assert "<svg" in resp.text
+
+    def test_spine_kind_returns_svg(self, lw_client, lw_session):
+        cookies = _login(lw_client, lw_session, f"lw_prev{_next()}")
+        resp = lw_client.get(
+            "/ui/labels/items/preview",
+            params={"kind": "spine", "field_call_number": "on", "field_cutter": "on"},
+            cookies=cookies,
+        )
+        assert resp.status_code == 200
+        assert "<svg" in resp.text
+
+    def test_barcode_only_kind_returns_svg(self, lw_client, lw_session):
+        cookies = _login(lw_client, lw_session, f"lw_prev{_next()}")
+        resp = lw_client.get(
+            "/ui/labels/items/preview",
+            params={"kind": "barcode-only", "field_barcode": "on"},
+            cookies=cookies,
+        )
+        assert resp.status_code == 200
+        assert "<svg" in resp.text
+
+    def test_requires_labels_generate_permission(self, lw_client, lw_session):
+        cookies = _login(lw_client, lw_session, f"lw_prev_ro{_next()}", role_name="ReadOnly")
+        resp = lw_client.get("/ui/labels/items/preview", cookies=cookies)
+        assert resp.status_code in (403, 302)
+
+    def test_unauthenticated_redirects(self, lw_client):
+        resp = lw_client.get("/ui/labels/items/preview")
+        assert resp.status_code in (302, 303, 401, 403)
+
+    def test_incompatible_template_falls_back_not_500(self, lw_client, lw_session):
+        # avery-5871 is pocket-only; requesting it for spine should NOT 500.
+        cookies = _login(lw_client, lw_session, f"lw_prev{_next()}")
+        resp = lw_client.get(
+            "/ui/labels/items/preview",
+            params={"kind": "spine", "template": "avery-5871"},
+            cookies=cookies,
+        )
+        assert resp.status_code == 200
+
+    def test_empty_fields_does_not_error(self, lw_client, lw_session):
+        cookies = _login(lw_client, lw_session, f"lw_prev{_next()}")
+        resp = lw_client.get(
+            "/ui/labels/items/preview",
+            params={"kind": "spine"},
+            cookies=cookies,
+        )
+        assert resp.status_code == 200
+
+    def test_items_page_has_preview_slot(self, lw_client, lw_session):
+        cookies = _login(lw_client, lw_session, f"lw_prev{_next()}")
+        resp = lw_client.get("/ui/labels/items", cookies=cookies)
+        assert resp.status_code == 200
+        body = resp.text
+        assert 'id="label-preview"' in body
+        assert "hx-get" in body

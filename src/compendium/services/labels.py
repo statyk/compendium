@@ -16,7 +16,7 @@ import re
 from dataclasses import dataclass, field
 from datetime import date
 from io import BytesIO
-from typing import Iterable, Literal
+from typing import Iterable, Literal, Protocol
 
 from reportlab.graphics.barcode import eanbc
 from reportlab.graphics.shapes import Drawing
@@ -27,6 +27,23 @@ from reportlab.pdfbase.pdfmetrics import stringWidth
 
 
 BarcodeSymbology = Literal["codabar", "code39", "code128"]
+
+
+class LabelCanvas(Protocol):
+    """Structural protocol satisfied by both reportlab's Canvas (PDF) and
+    SVGLabelCanvas (SVG preview). All internal drawing helpers accept this
+    type so they can be driven by either backend without modification."""
+
+    def setFont(self, name: str, size: float) -> None: ...
+    def drawString(self, x: float, y: float, text: str) -> None: ...
+    def drawCentredString(self, x: float, y: float, text: str) -> None: ...
+    def drawRightString(self, x: float, y: float, text: str) -> None: ...
+    def rect(self, x: float, y: float, w: float, h: float,
+             fill: int = 0, stroke: int = 1) -> None: ...
+    def saveState(self) -> None: ...
+    def restoreState(self) -> None: ...
+    def translate(self, dx: float, dy: float) -> None: ...
+    def rotate(self, degrees: float) -> None: ...
 
 
 ItemFormat = Literal["spine", "pocket", "barcode-only"]
@@ -363,7 +380,7 @@ def _human_readable_text(value: str, symbology: str) -> str:
 
 
 def _draw_barcode(
-    c: canvas.Canvas,
+    c: LabelCanvas,
     x: float,
     y: float,
     value: str,
@@ -397,7 +414,7 @@ def _draw_barcode(
 
 
 def _draw_barcode_vertical(
-    c: canvas.Canvas,
+    c: LabelCanvas,
     x: float,
     y: float,
     value: str,
@@ -420,7 +437,7 @@ def _draw_barcode_vertical(
 
 
 def _draw_barcode_ean13(
-    c: canvas.Canvas,
+    c: LabelCanvas,
     x: float,
     y: float,
     isbn: str,
@@ -534,7 +551,7 @@ def generate_item_labels(
 
 
 def _draw_item_label(
-    c: canvas.Canvas,
+    c: LabelCanvas,
     row: ItemLabelRow,
     x: float,
     y: float,
@@ -577,7 +594,7 @@ def _draw_item_label(
 
 
 def _draw_item_label_content(
-    c: canvas.Canvas,
+    c: LabelCanvas,
     row: ItemLabelRow,
     x: float,
     y: float,
@@ -876,7 +893,7 @@ def generate_patron_cards(
 
 
 def _draw_patron_full(
-    c: canvas.Canvas,
+    c: LabelCanvas,
     row: PatronCardRow,
     x: float,
     y: float,
@@ -933,7 +950,7 @@ def _draw_patron_full(
 
 
 def _draw_patron_sticker(
-    c: canvas.Canvas,
+    c: LabelCanvas,
     row: PatronCardRow,
     x: float,
     y: float,
@@ -962,3 +979,48 @@ def _draw_patron_sticker(
             c, x + pad, y + pad, row.card_number, inner_w, bc_h,
             symbology=symbology, human_readable=("card_number" in fields),
         )
+
+
+# ──────────────────────────────────────────────────────────────────────
+# SVG preview support
+# ──────────────────────────────────────────────────────────────────────
+
+# Hardcoded sample row used by the web preview — deterministic, no DB access.
+_SAMPLE_ITEM_ROW = ItemLabelRow(
+    barcode="SAMPLE-001",
+    title="The Lord of the Rings",
+    author_display="J.R.R. Tolkien",
+    call_number="PR6039.O32 L6 1965",
+    publication_year=1965,
+    branch_code="MAIN",
+    location="FICTION",
+)
+
+
+def render_item_label_svg(
+    *,
+    kind: str,
+    template_key: str,
+    fields: frozenset[str],
+    symbology: str | None = None,
+) -> str:
+    """Render a single sample item label as a standalone SVG string.
+
+    Uses a hardcoded placeholder row — no database access.  Always passes
+    ``use_isbn=False`` so the EAN-13 path (which requires reportlab's Drawing
+    internals, not part of the LabelCanvas protocol) is bypassed; the sample
+    barcode is also alphanumeric, providing a second natural fallback.
+    """
+    from compendium.services.label_canvas_svg import SVGLabelCanvas
+
+    template = TEMPLATES[template_key]
+    fmt = ITEM_KIND_TO_FORMAT.get(kind, "pocket")
+    lw = template.label_width * inch
+    lh = template.label_height * inch
+    sym: BarcodeSymbology = symbology or "code128"  # type: ignore[assignment]
+    svg_canvas = SVGLabelCanvas(lw, lh)
+    _draw_item_label(
+        svg_canvas, _SAMPLE_ITEM_ROW, 0.0, 0.0, template, fmt,
+        False, sym, fields,
+    )
+    return svg_canvas.to_svg()

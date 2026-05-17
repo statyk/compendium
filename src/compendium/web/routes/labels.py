@@ -24,6 +24,7 @@ from compendium.services.labels import (
     compatible_templates,
     generate_item_labels,
     generate_patron_cards,
+    render_item_label_svg,
 )
 
 from compendium.web.csrf import check_csrf_form, ensure_csrf, set_csrf_cookie
@@ -331,6 +332,41 @@ def _patron_form_ctx(
         "patron_count": patron_count,
         "error": error,
     }
+
+
+def _preview_context(kind: str, template_key: str, fields: frozenset[str]) -> dict[str, Any]:
+    """Build context for the label preview fragment."""
+    if kind not in ITEM_KIND_TO_FORMAT:
+        kind = "pocket"
+    compatible = [t.key for t in compatible_templates(kind)]
+    if template_key not in compatible:
+        fallback = compatible[0] if compatible else "avery-5160"
+        template_key = KIND_DEFAULT_TEMPLATE.get(kind, fallback)
+    if not fields:
+        fields = DEFAULT_FIELDS.get(ITEM_KIND_TO_FORMAT.get(kind, kind), frozenset())
+    symbology = get_site_setting("barcode_symbology")
+    svg = render_item_label_svg(
+        kind=kind, template_key=template_key, fields=fields, symbology=symbology
+    )
+    return {"svg": svg}
+
+
+@router.get("/labels/items/preview", response_class=Response)
+def item_labels_preview(
+    request: Request,
+    kind: str = "pocket",
+    template: str = "",
+    user: AppUser = Depends(require_web_permission(_PERM)),
+):
+    fields = frozenset(
+        name[len("field_"):]
+        for name in request.query_params.keys()
+        if name.startswith("field_")
+    )
+    ctx = _preview_context(kind, template, fields)
+    ctx["request"] = request
+    ctx["user"] = user
+    return _render("labels/_label_preview.html", request, ctx)
 
 
 @router.get("/labels")

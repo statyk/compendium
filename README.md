@@ -21,7 +21,7 @@ This paragraph here is about the only part of the project written by a human.
 - **Patrons & cards** — patron categories (Adult/Child/Staff/Teacher seeded), card expiry with maintenance auto-deactivation, optional 1:1 patron↔user link for self-service
 - **Bulk import/export** — round-trippable CSV; MARC21 binary + MARCXML import/export; LibraryThing TSV import; GoodReads CSV import (all with lenient encoding for messy real-world exports)
 - **Backup/restore** — portable JSONL tarballs; backend-agnostic (SQLite ↔ Postgres); doubles as a DB migration path
-- **Labels** — Avery-template item labels (spine / pocket) and patron cards (full / sticker) as PDFs. Spine templates: `avery-5167-spine` (½" narrow face), `avery-5160-spine` (1" medium face, rotated), `avery-5160` (flat wrap-around, centered text), `avery-22805`/`avery-22806` (square classification labels)
+- **Labels** — Avery-template item labels (spine / pocket) and patron cards (full / sticker) as PDFs. Spine templates: `avery-5167-spine` (½" narrow face), `avery-5160-spine` (1" medium face, rotated), `avery-5160` (flat wrap-around, centered text), `avery-22805`/`avery-22806` (square classification labels). Live in-page SVG preview updates as you change kind/template/fields — no PDF round-trip needed.
 - **Auth** — five preset roles (ReadOnly, Patron, Librarian, SystemAdmin, Administrator) plus custom roles via the admin UI; JWT for API, cookie-based for web UI
 - **Audit log** — synchronous trail of administrative mutations (Librarian + system tier); queryable via web UI, CLI, or REST
 - **DB-editable settings** — most configuration knobs (library name, fines, kiosk timeout, SMTP, retention, configurable nav shortcuts, etc.) editable from the UI / CLI / API; env vars still win as a break-glass

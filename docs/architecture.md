@@ -472,6 +472,33 @@ Cutter and year are reserved from the bottom of the cell upward (above the optio
 
 ---
 
+## Live label preview
+
+The labels UI at `/ui/labels/items` includes a live SVG preview pane that updates within ~150ms of any form change (kind, template, fields). It uses the same layout code as PDF generation — no separate preview renderer.
+
+### Canvas protocol
+
+Internal drawing helpers (`_draw_item_label`, `_draw_item_label_content`, `_draw_barcode`, etc.) accept a `LabelCanvas` structural protocol defined in `services/labels.py` rather than a concrete `canvas.Canvas`. Both backends satisfy the protocol:
+
+- **`canvas.Canvas` (reportlab)** — PDF backend, used by `generate_item_labels`.
+- **`SVGLabelCanvas`** (`services/label_canvas_svg.py`) — SVG backend, used by the preview. Accumulates drawing operations and serializes via `to_svg()`.
+
+### Coordinate conventions
+
+PDF uses y-up (origin bottom-left); SVG uses y-down (origin top-left). `SVGLabelCanvas.to_svg()` wraps all content in a root `<g transform="translate(0,H) scale(1,-1)">` group so drawing code can use PDF coordinates unchanged. Each text element also carries a per-element `scale(1,-1)` counter-flip so glyph outlines render right-side-up.
+
+Transform frames (`saveState`/`translate`/`rotate`/`restoreState`) are represented as a stack of `_Frame` objects whose accumulated transforms become a `<g transform="...">` wrapper around the frame's content on `restoreState`.
+
+### EAN-13 limitation
+
+The EAN-13 path uses reportlab's `Drawing.drawOn(c, ...)` which calls private reportlab-graphics primitives not in `LabelCanvas`. The preview always uses the configured barcode symbology (Code 128 / Code 39 / Codabar) via the rect-based path. The printed PDF is unaffected. The sample barcode ("SAMPLE-001") is alphanumeric, so EAN-13 validation fails and the fallback activates naturally even without explicit gating.
+
+### Preview route
+
+`GET /ui/labels/items/preview` (requires `labels.generate` permission) reads `kind`, `template`, and `field_*` query params — identical to what `POST /ui/labels/items` reads from form data — and returns an HTML fragment containing inline SVG rendered from a hardcoded placeholder row. HTMX on the form fires `hx-get` on every change with `hx-include="#item-labels-form"`.
+
+---
+
 ## Label barcode symbology
 
 Item labels and patron cards encode the Compendium barcode value in one of three symbologies, chosen via the `barcode_symbology` site setting (Code 128 / Code 39 / Codabar, default Code 128). The setting is read once per render call inside `generate_item_labels` / `generate_patron_cards` — there's no per-render override, on the assumption that operators set it once to match their scanner hardware and don't toggle per batch.

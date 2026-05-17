@@ -11,14 +11,20 @@ import pytest
 from reportlab.lib.units import inch
 from reportlab.pdfgen import canvas as rl_canvas
 
+import xml.etree.ElementTree as ET
+
 from compendium.services.labels import (
     ItemLabelRow,
     PatronCardRow,
+    ITEM_KIND_TO_FORMAT,
+    OPTIONAL_FIELDS,
     TEMPLATES,
+    _SAMPLE_ITEM_ROW,
     compatible_templates,
     cutter,
     generate_item_labels,
     generate_patron_cards,
+    render_item_label_svg,
     wrap_call_number,
 )
 
@@ -928,3 +934,125 @@ class TestSpineLayoutFixes:
         centred_texts = {text for (_, _, text) in dc}
         assert "HER" in drawstr_texts,   "cutter must use drawString on rotated spine"
         assert "HER" not in centred_texts, "cutter must NOT use drawCentredString on rotated spine"
+
+
+# ──────────────────────────────────────────────────────────────────────
+# SVG label preview (Slice 2)
+# ──────────────────────────────────────────────────────────────────────
+
+
+class TestRenderItemLabelSvg:
+    """render_item_label_svg — single-label SVG output for the web preview."""
+
+    def test_pocket_returns_svg_element(self):
+        svg = render_item_label_svg(
+            kind="pocket",
+            template_key="avery-5160",
+            fields=OPTIONAL_FIELDS["pocket"],
+        )
+        assert svg.startswith("<svg") or "<svg" in svg
+
+    def test_pocket_valid_xml(self):
+        svg = render_item_label_svg(
+            kind="pocket",
+            template_key="avery-5160",
+            fields=OPTIONAL_FIELDS["pocket"],
+        )
+        ET.fromstring(svg)
+
+    def test_spine_contains_call_number_fragment(self):
+        # Use DEFAULT_FIELDS (no barcode) so there's enough vertical room
+        # for the call number on the 1"-tall avery-5160 label.
+        from compendium.services.labels import DEFAULT_FIELDS
+        svg = render_item_label_svg(
+            kind="spine",
+            template_key="avery-5160",
+            fields=DEFAULT_FIELDS["spine"],
+        )
+        # Sample row has call_number "PR6039.O32 L6 1965"; at least "PR6039" should appear.
+        assert "PR6039" in svg
+
+    def test_spine_contains_publication_year(self):
+        from compendium.services.labels import DEFAULT_FIELDS
+        svg = render_item_label_svg(
+            kind="spine",
+            template_key="avery-5160",
+            fields=DEFAULT_FIELDS["spine"],
+        )
+        assert "1965" in svg
+
+    def test_spine_contains_location(self):
+        svg = render_item_label_svg(
+            kind="spine",
+            template_key="avery-5160",
+            fields=frozenset({"location", "call_number"}),
+        )
+        assert "FICTION" in svg
+
+    def test_barcode_only_returns_valid_xml(self):
+        svg = render_item_label_svg(
+            kind="barcode-only",
+            template_key="avery-5167",
+            fields=OPTIONAL_FIELDS["barcode-only"],
+        )
+        ET.fromstring(svg)
+
+    def test_alphanumeric_barcode_does_not_raise(self):
+        # "SAMPLE-001" fails EAN-13 validation; the code must fall back to the
+        # rect-based barcode path without touching Drawing.drawOn.
+        svg = render_item_label_svg(
+            kind="pocket",
+            template_key="avery-5160",
+            fields=frozenset({"barcode", "call_number"}),
+        )
+        assert "<svg" in svg
+
+    def test_all_compatible_combos_produce_valid_xml(self):
+        for kind in ITEM_KIND_TO_FORMAT:
+            fmt = ITEM_KIND_TO_FORMAT[kind]
+            fields = OPTIONAL_FIELDS.get(fmt, frozenset())
+            for t in compatible_templates(kind):
+                svg = render_item_label_svg(
+                    kind=kind,
+                    template_key=t.key,
+                    fields=fields,
+                )
+                ET.fromstring(svg)  # must parse cleanly
+
+    def test_empty_fields_renders_without_error(self):
+        svg = render_item_label_svg(
+            kind="spine",
+            template_key="avery-5160",
+            fields=frozenset(),
+        )
+        ET.fromstring(svg)
+
+    def test_rotated_template_renders_without_error(self):
+        svg = render_item_label_svg(
+            kind="spine",
+            template_key="avery-5167-spine",
+            fields=OPTIONAL_FIELDS["spine"],
+        )
+        ET.fromstring(svg)
+
+
+class TestSampleItemRow:
+    def test_has_call_number(self):
+        assert _SAMPLE_ITEM_ROW.call_number
+
+    def test_has_publication_year(self):
+        assert _SAMPLE_ITEM_ROW.publication_year
+
+    def test_has_location(self):
+        assert _SAMPLE_ITEM_ROW.location
+
+    def test_has_branch_code(self):
+        assert _SAMPLE_ITEM_ROW.branch_code
+
+    def test_cutter_derivable_from_author(self):
+        c = cutter(_SAMPLE_ITEM_ROW.author_display)
+        assert c  # non-empty cutter string
+
+    def test_barcode_is_not_ean13(self):
+        digits = "".join(ch for ch in _SAMPLE_ITEM_ROW.barcode if ch.isdigit())
+        assert len(digits) not in (12, 13), "Sample barcode must not match EAN-13 format"

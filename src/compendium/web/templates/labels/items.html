@@ -10,6 +10,7 @@
 
 {% include "labels/_symbology_banner.html" %}
 
+<div style="display:grid;grid-template-columns:1fr auto;gap:1.5rem;align-items:start;">
 <form method="post" action="/ui/labels/items" id="item-labels-form">
   <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
 
@@ -103,6 +104,17 @@
 
   <button type="submit">Generate PDF</button>
 </form>
+
+<aside id="label-preview"
+       hx-get="/ui/labels/items/preview"
+       hx-trigger="load, change from:#item-labels-form delay:150ms"
+       hx-include="#item-labels-form"
+       hx-swap="innerHTML"
+       aria-live="polite"
+       style="min-width:10rem;padding-top:0.25rem;">
+  <p style="font-size:0.75rem;color:#666;">Loading preview…</p>
+</aside>
+</div>
 {% endblock %}
 
 {% block scripts %}
