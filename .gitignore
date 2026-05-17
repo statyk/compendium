@@ -53,3 +53,5 @@ docker/certs/*
 CLAUDE.md
 ils_parity.txt
 docs/claude-deferred.md
+docs/superpowers/
+web_import_test_db

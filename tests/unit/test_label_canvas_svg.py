@@ -40,6 +40,18 @@ class TestInit:
         # Must contain the coordinate-flip transform so PDF y-up coords work.
         assert "scale(1,-1)" in svg
 
+    def test_svg_has_viewbox_and_no_fixed_pixel_size(self):
+        c = SVGLabelCanvas(100.0, 72.0)
+        root = _parse(c)
+        assert root.get("viewBox") == "0 0 100 72"
+        assert root.get("width") is None
+        assert root.get("height") is None
+
+    def test_svg_preserves_aspect_ratio(self):
+        c = SVGLabelCanvas(100, 72)
+        root = _parse(c)
+        assert root.get("preserveAspectRatio") == "xMidYMid meet"
+
 
 # ──────────────────────────────────────────────────────────────────────
 # drawString / drawCentredString / drawRightString

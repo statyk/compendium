@@ -10,7 +10,7 @@
 
 {% include "labels/_symbology_banner.html" %}
 
-<div style="display:grid;grid-template-columns:1fr auto;gap:1.5rem;align-items:start;">
+<div class="labels-page-layout">
 <form method="post" action="/ui/labels/items" id="item-labels-form">
   <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
 
@@ -27,7 +27,42 @@
     {% endfor %}
   </fieldset>
 
-  {# ── Step 2: Items to print ──────────────────────────────────────── #}
+  {# ── Step 2: Sheet template (per-kind) ──────────────────────────── #}
+  <section>
+    <h3>Sheet template</h3>
+    {% for k in item_kind_order %}
+    <div data-kind="{{ k }}"{% if k != selected_kind %} hidden{% endif %}>
+      <select name="{{ 'template' if k == selected_kind else 'template_' ~ k }}"
+              id="template-select-{{ k }}"
+              {% if k != selected_kind %} disabled{% endif %}>
+        {% for t in item_kinds[k].templates %}
+        <option value="{{ t.key }}"{% if t.key == item_kinds[k].default_template %} selected{% endif %}>{{ t.display }}</option>
+        {% endfor %}
+      </select>
+    </div>
+    {% endfor %}
+  </section>
+
+  {# ── Step 3: Fields shown (per-kind) ─────────────────────────────── #}
+  <section>
+    <h3>Fields shown on each label</h3>
+    {% for k in item_kind_order %}
+    <fieldset data-kind="{{ k }}"{% if k != selected_kind %} hidden{% endif %}>
+      {% for f in item_kinds[k].fields %}
+      <label>
+        <input type="checkbox" name="field_{{ f.name }}"{% if f.checked_by_default %} checked{% endif %}
+               {% if k != selected_kind %} disabled{% endif %}>
+        {{ f.label }}
+      </label>
+      {% endfor %}
+      {% if not item_kinds[k].fields %}
+      <p><small>No optional fields for this label kind.</small></p>
+      {% endif %}
+    </fieldset>
+    {% endfor %}
+  </section>
+
+  {# ── Step 4: Items to print ──────────────────────────────────────── #}
   <section>
     <h3>Items to print</h3>
     {% if branches|length > 1 %}
@@ -55,41 +90,6 @@
     {% endif %}
   </section>
 
-  {# ── Step 3: Sheet template (per-kind) ──────────────────────────── #}
-  <section>
-    <h3>Sheet template</h3>
-    {% for k in item_kind_order %}
-    <div data-kind="{{ k }}"{% if k != selected_kind %} hidden{% endif %}>
-      <select name="{{ 'template' if k == selected_kind else 'template_' ~ k }}"
-              id="template-select-{{ k }}"
-              {% if k != selected_kind %} disabled{% endif %}>
-        {% for t in item_kinds[k].templates %}
-        <option value="{{ t.key }}"{% if t.key == item_kinds[k].default_template %} selected{% endif %}>{{ t.display }}</option>
-        {% endfor %}
-      </select>
-    </div>
-    {% endfor %}
-  </section>
-
-  {# ── Step 4: Fields shown (per-kind) ─────────────────────────────── #}
-  <section>
-    <h3>Fields shown on each label</h3>
-    {% for k in item_kind_order %}
-    <fieldset data-kind="{{ k }}"{% if k != selected_kind %} hidden{% endif %}>
-      {% for f in item_kinds[k].fields %}
-      <label>
-        <input type="checkbox" name="field_{{ f.name }}"{% if f.checked_by_default %} checked{% endif %}
-               {% if k != selected_kind %} disabled{% endif %}>
-        {{ f.label }}
-      </label>
-      {% endfor %}
-      {% if not item_kinds[k].fields %}
-      <p><small>No optional fields for this label kind.</small></p>
-      {% endif %}
-    </fieldset>
-    {% endfor %}
-  </section>
-
   {# ── Step 5: Print options ───────────────────────────────────────── #}
   <section>
     <h3>Print options</h3>
@@ -106,13 +106,13 @@
 </form>
 
 <aside id="label-preview"
+       class="label-preview-pane"
        hx-get="/ui/labels/items/preview"
        hx-trigger="load, change from:#item-labels-form delay:150ms"
        hx-include="#item-labels-form"
        hx-swap="innerHTML"
-       aria-live="polite"
-       style="min-width:10rem;padding-top:0.25rem;">
-  <p style="font-size:0.75rem;color:#666;">Loading preview…</p>
+       aria-live="polite">
+  <p class="preview-caption">Loading preview…</p>
 </aside>
 </div>
 {% endblock %}

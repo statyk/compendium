@@ -132,6 +132,7 @@ class SVGLabelCanvas:
 
         return (
             f'<svg xmlns="http://www.w3.org/2000/svg" '
-            f'width="{w}" height="{h}" viewBox="0 0 {w} {h}">'
+            f'viewBox="0 0 {w} {h}" '
+            f'preserveAspectRatio="xMidYMid meet">'
             f'{outline}{flip}</svg>'
         )
