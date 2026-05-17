@@ -3,14 +3,19 @@
 from __future__ import annotations
 
 from datetime import date
+from io import BytesIO
 
 import barcode as _barcode_lib
 import pytest
+
+from reportlab.lib.units import inch
+from reportlab.pdfgen import canvas as rl_canvas
 
 from compendium.services.labels import (
     ItemLabelRow,
     PatronCardRow,
     TEMPLATES,
+    compatible_templates,
     cutter,
     generate_item_labels,
     generate_patron_cards,
@@ -696,3 +701,230 @@ class TestLabelSettingsValidator:
                 continue
             if desc.validator and desc.default is not None:
                 desc.validator(desc.default)
+
+
+# ──────────────────────────────────────────────────────────────────────
+# Helpers for positional / centering tests
+# ──────────────────────────────────────────────────────────────────────
+
+
+def _make_recording_canvas(page_w_pts: float, page_h_pts: float):
+    """Return a real reportlab Canvas whose drawString and drawCentredString
+    calls are recorded for inspection. Font metrics work normally because
+    the underlying canvas is real."""
+    buf = BytesIO()
+    c = rl_canvas.Canvas(buf, pagesize=(page_w_pts, page_h_pts))
+    c._rec_draw_string: list[tuple[float, float, str]] = []
+    c._rec_draw_centred: list[tuple[float, float, str]] = []
+
+    _orig_ds = c.drawString
+    _orig_dc = c.drawCentredString
+
+    def _rec_ds(x, y, text, *a, **kw):
+        c._rec_draw_string.append((x, y, str(text)))
+        return _orig_ds(x, y, text, *a, **kw)
+
+    def _rec_dc(x, y, text, *a, **kw):
+        c._rec_draw_centred.append((x, y, str(text)))
+        return _orig_dc(x, y, text, *a, **kw)
+
+    c.drawString = _rec_ds
+    c.drawCentredString = _rec_dc
+    return c
+
+
+def _spine_text_positions(
+    template_key: str,
+    fields: frozenset[str],
+    *,
+    rotated_ctx: bool = False,
+) -> tuple[list[tuple[float, float, str]], list[tuple[float, float, str]]]:
+    """Render one spine label via _draw_item_label_content and return
+    (drawString_calls, drawCentredString_calls)."""
+    from compendium.services.labels import _draw_item_label_content
+
+    tmpl = TEMPLATES[template_key]
+    lw = tmpl.label_width * inch
+    lh = tmpl.label_height * inch
+    if rotated_ctx:
+        lw, lh = lh, lw
+
+    row = ItemLabelRow(
+        barcode="BC000001",
+        title="Dune",
+        author_display="Frank Herbert",
+        call_number="PS3551 .E76 D8",
+        publication_year=1965,
+        location="REFERENCE",
+    )
+    c = _make_recording_canvas(lw, lh)
+    _draw_item_label_content(
+        c, row, 0.0, 0.0, lw, lh,
+        "spine", False, "code128", rotated_ctx, fields,
+    )
+    return c._rec_draw_string, c._rec_draw_centred
+
+
+# ──────────────────────────────────────────────────────────────────────
+# Spine layout fix tests (RED before implementing changes)
+# ──────────────────────────────────────────────────────────────────────
+
+
+class TestSpineLayoutFixes:
+    """Tests for the four changes in this slice:
+      1. avery-5160-spine template
+      2. squares in spine compatible_templates
+      3. cutter/year no-overlap (bottom-up layout)
+      4. flat-spine text centering
+    """
+
+    # ── 1. avery-5160-spine template ─────────────────────────────────
+
+    def test_avery_5160_spine_in_templates(self):
+        assert "avery-5160-spine" in TEMPLATES
+
+    def test_avery_5160_spine_is_rotated(self):
+        assert TEMPLATES["avery-5160-spine"].orientation == "rotated"
+
+    def test_avery_5160_spine_shares_geometry_with_5160(self):
+        """Same sheet geometry as avery-5160 — only content rotates."""
+        flat = TEMPLATES["avery-5160"]
+        rot  = TEMPLATES["avery-5160-spine"]
+        assert rot.cols         == flat.cols
+        assert rot.rows         == flat.rows
+        assert rot.label_width  == flat.label_width
+        assert rot.label_height == flat.label_height
+        assert rot.margin_left  == flat.margin_left
+        assert rot.margin_top   == flat.margin_top
+
+    def test_avery_5160_spine_cell_origins_match_5160(self):
+        """Cell origins must be identical — only content rotates."""
+        from compendium.services.labels import _iter_label_positions
+
+        flat_pos = list(zip(range(30), _iter_label_positions(TEMPLATES["avery-5160"])))
+        rot_pos  = list(zip(range(30), _iter_label_positions(TEMPLATES["avery-5160-spine"])))
+        for (_, (_, xf, yf, pf)), (_, (_, xr, yr, pr)) in zip(flat_pos, rot_pos):
+            assert abs(xf - xr) < 0.01
+            assert abs(yf - yr) < 0.01
+            assert pf == pr
+
+    def test_avery_5160_spine_renders_without_error(self):
+        rows = [ItemLabelRow(
+            barcode="BC000001", title="Dune",
+            author_display="Frank Herbert",
+            call_number="PS3551 .E76", publication_year=1965,
+        )]
+        pdf = generate_item_labels(rows, template_key="avery-5160-spine")
+        assert pdf.startswith(b"%PDF-")
+
+    def test_avery_5160_spine_in_compatible_spine_templates(self):
+        keys = [t.key for t in compatible_templates("spine")]
+        assert "avery-5160-spine" in keys
+
+    # ── 2. squares in compatible_templates("spine") ───────────────────
+
+    def test_compatible_templates_spine_includes_22805(self):
+        keys = [t.key for t in compatible_templates("spine")]
+        assert "avery-22805" in keys
+
+    def test_compatible_templates_spine_includes_22806(self):
+        keys = [t.key for t in compatible_templates("spine")]
+        assert "avery-22806" in keys
+
+    def test_square_22805_renders_as_spine(self):
+        rows = [ItemLabelRow(
+            barcode="BC000001", title="Dune",
+            author_display="Frank Herbert",
+            call_number="PS3551 .E76", publication_year=1965,
+        )]
+        pdf = generate_item_labels(rows, template_key="avery-22805", format="spine")
+        assert pdf.startswith(b"%PDF-")
+
+    def test_square_22806_renders_as_spine(self):
+        rows = [ItemLabelRow(
+            barcode="BC000001", title="Dune",
+            author_display="Frank Herbert",
+            call_number="PS3551 .E76", publication_year=1965,
+        )]
+        pdf = generate_item_labels(rows, template_key="avery-22806", format="spine")
+        assert pdf.startswith(b"%PDF-")
+
+    # ── 3. cutter/year no vertical overlap ───────────────────────────
+
+    def test_5160_spine_cutter_year_on_distinct_baselines(self):
+        """Cutter and year must differ by at least year_font_size (9pt) on
+        avery-5160 with all default spine fields so they don't visually overlap."""
+        ds, dc = _spine_text_positions(
+            "avery-5160",
+            frozenset({"call_number", "location", "cutter", "year"}),
+        )
+        all_calls = {text: y for (_, y, text) in (ds + dc)}
+        assert "HER" in all_calls,  "cutter (HER) not drawn"
+        assert "1965" in all_calls, "year (1965) not drawn"
+        sep = abs(all_calls["HER"] - all_calls["1965"])
+        assert sep >= 9, (
+            f"cutter and year baselines are only {sep:.1f}pt apart "
+            f"(cutter_y={all_calls['HER']:.1f}, year_y={all_calls['1965']:.1f}); "
+            "they will visually overlap"
+        )
+
+    def test_5160_spine_all_fields_no_overlap(self):
+        """With every spine field on, cutter and year still have room."""
+        ds, dc = _spine_text_positions(
+            "avery-5160",
+            frozenset({"call_number", "location", "branch", "cutter", "year"}),
+        )
+        all_calls = {text: y for (_, y, text) in (ds + dc)}
+        assert "HER" in all_calls and "1965" in all_calls
+        assert abs(all_calls["HER"] - all_calls["1965"]) >= 9
+
+    # ── 4. flat spine text centering ─────────────────────────────────
+
+    def test_flat_spine_cutter_uses_draw_centred_string(self):
+        """On a flat (non-rotated) spine template, cutter must be drawn with
+        drawCentredString so it lands on the visible spine face."""
+        ds, dc = _spine_text_positions(
+            "avery-5160",
+            frozenset({"call_number", "location", "cutter", "year"}),
+        )
+        centred_texts = {text for (_, _, text) in dc}
+        drawstr_texts = {text for (_, _, text) in ds}
+        assert "HER" in centred_texts, "cutter must use drawCentredString on flat spine"
+        assert "HER" not in drawstr_texts, "cutter must NOT use drawString on flat spine"
+
+    def test_flat_spine_year_uses_draw_centred_string(self):
+        ds, dc = _spine_text_positions(
+            "avery-5160",
+            frozenset({"call_number", "location", "cutter", "year"}),
+        )
+        centred_texts = {text for (_, _, text) in dc}
+        drawstr_texts = {text for (_, _, text) in ds}
+        assert "1965" in centred_texts, "year must use drawCentredString on flat spine"
+        assert "1965" not in drawstr_texts, "year must NOT use drawString on flat spine"
+
+    def test_flat_spine_centred_at_cell_midpoint(self):
+        """drawCentredString x must be at the cell horizontal midpoint."""
+        tmpl = TEMPLATES["avery-5160"]
+        centre_x = tmpl.label_width * inch / 2  # x=0 origin
+        _, dc = _spine_text_positions(
+            "avery-5160",
+            frozenset({"cutter", "year"}),
+        )
+        for (x, _y, text) in dc:
+            if text in ("HER", "1965"):
+                assert abs(x - centre_x) < 2.0, (
+                    f"{text!r}: expected centred at {centre_x:.1f}pt, got {x:.1f}pt"
+                )
+
+    def test_rotated_spine_cutter_uses_draw_string_not_centred(self):
+        """On a rotated spine template the content runs along the spine's long
+        axis — left-aligned (drawString) is correct; drawCentredString is wrong."""
+        ds, dc = _spine_text_positions(
+            "avery-5167-spine",
+            frozenset({"call_number", "cutter", "year"}),
+            rotated_ctx=True,
+        )
+        drawstr_texts = {text for (_, _, text) in ds}
+        centred_texts = {text for (_, _, text) in dc}
+        assert "HER" in drawstr_texts,   "cutter must use drawString on rotated spine"
+        assert "HER" not in centred_texts, "cutter must NOT use drawCentredString on rotated spine"

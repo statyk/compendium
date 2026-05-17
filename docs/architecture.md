@@ -429,6 +429,49 @@ Why CLI-only: a synchronous HTTP request that loops Open Library / TMDb lookups 
 
 ---
 
+## Label templates and spine layout
+
+### Supported templates
+
+| Template key | Dimensions | Kind(s) |
+|---|---|---|
+| `avery-5167` | ½" × 1¾" (4×20) | pocket, barcode-only |
+| `avery-5167-spine` | ½" × 1¾" rotated (4×20) | **spine** — narrow face |
+| `avery-5160` | 1" × 2⅝" (3×10) | pocket, barcode-only, **spine** (flat, wraps around) |
+| `avery-5160-spine` | 1" × 2⅝" rotated (3×10) | **spine** — medium face |
+| `avery-5871` | 2" × 3½" (2×5) | pocket, patron-full |
+| `avery-22805` | 1½" × 1½" square (4×6) | pocket, **spine** |
+| `avery-22806` | 2" × 2" square (3×4) | pocket, patron-full, **spine** |
+
+### Spine label layout
+
+There are two rendering modes for spine labels, determined by `template.orientation`:
+
+**Rotated** (`orientation="rotated"`, e.g. `avery-5167-spine`, `avery-5160-spine`): the canvas is translated and rotated 90° CCW inside `_draw_item_label`, so downstream drawing code sees a tall narrow cell. Text runs *along* the spine's physical long axis. Left-alignment is used so text anchors to the label's leading edge.
+
+**Flat** (`orientation="landscape"`, e.g. `avery-5160`, `avery-22805`, `avery-22806`): the label is wider than most book spines so it wraps around to the covers. Text is drawn with `drawCentredString` at `x + lw/2` so it lands on the visible spine face regardless of spine width. Branch and location run across the full label width, centered.
+
+### Bottom-up spine layout algorithm
+
+Cutter and year are reserved from the bottom of the cell upward (above the optional barcode strip) before the call-number block is drawn top-down. This guarantees they always have distinct, non-overlapping baselines:
+
+```
+  y + lh - pad  ┐
+                │  branch (optional, top)
+                │  location (optional)
+                │  call_number lines (fills remaining gap)
+                │
+  cutter_base  ─┤  cutter (bold, size 10)
+  year_base    ─┤  year (regular, size 9)
+  text_bottom  ─┤  (above barcode strip)
+  bc_strip     ─┤  barcode (optional)
+  y + pad      ─┘
+```
+
+`max_cn_lines` is computed dynamically from the space between the top-down cursor (after branch/location) and `cutter_base`, so long call numbers on short labels truncate cleanly instead of colliding with cutter/year.
+
+---
+
 ## Label barcode symbology
 
 Item labels and patron cards encode the Compendium barcode value in one of three symbologies, chosen via the `barcode_symbology` site setting (Code 128 / Code 39 / Codabar, default Code 128). The setting is read once per render call inside `generate_item_labels` / `generate_patron_cards` — there's no per-render override, on the assumption that operators set it once to match their scanner hardware and don't toggle per batch.

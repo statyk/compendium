@@ -102,6 +102,15 @@ TEMPLATES: dict[str, LabelTemplate] = {
         col_gap=0.30, row_gap=0.0,
         orientation="rotated",
     ),
+    "avery-5160-spine": LabelTemplate(
+        key="avery-5160-spine",
+        display="Spine label — 3×10, 1\" × 2⅝\" rotated (Avery 5160/5260)",
+        cols=3, rows=10,
+        label_width=2.625, label_height=1.0,
+        margin_left=0.1875, margin_top=0.5,
+        col_gap=0.125, row_gap=0.0,
+        orientation="rotated",
+    ),
     "avery-22805": LabelTemplate(
         key="avery-22805",
         display="Square — 4×6, 1½\" × 1½\" (Avery 22805)",
@@ -171,9 +180,17 @@ DEFAULT_FIELDS: dict[str, frozenset[str]] = {
 def compatible_templates(kind: str) -> list[LabelTemplate]:
     """Return templates that make geometric sense for the given label kind."""
     if kind == "spine":
-        return [t for t in TEMPLATES.values()
-                if t.orientation == "rotated"
-                or (t.label_width >= 2.0 and t.label_height <= 1.5)]
+        def _spine_ok(t: LabelTemplate) -> bool:
+            if t.orientation == "rotated":
+                return True
+            # Long-thin flat label wide enough to wrap around a spine.
+            if t.label_width >= 2.0 and t.label_height <= 1.5:
+                return True
+            # Square labels (≥1.0" side) — centered text lands on the spine face.
+            if t.label_width == t.label_height and t.label_width >= 1.0:
+                return True
+            return False
+        return [t for t in TEMPLATES.values() if _spine_ok(t)]
     if kind == "pocket":
         return [t for t in TEMPLATES.values()
                 if t.orientation != "rotated" and t.label_height >= 0.9]
@@ -609,18 +626,14 @@ def _draw_item_label_content(
         return
 
     if fmt == "spine":
-        # Fixed geometry so a missing call number doesn't shift the cutter/year
-        # up: reserve space for optional branch/location, up to 4 call-number
-        # lines, cutter, year, and (if barcode enabled) a barcode strip at bottom.
-        cn_font_size = 9
+        cn_font_size    = 9
         cutter_font_size = 10
-        year_font_size = 9
-        line_h_cn = cn_font_size + 1
+        year_font_size  = 9
+        line_h_cn       = cn_font_size + 1
 
         # When barcode is enabled, reserve a strip at the bottom of the cell.
         # In rotated context allocate 40% of the long dim so bars are tall
-        # enough to scan. Non-rotated gets a fixed 14pt strip. When barcode is
-        # off the strip collapses to zero and text reclaims the full height.
+        # enough to scan. Non-rotated gets a fixed 14pt strip.
         draw_barcode = "barcode" in fields
         if draw_barcode:
             bc_strip = (lh - 2 * pad) * 0.40 if rotated else 14
@@ -628,70 +641,92 @@ def _draw_item_label_content(
             bc_strip = 0
         text_bottom = y + pad + bc_strip + (2 if bc_strip else 0)
 
+        # On flat (non-rotated) spine labels the text is drawn centred
+        # horizontally so it lands on the visible spine face when the label
+        # wraps around the book. On rotated labels content runs along the
+        # spine's long axis, so left-alignment is correct.
+        def _draw_text(text_y: float, font_name: str, font_size: int, text: str) -> None:
+            c.setFont(font_name, font_size)
+            if rotated:
+                c.drawString(x + pad, text_y, _truncate(text, inner_w, font_name, font_size))
+            else:
+                c.drawCentredString(
+                    x + lw / 2, text_y,
+                    _truncate(text, inner_w, font_name, font_size),
+                )
+
+        # ── Bottom-up reservation ────────────────────────────────────────
+        # Reserve fixed slots for year and cutter from text_bottom upward so
+        # they always have guaranteed distinct baselines regardless of how many
+        # CN lines are drawn above them.
+        year_baseline: float | None = None
+        if "year" in fields and year:
+            year_baseline = text_bottom + 2
+
+        cutter_baseline: float | None = None
+        if "cutter" in fields and cutter_str:
+            above_year = (
+                (year_baseline + year_font_size + 2) if year_baseline is not None
+                else text_bottom + 2
+            )
+            cutter_baseline = above_year
+
+        # The top of the text area (below the top pad).
         top = y + lh - pad
 
-        # Optional branch line at the very top (small uppercase), above location.
+        # ── Top-down: branch, location, then CN ─────────────────────────
         if "branch" in fields and row.branch_code:
             br_size = 7
-            c.setFont(body_font, br_size)
-            c.drawString(
-                x + pad,
-                top - br_size,
-                _truncate(row.branch_code.upper(), inner_w, body_font, br_size),
-            )
+            _draw_text(top - br_size, body_font, br_size, row.branch_code.upper())
             top -= br_size + 2
 
-        # Optional location line (small uppercase), below branch.
         if "location" in fields and row.location:
             loc_size = 7
-            c.setFont(body_font, loc_size)
-            c.drawString(
-                x + pad,
-                top - loc_size,
-                _truncate(row.location.upper(), inner_w, body_font, loc_size),
-            )
+            _draw_text(top - loc_size, body_font, loc_size, row.location.upper())
             top -= loc_size + 2
 
-        # Call number block: up to 4 lines (optional; reserves fixed height so
-        # cutter/year don't shift when call number is absent from the data).
-        max_cn_lines = 4
+        # CN block: fill whatever vertical room remains above the cutter slot.
+        # cn_floor is the lowest baseline the last CN line may occupy.
+        cn_floor = (cutter_baseline if cutter_baseline is not None
+                    else (year_baseline if year_baseline is not None
+                          else text_bottom)) + line_h_cn
+        max_cn_lines_dynamic = max(0, int((top - cn_floor) // line_h_cn))
+
         cursor = top - cn_font_size
-        if "call_number" in fields:
-            cn_slots = min(len(cn_lines), max_cn_lines)
+        if "call_number" in fields and cn_lines:
+            cn_slots = min(len(cn_lines), max_cn_lines_dynamic)
             c.setFont(font, cn_font_size)
-            for i in range(max_cn_lines):
-                if i < cn_slots:
-                    c.drawString(x + pad, cursor, _truncate(cn_lines[i], inner_w, font, cn_font_size))
+            for i in range(cn_slots):
+                if rotated:
+                    c.drawString(x + pad, cursor,
+                                 _truncate(cn_lines[i], inner_w, font, cn_font_size))
+                else:
+                    c.drawCentredString(x + lw / 2, cursor,
+                                        _truncate(cn_lines[i], inner_w, font, cn_font_size))
                 cursor -= line_h_cn
-        else:
-            cursor -= line_h_cn * max_cn_lines  # reclaim vertical space
-        # Cutter (bold) + year (regular) on their own lines below the block.
-        if "cutter" in fields and cutter_str:
-            c.setFont(font, cutter_font_size)
-            c.drawString(x + pad, max(cursor - 2, text_bottom), cutter_str)
-        cursor -= cutter_font_size + 2
-        if "year" in fields and year:
-            c.setFont(body_font, year_font_size)
-            c.drawString(x + pad, max(cursor - 2, text_bottom), year)
+
+        # ── Fixed-position: cutter then year ────────────────────────────
+        if cutter_baseline is not None:
+            _draw_text(cutter_baseline, font, cutter_font_size, cutter_str)
+        if year_baseline is not None:
+            _draw_text(year_baseline, body_font, year_font_size, year)
 
         # Optional barcode strip at the bottom (when "barcode" field is enabled).
         if draw_barcode:
             if rotated:
                 # In a rotated drawing context, the local y-axis IS the
-                # physical long dimension (1.75"). Run the barcode along it
-                # so we have ~118pt of bar-distribution length instead of
-                # cramming 100+ modules into the 0.5" short dim.
+                # physical long dimension. Run the barcode along it so we have
+                # ~118pt of bar-distribution length.
                 _draw_barcode_vertical(
                     c,
                     x + pad,
                     y + pad,
                     row.barcode,
-                    inner_w,      # bar depth: full inner width
-                    bc_strip,     # bar length: reserved bottom portion (~40%)
+                    inner_w,
+                    bc_strip,
                     symbology=symbology,
                 )
             else:
-                # Non-rotated spine: a horizontal strip at the bottom.
                 _draw_barcode(
                     c,
                     x + pad,
