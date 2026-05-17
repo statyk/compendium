@@ -533,6 +533,10 @@ def _safe_extract(tar: tarfile.TarFile, dest: Path) -> None:
     Iterates members one at a time so this works for both random-access
     (``r:gz``) and streaming (``r|gz``) tarfiles — `getmembers()` would
     consume a streaming tar, leaving `extractall()` nothing to extract.
+
+    Also passes ``filter='data'`` (PEP 706) as defense-in-depth: rejects
+    block/char devices, FIFOs, and setuid bits the manual checks above
+    don't cover. Requires Python 3.11.4+.
     """
     dest = dest.resolve()
     for member in tar:
@@ -547,4 +551,7 @@ def _safe_extract(tar: tarfile.TarFile, dest: Path) -> None:
                 link_target.relative_to(dest)
             except ValueError:
                 raise BackupError(f"Unsafe link in archive: {member.name} -> {member.linkname}")
-        tar.extract(member, dest, set_attrs=False)
+        try:
+            tar.extract(member, dest, set_attrs=False, filter="data")
+        except tarfile.FilterError as e:
+            raise BackupError(f"Rejected by data filter: {member.name} ({e})")

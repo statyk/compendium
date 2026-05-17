@@ -456,6 +456,24 @@ class TestSafeExtract:
             _safe_extract(tar, dest)
         assert (dest / "data" / "ok.txt").read_bytes() == b"hello"
 
+    def test_device_entry_rejected(self, tmp_path):
+        """Block/char devices and FIFOs are caught by filter='data'."""
+        from compendium.services.backup import BackupError, _safe_extract
+        dest = tmp_path / "dest"
+        dest.mkdir()
+        import io
+        buf = io.BytesIO()
+        with tarfile.open(fileobj=buf, mode="w") as tf:
+            info = tarfile.TarInfo(name="data/evil-device")
+            info.type = tarfile.CHRTYPE
+            info.devmajor = 1
+            info.devminor = 3
+            tf.addfile(info)
+        buf.seek(0)
+        with tarfile.open(fileobj=buf, mode="r") as tar:
+            with pytest.raises(BackupError, match="Rejected by data filter"):
+                _safe_extract(tar, dest)
+
 
 class TestBackupServiceMigrationsDirSeam:
     """Unit tests for the migrations_dir constructor argument."""

@@ -33,6 +33,9 @@ This paragraph here is about the only part of the project written by a human.
 
 ### Prerequisites
 
+Python 3.11.4 or newer. (Backup restore uses the tarfile `data` filter from
+PEP 706, which was backported to 3.11.4.)
+
 **Debian / Ubuntu**
 ```bash
 sudo apt-get update
