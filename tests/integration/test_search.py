@@ -1,8 +1,10 @@
 """Integration tests for FTS search (SQLite FTS5)."""
+from datetime import datetime, timezone
 from unittest.mock import patch
 
 import pytest
 
+from compendium.domain.models import Creator, WorkCreator
 from compendium.repositories.sql.work_repository import SqlWorkRepository
 from compendium.repositories.sql.creator_repository import SqlCreatorRepository
 from compendium.repositories.sql.item_repository import SqlItemRepository
@@ -152,3 +154,97 @@ def test_suggest_respects_limit(session):
     session.flush()
     results = SqlWorkRepository(session).suggest("foobar", limit=8)
     assert len(results) == 8
+
+
+# ── Order-by tests ────────────────────────────────────────────────────────────
+
+
+def _add_work_with_creator(session, title: str, sort_title: str, creator_sort_name: str):
+    from compendium.domain.enums import CreatorRole
+    from compendium.domain.models import MediaType, Work
+
+    mt = session.query(MediaType).filter_by(code="book").first()
+    display = " ".join(reversed(creator_sort_name.split(", ", 1))) if ", " in creator_sort_name else creator_sort_name
+    w = Work(title=title, sort_title=sort_title, search_text=f"{title} {display}", media_type_id=mt.id)
+    session.add(w)
+    session.flush()
+    cr = Creator(display_name=display, sort_name=creator_sort_name)
+    session.add(cr)
+    session.flush()
+    wc = WorkCreator(work_id=w.id, creator_id=cr.id, display_order=0, role=CreatorRole.AUTHOR.value)
+    session.add(wc)
+    session.flush()
+    return w
+
+
+def test_order_by_title(session):
+    from compendium.domain.models import MediaType, Work
+
+    mt = session.query(MediaType).filter_by(code="book").first()
+    for sort_title, title in [("Zebra", "Zebra"), ("Aardvark", "Aardvark")]:
+        w = Work(title=title, sort_title=sort_title, search_text=title, media_type_id=mt.id)
+        session.add(w)
+    session.flush()
+    # include_withdrawn_only=True bypasses the "must have items" filter for test isolation.
+    results = SqlWorkRepository(session).search("", order_by="title", include_withdrawn_only=True)
+    titles = [w.title for w in results]
+    assert titles.index("Aardvark") < titles.index("Zebra")
+
+
+def test_order_by_author(session):
+    _add_work_with_creator(session, "Zebra Book", "Zebra Book", "Zheng, Wei")
+    _add_work_with_creator(session, "Aardvark Book", "Aardvark Book", "Allen, Bob")
+    results = SqlWorkRepository(session).search("", order_by="author", include_withdrawn_only=True)
+    titles = [w.title for w in results]
+    assert titles.index("Aardvark Book") < titles.index("Zebra Book")
+
+
+def test_order_by_author_works_without_creators_sorted_last(session):
+    from compendium.domain.models import MediaType, Work
+
+    mt = session.query(MediaType).filter_by(code="book").first()
+    no_creator = Work(title="No Creator", sort_title="No Creator", search_text="No Creator", media_type_id=mt.id)
+    session.add(no_creator)
+    session.flush()
+    _add_work_with_creator(session, "Has Creator", "Has Creator", "Asimov, Isaac")
+    results = SqlWorkRepository(session).search("", order_by="author", include_withdrawn_only=True)
+    titles = [w.title for w in results]
+    assert titles.index("Has Creator") < titles.index("No Creator")
+
+
+def test_order_by_recent(session):
+    from compendium.domain.models import MediaType, Work
+
+    mt = session.query(MediaType).filter_by(code="book").first()
+    older = Work(
+        title="Older Book", sort_title="Older Book", search_text="Older Book", media_type_id=mt.id,
+        created_at=datetime(2020, 1, 1, tzinfo=timezone.utc),
+    )
+    newer = Work(
+        title="Newer Book", sort_title="Newer Book", search_text="Newer Book", media_type_id=mt.id,
+        created_at=datetime(2024, 6, 1, tzinfo=timezone.utc),
+    )
+    session.add_all([older, newer])
+    session.flush()
+    results = SqlWorkRepository(session).search("", order_by="recent", include_withdrawn_only=True)
+    titles = [w.title for w in results]
+    assert titles.index("Newer Book") < titles.index("Older Book")
+
+
+def test_order_by_relevance_fts_preserves_rank(session, two_books):
+    # FTS path: "Dune" is a very specific match for Dune, Foundation should not lead.
+    results = SqlWorkRepository(session).search("Dune", order_by="relevance")
+    assert results[0].title == "Dune"
+
+
+def test_order_by_relevance_empty_query_falls_back_to_title(session):
+    from compendium.domain.models import MediaType, Work
+
+    mt = session.query(MediaType).filter_by(code="book").first()
+    for sort_title, title in [("Zebra", "Zebra"), ("Alpha", "Alpha")]:
+        w = Work(title=title, sort_title=sort_title, search_text=title, media_type_id=mt.id)
+        session.add(w)
+    session.flush()
+    results = SqlWorkRepository(session).search("", order_by="relevance", include_withdrawn_only=True)
+    titles = [w.title for w in results]
+    assert titles.index("Alpha") < titles.index("Zebra")

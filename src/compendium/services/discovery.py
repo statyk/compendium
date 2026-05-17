@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass, field
+from typing import Literal
 
 from compendium.domain.models import Work
 from compendium.repositories.base import MediaTypeRepository, WorkRepository
@@ -54,6 +55,7 @@ class DiscoveryService:
         decade: int | None = None,
         available_only: bool = False,
         include_withdrawn_only: bool = False,
+        order_by: Literal["title", "author", "recent", "relevance"] = "title",
     ) -> SearchPage:
         page = max(1, page)
         offset = (page - 1) * page_size
@@ -66,6 +68,7 @@ class DiscoveryService:
             decade=decade,
             available_only=available_only,
             include_withdrawn_only=include_withdrawn_only,
+            order_by=order_by,
         )
         total = self._works.count_search(
             q,

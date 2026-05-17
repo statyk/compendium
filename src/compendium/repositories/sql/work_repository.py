@@ -1,10 +1,11 @@
 from __future__ import annotations
 
 import re
-from datetime import datetime
+from datetime import UTC, datetime
+from typing import Literal
 
-from sqlalchemy import case, exists, func, or_, text
-from sqlalchemy.orm import Session, selectinload
+from sqlalchemy import and_, case, exists, func, or_, text
+from sqlalchemy.orm import Session, aliased, selectinload
 
 from compendium.domain.enums import ItemStatus
 from compendium.domain.models import Branch, Creator, Item, Loan, MediaType, Work, WorkCreator
@@ -174,6 +175,34 @@ class SqlWorkRepository:
             q = q.limit(limit)
         return q.all()
 
+    def _apply_order(
+        self,
+        q,
+        *,
+        order_by: str,
+        already_joined_creator: bool = False,
+    ):
+        if order_by == "recent":
+            return q.order_by(Work.created_at.desc(), Work.id.desc())
+        if order_by == "author":
+            # Outer-join to the primary creator (display_order 0) so works with
+            # no creators still appear, sorted last.
+            if not already_joined_creator:
+                primary_wc = aliased(WorkCreator)
+                primary_cr = aliased(Creator)
+                q = (
+                    q.outerjoin(
+                        primary_wc,
+                        and_(primary_wc.work_id == Work.id, primary_wc.display_order == 0),
+                    )
+                    .outerjoin(primary_cr, primary_cr.id == primary_wc.creator_id)
+                )
+                return q.order_by(primary_cr.sort_name.asc().nullslast(), Work.sort_title)
+            # Already joined (author-field search) — order by the joined creator alias.
+            return q.order_by(Creator.sort_name.asc().nullslast(), Work.sort_title)
+        # "title" / "relevance" (non-FTS path) / unknown — default title order
+        return q.order_by(Work.sort_title, Work.title)
+
     def search(
         self,
         q: str,
@@ -185,6 +214,7 @@ class SqlWorkRepository:
         decade: int | None = None,
         available_only: bool = False,
         include_withdrawn_only: bool = False,
+        order_by: Literal["title", "author", "recent", "relevance"] = "title",
     ) -> list[Work]:
         # FTS gives us a candidate id-list (already ranked); filters then narrow.
         if field == "all" and q.strip():
@@ -198,6 +228,7 @@ class SqlWorkRepository:
                     decade=decade,
                     available_only=available_only,
                     include_withdrawn_only=include_withdrawn_only,
+                    order_by=order_by,
                 )
 
         base = self._base_filtered(
@@ -207,58 +238,65 @@ class SqlWorkRepository:
             include_withdrawn_only=include_withdrawn_only,
         )
         if not q:
-            return base.order_by(Work.sort_title, Work.title).offset(offset).limit(limit).all()
+            return (
+                self._apply_order(base, order_by=order_by)
+                .offset(offset)
+                .limit(limit)
+                .all()
+            )
 
         pattern = f"%{q}%"
         if field == "title":
             return (
-                base.filter(Work.title.ilike(pattern))
-                .order_by(Work.sort_title, Work.title)
+                self._apply_order(base.filter(Work.title.ilike(pattern)), order_by=order_by)
                 .offset(offset)
                 .limit(limit)
                 .all()
             )
         if field == "author":
             return (
-                base.join(Work.creators)
-                .join(WorkCreator.creator)
-                .filter(Creator.display_name.ilike(pattern))
-                .order_by(Work.sort_title, Work.title)
-                .distinct()
+                self._apply_order(
+                    base.join(Work.creators)
+                    .join(WorkCreator.creator)
+                    .filter(Creator.display_name.ilike(pattern))
+                    .distinct(),
+                    order_by=order_by,
+                    already_joined_creator=True,
+                )
                 .offset(offset)
                 .limit(limit)
                 .all()
             )
         if field == "publisher":
             return (
-                base.filter(Work.publisher.ilike(pattern))
-                .order_by(Work.sort_title, Work.title)
+                self._apply_order(base.filter(Work.publisher.ilike(pattern)), order_by=order_by)
                 .offset(offset)
                 .limit(limit)
                 .all()
             )
         if field == "isbn":
             return (
-                base.filter(Work.isbn.ilike(pattern))
-                .order_by(Work.sort_title, Work.title)
+                self._apply_order(base.filter(Work.isbn.ilike(pattern)), order_by=order_by)
                 .offset(offset)
                 .limit(limit)
                 .all()
             )
 
         return (
-            base.outerjoin(Work.creators)
-            .outerjoin(WorkCreator.creator)
-            .filter(
-                or_(
-                    Work.title.ilike(pattern),
-                    Work.publisher.ilike(pattern),
-                    Work.isbn.ilike(pattern),
-                    Creator.display_name.ilike(pattern),
+            self._apply_order(
+                base.outerjoin(Work.creators)
+                .outerjoin(WorkCreator.creator)
+                .filter(
+                    or_(
+                        Work.title.ilike(pattern),
+                        Work.publisher.ilike(pattern),
+                        Work.isbn.ilike(pattern),
+                        Creator.display_name.ilike(pattern),
+                    )
                 )
+                .distinct(),
+                order_by=order_by,
             )
-            .order_by(Work.sort_title, Work.title)
-            .distinct()
             .offset(offset)
             .limit(limit)
             .all()
@@ -369,6 +407,7 @@ class SqlWorkRepository:
         decade: int | None,
         available_only: bool,
         include_withdrawn_only: bool = False,
+        order_by: str = "relevance",
     ) -> list[Work]:
         if not ids:
             return []
@@ -378,10 +417,18 @@ class SqlWorkRepository:
             available_only=available_only,
             include_withdrawn_only=include_withdrawn_only,
         ).filter(Work.id.in_(ids))
-        works = {w.id: w for w in q.all()}
-        # Preserve FTS rank order, then paginate.
-        ordered = [works[i] for i in ids if i in works]
-        return ordered[offset : offset + limit]
+        if order_by == "relevance":
+            # Preserve FTS rank order, then paginate.
+            works = {w.id: w for w in q.all()}
+            ordered = [works[i] for i in ids if i in works]
+            return ordered[offset : offset + limit]
+        # Non-relevance: re-sort the filtered set by the requested field.
+        return (
+            self._apply_order(q, order_by=order_by)
+            .offset(offset)
+            .limit(limit)
+            .all()
+        )
 
     def _count_post_filter(
         self,
@@ -546,9 +593,9 @@ class SqlWorkRepository:
         return [r[0] for r in rows]
 
     def list_recent(self, *, days: int, limit: int, include_withdrawn_only: bool = False) -> list[Work]:
-        from datetime import timedelta, timezone
+        from datetime import timedelta
 
-        cutoff = datetime.now(tz=timezone.utc) - timedelta(days=days)
+        cutoff = datetime.now(tz=UTC) - timedelta(days=days)
         q = (
             self._s.query(Work)
             .options(
@@ -561,9 +608,9 @@ class SqlWorkRepository:
         return q.order_by(Work.created_at.desc()).limit(limit).all()
 
     def list_recently_returned(self, *, days: int, limit: int, include_withdrawn_only: bool = False) -> list[Work]:
-        from datetime import timedelta, timezone
+        from datetime import timedelta
 
-        cutoff = datetime.now(tz=timezone.utc) - timedelta(days=days)
+        cutoff = datetime.now(tz=UTC) - timedelta(days=days)
         # Window: works whose most recent loan was returned in the last `days`.
         sub = (
             self._s.query(Item.work_id, func.max(Loan.returned_at).label("last"))

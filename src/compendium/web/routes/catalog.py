@@ -9,29 +9,29 @@ from sqlalchemy.orm import Session
 
 from compendium.db.engine import get_settings
 from compendium.db.session import get_session
-from compendium.services.site_settings import get_site_setting
+from compendium.domain.enums import CreatorRole, ItemStatus
 from compendium.domain.errors import (
     BusinessRuleError,
     NotFoundError,
     ValidationError,
 )
-from compendium.domain.enums import CreatorRole, ItemStatus
 from compendium.domain.models import AppUser
 from compendium.repositories.sql.audit_log_repository import SqlAuditLogRepository
 from compendium.repositories.sql.branch_repository import SqlBranchRepository
+from compendium.repositories.sql.counters import SqlCounterRepository
 from compendium.repositories.sql.creator_repository import SqlCreatorRepository
 from compendium.repositories.sql.hold_repository import SqlHoldRepository
-from compendium.services.auth import has_permission
 from compendium.repositories.sql.item_repository import SqlItemRepository
 from compendium.repositories.sql.loan_repository import SqlLoanRepository
 from compendium.repositories.sql.media_type_repository import SqlMediaTypeRepository
 from compendium.repositories.sql.patron_repository import SqlPatronRepository
-from compendium.repositories.sql.counters import SqlCounterRepository
 from compendium.repositories.sql.work_repository import SqlWorkRepository
 from compendium.services.audit import AuditService
+from compendium.services.auth import has_permission
 from compendium.services.catalog import CatalogService
 from compendium.services.discovery import DiscoveryService
 from compendium.services.holds import HoldService
+from compendium.services.site_settings import get_site_setting
 from compendium.web.csrf import check_csrf_form, ensure_csrf, set_csrf_cookie
 from compendium.web.deps import get_web_user, require_web_permission, require_web_user
 from compendium.web.jinja import templates
@@ -110,9 +110,13 @@ def _parse_int(s: str) -> int | None:
         return None
 
 
+_VALID_ORDER_BY = {"title", "author", "recent", "relevance"}
+
+
 def _filters_qs(
     *, q: str, field: str, media: list[str], decade: int | None, avail: bool,
     include_withdrawn: bool = False,
+    order_by: str = "title",
 ) -> str:
     from urllib.parse import urlencode
 
@@ -125,6 +129,8 @@ def _filters_qs(
         params.append(("avail", "1"))
     if include_withdrawn:
         params.append(("include_withdrawn", "1"))
+    if order_by != "title":
+        params.append(("order_by", order_by))
     return urlencode(params)
 
 
@@ -137,11 +143,14 @@ def catalog_search(
     decade: str = "",
     avail: str = "",
     include_withdrawn: str = "",
+    order_by: str = "title",
     page: int = 1,
     user=Depends(get_web_user),
     session: Session = Depends(get_session),
 ):
     settings = get_settings()
+    if order_by not in _VALID_ORDER_BY:
+        order_by = "title"
     if not (get_site_setting("guest_search_enabled") or user is not None):
         return _render(
             "catalog/search.html",
@@ -157,6 +166,7 @@ def catalog_search(
                 "avail": False,
                 "include_withdrawn": False,
                 "can_include_withdrawn": False,
+                "order_by": order_by,
                 "new_arrivals": [],
                 "recently_returned": [],
                 "show_landing": False,
@@ -180,6 +190,7 @@ def catalog_search(
         decade=decade_int,
         available_only=available_only,
         include_withdrawn_only=include_withdrawn_flag,
+        order_by=order_by,
     )
     new_arrivals: list = []
     recently_returned: list = []
@@ -188,7 +199,7 @@ def catalog_search(
         recently_returned = svc.recently_returned(include_withdrawn_only=include_withdrawn_flag)
     qs = _filters_qs(
         q=q, field=field, media=media_codes, decade=decade_int, avail=available_only,
-        include_withdrawn=include_withdrawn_flag,
+        include_withdrawn=include_withdrawn_flag, order_by=order_by,
     )
     return _render(
         "catalog/search.html",
@@ -204,6 +215,7 @@ def catalog_search(
             "avail": available_only,
             "include_withdrawn": include_withdrawn_flag,
             "can_include_withdrawn": can_include_withdrawn,
+            "order_by": order_by,
             "filters_qs": qs,
             "new_arrivals": new_arrivals,
             "recently_returned": recently_returned,
@@ -221,11 +233,13 @@ def catalog_search_results(
     decade: str = "",
     avail: str = "",
     include_withdrawn: str = "",
+    order_by: str = "title",
     page: int = 1,
     user=Depends(get_web_user),
     session: Session = Depends(get_session),
 ):
-    settings = get_settings()
+    if order_by not in _VALID_ORDER_BY:
+        order_by = "title"
     if not (get_site_setting("guest_search_enabled") or user is not None):
         return templates.TemplateResponse(
             request, "_partials/work_list.html", {"page": None, "q": q}
@@ -244,10 +258,11 @@ def catalog_search_results(
         decade=decade_int,
         available_only=available_only,
         include_withdrawn_only=include_withdrawn_flag,
+        order_by=order_by,
     )
     qs = _filters_qs(
         q=q, field=field, media=media_codes, decade=decade_int, avail=available_only,
-        include_withdrawn=include_withdrawn_flag,
+        include_withdrawn=include_withdrawn_flag, order_by=order_by,
     )
     return templates.TemplateResponse(
         request,

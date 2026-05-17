@@ -46,6 +46,7 @@ class WorkRepository(Protocol):
         decade: int | None = None,
         available_only: bool = False,
         include_withdrawn_only: bool = False,
+        order_by: str = "title",
     ) -> list[Work]: ...
     def count_search(
         self,
@@ -96,7 +97,7 @@ class WorkRepository(Protocol):
         *,
         media_type_code: str | None = None,
         branch_code: str | None = None,
-        since: "datetime | None" = None,
+        since: datetime | None = None,
     ) -> list[Work]: ...
     def iter_for_refresh(
         self,
@@ -234,7 +235,7 @@ class HoldRepository(Protocol):
     def get_available_for_patron_work(self, patron_id: int, work_id: int) -> Hold | None: ...
     def get_active_for_patron_work(self, patron_id: int, work_id: int) -> Hold | None: ...
     def get_expired_waiting(self, before: datetime) -> list[Hold]: ...
-    def list_suspended_expiring_on_or_before(self, cutoff: "date") -> list[Hold]: ...
+    def list_suspended_expiring_on_or_before(self, cutoff: date) -> list[Hold]: ...
     def list_active(
         self,
         *,
@@ -345,7 +346,7 @@ class NotificationRepository(Protocol):
     def prune(
         self,
         *,
-        older_than: "datetime | None" = None,
+        older_than: datetime | None = None,
         status: str | None = None,
         dry_run: bool = False,
     ) -> int: ...

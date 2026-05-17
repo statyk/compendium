@@ -162,6 +162,15 @@ If a partial-word query returns nothing from the default box, switch to a field-
 
 **Catalog ordering** uses `Work.sort_title` (indexed), which strips leading English articles (A, An, The) from the title. "The Great Gatsby" sorts under G, "An Odd Story" under O. The displayed title is unchanged; only the sort key is different. `sort_title` is set automatically on creation and title updates.
 
+The sort order is configurable via the `order_by` parameter on `DiscoveryService.search`, the `GET /works/search?order_by=` API query parameter, the `--sort` flag on `compendium work search`, and the "Sort:" dropdown in the web catalog. Valid values:
+
+| Value | Behaviour |
+|---|---|
+| `title` (default) | Ascending by `sort_title` then `title`. |
+| `author` | Ascending by the primary creator's `sort_name` (`Creator.sort_name`, first by `WorkCreator.display_order`). Works with no creators sort last. |
+| `recent` | Descending by `Work.created_at` (when the work record was added to the catalog). |
+| `relevance` | When the query takes the FTS path (All Fields + non-empty query), preserves FTS rank order. On all other paths (field-scoped search, empty query) falls back to `title`. |
+
 **Import normalization:** LibraryThing TSV, GoodReads CSV (and any source that calls `CatalogService`) normalizes two conventions on the way in:
 - *Trailing-article titles* — `"Information, The"` is stored as `"The Information"` with `sort_title = "Information"`.
 - *Last, First author names* — `"Brooks, David"` is stored as `"David Brooks"` (conservative heuristic: exactly one comma, no recognized name suffix like Jr./Sr./II). This ensures deduplification works across sources that use different conventions for the same author.

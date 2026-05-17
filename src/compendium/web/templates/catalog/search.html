@@ -20,6 +20,17 @@
     <option value="publisher" {% if field == "publisher" %}selected{% endif %}>Publisher</option>
     <option value="isbn" {% if field == "isbn" %}selected{% endif %}>ISBN</option>
   </select>
+  <select name="order_by" style="max-width:10rem; flex-shrink:0; margin-bottom:0"
+          hx-get="/ui/catalog/search-results"
+          hx-trigger="change"
+          hx-target="#results"
+          hx-include="closest form"
+          hx-indicator="#search-ind">
+    <option value="title" {% if order_by == "title" %}selected{% endif %}>Sort: Title</option>
+    <option value="author" {% if order_by == "author" %}selected{% endif %}>Sort: Author</option>
+    <option value="recent" {% if order_by == "recent" %}selected{% endif %}>Sort: Recent</option>
+    <option value="relevance" {% if order_by == "relevance" %}selected{% endif %}>Sort: Relevance</option>
+  </select>
   <div class="suggest-wrap">
     <input id="q-input" type="search" name="q" placeholder="Search…" value="{{ q }}"
            {% if show_landing %}autofocus{% endif %}

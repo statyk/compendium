@@ -45,6 +45,9 @@ def _print_works(works) -> None:
         typer.echo(f"  [{w.id}] {w.title}{media}" + (f" — {creators}" if creators else "") + year)
 
 
+_VALID_SORTS = {"title", "author", "recent", "relevance"}
+
+
 @app.command("search")
 def search_works(
     query: str = typer.Argument(..., help="Search query"),
@@ -67,8 +70,16 @@ def search_works(
         False, "--include-withdrawn/--hide-withdrawn",
         help="Include works whose copies are all withdrawn (hidden by default).",
     ),
+    sort: str = typer.Option(
+        "title", "--sort", help="Sort order: title, author, recent, relevance."
+    ),
 ) -> None:
     """Search the catalog by title, author, publisher, or ISBN."""
+    if sort not in _VALID_SORTS:
+        raise typer.BadParameter(
+            f"Invalid sort '{sort}'. Choose from: {', '.join(sorted(_VALID_SORTS))}",
+            param_hint="--sort",
+        )
     with session_scope() as session:
         works = SqlWorkRepository(session).search(
             query,
@@ -78,6 +89,7 @@ def search_works(
             decade=decade,
             available_only=available,
             include_withdrawn_only=include_withdrawn,
+            order_by=sort,
         )
         if not works:
             typer.echo(f"No results for '{query}'.")

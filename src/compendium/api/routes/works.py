@@ -2,16 +2,13 @@ from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy.orm import Session
 
 from compendium.api.deps import get_optional_user, require_permission
-from compendium.services.auth import has_permission
 from compendium.api.schemas import (
     WorkCreatorsReplace,
     WorkDetail,
     WorkSummary,
     WorkUpdate,
 )
-from compendium.db.engine import get_settings
 from compendium.db.session import get_session
-from compendium.services.site_settings import get_site_setting
 from compendium.domain.errors import (
     BusinessRuleError,
     NotFoundError,
@@ -25,8 +22,10 @@ from compendium.repositories.sql.item_repository import SqlItemRepository
 from compendium.repositories.sql.media_type_repository import SqlMediaTypeRepository
 from compendium.repositories.sql.work_repository import SqlWorkRepository
 from compendium.services.audit import AuditService
+from compendium.services.auth import has_permission
 from compendium.services.catalog import CatalogService
 from compendium.services.discovery import DiscoveryService
+from compendium.services.site_settings import get_site_setting
 
 router = APIRouter()
 
@@ -53,6 +52,9 @@ def _gate_search(user: AppUser | None) -> None:
         raise HTTPException(status_code=401, detail="Authentication required to search")
 
 
+_VALID_ORDER_BY = {"title", "author", "recent", "relevance"}
+
+
 @router.get("/search", response_model=list[WorkSummary])
 def search_works(
     q: str = "",
@@ -61,12 +63,15 @@ def search_works(
     decade: int | None = None,
     available_only: bool = False,
     include_withdrawn: bool = False,
+    order_by: str = Query("title", description="Sort order: title, author, recent, relevance."),
     page: int = Query(1, ge=1),
     page_size: int = Query(25, ge=1, le=200),
     session: Session = Depends(get_session),
     user: AppUser | None = Depends(get_optional_user),
 ) -> list[WorkSummary]:
     _gate_search(user)
+    if order_by not in _VALID_ORDER_BY:
+        raise HTTPException(status_code=422, detail=f"Invalid order_by '{order_by}'.")
     media_codes = [c.strip() for c in media.split(",") if c.strip()]
     can_include = user is not None and has_permission(user.role.permissions, "item.edit")
     page_obj = _discovery(session).search(
@@ -78,6 +83,7 @@ def search_works(
         decade=decade,
         available_only=available_only,
         include_withdrawn_only=include_withdrawn and can_include,
+        order_by=order_by,
     )
     return [WorkSummary.model_validate(w) for w in page_obj.works]
 
