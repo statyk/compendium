@@ -1071,6 +1071,13 @@ _SAMPLE_ITEM_ROW = ItemLabelRow(
     location="FICTION",
 )
 
+_SAMPLE_PATRON_ROW = PatronCardRow(
+    card_number="00000001",
+    full_name="Jane Q. Patron",
+    expires_at=date(2027, 12, 31),
+    category_display="Adult",
+)
+
 
 def render_item_label_svg(
     *,
@@ -1100,4 +1107,36 @@ def render_item_label_svg(
         False, sym, fields,
         library_name=library_name,
     )
+    return svg_canvas.to_svg()
+
+
+def render_patron_label_svg(
+    *,
+    kind: str,
+    template_key: str,
+    fields: frozenset[str],
+    symbology: str | None = None,
+    library_name: str | None = None,
+) -> str:
+    """Render a single sample patron card as a standalone SVG string.
+
+    Uses a hardcoded placeholder row — no database access.
+    """
+    from compendium.services.label_canvas_svg import SVGLabelCanvas
+
+    template = TEMPLATES[template_key]
+    fmt = PATRON_KIND_TO_FORMAT.get(kind, "full")
+    lw = template.label_width * inch
+    lh = template.label_height * inch
+    sym: BarcodeSymbology = symbology or "code128"  # type: ignore[assignment]
+    svg_canvas = SVGLabelCanvas(lw, lh)
+    if fmt == "full":
+        _draw_patron_full(
+            svg_canvas, _SAMPLE_PATRON_ROW, 0.0, 0.0, template,
+            library_name or "Sample Library", sym, fields,
+        )
+    else:
+        _draw_patron_sticker(
+            svg_canvas, _SAMPLE_PATRON_ROW, 0.0, 0.0, template, sym, fields,
+        )
     return svg_canvas.to_svg()

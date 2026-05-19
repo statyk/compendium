@@ -10,6 +10,7 @@
 
 {% include "labels/_symbology_banner.html" %}
 
+<div class="labels-page-layout">
 <form method="post" action="/ui/labels/patrons" id="patron-cards-form">
   <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
 
@@ -26,7 +27,42 @@
     {% endfor %}
   </fieldset>
 
-  {# ── Step 2: Patrons to print ────────────────────────────────────── #}
+  {# ── Step 2: Sheet template (per-kind) ──────────────────────────── #}
+  <section>
+    <h3>Sheet template</h3>
+    {% for k in patron_kind_order %}
+    <div data-kind="{{ k }}"{% if k != selected_kind %} hidden{% endif %}>
+      <select name="{{ 'template' if k == selected_kind else 'template_' ~ k }}"
+              id="template-select-{{ k }}"
+              {% if k != selected_kind %} disabled{% endif %}>
+        {% for t in patron_kinds[k].templates %}
+        <option value="{{ t.key }}"{% if t.key == patron_kinds[k].default_template %} selected{% endif %}>{{ t.display }}</option>
+        {% endfor %}
+      </select>
+    </div>
+    {% endfor %}
+  </section>
+
+  {# ── Step 3: Fields shown (per-kind) ─────────────────────────────── #}
+  <section>
+    <h3>Fields shown on each card</h3>
+    {% for k in patron_kind_order %}
+    <fieldset data-kind="{{ k }}"{% if k != selected_kind %} hidden{% endif %}>
+      {% for f in patron_kinds[k].fields %}
+      <label>
+        <input type="checkbox" name="field_{{ f.name }}"{% if f.checked_by_default %} checked{% endif %}
+               {% if k != selected_kind %} disabled{% endif %}>
+        {{ f.label }}
+      </label>
+      {% endfor %}
+      {% if not patron_kinds[k].fields %}
+      <p><small>No optional fields for this card kind.</small></p>
+      {% endif %}
+    </fieldset>
+    {% endfor %}
+  </section>
+
+  {# ── Step 4: Patrons to print ────────────────────────────────────── #}
   <section>
     <h3>Patrons to print</h3>
     <label>Category
@@ -47,41 +83,6 @@
     {% endif %}
   </section>
 
-  {# ── Step 3: Sheet template (per-kind) ──────────────────────────── #}
-  <section>
-    <h3>Sheet template</h3>
-    {% for k in patron_kind_order %}
-    <div data-kind="{{ k }}"{% if k != selected_kind %} hidden{% endif %}>
-      <select name="{{ 'template' if k == selected_kind else 'template_' ~ k }}"
-              id="template-select-{{ k }}"
-              {% if k != selected_kind %} disabled{% endif %}>
-        {% for t in patron_kinds[k].templates %}
-        <option value="{{ t.key }}"{% if t.key == patron_kinds[k].default_template %} selected{% endif %}>{{ t.display }}</option>
-        {% endfor %}
-      </select>
-    </div>
-    {% endfor %}
-  </section>
-
-  {# ── Step 4: Fields shown (per-kind) ─────────────────────────────── #}
-  <section>
-    <h3>Fields shown on each card</h3>
-    {% for k in patron_kind_order %}
-    <fieldset data-kind="{{ k }}"{% if k != selected_kind %} hidden{% endif %}>
-      {% for f in patron_kinds[k].fields %}
-      <label>
-        <input type="checkbox" name="field_{{ f.name }}"{% if f.checked_by_default %} checked{% endif %}
-               {% if k != selected_kind %} disabled{% endif %}>
-        {{ f.label }}
-      </label>
-      {% endfor %}
-      {% if not patron_kinds[k].fields %}
-      <p><small>No optional fields for this card kind.</small></p>
-      {% endif %}
-    </fieldset>
-    {% endfor %}
-  </section>
-
   {# ── Step 5: Print options ───────────────────────────────────────── #}
   <section>
     <h3>Print options</h3>
@@ -92,6 +93,17 @@
 
   <button type="submit">Generate PDF</button>
 </form>
+
+<aside id="label-preview"
+       class="label-preview-pane"
+       hx-get="/ui/labels/patrons/preview"
+       hx-trigger="load, change from:#patron-cards-form delay:150ms"
+       hx-include="#patron-cards-form"
+       hx-swap="innerHTML"
+       aria-live="polite">
+  <p class="preview-caption">Loading preview…</p>
+</aside>
+</div>
 {% endblock %}
 
 {% block scripts %}
