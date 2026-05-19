@@ -19,7 +19,7 @@ from dataclasses import dataclass, field
 
 def _css_family(font_name: str) -> str:
     base = font_name[:-5] if font_name.endswith("-Bold") else font_name
-    return f"{base}, sans-serif"
+    return base
 
 
 def _escape(text: str) -> str:
