@@ -31,7 +31,7 @@ PERMISSION_GROUPS = [
     ("Reports", ["report.view"]),
     ("Labels", ["labels.generate"]),
     ("Audit", ["audit.view"]),
-    ("Administration", ["patron.manage", "patron.account.manage", "policy.edit", "branch.edit", "calendar.manage"]),
+    ("Administration", ["patron.manage", "patron.account.manage", "household.manage", "policy.edit", "branch.edit", "calendar.manage"]),
     ("System", ["system.manage", "user.manage", "role.manage"]),
 ]
 
@@ -68,6 +68,7 @@ PERMISSION_DESCRIPTIONS: dict[str, str] = {
     # Administration
     "patron.manage": "Create, edit, and deactivate patron records.",
     "patron.account.manage": "Create, reset, and deactivate login accounts for Patron-role users linked to patron records.",
+    "household.manage": "Create, edit, and manage household groups that link patron records (e.g. family accounts).",
     "policy.edit":   "Create and edit loan policies (loan period, renewal limits, media/category rules).",
     "branch.edit":   "Edit branch settings: name, location code, and classification defaults.",
     "calendar.manage": "Configure library hours and closed-date exceptions that govern due-date rolling and overdue-fine accrual.",

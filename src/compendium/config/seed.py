@@ -48,8 +48,8 @@ _LIBRARIAN_PERMISSIONS = [
     # Audit
     "audit.view",
     # Administration
-    "patron.manage", "patron.account.manage", "policy.edit", "branch.edit",
-    "calendar.manage",
+    "patron.manage", "patron.account.manage", "household.manage", "policy.edit",
+    "branch.edit", "calendar.manage",
 ]
 
 # SystemAdmin preset — IT/sysadmin seat in multi-person deployments. Manages
