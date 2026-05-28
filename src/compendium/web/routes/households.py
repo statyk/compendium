@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from fastapi import APIRouter, Depends, Form, Request
+from fastapi import APIRouter, Depends, Form, Query, Request
 from fastapi.responses import RedirectResponse
 from sqlalchemy.orm import Session
 
@@ -104,6 +104,7 @@ def create_household(
 def household_detail(
     household_id: int,
     request: Request,
+    error: str | None = Query(default=None),
     user: AppUser = Depends(require_web_permission(_PERM)),
     session: Session = Depends(get_session),
 ):
@@ -134,7 +135,7 @@ def household_detail(
             "user": user,
             "household": hh,
             "member_summaries": member_summaries,
-            "error": None,
+            "error": error,
         },
     )
 
