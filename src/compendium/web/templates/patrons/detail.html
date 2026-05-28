@@ -138,6 +138,32 @@
   </dd>
 </dl>
 
+{% if patron.household_id %}
+<section>
+  <h3>Household: <a href="/ui/households/{{ patron.household_id }}">{{ patron.household.name }}</a></h3>
+  {% if household_members_summary %}
+  <table class="striped">
+    <thead><tr><th>Name</th><th>Card #</th><th>Loans</th><th>Holds</th></tr></thead>
+    <tbody>
+      {% for m in household_members_summary %}
+      <tr>
+        <td><a href="/ui/patrons/{{ m.patron.library_card_number }}">{{ m.patron.full_name }}</a>{% if not m.patron.is_active %} <small>(inactive)</small>{% endif %}</td>
+        <td><code>{{ m.patron.library_card_number }}</code></td>
+        <td>{{ m.loan_count }}</td>
+        <td>{{ m.hold_count }}</td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+  {% else %}
+  <p>No other members in this household.</p>
+  {% endif %}
+  {% if has_permission(user, 'household.manage') %}
+  <p><a href="/ui/households/{{ patron.household_id }}">Manage household →</a></p>
+  {% endif %}
+</section>
+{% endif %}
+
 {% if has_permission(user, 'fine.manage') %}
 <p>
   <a href="/ui/patrons/{{ patron.library_card_number }}/fines" role="button" class="outline">

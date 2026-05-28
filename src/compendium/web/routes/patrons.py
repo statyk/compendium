@@ -247,6 +247,23 @@ def patron_detail(
     holds = SqlHoldRepository(session).get_active_for_patron(patron.id)
     linked_user = SqlUserRepository(session).get(patron.user_id) if patron.user_id else None
     avail_users = _unlinked_users(session) if linked_user is None else []
+
+    # Household context
+    household_members_summary = []
+    if patron.household_id is not None:
+        members = SqlPatronRepository(session).list_by_household(patron.household_id)
+        loan_repo_inner = SqlLoanRepository(session)
+        hold_repo_inner = SqlHoldRepository(session)
+        household_members_summary = [
+            {
+                "patron": m,
+                "loan_count": loan_repo_inner.count_for_patron(m.id),
+                "hold_count": hold_repo_inner.count_active(patron_id=m.id),
+            }
+            for m in members
+            if m.id != patron.id
+        ]
+
     return _render(
         "patrons/detail.html",
         request,
@@ -261,6 +278,7 @@ def patron_detail(
             "categories": _categories(session),
             "message": message,
             "error": error,
+            "household_members_summary": household_members_summary,
         },
     )
 
