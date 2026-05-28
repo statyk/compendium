@@ -142,6 +142,7 @@ class PatronResponse(BaseModel):
     is_active: bool
     category_id: int | None = None
     expires_at: date | None = None
+    household_id: int | None = None
 
 
 class PatronCategoryResponse(BaseModel):
@@ -398,3 +399,35 @@ class NotificationResponse(BaseModel):
     scheduled_for: datetime
     sent_at: datetime | None
     created_at: datetime
+
+
+class CreateHouseholdRequest(BaseModel):
+    name: str
+    notes: str | None = None
+
+
+class UpdateHouseholdRequest(BaseModel):
+    name: str | None = None
+    notes: str | None = None
+
+
+class AddHouseholdMemberRequest(BaseModel):
+    card_number: str
+
+
+class HouseholdResponse(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    id: int
+    name: str
+    notes: str | None
+    created_at: datetime
+
+
+class HouseholdListResponse(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    id: int
+    name: str
+    notes: str | None
+    member_count: int
