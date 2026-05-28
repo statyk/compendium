@@ -19,6 +19,7 @@ class AuditEntityType:
     METADATA_CACHE = "metadata_cache"
     LIBRARY_HOURS = "library_hours"
     CLOSED_DATE = "closed_date"
+    HOUSEHOLD = "household"
 
 
 class AuditAction:
