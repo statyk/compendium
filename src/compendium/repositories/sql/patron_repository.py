@@ -1,3 +1,5 @@
+from __future__ import annotations
+
 from sqlalchemy.orm import Session
 
 from compendium.domain.models import Patron
@@ -30,3 +32,11 @@ class SqlPatronRepository:
         if not include_inactive:
             q = q.filter(Patron.is_active == True)  # noqa: E712
         return q.order_by(Patron.full_name).offset(offset).limit(limit).all()
+
+    def list_by_household(self, household_id: int) -> list[Patron]:
+        return (
+            self._s.query(Patron)
+            .filter(Patron.household_id == household_id)
+            .order_by(Patron.full_name)
+            .all()
+        )
