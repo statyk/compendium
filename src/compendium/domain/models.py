@@ -157,6 +157,22 @@ class AppUser(Base):
     )
 
 
+class Household(Base):
+    __tablename__ = "household"
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    name: Mapped[str] = mapped_column(String(256))
+    notes: Mapped[str | None] = mapped_column(Text, nullable=True)
+    created_at: Mapped[datetime] = mapped_column(UtcDateTime, server_default=func.now())
+    updated_at: Mapped[datetime | None] = mapped_column(UtcDateTime, onupdate=func.now())
+
+    members: Mapped[list["Patron"]] = relationship(
+        "Patron",
+        foreign_keys="[Patron.household_id]",
+        back_populates="household",
+    )
+
+
 class PatronCategory(Base):
     __tablename__ = "patron_category"
 
@@ -186,6 +202,9 @@ class Patron(Base):
     receive_notifications: Mapped[bool] = mapped_column(
         Boolean, default=True, server_default="1"
     )
+    household_id: Mapped[int | None] = mapped_column(
+        ForeignKey("household.id", ondelete="SET NULL"), nullable=True, index=True
+    )
     created_at: Mapped[datetime] = mapped_column(UtcDateTime, server_default=func.now())
     updated_at: Mapped[datetime | None] = mapped_column(
         UtcDateTime, onupdate=func.now()
@@ -193,6 +212,11 @@ class Patron(Base):
 
     user: Mapped[AppUser | None] = relationship(foreign_keys=[user_id], back_populates="patron")
     category: Mapped[PatronCategory | None] = relationship(foreign_keys=[category_id])
+    household: Mapped["Household | None"] = relationship(
+        "Household",
+        foreign_keys=[household_id],
+        back_populates="members",
+    )
 
 
 class Loan(Base):
