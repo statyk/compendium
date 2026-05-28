@@ -94,13 +94,31 @@ def show_household(
 @app.command("rename")
 def rename_household(
     id: int = typer.Option(..., "--id", help="Household ID"),
-    name: str = typer.Option(..., "--name", "-n", help="New display name"),
+    name: str | None = typer.Option(None, "--name", "-n", help="New display name"),
+    notes: str | None = typer.Option(None, "--notes", help="New notes text"),
+    clear_notes: bool = typer.Option(False, "--clear-notes", help="Clear notes field"),
 ) -> None:
-    """Rename a household."""
+    """Update household name and/or notes."""
+    if name is None and notes is None and not clear_notes:
+        typer.echo("Error: provide at least one of --name, --notes, or --clear-notes", err=True)
+        raise typer.Exit(1)
     try:
         with session_scope() as session:
-            hh = _svc(session).update(id, name=name)
-        typer.echo(f"Household {id} renamed to: {hh.name}")
+            svc = _svc(session)
+            update_kwargs: dict = {}
+            if name is not None:
+                update_kwargs["name"] = name
+            if notes is not None:
+                update_kwargs["notes"] = notes
+            elif clear_notes:
+                update_kwargs["notes"] = None
+            hh = svc.update(id, **update_kwargs)
+        parts = []
+        if name is not None:
+            parts.append(f"name → {hh.name}")
+        if "notes" in update_kwargs:
+            parts.append(f"notes → {hh.notes!r}")
+        typer.echo(f"Household {id} updated: {', '.join(parts)}")
     except DomainError as e:
         typer.echo(f"Error: {e}", err=True)
         raise typer.Exit(1)
@@ -111,10 +129,10 @@ def delete_household(
     id: int = typer.Option(..., "--id", help="Household ID"),
     yes: bool = typer.Option(False, "--yes", "-y", help="Skip confirmation prompt"),
 ) -> None:
-    """Delete a household. All member links are removed first."""
+    """Delete an empty household (must have no members)."""
     if not yes:
         confirmed = typer.confirm(
-            f"Delete household {id}? Members will be unlinked but not deleted."
+            f"Delete household {id}? The household must have no members."
         )
         if not confirmed:
             raise typer.Abort()
