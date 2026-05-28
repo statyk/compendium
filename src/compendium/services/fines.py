@@ -17,6 +17,7 @@ from compendium.repositories.base import (
     PatronRepository,
 )
 from compendium.services.audit import AuditAction, AuditEntityType, AuditService
+from compendium.services.calendar import CalendarService
 
 
 class CheckoutStatus(str, Enum):
@@ -35,6 +36,7 @@ class FineService:
         item_repo: ItemRepository,
         policy_repo: LoanPolicyRepository,
         settings: Settings,
+        calendar_svc: CalendarService | None = None,
         audit_svc: AuditService | None = None,
         actor: AppUser | None = None,
         actor_label: str | None = None,
@@ -46,6 +48,7 @@ class FineService:
         self._items = item_repo
         self._policies = policy_repo
         self._settings = settings
+        self._calendar = calendar_svc
         self._audit = audit_svc
         self._actor = actor
         self._actor_label = actor_label
@@ -382,6 +385,11 @@ class FineService:
         # consistent and predictable (a patron returning within 24h of due_at
         # owes 0 days). timedelta.days is floor for positive deltas.
         days_over = max(0, delta.days)
+        # Subtract closed calendar days — patrons aren't fined for days the
+        # library couldn't accept returns.
+        if self._calendar is not None and days_over > 0:
+            closed = self._calendar.closed_days_between(loan.due_at, reference)
+            days_over = max(0, days_over - closed)
         chargeable_days = max(0, days_over - grace)
         if chargeable_days <= 0:
             return 0

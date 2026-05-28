@@ -13,6 +13,7 @@ from compendium.api.routes import (
     audit,
     auth,
     branches,
+    calendar as calendar_routes,
     creators,
     fines,
     holds,
@@ -172,6 +173,7 @@ def create_app() -> FastAPI:
     app.include_router(reports.router, prefix="/reports", tags=["reports"])
     app.include_router(labels.router, prefix="/labels", tags=["labels"])
     app.include_router(settings_routes.router, prefix="/settings", tags=["settings"])
+    app.include_router(calendar_routes.router, tags=["calendar"])
 
     # Web UI routes (HTMX + Jinja2)
     app.mount("/ui/static", StaticFiles(directory=str(_WEB_STATIC)), name="web_static")

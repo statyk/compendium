@@ -304,6 +304,23 @@ Book adapters are resolved at runtime by `_resolve_book_adapter()` in `services/
 
 Note: TMDb does not index physical-disc UPCs, so film items are added via a title-search candidate picker rather than direct barcode scan. A UPC→title bridge is a deferred enhancement.
 
+### Library hours and closed-date calendar
+
+`CalendarService` (`services/calendar.py`) is the single source of truth for whether a given local date is open. It reads two tables:
+
+- **`library_hours`** — one row per weekday (0=Monday, 6=Sunday) with `is_open`, `open_time`, `close_time`.
+- **`closed_date`** — date ranges with optional `recurs_annually` flag.
+
+All datetime arithmetic is done in UTC; local-date conversions use the **`library_timezone`** site setting (IANA name, default `"UTC"`, env `COMPENDIUM_LIBRARY_TIMEZONE`).
+
+**Due-date rolling.** `CirculationService.checkout()` and `renew()` call `calendar.compute_due_at(now_utc, period_days)` instead of `now + timedelta(days=N)`. The helper adds `period_days` as local calendar days, walks forward past closed days, and returns the UTC instant of that open day's `close_time`. Without a CalendarService injected (or with all-days-open default hours), behaviour is identical to before this feature.
+
+**Fine deduction.** `FineService._compute_overdue_amount()` calls `calendar.closed_days_between(due_at, reference)` to subtract closed local-dates from `days_over` before applying grace and the daily rate.
+
+**Hold pickup expiry.** `HoldService._pickup_deadline(now_utc)` delegates to `calendar.compute_due_at()`, so the patron-facing pickup window rolls past closed days.
+
+Admin UI: **Admin → Library Hours** (`/ui/admin/library-hours`) and **Admin → Closed Dates** (`/ui/admin/closed-dates`). Permission: `calendar.manage` (included in the Librarian preset). CLI: `compendium calendar hours show/set` and `compendium calendar closed-date list/add/delete`.
+
 ### Book metadata source preference and rate-limit handling
 
 The primary book metadata adapter is chosen at runtime based on four factors:

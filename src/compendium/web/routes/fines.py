@@ -27,16 +27,21 @@ from compendium.repositories.sql.loan_policy_repository import SqlLoanPolicyRepo
 from compendium.repositories.sql.loan_repository import SqlLoanRepository
 from compendium.repositories.sql.patron_repository import SqlPatronRepository
 from compendium.services.audit import AuditService
+from compendium.services.calendar import CalendarService
 from compendium.services.circulation import CirculationService
 from compendium.services.fines import CheckoutStatus, FineService
 from compendium.web.csrf import check_csrf_form, ensure_csrf, set_csrf_cookie
-from compendium.web.deps import get_web_patron, require_web_permission, require_web_user
+from compendium.web.deps import get_calendar_svc, get_web_patron, require_web_permission, require_web_user
 from compendium.web.jinja import templates
 
 router = APIRouter()
 
 
-def _fine_svc(session: Session, user: AppUser | None) -> FineService:
+def _fine_svc(
+    session: Session,
+    user: AppUser | None,
+    calendar_svc: CalendarService | None = None,
+) -> FineService:
     return FineService(
         fine_repo=SqlFineRepository(session),
         patron_repo=SqlPatronRepository(session),
@@ -44,13 +49,18 @@ def _fine_svc(session: Session, user: AppUser | None) -> FineService:
         item_repo=SqlItemRepository(session),
         policy_repo=SqlLoanPolicyRepository(session),
         settings=get_settings(),
+        calendar_svc=calendar_svc,
         audit_svc=AuditService(SqlAuditLogRepository(session)),
         actor=user,
         source="web",
     )
 
 
-def _circulation(session: Session, user: AppUser | None) -> CirculationService:
+def _circulation(
+    session: Session,
+    user: AppUser | None,
+    calendar_svc: CalendarService | None = None,
+) -> CirculationService:
     settings = get_settings()
     audit = AuditService(SqlAuditLogRepository(session))
     return CirculationService(
@@ -61,7 +71,8 @@ def _circulation(session: Session, user: AppUser | None) -> CirculationService:
         hold_repo=SqlHoldRepository(session),
         policy_repo=SqlLoanPolicyRepository(session),
         hold_pickup_days=get_site_setting("hold_pickup_days"),
-        fine_svc=_fine_svc(session, user),
+        fine_svc=_fine_svc(session, user, calendar_svc),
+        calendar_svc=calendar_svc,
         audit_svc=audit,
         actor=user,
         source="web",
@@ -136,6 +147,7 @@ def patron_assess_overdue(
     csrf_token: str = Form(...),
     user: AppUser = Depends(require_web_permission("fine.manage")),
     session: Session = Depends(get_session),
+    calendar_svc: CalendarService = Depends(get_calendar_svc),
 ):
     check_csrf_form(request, csrf_token)
     patron = SqlPatronRepository(session).get_by_card_number(card_number)
@@ -144,7 +156,7 @@ def patron_assess_overdue(
             f"/ui/patrons?error={quote(f'No patron {card_number}')}",
             status_code=303,
         )
-    counts = _fine_svc(session, user).assess_overdue_fines(patron_id=patron.id)
+    counts = _fine_svc(session, user, calendar_svc).assess_overdue_fines(patron_id=patron.id)
     msg = (
         f"Overdue assessed: {counts['created']} created, "
         f"{counts['updated']} updated, {counts['unchanged']} unchanged."

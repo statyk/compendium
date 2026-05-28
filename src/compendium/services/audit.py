@@ -17,6 +17,8 @@ class AuditEntityType:
     NOTIFICATION = "notification"
     SITE_SETTING = "site_setting"
     METADATA_CACHE = "metadata_cache"
+    LIBRARY_HOURS = "library_hours"
+    CLOSED_DATE = "closed_date"
 
 
 class AuditAction:

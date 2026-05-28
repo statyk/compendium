@@ -20,6 +20,8 @@ NAV_PAGES: list[dict] = [
     {"key": "patron_categories", "section": "Admin", "label": "Patron Categories", "url": "/ui/admin/patron-categories", "permission": "patron.manage"},
     {"key": "policies", "section": "Admin", "label": "Loan Policies", "url": "/ui/policies", "permission": "policy.edit"},
     {"key": "branches", "section": "Admin", "label": "Branches", "url": "/ui/branches", "permission": "branch.edit"},
+    {"key": "library_hours", "section": "Admin", "label": "Library Hours", "url": "/ui/admin/library-hours", "permission": "calendar.manage"},
+    {"key": "closed_dates", "section": "Admin", "label": "Closed Dates", "url": "/ui/admin/closed-dates", "permission": "calendar.manage"},
     {"key": "kiosk", "section": "Admin", "label": "Kiosk", "url": "/ui/kiosk", "permission": "loan.checkout"},
     {"key": "notifications", "section": "Admin", "label": "Notifications", "url": "/ui/admin/notifications", "permission": "notification.manage"},
     {"key": "reports", "section": "Admin", "label": "Reports", "url": "/ui/reports", "permission": "report.view"},

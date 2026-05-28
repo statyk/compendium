@@ -13,7 +13,7 @@ This paragraph here is about the only part of the project written by a human.
 ## Features
 
 - **Catalog** — add items by ISBN / UPC / MusicBrainz ID / TMDb ID / title search (Google Books / Open Library, MusicBrainz, TMDb) or manually for obscure items; search and browse works and copies; faceted discovery (media type, decade, availability)
-- **Circulation** — checkout, checkin, loan renewal with category-aware per-media-type loan policies; lost / damaged / claims-returned states; self-checkout kiosk mode
+- **Circulation** — checkout, checkin, loan renewal with category-aware per-media-type loan policies; lost / damaged / claims-returned states; self-checkout kiosk mode; library hours and holiday calendar so due dates never land on closed days and overdue fines skip closed days
 - **Holds** — patron reservation queue; immediate promotion when a copy is available; suspend/resume; auto-expiry via maintenance command
 - **Fines** — configurable per-policy overdue rates with caps and grace periods; lost/damaged fees; threshold-based checkout/hold blocking; pay/waive workflow; per-patron and bulk overdue assessment
 - **Notifications** — outbox-pattern email delivery (hold-ready, due-soon, overdue) drained by a cron-invoked CLI; admin viewer + retry; per-patron opt-out; configurable retention
@@ -209,6 +209,7 @@ Below is a high-level inventory grouped by concern; the OpenAPI document is the 
 | **Policies** | `GET/POST /policies` | `item.view` / `policy.edit` |
 | **Users** | `POST /users`, `POST /users/{username}/{deactivate,reactivate}`, `POST/DELETE /users/{username}/patron` | `user.manage` |
 | **Settings** | `GET /settings/`, `GET/PATCH/DELETE /settings/{key}` | `patron.manage` (librarian-tier) / `system.manage` (system-tier) |
+| **Calendar** | `GET /library-hours/`, `PATCH /library-hours/{weekday}`; `GET/POST /closed-dates/`, `PATCH/DELETE /closed-dates/{id}` | `calendar.manage` |
 | **Audit** | `GET /audit/` | `audit.view` |
 
 The "min permission" column lists the lowest preset role that's allowed. Administrator (wildcard) covers everything. Slimmed Librarian covers librarian-tier endpoints; SystemAdmin covers user/role/system-tier endpoints.

@@ -19,6 +19,7 @@ from compendium.repositories.base import (
     WorkRepository,
 )
 from compendium.services.audit import AuditAction, AuditEntityType, AuditService
+from compendium.services.calendar import CalendarService
 from compendium.services.fines import CheckoutStatus, FineService
 
 if TYPE_CHECKING:
@@ -39,6 +40,7 @@ class HoldService:
         hold_pickup_days: int = 3,
         fine_svc: FineService | None = None,
         notification_svc: "NotificationService | None" = None,
+        calendar_svc: CalendarService | None = None,
         audit_svc: AuditService | None = None,
         actor: AppUser | None = None,
         actor_label: str | None = None,
@@ -53,6 +55,7 @@ class HoldService:
         self._pickup_days = hold_pickup_days
         self._fines = fine_svc
         self._notifications = notification_svc
+        self._calendar = calendar_svc
         self._audit = audit_svc
         self._actor = actor
         self._actor_label = actor_label
@@ -75,6 +78,17 @@ class HoldService:
                 action=action,
                 details=details,
             )
+
+    def _pickup_deadline(self, now_utc: datetime) -> datetime:
+        """Compute hold pickup expiry, rolling past closed days when configured.
+
+        hold_expiry_days (the waiting-hold cleanup deadline, ~30 days) is
+        intentionally NOT rolled — it is an internal maintenance deadline,
+        not a patron-facing promise.
+        """
+        if self._calendar is not None:
+            return self._calendar.compute_due_at(now_utc, self._pickup_days)
+        return now_utc + timedelta(days=self._pickup_days)
 
     def place(self, work_id: int, card_number: str) -> Hold:
         work = self._works.get(work_id)
@@ -117,7 +131,7 @@ class HoldService:
                 branch_id=branch.id,  # type: ignore[union-attr]
                 status=HoldStatus.AVAILABLE.value,
                 placed_at=now,
-                expires_at=now + timedelta(days=self._pickup_days),
+                expires_at=self._pickup_deadline(now),
                 notified_at=now,
                 held_item_id=copy.id,
             )
@@ -223,7 +237,7 @@ class HoldService:
             now = datetime.now(timezone.utc)
             hold.status = HoldStatus.AVAILABLE.value
             hold.held_item_id = copy.id
-            hold.expires_at = now + timedelta(days=self._pickup_days)
+            hold.expires_at = self._pickup_deadline(now)
             hold.notified_at = now
             copy.status = ItemStatus.ON_HOLD.value
             self._items.update(copy)
@@ -266,7 +280,7 @@ class HoldService:
                 now = datetime.now(timezone.utc)
                 hold.status = HoldStatus.AVAILABLE.value
                 hold.held_item_id = copy.id
-                hold.expires_at = now + timedelta(days=self._pickup_days)
+                hold.expires_at = self._pickup_deadline(now)
                 hold.notified_at = now
                 copy.status = ItemStatus.ON_HOLD.value
                 self._items.update(copy)
@@ -366,7 +380,7 @@ class HoldService:
             now = datetime.now(timezone.utc)
             next_hold.status = HoldStatus.AVAILABLE.value
             next_hold.held_item_id = item.id
-            next_hold.expires_at = now + timedelta(days=self._pickup_days)
+            next_hold.expires_at = self._pickup_deadline(now)
             next_hold.notified_at = now
             self._holds.update(next_hold)
             if self._notifications is not None:

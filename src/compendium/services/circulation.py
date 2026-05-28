@@ -20,6 +20,7 @@ from compendium.repositories.base import (
     PatronRepository,
 )
 from compendium.services.audit import AuditAction, AuditEntityType, AuditService
+from compendium.services.calendar import CalendarService
 from compendium.services.fines import CheckoutStatus, FineService
 from compendium.services.notifications import NotificationService
 from compendium.services.site_settings import get_site_setting
@@ -41,6 +42,7 @@ class CirculationService:
         hold_pickup_days: int = 3,
         fine_svc: FineService | None = None,
         notification_svc: NotificationService | None = None,
+        calendar_svc: CalendarService | None = None,
         audit_svc: AuditService | None = None,
         actor: AppUser | None = None,
         actor_label: str | None = None,
@@ -55,6 +57,7 @@ class CirculationService:
         self._pickup_days = hold_pickup_days
         self._fines = fine_svc
         self._notifications = notification_svc
+        self._calendar = calendar_svc
         self._audit = audit_svc
         self._actor = actor
         self._actor_label = actor_label
@@ -185,7 +188,7 @@ class CirculationService:
             patron_id=patron.id,
             branch_id=branch.id,  # type: ignore[union-attr]
             checked_out_at=now,
-            due_at=now + timedelta(days=loan_period_days),
+            due_at=self._compute_due(now, loan_period_days),
         )
         self._loans.add(loan)
 
@@ -257,7 +260,8 @@ class CirculationService:
                 f"Item '{barcode}' has reached the renewal limit ({max_renewals})"
             )
 
-        loan.due_at = datetime.now(timezone.utc) + timedelta(days=loan_period_days)
+        now = datetime.now(timezone.utc)
+        loan.due_at = self._compute_due(now, loan_period_days)
         loan.renewal_count += 1
         self._loans.update(loan)
         return loan
@@ -283,10 +287,17 @@ class CirculationService:
                 f"Loan {loan_id} has reached the renewal limit ({max_renewals})"
             )
 
-        loan.due_at = datetime.now(timezone.utc) + timedelta(days=loan_period_days)
+        now = datetime.now(timezone.utc)
+        loan.due_at = self._compute_due(now, loan_period_days)
         loan.renewal_count += 1
         self._loans.update(loan)
         return loan
+
+    def _compute_due(self, now_utc: datetime, period_days: int) -> datetime:
+        """Compute due_at, rolling forward past closed days when a calendar is configured."""
+        if self._calendar is not None:
+            return self._calendar.compute_due_at(now_utc, period_days)
+        return now_utc + timedelta(days=period_days)
 
     # ------------------------------------------------------------------
     # Lost / damaged / recovery transitions

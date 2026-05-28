@@ -13,6 +13,7 @@ from compendium.domain.models import AppUser, Patron
 from compendium.repositories.sql.patron_repository import SqlPatronRepository
 from compendium.repositories.sql.user_repository import SqlUserRepository
 from compendium.services.auth import has_permission
+from compendium.services.calendar import CalendarService
 
 _bearer = HTTPBearer(auto_error=False)
 
@@ -105,3 +106,17 @@ def require_permission(permission: str):
         return user
 
     return _check
+
+
+def get_calendar_svc(session: Session = Depends(get_session)) -> CalendarService:
+    from compendium.repositories.sql.calendar_repository import (
+        SqlClosedDateRepository,
+        SqlLibraryHoursRepository,
+    )
+    from compendium.services.site_settings import get_site_setting
+
+    return CalendarService(
+        hours_repo=SqlLibraryHoursRepository(session),
+        closed_date_repo=SqlClosedDateRepository(session),
+        timezone=get_site_setting("library_timezone"),
+    )

@@ -13,7 +13,7 @@ import re
 import shutil
 import tarfile
 import tempfile
-from datetime import date, datetime, timezone
+from datetime import date, datetime, time, timezone
 from importlib.resources import files as _pkg_files
 from pathlib import Path
 from typing import Any, Iterator
@@ -110,6 +110,8 @@ def _encode_value(value: Any) -> Any:
         return value.isoformat()
     if isinstance(value, date):
         return value.isoformat()
+    if isinstance(value, time):
+        return value.strftime("%H:%M:%S")
     return value
 
 
@@ -121,6 +123,10 @@ def _decode_value(col: sa.Column, value: Any) -> Any:
         return datetime.fromisoformat(value)
     if isinstance(base, sa.Date) and isinstance(value, str):
         return date.fromisoformat(value)
+    if isinstance(base, sa.Time) and isinstance(value, str):
+        # Keep as HH:MM:SS string — raw SQL binds pass this directly to the
+        # DB driver, which expects a string for SQLite Time columns.
+        return value
     # JSON columns: raw SQL binds don't trigger the dialect's JSON serializer,
     # so hand SQLite/Postgres a JSON string (Postgres JSONB parses it).
     if isinstance(base, sa.JSON) and isinstance(value, (dict, list)):

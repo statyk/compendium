@@ -1,9 +1,9 @@
 from __future__ import annotations
 
-from datetime import date, datetime
+from datetime import date, datetime, time
 from typing import Any
 
-from sqlalchemy import BigInteger, Boolean, Date, ForeignKey, Index, Integer, String, Text, func, text
+from sqlalchemy import BigInteger, Boolean, Date, ForeignKey, Index, Integer, String, Text, Time, func, text
 from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column, relationship
 from sqlalchemy.types import JSON
 
@@ -419,6 +419,36 @@ class FailedLogin(Base):
 
     __table_args__ = (
         Index("ix_failed_login_scope_id_at", "scope", "identifier", "occurred_at"),
+    )
+
+
+class LibraryHours(Base):
+    """Open/close schedule for each weekday (0 = Monday … 6 = Sunday, ISO convention)."""
+
+    __tablename__ = "library_hours"
+
+    weekday: Mapped[int] = mapped_column(Integer, primary_key=True)
+    is_open: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True)
+    open_time: Mapped[time | None] = mapped_column(Time, nullable=True)
+    close_time: Mapped[time | None] = mapped_column(Time, nullable=True)
+
+
+class ClosedDate(Base):
+    """A date range during which the library is closed.
+
+    ``start_date`` and ``end_date`` are inclusive local dates.
+    When ``recurs_annually`` is True the closure repeats on the same
+    month/day every year (the stored year is the anchor, not a limit).
+    """
+
+    __tablename__ = "closed_date"
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    start_date: Mapped[date] = mapped_column(Date, nullable=False)
+    end_date: Mapped[date] = mapped_column(Date, nullable=False)
+    label: Mapped[str | None] = mapped_column(String(128), nullable=True)
+    recurs_annually: Mapped[bool] = mapped_column(
+        Boolean, nullable=False, default=False, server_default="0"
     )
 
 

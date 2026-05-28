@@ -41,11 +41,12 @@ from compendium.repositories.sql.loan_policy_repository import SqlLoanPolicyRepo
 from compendium.repositories.sql.loan_repository import SqlLoanRepository
 from compendium.repositories.sql.patron_repository import SqlPatronRepository
 from compendium.services.audit import AuditService
+from compendium.services.calendar import CalendarService
 from compendium.services.circulation import CirculationService
 from compendium.services.fines import CheckoutStatus, FineService
 from compendium.services.rate_limit import RateLimitService
 from compendium.web.csrf import check_csrf_form, ensure_csrf, set_csrf_cookie
-from compendium.web.deps import require_web_permission
+from compendium.web.deps import get_calendar_svc, require_web_permission
 from compendium.web.jinja import templates
 
 router = APIRouter()
@@ -53,7 +54,11 @@ router = APIRouter()
 _PERM = "loan.checkout"
 
 
-def _fine_svc(session: Session, settings: Settings) -> FineService:
+def _fine_svc(
+    session: Session,
+    settings: Settings,
+    calendar_svc: CalendarService | None = None,
+) -> FineService:
     return FineService(
         fine_repo=SqlFineRepository(session),
         patron_repo=SqlPatronRepository(session),
@@ -61,11 +66,17 @@ def _fine_svc(session: Session, settings: Settings) -> FineService:
         item_repo=SqlItemRepository(session),
         policy_repo=SqlLoanPolicyRepository(session),
         settings=settings,
+        calendar_svc=calendar_svc,
         source="kiosk",
     )
 
 
-def _circ(session: Session, actor: AppUser, settings: Settings) -> CirculationService:
+def _circ(
+    session: Session,
+    actor: AppUser,
+    settings: Settings,
+    calendar_svc: CalendarService | None = None,
+) -> CirculationService:
     return CirculationService(
         item_repo=SqlItemRepository(session),
         loan_repo=SqlLoanRepository(session),
@@ -74,7 +85,8 @@ def _circ(session: Session, actor: AppUser, settings: Settings) -> CirculationSe
         hold_repo=SqlHoldRepository(session),
         policy_repo=SqlLoanPolicyRepository(session),
         hold_pickup_days=get_site_setting("hold_pickup_days"),
-        fine_svc=_fine_svc(session, settings),
+        fine_svc=_fine_svc(session, settings, calendar_svc),
+        calendar_svc=calendar_svc,
         audit_svc=AuditService(SqlAuditLogRepository(session)),
         actor=actor,
         source="kiosk",
@@ -217,6 +229,7 @@ def kiosk_checkout(
     csrf_token: str = Form(default=""),
     user: AppUser = Depends(require_web_permission(_PERM)),
     session: Session = Depends(get_session),
+    calendar_svc: CalendarService = Depends(get_calendar_svc),
 ):
     check_csrf_form(request, csrf_token)
     barcode = barcode.strip()
@@ -224,7 +237,7 @@ def kiosk_checkout(
         return HTMLResponse(_kiosk_error("Please scan an item barcode."))
     settings = get_settings()
     try:
-        loan = _circ(session, user, settings).checkout(barcode, card_number)
+        loan = _circ(session, user, settings, calendar_svc).checkout(barcode, card_number)
     except NotFoundError:
         return HTMLResponse(_kiosk_error("Item not found. Please try again."))
     except BlockedByFinesError:

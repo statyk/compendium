@@ -270,6 +270,14 @@ def _shortcut_list(v: list) -> None:
             )
 
 
+def _validate_timezone(value: str) -> None:
+    from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
+    try:
+        ZoneInfo(value)
+    except (ZoneInfoNotFoundError, KeyError):
+        raise SettingValidationError(f"'{value}' is not a valid IANA timezone name.")
+
+
 def _register_builtins() -> None:
     # ── Librarian-tier ─────────────────────────────────────────────────────
     register(
@@ -283,6 +291,23 @@ def _register_builtins() -> None:
                 "Name of the library. Appears in the nav brand, email "
                 "templates, and printed patron cards."
             ),
+        )
+    )
+    register(
+        SettingDescriptor(
+            key="library_timezone",
+            display_name="Library Timezone",
+            type=str,
+            default="UTC",
+            scope="librarian",
+            help_text=(
+                "IANA timezone name for the library (e.g. 'America/New_York', "
+                "'America/Chicago', 'America/Los_Angeles'). Used to compute "
+                "due-date rolling and closed-day deductions relative to local "
+                "calendar days. The env var COMPENDIUM_LIBRARY_TIMEZONE overrides "
+                "the DB value."
+            ),
+            validator=_validate_timezone,
         )
     )
     register(

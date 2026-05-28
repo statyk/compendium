@@ -1,0 +1,62 @@
+{% extends "base.html" %}
+{% block title %}Closed Dates — {{ library_name() }}{% endblock %}
+{% block content %}
+<h2>Closed Dates</h2>
+<p><small>Holidays, breaks, and one-off closures. Due dates that land on a closed date are rolled to the next open day. Overdue fines do not accrue on closed days. Also see <a href="/ui/admin/library-hours">Library Hours</a> for the weekly schedule.</small></p>
+
+{% if message %}<p class="success-banner">{{ message }}</p>{% endif %}
+{% if error %}<p class="error-banner">{{ error }}</p>{% endif %}
+
+{% if closed_dates %}
+<table>
+  <thead>
+    <tr><th>Start date</th><th>End date</th><th>Label</th><th>Annual</th><th></th></tr>
+  </thead>
+  <tbody>
+    {% for cd in closed_dates %}
+    <tr>
+      <td>{{ cd.start_date.isoformat() }}</td>
+      <td>{{ cd.end_date.isoformat() }}</td>
+      <td>{{ cd.label or '—' }}</td>
+      <td>{% if cd.recurs_annually %}✓{% endif %}</td>
+      <td>
+        <form
+          hx-post="/ui/admin/closed-dates/{{ cd.id }}/delete"
+          hx-include="[name='csrf_token']"
+          hx-confirm="Delete this closed date{% if cd.label %}: {{ cd.label }}{% endif %}?"
+          hx-target="body"
+          hx-swap="outerHTML"
+          style="margin:0"
+        >
+          <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+          <button type="submit" class="outline contrast" style="padding:0.2rem 0.6rem; margin:0; width:auto">Delete</button>
+        </form>
+      </td>
+    </tr>
+    {% endfor %}
+  </tbody>
+</table>
+{% else %}
+<p class="empty-inline">No closed dates defined. Due dates and fines use the weekly hours schedule only.</p>
+{% endif %}
+
+<h3>Add closed date</h3>
+<form method="post" action="/ui/admin/closed-dates/new"
+      style="display:flex; gap:0.5rem; align-items:flex-end; flex-wrap:wrap">
+  <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+  <label>Start date
+    <input type="date" name="start_date" required style="width:11rem">
+  </label>
+  <label>End date <small>(leave blank for single day)</small>
+    <input type="date" name="end_date" style="width:11rem">
+  </label>
+  <label>Label
+    <input type="text" name="label" maxlength="128" placeholder="e.g. Christmas" style="width:14rem">
+  </label>
+  <label style="margin-bottom:0.5rem">
+    <input type="checkbox" name="recurs_annually" value="on">
+    Repeat every year
+  </label>
+  <button type="submit" style="margin-bottom:0.5rem; width:auto">Add</button>
+</form>
+{% endblock %}

@@ -7,6 +7,7 @@ from compendium.cli.commands import (
     backup,
     branch,
     bulk_ops,
+    calendar as calendar_cmd,
     creator,
     db,
     fine,
@@ -55,6 +56,7 @@ app.add_typer(reports.app, name="reports")
 app.add_typer(labels.app, name="labels")
 app.add_typer(settings_cmd.app, name="settings")
 
+app.add_typer(calendar_cmd.app, name="calendar")
 app.add_typer(keygen.app, name="keygen")
 app.add_typer(secrets_cmd.app, name="secrets")
 app.add_typer(metadata_cmd.app, name="metadata")

@@ -7,10 +7,12 @@ from compendium.domain.models import (
     AppUser,
     AuditLog,
     Branch,
+    ClosedDate,
     Creator,
     Fine,
     Hold,
     Item,
+    LibraryHours,
     Loan,
     LoanPolicy,
     MediaType,
@@ -369,3 +371,20 @@ class AuditLogRepository(Protocol):
 @runtime_checkable
 class CounterRepository(Protocol):
     def next(self, key: str) -> int: ...
+
+
+@runtime_checkable
+class LibraryHoursRepository(Protocol):
+    def list(self) -> list[LibraryHours]: ...
+    def get(self, weekday: int) -> LibraryHours | None: ...
+    def update(self, hours: LibraryHours) -> LibraryHours: ...
+
+
+@runtime_checkable
+class ClosedDateRepository(Protocol):
+    def list_in_range(self, start: date, end: date) -> list[ClosedDate]: ...
+    def get(self, closed_date_id: int) -> ClosedDate | None: ...
+    def add(self, closed_date: ClosedDate) -> ClosedDate: ...
+    def update(self, closed_date: ClosedDate) -> ClosedDate: ...
+    def delete(self, closed_date: ClosedDate) -> None: ...
+    def list(self, *, limit: int = 100, offset: int = 0) -> list[ClosedDate]: ...

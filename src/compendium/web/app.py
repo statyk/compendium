@@ -21,6 +21,7 @@ from compendium.web.routes import (
     items,
     kiosk,
     labels,
+    library_hours,
     me,
     notifications,
     patron_categories,
@@ -57,6 +58,7 @@ def create_web_router() -> APIRouter:
     router.include_router(admin_holds.router)
     router.include_router(admin_circulation.router)
     router.include_router(admin_settings.router)
+    router.include_router(library_hours.router)
     return router
 
 

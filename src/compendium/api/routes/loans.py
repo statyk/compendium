@@ -17,12 +17,18 @@ from compendium.repositories.sql.loan_policy_repository import SqlLoanPolicyRepo
 from compendium.repositories.sql.loan_repository import SqlLoanRepository
 from compendium.repositories.sql.patron_repository import SqlPatronRepository
 from compendium.services.audit import AuditService
+from compendium.services.calendar import CalendarService
 from compendium.services.circulation import CirculationService
+from compendium.api.deps import get_calendar_svc
 
 router = APIRouter()
 
 
-def _circulation(session: Session, actor: AppUser | None = None) -> CirculationService:
+def _circulation(
+    session: Session,
+    actor: AppUser | None = None,
+    calendar_svc: CalendarService | None = None,
+) -> CirculationService:
     settings = get_settings()
     return CirculationService(
         item_repo=SqlItemRepository(session),
@@ -32,6 +38,7 @@ def _circulation(session: Session, actor: AppUser | None = None) -> CirculationS
         hold_repo=SqlHoldRepository(session),
         policy_repo=SqlLoanPolicyRepository(session),
         hold_pickup_days=get_site_setting("hold_pickup_days"),
+        calendar_svc=calendar_svc,
         audit_svc=AuditService(SqlAuditLogRepository(session)),
         actor=actor,
         source="api",
@@ -43,9 +50,10 @@ def checkout(
     body: CheckoutRequest,
     session: Session = Depends(get_session),
     user: AppUser = Depends(require_permission("loan.checkout")),
+    calendar_svc: CalendarService = Depends(get_calendar_svc),
 ) -> LoanResponse:
     try:
-        loan = _circulation(session, actor=user).checkout(
+        loan = _circulation(session, actor=user, calendar_svc=calendar_svc).checkout(
             body.barcode, body.card_number, override_holds=body.override_holds
         )
     except (NotFoundError, BusinessRuleError) as exc:
@@ -71,9 +79,10 @@ def renew(
     loan_id: int = Path(),
     session: Session = Depends(get_session),
     _user: AppUser = Depends(require_permission("loan.renew.any")),
+    calendar_svc: CalendarService = Depends(get_calendar_svc),
 ) -> LoanResponse:
     try:
-        loan = _circulation(session).renew_by_id(loan_id)
+        loan = _circulation(session, calendar_svc=calendar_svc).renew_by_id(loan_id)
     except (NotFoundError, BusinessRuleError) as exc:
         raise HTTPException(status_code=422, detail=str(exc)) from exc
     return LoanResponse.model_validate(loan)

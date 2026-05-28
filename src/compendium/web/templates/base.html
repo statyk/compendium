@@ -94,6 +94,8 @@
                 {% if has_permission(user, 'patron.manage') %}<li><a href="/ui/admin/patron-categories">Patron Categories</a></li>{% endif %}
                 {% if has_permission(user, 'policy.edit') %}<li><a href="/ui/policies">Loan Policies</a></li>{% endif %}
                 {% if has_permission(user, 'branch.edit') %}<li><a href="/ui/branches">Branches</a></li>{% endif %}
+                {% if has_permission(user, 'calendar.manage') %}<li><a href="/ui/admin/library-hours">Library Hours</a></li>{% endif %}
+                {% if has_permission(user, 'calendar.manage') %}<li><a href="/ui/admin/closed-dates">Closed Dates</a></li>{% endif %}
                 {% if has_permission(user, 'loan.checkout') %}<li><a href="/ui/kiosk">Kiosk</a></li>{% endif %}
                 {% if has_permission(user, 'notification.manage') %}<li><a href="/ui/admin/notifications">Notifications</a></li>{% endif %}
                 {% if has_permission(user, 'report.view') %}<li><a href="/ui/reports">Reports</a></li>{% endif %}

@@ -18,9 +18,10 @@ from compendium.repositories.sql.loan_policy_repository import SqlLoanPolicyRepo
 from compendium.repositories.sql.loan_repository import SqlLoanRepository
 from compendium.repositories.sql.patron_repository import SqlPatronRepository
 from compendium.services.audit import AuditService
+from compendium.services.calendar import CalendarService
 from compendium.services.circulation import CirculationService
 from compendium.web.csrf import check_csrf_form, ensure_csrf, set_csrf_cookie
-from compendium.web.deps import require_web_permission
+from compendium.web.deps import get_calendar_svc, require_web_permission
 from compendium.web.jinja import templates
 
 router = APIRouter()
@@ -28,7 +29,11 @@ router = APIRouter()
 _PERM = "loan.checkout"
 
 
-def _circ(session: Session, actor: AppUser | None = None) -> CirculationService:
+def _circ(
+    session: Session,
+    actor: AppUser | None = None,
+    calendar_svc: CalendarService | None = None,
+) -> CirculationService:
     settings = get_settings()
     return CirculationService(
         item_repo=SqlItemRepository(session),
@@ -38,6 +43,7 @@ def _circ(session: Session, actor: AppUser | None = None) -> CirculationService:
         hold_repo=SqlHoldRepository(session),
         policy_repo=SqlLoanPolicyRepository(session),
         hold_pickup_days=get_site_setting("hold_pickup_days"),
+        calendar_svc=calendar_svc,
         audit_svc=AuditService(SqlAuditLogRepository(session)),
         actor=actor,
         source="web",
@@ -71,10 +77,11 @@ def checkout(
     csrf_token: str = Form(default=""),
     user: AppUser = Depends(require_web_permission(_PERM)),
     session: Session = Depends(get_session),
+    calendar_svc: CalendarService = Depends(get_calendar_svc),
 ):
     check_csrf_form(request, csrf_token)
     try:
-        loan = _circ(session, actor=user).checkout(
+        loan = _circ(session, actor=user, calendar_svc=calendar_svc).checkout(
             barcode, card_number, override_holds=override_holds
         )
         due = loan.due_at.strftime("%Y-%m-%d") if loan.due_at else "—"
@@ -107,10 +114,11 @@ def checkin(
     csrf_token: str = Form(default=""),
     user: AppUser = Depends(require_web_permission(_PERM)),
     session: Session = Depends(get_session),
+    calendar_svc: CalendarService = Depends(get_calendar_svc),
 ):
     check_csrf_form(request, csrf_token)
     try:
-        _circ(session).checkin(barcode)
+        _circ(session, calendar_svc=calendar_svc).checkin(barcode)
         return HTMLResponse(
             f"<p class='success-banner'>Checked in <strong>{escape(barcode)}</strong>.</p>"
         )
@@ -154,10 +162,11 @@ def renew(
     csrf_token: str = Form(default=""),
     user: AppUser = Depends(require_web_permission(_PERM)),
     session: Session = Depends(get_session),
+    calendar_svc: CalendarService = Depends(get_calendar_svc),
 ):
     check_csrf_form(request, csrf_token)
     try:
-        loan = _circ(session).renew(barcode, card_number)
+        loan = _circ(session, calendar_svc=calendar_svc).renew(barcode, card_number)
         due = loan.due_at.strftime("%Y-%m-%d") if loan.due_at else "—"
         return HTMLResponse(
             f"<p class='success-banner'>Renewed <strong>{escape(barcode)}</strong>. "

@@ -375,6 +375,37 @@ Writes go through `services/site_settings.set_site_setting()`, which also emits 
 
 ---
 
+### `library_hours`
+
+One row per weekday; drives closed-day checks and due-date rolling (see `CalendarService`).
+
+| Column | Type | Notes |
+|--------|------|-------|
+| weekday | integer PK | 0=Monday … 6=Sunday (ISO Python convention) |
+| is_open | boolean | Whether the library is open that day |
+| open_time | time NULLABLE | Opening time in local library hours |
+| close_time | time NULLABLE | Closing time; due dates roll to this moment. Falls back to 23:59 if NULL |
+
+Seeded at `db init` / first migration with 7 rows (all open, 00:00–23:59), which preserves pre-calendar due-date behaviour until a librarian configures hours.
+
+---
+
+### `closed_date`
+
+Holidays, breaks, and one-off closures. Closed dates override the weekday schedule.
+
+| Column | Type | Notes |
+|--------|------|-------|
+| id | integer PK | |
+| start_date | date | Inclusive start of the closure |
+| end_date | date | Inclusive end (same as start for single-day closures) |
+| label | varchar(128) NULLABLE | Human-readable name (e.g. "Christmas") |
+| recurs_annually | boolean | When true, the closure repeats on the same month/day every year |
+
+Index: `ix_closed_date_start` on `start_date`.
+
+---
+
 ## Migration history
 
 | Revision | Description |
@@ -398,3 +429,4 @@ Writes go through `services/site_settings.set_site_setting()`, which also emits 
 | `b2c3d4e5f6a7` | Add counters table (auto-sequence for accession numbers) |
 | `c3d4e5f6a7b8` | Revamp identifiers (barcode format + external ID normalization) |
 | `d7e8f9a0b1c2` | Add work.sort_title (article-ignoring catalog sort key) |
+| `c4d5e6f7a8b9` | Add library_hours + closed_date; calendar.manage permission on Librarian |

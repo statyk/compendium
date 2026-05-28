@@ -57,6 +57,21 @@ def deactivate_expired_patrons(
             )
 
 
+def _calendar_svc(session):
+    from compendium.repositories.sql.calendar_repository import (
+        SqlClosedDateRepository,
+        SqlLibraryHoursRepository,
+    )
+    from compendium.services.calendar import CalendarService
+
+    return CalendarService(
+        hours_repo=SqlLibraryHoursRepository(session),
+        closed_date_repo=SqlClosedDateRepository(session),
+        timezone=get_site_setting("library_timezone"),
+        source="cli",
+    )
+
+
 def _holds_svc(session) -> HoldService:
     settings = get_settings()
     return HoldService(
@@ -67,6 +82,7 @@ def _holds_svc(session) -> HoldService:
         item_repo=SqlItemRepository(session),
         hold_expiry_days=get_site_setting("hold_expiry_days"),
         hold_pickup_days=get_site_setting("hold_pickup_days"),
+        calendar_svc=_calendar_svc(session),
         audit_svc=AuditService(SqlAuditLogRepository(session)),
         actor_label=f"cli:{getpass.getuser()}",
         source="cli",
@@ -207,6 +223,7 @@ def assess_overdue_fines_cmd() -> None:
             item_repo=SqlItemRepository(session),
             policy_repo=SqlLoanPolicyRepository(session),
             settings=settings,
+            calendar_svc=_calendar_svc(session),
             audit_svc=audit,
             actor_label=f"cli:{getpass.getuser()}",
             source="cli",

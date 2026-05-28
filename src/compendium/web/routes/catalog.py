@@ -33,7 +33,8 @@ from compendium.services.discovery import DiscoveryService
 from compendium.services.holds import HoldService
 from compendium.services.site_settings import get_site_setting
 from compendium.web.csrf import check_csrf_form, ensure_csrf, set_csrf_cookie
-from compendium.web.deps import get_web_user, require_web_permission, require_web_user
+from compendium.services.calendar import CalendarService
+from compendium.web.deps import get_calendar_svc, get_web_user, require_web_permission, require_web_user
 from compendium.web.jinja import templates
 
 router = APIRouter()
@@ -53,10 +54,8 @@ def _catalog_svc(session: Session, actor: AppUser) -> CatalogService:
     )
 
 
-def _holds_svc(session: Session) -> HoldService:
+def _holds_svc(session: Session, calendar_svc: CalendarService | None = None) -> HoldService:
     settings = get_settings()
-    # Wire notification_svc so the immediate-promote path (and _release_held_item
-    # reassignments) queues a hold_ready email when a hold becomes AVAILABLE.
     from compendium.repositories.sql.notification_repository import (
         SqlNotificationRepository,
     )
@@ -77,6 +76,7 @@ def _holds_svc(session: Session) -> HoldService:
         item_repo=SqlItemRepository(session),
         hold_expiry_days=get_site_setting("hold_expiry_days"),
         hold_pickup_days=get_site_setting("hold_pickup_days"),
+        calendar_svc=calendar_svc,
         notification_svc=notifs,
     )
 
@@ -672,13 +672,14 @@ def place_hold(
     csrf_token: str = Form(default=""),
     user=Depends(require_web_user),
     session: Session = Depends(get_session),
+    calendar_svc: CalendarService = Depends(get_calendar_svc),
 ):
     check_csrf_form(request, csrf_token)
     patron = SqlPatronRepository(session).get_by_user_id(user.id)
     if patron is None:
         return HTMLResponse("<p class='error-banner'>No patron account linked to your user.</p>")
     try:
-        _holds_svc(session).place(work_id, patron.library_card_number)
+        _holds_svc(session, calendar_svc).place(work_id, patron.library_card_number)
         return HTMLResponse("<p class='success-banner'>Hold placed successfully.</p>")
     except (BusinessRuleError, NotFoundError) as exc:
         return HTMLResponse(f"<p class='error-banner'>{escape(str(exc))}</p>")
@@ -692,13 +693,14 @@ def place_hold_for(
     csrf_token: str = Form(default=""),
     user=Depends(require_web_permission("hold.place.any")),
     session: Session = Depends(get_session),
+    calendar_svc: CalendarService = Depends(get_calendar_svc),
 ):
     check_csrf_form(request, csrf_token)
     card = card_number.strip()
     if not card:
         return HTMLResponse("<p class='error-banner'>Enter a patron card number.</p>")
     try:
-        _holds_svc(session).place(work_id, card)
+        _holds_svc(session, calendar_svc).place(work_id, card)
         return HTMLResponse(
             f"<p class='success-banner'>Hold placed for card {escape(card)}.</p>"
         )

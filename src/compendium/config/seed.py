@@ -1,6 +1,8 @@
+from datetime import time
+
 from sqlalchemy.orm import Session
 
-from compendium.domain.models import Branch, LoanPolicy, MediaType, PatronCategory, Role
+from compendium.domain.models import Branch, LibraryHours, LoanPolicy, MediaType, PatronCategory, Role
 
 _MEDIA_TYPES = [
     ("book", "Book"),
@@ -47,6 +49,7 @@ _LIBRARIAN_PERMISSIONS = [
     "audit.view",
     # Administration
     "patron.manage", "patron.account.manage", "policy.edit", "branch.edit",
+    "calendar.manage",
 ]
 
 # SystemAdmin preset — IT/sysadmin seat in multi-person deployments. Manages
@@ -134,5 +137,16 @@ def seed_defaults(session: Session) -> None:
                 is_default=True,
             )
         )
+
+    # Seed library hours for all seven weekdays if not already present.
+    # Default: all open 00:00–23:59, which preserves current due-date behaviour.
+    if not session.query(LibraryHours).first():
+        for wd in range(7):
+            session.add(LibraryHours(
+                weekday=wd,
+                is_open=True,
+                open_time=time(0, 0),
+                close_time=time(23, 59),
+            ))
 
     session.flush()

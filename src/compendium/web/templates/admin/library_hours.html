@@ -1,0 +1,45 @@
+{% extends "base.html" %}
+{% block title %}Library Hours — {{ library_name() }}{% endblock %}
+{% block content %}
+<h2>Library Hours</h2>
+<p><small>Set open/close times for each weekday. Closed days are skipped when computing due dates and overdue fines. Also see <a href="/ui/admin/closed-dates">Closed Dates</a> for holidays and one-off closures.</small></p>
+
+{% if message %}<p class="success-banner">{{ message }}</p>{% endif %}
+{% if error %}<p class="error-banner">{{ error }}</p>{% endif %}
+
+<table>
+  <thead>
+    <tr><th>Day</th><th>Open</th><th>Open time</th><th>Close time</th><th></th></tr>
+  </thead>
+  <tbody>
+    {% for h in hours %}
+    <tr>
+      <td>{{ weekday_names[h.weekday] }}</td>
+      <td>{% if h.is_open %}Open{% else %}<em>Closed</em>{% endif %}</td>
+      <td>{{ h.open_time.strftime('%H:%M') if h.open_time else '—' }}</td>
+      <td>{{ h.close_time.strftime('%H:%M') if h.close_time else '—' }}</td>
+      <td>
+        <form method="post" action="/ui/admin/library-hours/{{ h.weekday }}/update"
+              style="display:flex; gap:0.5rem; align-items:center; margin:0">
+          <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+          <label style="margin:0">
+            <input type="checkbox" name="is_open" value="on"{% if h.is_open %} checked{% endif %}>
+            Open
+          </label>
+          <input type="time" name="open_time"
+                 value="{{ h.open_time.strftime('%H:%M') if h.open_time else '' }}"
+                 style="margin:0; width:8rem">
+          <span>–</span>
+          <input type="time" name="close_time"
+                 value="{{ h.close_time.strftime('%H:%M') if h.close_time else '' }}"
+                 style="margin:0; width:8rem">
+          <button type="submit" style="padding:0.2rem 0.6rem; margin:0; width:auto">Save</button>
+        </form>
+      </td>
+    </tr>
+    {% endfor %}
+  </tbody>
+</table>
+
+<p><small>Timezone used: <strong>{{ library_timezone }}</strong> — change in <a href="/ui/admin/settings/general">General Settings</a>.</small></p>
+{% endblock %}

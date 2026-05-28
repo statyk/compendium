@@ -57,7 +57,7 @@ _PAGES: dict[str, dict[str, Any]] = {
             "Library identity and visitor experience. Changes apply on "
             "the next page render — no restart required."
         ),
-        "keys": ["library_name", "default_theme", "guest_search_enabled", "custom_shortcuts"],
+        "keys": ["library_name", "library_timezone", "default_theme", "guest_search_enabled", "custom_shortcuts"],
     },
     "circulation": {
         "title": "Circulation defaults",

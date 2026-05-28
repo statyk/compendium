@@ -20,12 +20,18 @@ from compendium.repositories.sql.audit_log_repository import SqlAuditLogReposito
 from compendium.repositories.sql.work_repository import SqlWorkRepository
 from compendium.services.audit import AuditService
 from compendium.services.auth import has_permission
+from compendium.services.calendar import CalendarService
 from compendium.services.holds import HoldService
+from compendium.api.deps import get_calendar_svc
 
 router = APIRouter()
 
 
-def _holds(session: Session, actor: AppUser | None = None) -> HoldService:
+def _holds(
+    session: Session,
+    actor: AppUser | None = None,
+    calendar_svc: CalendarService | None = None,
+) -> HoldService:
     settings = get_settings()
     return HoldService(
         hold_repo=SqlHoldRepository(session),
@@ -35,6 +41,7 @@ def _holds(session: Session, actor: AppUser | None = None) -> HoldService:
         item_repo=SqlItemRepository(session),
         hold_expiry_days=get_site_setting("hold_expiry_days"),
         hold_pickup_days=get_site_setting("hold_pickup_days"),
+        calendar_svc=calendar_svc,
         audit_svc=AuditService(SqlAuditLogRepository(session)),
         actor=actor,
         source="api",
@@ -55,10 +62,11 @@ def place_hold(
     body: CreateHoldRequest,
     session: Session = Depends(get_session),
     user: AppUser = Depends(require_permission("hold.place.self")),
+    calendar_svc: CalendarService = Depends(get_calendar_svc),
 ) -> HoldResponse:
     _require_self_or_any(user, session, body.card_number, "hold.place.any")
     try:
-        hold = _holds(session).place(body.work_id, body.card_number)
+        hold = _holds(session, calendar_svc=calendar_svc).place(body.work_id, body.card_number)
     except (NotFoundError, BusinessRuleError) as exc:
         raise HTTPException(status_code=422, detail=str(exc)) from exc
     return HoldResponse.model_validate(hold)

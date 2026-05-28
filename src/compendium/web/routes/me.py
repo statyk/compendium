@@ -25,14 +25,17 @@ from compendium.services.auth import AuthService
 from compendium.services.circulation import CirculationService
 from compendium.services.holds import HoldService
 from compendium.web.csrf import check_csrf_form, ensure_csrf, set_csrf_cookie
-from compendium.web.deps import AUTH_COOKIE, get_web_patron, require_web_user
+from compendium.services.calendar import CalendarService
+from compendium.web.deps import AUTH_COOKIE, get_calendar_svc, get_web_patron, require_web_user
 from compendium.web.jinja import templates
 
 router = APIRouter()
 
 
 def _circ(
-    session: Session, actor: AppUser | None = None
+    session: Session,
+    actor: AppUser | None = None,
+    calendar_svc: CalendarService | None = None,
 ) -> CirculationService:
     return CirculationService(
         item_repo=SqlItemRepository(session),
@@ -42,13 +45,18 @@ def _circ(
         hold_repo=SqlHoldRepository(session),
         policy_repo=SqlLoanPolicyRepository(session),
         hold_pickup_days=get_site_setting("hold_pickup_days"),
+        calendar_svc=calendar_svc,
         audit_svc=AuditService(SqlAuditLogRepository(session)),
         actor=actor,
         source="web",
     )
 
 
-def _holds_svc(session: Session, actor: AppUser | None = None) -> HoldService:
+def _holds_svc(
+    session: Session,
+    actor: AppUser | None = None,
+    calendar_svc: CalendarService | None = None,
+) -> HoldService:
     return HoldService(
         hold_repo=SqlHoldRepository(session),
         patron_repo=SqlPatronRepository(session),
@@ -57,6 +65,7 @@ def _holds_svc(session: Session, actor: AppUser | None = None) -> HoldService:
         item_repo=SqlItemRepository(session),
         hold_expiry_days=get_site_setting("hold_expiry_days"),
         hold_pickup_days=get_site_setting("hold_pickup_days"),
+        calendar_svc=calendar_svc,
         audit_svc=AuditService(SqlAuditLogRepository(session)),
         actor=actor,
         source="web",
@@ -96,10 +105,11 @@ def renew_loan(
     user: AppUser = Depends(require_web_user),
     patron: Patron = Depends(get_web_patron),
     session: Session = Depends(get_session),
+    calendar_svc: CalendarService = Depends(get_calendar_svc),
 ):
     check_csrf_form(request, csrf_token)
     try:
-        loan = _circ(session).renew_by_id(loan_id, patron_id=patron.id)
+        loan = _circ(session, calendar_svc=calendar_svc).renew_by_id(loan_id, patron_id=patron.id)
         due = loan.due_at.strftime("%Y-%m-%d") if loan.due_at else "—"
         return HTMLResponse(
             f"<td>{escape(loan.item.barcode)}</td>"

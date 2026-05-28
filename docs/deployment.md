@@ -76,6 +76,7 @@ COMPENDIUM_SECURE_COOKIES=true            # default; set `false` for plain-HTTP 
 # COMPENDIUM_BOOK_METADATA_SOURCE_PREFERENCE=googlebooks  # or 'openlibrary'
 # COMPENDIUM_BOOK_METADATA_FALLBACK_ENABLED=true  # set 'false' to disable secondary-source fallback
 # COMPENDIUM_METADATA_CACHE_TTL_DAYS=30  # positive-hit TTL for metadata cache (days)
+# COMPENDIUM_LIBRARY_TIMEZONE=America/New_York  # IANA timezone for due-date rolling (default: UTC)
 ```
 
 **`JWT_SECRET_KEY` must be set to a strong random value.** The built-in default is intentionally weak — the server refuses to start when it's detected. Generate one with `python -c "import secrets; print(secrets.token_urlsafe(48))"` (or `openssl rand -base64 48`). For first-run / dev work you may set `COMPENDIUM_ALLOW_INSECURE_JWT=1` to bypass the check, which downgrades it to a startup warning; do not use that in production.
