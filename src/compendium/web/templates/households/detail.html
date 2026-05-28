@@ -1,0 +1,71 @@
+{% extends "base.html" %}
+{% block title %}{{ household.name }} — Household — {{ library_name() }}{% endblock %}
+{% block content %}
+{% if error %}
+<div class="error-banner">{{ error }}</div>
+{% endif %}
+
+<h2>{{ household.name }}</h2>
+
+<form method="post" action="/ui/households/{{ household.id }}/edit" style="margin-bottom:1.5rem">
+  <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+  <div style="display:flex;gap:0.5rem;align-items:flex-end;flex-wrap:wrap">
+    <div>
+      <label for="name">Name</label>
+      <input type="text" id="name" name="name" value="{{ household.name }}" required style="width:16rem">
+    </div>
+    <div>
+      <label for="notes">Notes</label>
+      <input type="text" id="notes" name="notes" value="{{ household.notes or '' }}" style="width:20rem">
+    </div>
+    <button type="submit" style="width:auto">Save</button>
+  </div>
+</form>
+
+<h3>Members</h3>
+{% if member_summaries %}
+<table class="responsive-table">
+  <thead>
+    <tr><th>Name</th><th>Card #</th><th>Loans</th><th>Holds</th><th></th></tr>
+  </thead>
+  <tbody>
+    {% for m in member_summaries %}
+    <tr>
+      <td data-label="Name"><a href="/ui/patrons/{{ m.patron.library_card_number }}">{{ m.patron.full_name }}</a>{% if not m.patron.is_active %} <small>(inactive)</small>{% endif %}</td>
+      <td data-label="Card #"><code>{{ m.patron.library_card_number }}</code></td>
+      <td data-label="Loans">{{ m.loan_count }}</td>
+      <td data-label="Holds">{{ m.hold_count }}</td>
+      <td>
+        <form method="post" action="/ui/households/{{ household.id }}/members/{{ m.patron.library_card_number }}/remove" style="display:inline">
+          <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+          <button type="submit" style="width:auto" class="outline contrast">Remove</button>
+        </form>
+      </td>
+    </tr>
+    {% endfor %}
+  </tbody>
+</table>
+{% else %}
+<p>No members yet.</p>
+{% endif %}
+
+<details style="margin-top:1rem">
+  <summary>Add a patron to this household</summary>
+  <form method="post" action="/ui/households/{{ household.id }}/members/add" style="margin-top:0.75rem">
+    <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+    <div style="display:flex;gap:0.5rem;align-items:flex-end">
+      <div>
+        <label for="card_number">Library card number</label>
+        <input type="text" id="card_number" name="card_number" required>
+      </div>
+      <button type="submit" style="width:auto">Add</button>
+    </div>
+  </form>
+</details>
+
+<hr>
+<form method="post" action="/ui/households/{{ household.id }}/delete">
+  <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+  <button type="submit" class="outline contrast" style="width:auto">Delete Household</button>
+</form>
+{% endblock %}

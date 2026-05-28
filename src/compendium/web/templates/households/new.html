@@ -1,0 +1,21 @@
+{% extends "base.html" %}
+{% block title %}New Household — {{ library_name() }}{% endblock %}
+{% block content %}
+<div style="max-width:600px">
+  <h2>New Household</h2>
+  {% if error %}
+  <div class="error-banner">{{ error }}</div>
+  {% endif %}
+  <form method="post" action="/ui/households/new">
+    <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+    <label for="name">Name <sup>*</sup></label>
+    <input type="text" id="name" name="name" required autofocus placeholder="e.g. Smith Family">
+    <label for="notes">Notes</label>
+    <textarea id="notes" name="notes" rows="3" placeholder="Optional notes"></textarea>
+    <div style="display:flex;gap:1rem;align-items:center">
+      <button type="submit" style="width:auto">Create Household</button>
+      <a href="/ui/households">Cancel</a>
+    </div>
+  </form>
+</div>
+{% endblock %}

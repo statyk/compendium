@@ -1,0 +1,26 @@
+{% extends "base.html" %}
+{% block title %}Households — {{ library_name() }}{% endblock %}
+{% block content %}
+<div style="display:flex;justify-content:space-between;align-items:baseline;margin-bottom:1rem">
+  <h2 style="margin:0">Households</h2>
+  <a href="/ui/households/new" role="button" class="outline" style="padding:0.25rem 0.75rem">+ New Household</a>
+</div>
+{% if items %}
+<table class="responsive-table">
+  <thead>
+    <tr><th>Name</th><th>Members</th><th></th></tr>
+  </thead>
+  <tbody>
+    {% for item in items %}
+    <tr>
+      <td data-label="Name"><a href="/ui/households/{{ item.household.id }}">{{ item.household.name }}</a></td>
+      <td data-label="Members">{{ item.member_count }}</td>
+      <td><a href="/ui/households/{{ item.household.id }}">View</a></td>
+    </tr>
+    {% endfor %}
+  </tbody>
+</table>
+{% else %}
+<p>No households yet. <a href="/ui/households/new">Create the first one.</a></p>
+{% endif %}
+{% endblock %}
