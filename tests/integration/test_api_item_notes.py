@@ -241,3 +241,39 @@ class TestDeleteItemNote:
         headers = _auth_header(db, "lib_del4", "Librarian")
         r = client.delete("/items/NONEXISTENT-BARCODE/notes/1", headers=headers)
         assert r.status_code == 404
+
+    def test_cannot_delete_other_items_note(self, client, db):
+        """Cannot delete a note that belongs to a different item (cross-item guard)."""
+        item_a = _make_item(db)
+        item_b = _make_item(db)
+        note = ItemNote(item_id=item_a.id, note="Belongs to A", kind="general", is_system=False)
+        db.add(note)
+        db.commit()
+
+        headers = _auth_header(db, "lib_del5", "Librarian")
+        r = client.delete(f"/items/{item_b.barcode}/notes/{note.id}", headers=headers)
+        assert r.status_code == 404
+
+
+class TestInvalidKind:
+    def test_status_kind_is_rejected(self, client, db):
+        """Posting kind='status' is rejected (system-only kind)."""
+        item = _make_item(db)
+        headers = _auth_header(db, "lib_kind1", "Librarian")
+        r = client.post(
+            f"/items/{item.barcode}/notes",
+            json={"kind": "status", "note": "Manual status note"},
+            headers=headers,
+        )
+        assert r.status_code == 422
+
+    def test_invalid_kind_is_rejected(self, client, db):
+        """Posting an unknown kind value returns 422."""
+        item = _make_item(db)
+        headers = _auth_header(db, "lib_kind2", "Librarian")
+        r = client.post(
+            f"/items/{item.barcode}/notes",
+            json={"kind": "bogus_kind", "note": "Something"},
+            headers=headers,
+        )
+        assert r.status_code == 422
