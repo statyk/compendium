@@ -121,10 +121,12 @@
       <td data-label="By"><small>{{ n.actor_label or (n.author.username if n.author else "system") }}</small></td>
       <td>
         {% if not n.is_system and has_permission(user, 'item.edit') %}
-        <form method="post" action="/ui/items/{{ item.barcode }}/notes/{{ n.id }}/delete" style="display:inline">
+        <form hx-post="/ui/items/{{ item.barcode }}/notes/{{ n.id }}/delete"
+              hx-include="[name='csrf_token']"
+              hx-confirm="Delete this note?"
+              style="display:inline">
           <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
-          <button type="submit" class="outline contrast" style="width:auto"
-                  hx-confirm="Delete this note?">Delete</button>
+          <button type="submit" class="outline contrast" style="width:auto">Delete</button>
         </form>
         {% endif %}
       </td>
