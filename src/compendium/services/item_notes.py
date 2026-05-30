@@ -97,5 +97,4 @@ class ItemNoteService:
 def record_system_note(repo: ItemNoteRepository | None, item_id: int, kind: str, text: str) -> None:
     """Append a system-generated note; no-op if repo is None."""
     if repo is not None:
-        from compendium.domain.models import ItemNote
         repo.add(ItemNote(item_id=item_id, kind=kind, note=text, is_system=True))
