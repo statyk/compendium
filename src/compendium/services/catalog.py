@@ -17,6 +17,7 @@ from compendium.repositories.base import (
     CounterRepository,
     CreatorRepository,
     HoldRepository,
+    ItemNoteRepository,
     ItemRepository,
     MediaTypeRepository,
     WorkRepository,
@@ -128,6 +129,7 @@ class CatalogService:
         source: str = "system",
         hold_repo: HoldRepository | None = None,
         counter_repo: CounterRepository | None = None,
+        item_note_repo: ItemNoteRepository | None = None,
     ) -> None:
         self._works = work_repo
         self._items = item_repo
@@ -140,6 +142,7 @@ class CatalogService:
         self._source = source
         self._holds = hold_repo
         self._counters = counter_repo
+        self._item_notes = item_note_repo
 
     # ------------------------------------------------------------------
     # Public API
@@ -711,6 +714,7 @@ class CatalogService:
             raise NotFoundError(f"No item with barcode '{barcode}'")
 
         changes: dict[str, object | None] = {}
+        old_condition = item.condition
         if location is not _MISSING:
             new = location.strip() if isinstance(location, str) and location.strip() else None
             if new != item.location:
@@ -740,6 +744,13 @@ class CatalogService:
             AuditEntityType.ITEM, item.id, AuditAction.UPDATE,
             {"barcode": item.barcode, "changes": changes},
         )
+        if "condition" in changes:
+            from compendium.services.item_notes import ItemNoteKind, record_system_note
+
+            record_system_note(
+                self._item_notes, item.id, ItemNoteKind.CONDITION.value,
+                f"Condition changed from '{old_condition or '—'}' to '{changes['condition']}'.",
+            )
         return result
 
     def replace_creators(
@@ -950,6 +961,12 @@ class CatalogService:
         self._record(
             AuditEntityType.ITEM, item.id, AuditAction.WITHDRAW,
             {"snapshot": {"barcode": item.barcode, "work_id": item.work_id}},
+        )
+        from compendium.services.item_notes import ItemNoteKind, record_system_note
+
+        record_system_note(
+            self._item_notes, item.id, ItemNoteKind.STATUS.value,
+            "Item withdrawn from circulation.",
         )
         return result
 

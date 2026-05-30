@@ -74,3 +74,12 @@ class NotificationTemplate(StrEnum):
     HOLD_READY = "hold_ready"
     DUE_SOON = "due_soon"
     OVERDUE = "overdue"
+
+
+class ItemNoteKind(StrEnum):
+    GENERAL = "general"
+    CONDITION = "condition"
+    REPAIR = "repair"
+    PROVENANCE = "provenance"
+    ACQUISITION = "acquisition"
+    STATUS = "status"  # system-generated only

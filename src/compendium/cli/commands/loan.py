@@ -10,6 +10,7 @@ from compendium.repositories.sql.audit_log_repository import SqlAuditLogReposito
 from compendium.repositories.sql.branch_repository import SqlBranchRepository
 from compendium.repositories.sql.fine_repository import SqlFineRepository
 from compendium.repositories.sql.hold_repository import SqlHoldRepository
+from compendium.repositories.sql.item_note_repository import SqlItemNoteRepository
 from compendium.repositories.sql.item_repository import SqlItemRepository
 from compendium.repositories.sql.loan_policy_repository import SqlLoanPolicyRepository
 from compendium.repositories.sql.loan_repository import SqlLoanRepository
@@ -48,6 +49,7 @@ def _circulation(session) -> CirculationService:
         audit_svc=audit,
         actor_label=f"cli:{getpass.getuser()}",
         source="cli",
+        item_note_repo=SqlItemNoteRepository(session),
     )
 
 

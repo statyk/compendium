@@ -7,7 +7,7 @@ from sqlalchemy import BigInteger, Boolean, Date, ForeignKey, Index, Integer, St
 from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column, relationship
 from sqlalchemy.types import JSON
 
-from compendium.domain.enums import HoldStatus, ItemStatus
+from compendium.domain.enums import HoldStatus, ItemNoteKind, ItemStatus
 from compendium.domain.types import UtcDateTime
 
 
@@ -119,6 +119,32 @@ class Item(Base):
 
     work: Mapped[Work] = relationship(back_populates="items")
     branch: Mapped[Branch] = relationship()
+    note_entries: Mapped[list["ItemNote"]] = relationship(
+        back_populates="item",
+        cascade="all, delete-orphan",
+        order_by="ItemNote.created_at.desc()",
+    )
+
+
+class ItemNote(Base):
+    __tablename__ = "item_note"
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    item_id: Mapped[int] = mapped_column(
+        ForeignKey("item.id", ondelete="CASCADE"), index=True
+    )
+    kind: Mapped[str] = mapped_column(String(16), default=ItemNoteKind.GENERAL.value, server_default="general")
+    note: Mapped[str] = mapped_column(Text)
+    event_date: Mapped[date | None] = mapped_column(Date, nullable=True)
+    is_system: Mapped[bool] = mapped_column(Boolean, default=False, server_default="0")
+    user_id: Mapped[int | None] = mapped_column(
+        ForeignKey("app_user.id"), nullable=True
+    )
+    actor_label: Mapped[str | None] = mapped_column(String(128), nullable=True)
+    created_at: Mapped[datetime] = mapped_column(UtcDateTime, server_default=func.now())
+
+    item: Mapped["Item"] = relationship(back_populates="note_entries")
+    author: Mapped["AppUser | None"] = relationship(foreign_keys=[user_id])
 
 
 class Role(Base):

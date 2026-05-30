@@ -14,6 +14,7 @@ from compendium.domain.models import AppUser, Hold, Item, Loan, Patron
 from compendium.repositories.base import (
     BranchRepository,
     HoldRepository,
+    ItemNoteRepository,
     ItemRepository,
     LoanPolicyRepository,
     LoanRepository,
@@ -47,6 +48,7 @@ class CirculationService:
         actor: AppUser | None = None,
         actor_label: str | None = None,
         source: str = "system",
+        item_note_repo: ItemNoteRepository | None = None,
     ) -> None:
         self._items = item_repo
         self._loans = loan_repo
@@ -62,6 +64,7 @@ class CirculationService:
         self._actor = actor
         self._actor_label = actor_label
         self._source = source
+        self._item_notes = item_note_repo
 
     def _record(
         self,
@@ -356,6 +359,11 @@ class CirculationService:
                 "note": note,
             },
         )
+        from compendium.services.item_notes import ItemNoteKind, record_system_note
+
+        record_system_note(
+            self._item_notes, item.id, ItemNoteKind.STATUS.value, "Item declared lost."
+        )
         return item
 
     def mark_damaged(
@@ -393,6 +401,11 @@ class CirculationService:
                 "note": note,
             },
         )
+        from compendium.services.item_notes import ItemNoteKind, record_system_note
+
+        record_system_note(
+            self._item_notes, item.id, ItemNoteKind.STATUS.value, "Item marked as damaged."
+        )
         return item
 
     def clear_damage(self, barcode: str) -> Item:
@@ -411,6 +424,12 @@ class CirculationService:
             AuditAction.CLEAR_DAMAGE,
             {"barcode": item.barcode},
         )
+        from compendium.services.item_notes import ItemNoteKind, record_system_note
+
+        record_system_note(
+            self._item_notes, item.id, ItemNoteKind.STATUS.value,
+            "Damage cleared; item returned to available.",
+        )
         return item
 
     def clear_lost(self, barcode: str) -> Item:
@@ -428,6 +447,12 @@ class CirculationService:
             item.id,
             AuditAction.CLEAR_LOST,
             {"barcode": item.barcode},
+        )
+        from compendium.services.item_notes import ItemNoteKind, record_system_note
+
+        record_system_note(
+            self._item_notes, item.id, ItemNoteKind.STATUS.value,
+            "Item recovered; status set to available.",
         )
         return item
 
@@ -475,6 +500,12 @@ class CirculationService:
                 "note": note,
             },
         )
+        from compendium.services.item_notes import ItemNoteKind, record_system_note
+
+        record_system_note(
+            self._item_notes, item.id, ItemNoteKind.STATUS.value,
+            "Patron claimed item returned.",
+        )
         return item
 
     def verify_returned(self, barcode: str) -> Loan:
@@ -508,6 +539,12 @@ class CirculationService:
                 "barcode": item.barcode,
                 "loan_id": loan.id,
             },
+        )
+        from compendium.services.item_notes import ItemNoteKind, record_system_note
+
+        record_system_note(
+            self._item_notes, item.id, ItemNoteKind.STATUS.value,
+            "Claim verified; item found and returned.",
         )
         return loan
 
@@ -544,5 +581,11 @@ class CirculationService:
                 "loan_id": loan.id,
                 "note": note,
             },
+        )
+        from compendium.services.item_notes import ItemNoteKind, record_system_note
+
+        record_system_note(
+            self._item_notes, item.id, ItemNoteKind.STATUS.value,
+            "Patron's claim accepted; item returned to circulation.",
         )
         return loan

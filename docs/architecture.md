@@ -605,6 +605,27 @@ POST   /items/{barcode}/clear-lost
 
 ---
 
+## Item notes / condition history
+
+The `item_note` table holds a dated per-item history trail. Each row carries `item_id`, `kind` (enum), `note` (free text), optional `event_date`, `is_system` (bool), and optional actor attribution (`user_id`, `actor_label`).
+
+**Auto-logging.** System entries (`is_system=True`) are written automatically by:
+- `CatalogService.update_item` — whenever `condition` changes.
+- `CatalogService.withdraw_item` — on withdrawal.
+- `CirculationService` — on `declare_lost`, `mark_damaged`, `clear_damage`, `clear_lost`, `claim_returned`, `verify_returned`, and `write_off_claim`.
+
+Routine circulation (checkout / checkin / renew / hold-fill) is **deliberately excluded** — loan history already records those transitions.
+
+**Immutability.** `is_system=True` entries cannot be deleted via any interface.
+
+**Permissions.** `item.view` is required to read the note trail; `item.edit` is required to add or delete manual entries. No new permission string was introduced.
+
+**Wiring.** Pass `item_note_repo=SqlItemNoteRepository(session)` to `CatalogService` and `CirculationService` factory calls. When `None`, auto-logging is silently skipped (backward-compatible for callers that don't inject the repo).
+
+**Interfaces.** Web UI: note trail shown on `/ui/items/{barcode}` with add/delete forms. API: `GET /items/{barcode}/notes`, `POST /items/{barcode}/notes`, `DELETE /items/{barcode}/notes/{note_id}`. CLI: `compendium item note add/list/delete`.
+
+---
+
 ## Notifications
 
 `services/notifications/` provides an outbox-pattern email notification pipeline. Triggers write `Notification` rows synchronously; a cron-invoked drainer (`compendium maintenance send-queued-notifications`) renders pending rows and delivers them via SMTP (stdlib `smtplib`). No extra runtime deps.

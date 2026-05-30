@@ -431,3 +431,20 @@ class HouseholdListResponse(BaseModel):
     name: str
     notes: str | None
     member_count: int
+
+
+class CreateItemNoteRequest(BaseModel):
+    kind: str = "general"
+    note: str
+    event_date: date | None = None
+
+
+class ItemNoteResponse(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    id: int
+    kind: str
+    note: str
+    event_date: date | None
+    is_system: bool
+    created_at: datetime

@@ -1,3 +1,7 @@
+import getpass
+from datetime import date
+from typing import Optional
+
 import typer
 
 from compendium.db.session import session_scope
@@ -6,12 +10,14 @@ from compendium.repositories.sql.audit_log_repository import SqlAuditLogReposito
 from compendium.repositories.sql.branch_repository import SqlBranchRepository
 from compendium.repositories.sql.creator_repository import SqlCreatorRepository
 from compendium.repositories.sql.hold_repository import SqlHoldRepository
+from compendium.repositories.sql.item_note_repository import SqlItemNoteRepository
 from compendium.repositories.sql.item_repository import SqlItemRepository
 from compendium.repositories.sql.media_type_repository import SqlMediaTypeRepository
 from compendium.repositories.sql.counters import SqlCounterRepository
 from compendium.repositories.sql.work_repository import SqlWorkRepository
 from compendium.services.audit import AuditService
 from compendium.services.catalog import CatalogService
+from compendium.services.item_notes import ItemNoteService
 from compendium.services.metadata import (
     musicbrainz_search_title,
     open_library_search_title,
@@ -19,6 +25,9 @@ from compendium.services.metadata import (
 )
 
 app = typer.Typer(help="Catalog item commands.")
+
+note_app = typer.Typer(help="Item note commands.")
+app.add_typer(note_app, name="note")
 
 _TITLE_SEARCH_SOURCES: dict[str, tuple[str, str, str]] = {
     # media_type -> (source_label, identifier_kind_for_picks, search_fn_name)
@@ -96,6 +105,7 @@ def _catalog(session):
         hold_repo=SqlHoldRepository(session),
         source="cli",
         counter_repo=SqlCounterRepository(session),
+        item_note_repo=SqlItemNoteRepository(session),
     )
 
 
@@ -424,3 +434,93 @@ def list_items(
             copies = len(work.items)
             suffix = f" [{copies} cop{'y' if copies == 1 else 'ies'}]"
             typer.echo(f"  {work.title}" + (f" — {creators}" if creators else "") + suffix)
+
+
+# ---------------------------------------------------------------------------
+# Item note sub-commands
+# ---------------------------------------------------------------------------
+
+
+def _note_svc(session) -> ItemNoteService:
+    return ItemNoteService(
+        item_note_repo=SqlItemNoteRepository(session),
+        item_repo=SqlItemRepository(session),
+        audit_svc=AuditService(SqlAuditLogRepository(session)),
+        actor_label=f"cli:{getpass.getuser()}",
+        source="cli",
+    )
+
+
+@note_app.command("add")
+def note_add(
+    barcode: str = typer.Argument(..., help="Item barcode"),
+    note: str = typer.Option(..., "--note", "-n", help="Note text"),
+    kind: str = typer.Option(
+        "general",
+        "--kind",
+        "-k",
+        help="Note kind (general/condition/repair/provenance/acquisition)",
+    ),
+    date_str: Optional[str] = typer.Option(
+        None, "--date", "-d", help="Event date YYYY-MM-DD"
+    ),
+) -> None:
+    """Add a note to an item."""
+    event_date: Optional[date] = None
+    if date_str is not None:
+        try:
+            event_date = date.fromisoformat(date_str)
+        except ValueError:
+            raise typer.BadParameter(
+                f"Invalid date '{date_str}'. Expected YYYY-MM-DD.", param_hint="--date"
+            )
+    try:
+        with session_scope() as session:
+            _note_svc(session).add_note(barcode, kind=kind, note=note, event_date=event_date)
+        typer.echo(f"Note added to item {barcode}.")
+    except DomainError as e:
+        typer.echo(f"Error: {e}", err=True)
+        raise typer.Exit(1)
+
+
+@note_app.command("list")
+def note_list(
+    barcode: str = typer.Argument(..., help="Item barcode"),
+) -> None:
+    """List notes for an item."""
+    try:
+        with session_scope() as session:
+            notes = _note_svc(session).list_for_item(barcode)
+    except DomainError as e:
+        typer.echo(f"Error: {e}", err=True)
+        raise typer.Exit(1)
+
+    if not notes:
+        typer.echo("No notes found.")
+        return
+
+    for n in notes:
+        date_col = str(n.event_date or n.created_at.date())
+        system_tag = " [system]" if n.is_system else ""
+        text = n.note if len(n.note) <= 60 else n.note[:57] + "..."
+        typer.echo(f"  [{n.id}] {date_col}  {n.kind:<12}{system_tag}  {text}")
+
+
+@note_app.command("delete")
+def note_delete(
+    barcode: str = typer.Argument(..., help="Item barcode"),
+    note_id: int = typer.Argument(..., help="Note ID to delete"),
+    yes: bool = typer.Option(False, "--yes", "-y", help="Skip confirmation"),
+) -> None:
+    """Delete a note from an item."""
+    if not yes:
+        confirmed = typer.confirm(f"Delete note {note_id} from item {barcode}?")
+        if not confirmed:
+            raise typer.Abort()
+    try:
+        with session_scope() as session:
+            _note_svc(session).delete_note(barcode, note_id)
+        typer.echo(f"Note {note_id} deleted.")
+    except DomainError as e:
+        typer.echo(f"Error: {e}", err=True)
+        raise typer.Exit(1)

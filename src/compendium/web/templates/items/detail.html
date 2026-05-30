@@ -104,6 +104,71 @@
 </a>
 {% endif %}
 
+{% if has_permission(user, 'item.view') %}
+<hr>
+<h3 id="notes">Notes &amp; history</h3>
+{% if note_entries %}
+<table class="responsive-table">
+  <thead>
+    <tr><th>Date</th><th>Kind</th><th>Note</th><th>By</th><th></th></tr>
+  </thead>
+  <tbody>
+    {% for n in note_entries %}
+    <tr>
+      <td data-label="Date"><small>{{ (n.event_date or n.created_at.date()).strftime("%Y-%m-%d") }}</small></td>
+      <td data-label="Kind"><small>{{ n.kind }}</small></td>
+      <td data-label="Note">{{ n.note }}</td>
+      <td data-label="By"><small>{{ n.actor_label or (n.author.username if n.author else "system") }}</small></td>
+      <td>
+        {% if not n.is_system and has_permission(user, 'item.edit') %}
+        <form hx-post="/ui/items/{{ item.barcode }}/notes/{{ n.id }}/delete"
+              hx-include="[name='csrf_token']"
+              hx-confirm="Delete this note?"
+              hx-target="body"
+              hx-swap="outerHTML"
+              style="display:inline">
+          <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+          <button type="submit" class="outline contrast" style="width:auto">Delete</button>
+        </form>
+        {% endif %}
+      </td>
+    </tr>
+    {% endfor %}
+  </tbody>
+</table>
+{% else %}
+<p class="empty-inline">No notes yet.</p>
+{% endif %}
+
+{% if has_permission(user, 'item.edit') %}
+<details style="margin-top:1rem">
+  <summary>Add a note</summary>
+  <form method="post" action="/ui/items/{{ item.barcode }}/notes/add" style="margin-top:0.75rem">
+    <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+    <div style="display:flex;gap:0.5rem;align-items:flex-end;flex-wrap:wrap">
+      <div>
+        <label for="note_kind">Kind</label>
+        <select id="note_kind" name="kind">
+          <option value="general">General</option>
+          <option value="condition">Condition</option>
+          <option value="repair">Repair</option>
+          <option value="provenance">Provenance</option>
+          <option value="acquisition">Acquisition</option>
+        </select>
+      </div>
+      <div>
+        <label for="note_date">Date (optional)</label>
+        <input type="date" id="note_date" name="event_date">
+      </div>
+    </div>
+    <label for="note_text">Note</label>
+    <textarea id="note_text" name="note" rows="2" required placeholder="Enter note text..."></textarea>
+    <button type="submit" style="width:auto">Add Note</button>
+  </form>
+</details>
+{% endif %}
+{% endif %}
+
 {% if has_permission(user, 'loan.view.any') %}
 <hr>
 <h3>Loan history</h3>
