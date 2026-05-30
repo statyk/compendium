@@ -663,7 +663,7 @@ def add_item_note(
         return RedirectResponse(
             f"/ui/items/{barcode}?error={quote(str(exc))}", status_code=303
         )
-    return RedirectResponse(f"/ui/items/{barcode}", status_code=303)
+    return RedirectResponse(f"/ui/items/{barcode}?message=Note+added.", status_code=303)
 
 
 @router.post("/items/{barcode}/notes/{note_id}/delete")
@@ -682,4 +682,4 @@ def delete_item_note(
         return RedirectResponse(
             f"/ui/items/{barcode}?error={quote(str(exc))}", status_code=303
         )
-    return RedirectResponse(f"/ui/items/{barcode}", status_code=303)
+    return RedirectResponse(f"/ui/items/{barcode}?message=Note+deleted.", status_code=303)

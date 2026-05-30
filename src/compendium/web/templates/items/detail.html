@@ -124,6 +124,8 @@
         <form hx-post="/ui/items/{{ item.barcode }}/notes/{{ n.id }}/delete"
               hx-include="[name='csrf_token']"
               hx-confirm="Delete this note?"
+              hx-target="body"
+              hx-swap="outerHTML"
               style="display:inline">
           <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
           <button type="submit" class="outline contrast" style="width:auto">Delete</button>
