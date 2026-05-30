@@ -50,6 +50,8 @@ class AuditAction:
     CHECKOUT_OVERRIDE_HOLDS = "checkout_override_holds"
     SETTING_UPDATE = "setting_update"
     SETTING_RESET = "setting_reset"
+    NOTE_ADD = "note_add"
+    NOTE_DELETE = "note_delete"
 
 
 class AuditService:
