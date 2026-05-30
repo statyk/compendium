@@ -118,7 +118,9 @@ def test_item_note_is_system_defaults_false(db):
     note = ItemNote(item_id=item.id, note="Manual note")
     db.add(note)
     db.flush()
+    db.refresh(note)
     assert note.is_system is False
+    assert note.kind == ItemNoteKind.GENERAL
 
 
 def test_item_delete_cascades_to_notes(db):

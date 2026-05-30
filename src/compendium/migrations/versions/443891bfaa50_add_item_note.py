@@ -24,7 +24,7 @@ def upgrade() -> None:
         "item_note",
         sa.Column("id", sa.Integer(), nullable=False, primary_key=True),
         sa.Column("item_id", sa.Integer(), nullable=False),
-        sa.Column("kind", sa.String(length=16), nullable=False),
+        sa.Column("kind", sa.String(length=16), server_default="general", nullable=False),
         sa.Column("note", sa.Text(), nullable=False),
         sa.Column("event_date", sa.Date(), nullable=True),
         sa.Column("is_system", sa.Boolean(), server_default="0", nullable=False),

@@ -133,7 +133,7 @@ class ItemNote(Base):
     item_id: Mapped[int] = mapped_column(
         ForeignKey("item.id", ondelete="CASCADE"), index=True
     )
-    kind: Mapped[str] = mapped_column(String(16), default=ItemNoteKind.GENERAL.value)
+    kind: Mapped[str] = mapped_column(String(16), default=ItemNoteKind.GENERAL.value, server_default="general")
     note: Mapped[str] = mapped_column(Text)
     event_date: Mapped[date | None] = mapped_column(Date, nullable=True)
     is_system: Mapped[bool] = mapped_column(Boolean, default=False, server_default="0")
