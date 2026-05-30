@@ -149,6 +149,65 @@ def test_clear_damage_logs_status_note(session, item):
     assert all(n.kind == ItemNoteKind.STATUS.value for n in notes)
 
 
+def test_clear_lost_logs_status_note(session, item, patron):
+    circ = _circulation(session)
+    circ.checkout(item.barcode, patron.library_card_number)
+    session.flush()
+    circ.declare_lost(item.barcode)
+    session.flush()
+    circ.clear_lost(item.barcode)
+    session.flush()
+
+    notes = _notes(session, item.id)
+    assert len(notes) == 2
+    assert all(n.is_system for n in notes)
+    assert all(n.kind == ItemNoteKind.STATUS.value for n in notes)
+
+
+def test_claim_returned_logs_status_note(session, item, patron):
+    circ = _circulation(session)
+    circ.checkout(item.barcode, patron.library_card_number)
+    session.flush()
+    circ.claim_returned(item.barcode)
+    session.flush()
+
+    notes = _notes(session, item.id)
+    assert len(notes) == 1
+    assert notes[0].is_system is True
+    assert notes[0].kind == ItemNoteKind.STATUS.value
+
+
+def test_verify_returned_logs_status_note(session, item, patron):
+    circ = _circulation(session)
+    circ.checkout(item.barcode, patron.library_card_number)
+    session.flush()
+    circ.claim_returned(item.barcode)
+    session.flush()
+    circ.verify_returned(item.barcode)
+    session.flush()
+
+    notes = _notes(session, item.id)
+    assert len(notes) == 2
+    assert all(n.is_system for n in notes)
+
+
+def test_write_off_claim_logs_status_note(session, item, patron):
+    circ = _circulation(session)
+    circ.checkout(item.barcode, patron.library_card_number)
+    session.flush()
+    circ.claim_returned(item.barcode)
+    session.flush()
+    circ.write_off_claim(item.barcode, note="trusted patron")
+    session.flush()
+
+    notes = _notes(session, item.id)
+    assert len(notes) == 2
+    assert all(n.is_system for n in notes)
+    # write_off_claim returns item to circulation, NOT declared lost
+    last = notes[0]  # newest first
+    assert "declared lost" not in last.note.lower()
+
+
 def test_routine_checkout_checkin_logs_no_note(session, item, patron):
     circ = _circulation(session)
     circ.checkout(item.barcode, patron.library_card_number)

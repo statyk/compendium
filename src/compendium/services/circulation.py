@@ -586,6 +586,6 @@ class CirculationService:
 
         record_system_note(
             self._item_notes, item.id, ItemNoteKind.STATUS.value,
-            "Claim written off; item declared lost.",
+            "Patron's claim accepted; item returned to circulation.",
         )
         return loan
