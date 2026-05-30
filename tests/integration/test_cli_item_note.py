@@ -149,3 +149,10 @@ def test_note_list_no_notes(db):
         result = runner.invoke(app, ["item", "note", "list", "NOTE-005"])
     assert result.exit_code == 0, result.output
     assert "No notes" in result.output
+
+
+def test_note_list_nonexistent_barcode_exits_one(db):
+    """Listing notes for a nonexistent barcode exits 1."""
+    with patch("compendium.cli.commands.item.session_scope", _session_scope_for(db)):
+        result = runner.invoke(app, ["item", "note", "list", "DOES-NOT-EXIST"])
+    assert result.exit_code == 1

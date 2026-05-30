@@ -500,7 +500,7 @@ def note_list(
         return
 
     for n in notes:
-        date_col = str(n.event_date) if n.event_date else "          "
+        date_col = str(n.event_date or n.created_at.date())
         system_tag = " [system]" if n.is_system else ""
         text = n.note if len(n.note) <= 60 else n.note[:57] + "..."
         typer.echo(f"  [{n.id}] {date_col}  {n.kind:<12}{system_tag}  {text}")
