@@ -87,7 +87,7 @@ Run `compendium --help` for the full command tree, or `compendium <group> --help
 **Catalog & cataloging**
 | Group | Common subcommands |
 |---|---|
-| `item` | `add` (--isbn / --upc / --mbid / --tmdb-id / --title), `add-manual`, `show`, `list`, `withdraw`, `set-loanable` |
+| `item` | `add` (--isbn / --upc / --mbid / --tmdb-id / --title), `add-manual`, `show`, `list`, `withdraw`, `set-loanable`; `note add/list/delete` |
 | `work` | `search`, `show`, `new-arrivals`, `recently-returned` |
 | `creator` | `list`, `show`, `merge` |
 | `branch` | `list`, `set` |
