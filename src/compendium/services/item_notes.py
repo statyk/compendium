@@ -53,7 +53,7 @@ class ItemNoteService:
             actor_label=self._actor_label,
         )
         result = self._item_note_repo.add(new_note)
-        self._record(item.id, AuditAction.NOTE_ADD, {"barcode": barcode, "kind": kind})
+        self._record(item.id, AuditAction.NOTE_ADD, {"barcode": barcode, "kind": kind, "note": note.strip()})
         return result
 
     def list_for_item(self, barcode: str) -> list[ItemNote]:

@@ -5,7 +5,7 @@ from unittest.mock import MagicMock
 
 from compendium.domain.errors import BusinessRuleError, NotFoundError, ValidationError
 from compendium.domain.models import Item, ItemNote
-from compendium.services.item_notes import ItemNoteService
+from compendium.services.item_notes import ItemNoteService, record_system_note
 
 
 def _svc(**overrides):
@@ -130,3 +130,19 @@ class TestDeleteNote:
         svc._item_note_repo.get.return_value = None
         with pytest.raises(NotFoundError):
             svc.delete_note("BC001", 999)
+
+
+class TestRecordSystemNote:
+    def test_noop_when_repo_is_none(self):
+        record_system_note(None, item_id=1, kind="status", text="lost")
+        # no exception = pass
+
+    def test_calls_repo_add_with_system_note(self):
+        repo = MagicMock()
+        record_system_note(repo, item_id=5, kind="status", text="Status changed to lost.")
+        repo.add.assert_called_once()
+        added: ItemNote = repo.add.call_args[0][0]
+        assert added.item_id == 5
+        assert added.kind == "status"
+        assert added.note == "Status changed to lost."
+        assert added.is_system is True
