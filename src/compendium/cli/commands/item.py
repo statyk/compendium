@@ -6,6 +6,7 @@ from compendium.repositories.sql.audit_log_repository import SqlAuditLogReposito
 from compendium.repositories.sql.branch_repository import SqlBranchRepository
 from compendium.repositories.sql.creator_repository import SqlCreatorRepository
 from compendium.repositories.sql.hold_repository import SqlHoldRepository
+from compendium.repositories.sql.item_note_repository import SqlItemNoteRepository
 from compendium.repositories.sql.item_repository import SqlItemRepository
 from compendium.repositories.sql.media_type_repository import SqlMediaTypeRepository
 from compendium.repositories.sql.counters import SqlCounterRepository
@@ -96,6 +97,7 @@ def _catalog(session):
         hold_repo=SqlHoldRepository(session),
         source="cli",
         counter_repo=SqlCounterRepository(session),
+        item_note_repo=SqlItemNoteRepository(session),
     )
 
 

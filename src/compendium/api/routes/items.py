@@ -8,6 +8,7 @@ from compendium.domain.errors import BusinessRuleError, NotFoundError, Validatio
 from compendium.domain.models import AppUser
 from compendium.repositories.sql.branch_repository import SqlBranchRepository
 from compendium.repositories.sql.creator_repository import SqlCreatorRepository
+from compendium.repositories.sql.item_note_repository import SqlItemNoteRepository
 from compendium.repositories.sql.item_repository import SqlItemRepository
 from compendium.repositories.sql.media_type_repository import SqlMediaTypeRepository
 from compendium.repositories.sql.work_repository import SqlWorkRepository
@@ -33,6 +34,7 @@ def _catalog(session: Session, actor: AppUser | None = None) -> CatalogService:
         source="api",
         hold_repo=SqlHoldRepository(session),
         counter_repo=SqlCounterRepository(session),
+        item_note_repo=SqlItemNoteRepository(session),
     )
 
 
