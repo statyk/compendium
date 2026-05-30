@@ -607,12 +607,12 @@ POST   /items/{barcode}/clear-lost
 
 ## Item notes / condition history
 
-The `item_note` table holds a dated per-item history trail. Each row carries `item_id`, `kind` (enum), `note` (free text), `event_date`, `is_system` (bool), and optional actor attribution (`user_id`, `actor_display`).
+The `item_note` table holds a dated per-item history trail. Each row carries `item_id`, `kind` (enum), `note` (free text), optional `event_date`, `is_system` (bool), and optional actor attribution (`user_id`, `actor_label`).
 
 **Auto-logging.** System entries (`is_system=True`) are written automatically by:
 - `CatalogService.update_item` — whenever `condition` changes.
 - `CatalogService.withdraw_item` — on withdrawal.
-- `CirculationService` — on `declare_lost`, `mark_damaged`, `clear_damage`, `clear_lost`, and claims-returned resolution paths.
+- `CirculationService` — on `declare_lost`, `mark_damaged`, `clear_damage`, `clear_lost`, `claim_returned`, `verify_returned`, and `write_off_claim`.
 
 Routine circulation (checkout / checkin / renew / hold-fill) is **deliberately excluded** — loan history already records those transitions.
 
@@ -622,7 +622,7 @@ Routine circulation (checkout / checkin / renew / hold-fill) is **deliberately e
 
 **Wiring.** Pass `item_note_repo=SqlItemNoteRepository(session)` to `CatalogService` and `CirculationService` factory calls. When `None`, auto-logging is silently skipped (backward-compatible for callers that don't inject the repo).
 
-**Interfaces.** Web UI: note trail shown on `/ui/items/{barcode}` with add/delete forms. API: `GET /items/{barcode}/notes`, `POST /items/{barcode}/notes`, `DELETE /items/{barcode}/notes/{note_id}`. CLI: `compendium item note list/add/delete`.
+**Interfaces.** Web UI: note trail shown on `/ui/items/{barcode}` with add/delete forms. API: `GET /items/{barcode}/notes`, `POST /items/{barcode}/notes`, `DELETE /items/{barcode}/notes/{note_id}`. CLI: `compendium item note add/list/delete`.
 
 ---
 
