@@ -183,6 +183,41 @@ class AppUser(Base):
     )
 
 
+class CuratedList(Base):
+    __tablename__ = "curated_list"
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    slug: Mapped[str] = mapped_column(String(96), unique=True)
+    name: Mapped[str] = mapped_column(String(256))
+    description: Mapped[str | None] = mapped_column(Text, nullable=True)
+    is_public: Mapped[bool] = mapped_column(Boolean, default=True, server_default="1")
+    is_featured: Mapped[bool] = mapped_column(Boolean, default=False, server_default="0")
+    display_order: Mapped[int] = mapped_column(Integer, default=0)
+    created_at: Mapped[datetime] = mapped_column(UtcDateTime, server_default=func.now())
+    updated_at: Mapped[datetime | None] = mapped_column(UtcDateTime, onupdate=func.now())
+    entries: Mapped[list["CuratedListEntry"]] = relationship(
+        back_populates="curated_list",
+        cascade="all, delete-orphan",
+        order_by="CuratedListEntry.display_order",
+    )
+
+
+class CuratedListEntry(Base):
+    __tablename__ = "curated_list_entry"
+
+    list_id: Mapped[int] = mapped_column(
+        ForeignKey("curated_list.id", ondelete="CASCADE"), primary_key=True
+    )
+    work_id: Mapped[int] = mapped_column(
+        ForeignKey("work.id", ondelete="CASCADE"), primary_key=True
+    )
+    display_order: Mapped[int] = mapped_column(Integer, default=0)
+    annotation: Mapped[str | None] = mapped_column(Text, nullable=True)
+
+    curated_list: Mapped["CuratedList"] = relationship(back_populates="entries")
+    work: Mapped["Work"] = relationship()
+
+
 class Household(Base):
     __tablename__ = "household"
 

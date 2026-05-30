@@ -17,6 +17,7 @@ from compendium.web.routes import (
     circ,
     covers,
     creators,
+    curated_lists,
     fines,
     households,
     items,
@@ -61,6 +62,7 @@ def create_web_router() -> APIRouter:
     router.include_router(admin_settings.router)
     router.include_router(library_hours.router)
     router.include_router(households.router)
+    router.include_router(curated_lists.router)
     return router
 
 

@@ -9,6 +9,8 @@ from sqlalchemy.orm import Session
 
 from compendium.db.engine import get_settings
 from compendium.db.session import get_session
+from compendium.repositories.sql.curated_list_repository import SqlCuratedListRepository
+from compendium.services.curated_lists import CuratedListService
 from compendium.domain.enums import CreatorRole, ItemStatus
 from compendium.domain.errors import (
     BusinessRuleError,
@@ -169,6 +171,7 @@ def catalog_search(
                 "order_by": order_by,
                 "new_arrivals": [],
                 "recently_returned": [],
+                "featured_lists": [],
                 "show_landing": False,
             },
         )
@@ -194,9 +197,14 @@ def catalog_search(
     )
     new_arrivals: list = []
     recently_returned: list = []
+    featured_lists: list = []
     if not has_filters:
         new_arrivals = svc.new_arrivals(include_withdrawn_only=include_withdrawn_flag)
         recently_returned = svc.recently_returned(include_withdrawn_only=include_withdrawn_flag)
+        featured_lists = CuratedListService(
+            curated_list_repo=SqlCuratedListRepository(session),
+            work_repo=SqlWorkRepository(session),
+        ).list(featured_only=True, public_only=True, limit=10, offset=0)
     qs = _filters_qs(
         q=q, field=field, media=media_codes, decade=decade_int, avail=available_only,
         include_withdrawn=include_withdrawn_flag, order_by=order_by,
@@ -219,6 +227,7 @@ def catalog_search(
             "filters_qs": qs,
             "new_arrivals": new_arrivals,
             "recently_returned": recently_returned,
+            "featured_lists": featured_lists,
             "show_landing": not has_filters,
         },
     )

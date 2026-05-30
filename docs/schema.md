@@ -390,6 +390,43 @@ Seeded at `db init` / first migration with 7 rows (all open, 00:00–23:59), whi
 
 ---
 
+### `curated_list`
+
+Librarian-curated named collection of works ("Staff picks", "Summer reads"). `slug` is the external-facing identifier — internal IDs are never exposed.
+
+```sql
+CREATE TABLE curated_list (
+    id            INTEGER PRIMARY KEY,
+    slug          VARCHAR(96) NOT NULL UNIQUE,
+    name          VARCHAR(256) NOT NULL,
+    description   TEXT,
+    is_public     BOOLEAN NOT NULL DEFAULT 1,
+    is_featured   BOOLEAN NOT NULL DEFAULT 0,
+    display_order INTEGER NOT NULL DEFAULT 0,
+    created_at    DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    updated_at    DATETIME
+);
+```
+
+---
+
+### `curated_list_entry`
+
+One row per work in a curated list. Composite PK `(list_id, work_id)` prevents duplicates; cascades delete with the parent list.
+
+```sql
+CREATE TABLE curated_list_entry (
+    list_id       INTEGER NOT NULL REFERENCES curated_list(id) ON DELETE CASCADE,
+    work_id       INTEGER NOT NULL REFERENCES work(id) ON DELETE CASCADE,
+    display_order INTEGER NOT NULL DEFAULT 0,
+    annotation    TEXT,
+    PRIMARY KEY (list_id, work_id)
+);
+CREATE INDEX ix_curated_list_entry_list_id ON curated_list_entry(list_id);
+```
+
+---
+
 ### `closed_date`
 
 Holidays, breaks, and one-off closures. Closed dates override the weekday schedule.
@@ -430,3 +467,5 @@ Index: `ix_closed_date_start` on `start_date`.
 | `c3d4e5f6a7b8` | Revamp identifiers (barcode format + external ID normalization) |
 | `d7e8f9a0b1c2` | Add work.sort_title (article-ignoring catalog sort key) |
 | `c4d5e6f7a8b9` | Add library_hours + closed_date; calendar.manage permission on Librarian |
+| `443891bfaa50` | Add item_note table (condition / lifecycle history trail) |
+| (next) | Add curated_list + curated_list_entry; curatedlist.manage permission on Librarian |

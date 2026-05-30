@@ -9,6 +9,7 @@ from compendium.cli.commands import (
     bulk_ops,
     calendar as calendar_cmd,
     creator,
+    curated_list,
     db,
     fine,
     hold,
@@ -58,6 +59,7 @@ app.add_typer(labels.app, name="labels")
 app.add_typer(settings_cmd.app, name="settings")
 
 app.add_typer(calendar_cmd.app, name="calendar")
+app.add_typer(curated_list.app, name="curated-list")
 app.add_typer(household.app, name="household")
 app.add_typer(keygen.app, name="keygen")
 app.add_typer(secrets_cmd.app, name="secrets")

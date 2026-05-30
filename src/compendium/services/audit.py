@@ -20,6 +20,7 @@ class AuditEntityType:
     LIBRARY_HOURS = "library_hours"
     CLOSED_DATE = "closed_date"
     HOUSEHOLD = "household"
+    CURATED_LIST = "curated_list"
 
 
 class AuditAction:
@@ -52,6 +53,8 @@ class AuditAction:
     SETTING_RESET = "setting_reset"
     NOTE_ADD = "note_add"
     NOTE_DELETE = "note_delete"
+    LIST_ADD_WORK = "list_add_work"
+    LIST_REMOVE_WORK = "list_remove_work"
 
 
 class AuditService:

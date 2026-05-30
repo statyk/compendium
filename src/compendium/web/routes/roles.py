@@ -31,7 +31,7 @@ PERMISSION_GROUPS = [
     ("Reports", ["report.view"]),
     ("Labels", ["labels.generate"]),
     ("Audit", ["audit.view"]),
-    ("Administration", ["patron.manage", "patron.account.manage", "household.manage", "policy.edit", "branch.edit", "calendar.manage"]),
+    ("Administration", ["patron.manage", "patron.account.manage", "household.manage", "policy.edit", "branch.edit", "calendar.manage", "curatedlist.manage"]),
     ("System", ["system.manage", "user.manage", "role.manage"]),
 ]
 
@@ -72,6 +72,7 @@ PERMISSION_DESCRIPTIONS: dict[str, str] = {
     "policy.edit":   "Create and edit loan policies (loan period, renewal limits, media/category rules).",
     "branch.edit":   "Edit branch settings: name, location code, and classification defaults.",
     "calendar.manage": "Configure library hours and closed-date exceptions that govern due-date rolling and overdue-fine accrual.",
+    "curatedlist.manage": "Create, edit, and delete curated lists and their contents.",
     # System
     "system.manage": "Edit system-wide settings: library name, guest search, email, and more.",
     "user.manage":   "Create, edit, and deactivate user (staff) accounts.",

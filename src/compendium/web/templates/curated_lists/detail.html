@@ -1,0 +1,132 @@
+{% extends "base.html" %}
+{% block title %}{{ cl.name }} — {{ library_name() }}{% endblock %}
+{% block content %}
+{% set _err = error or request.query_params.get('error') %}
+{% if _err %}
+<div class="error-banner">{{ _err }}</div>
+{% endif %}
+
+<div style="display:flex;justify-content:space-between;align-items:baseline;margin-bottom:0.5rem">
+  <h2 style="margin:0">{{ cl.name }}</h2>
+  <a href="/ui/curated-lists" style="font-size:0.9em">← All Lists</a>
+</div>
+
+<p style="font-size:0.9em;color:#666;margin-top:0">
+  Slug: <code>{{ cl.slug }}</code> ·
+  {% if cl.is_public %}<span style="color:#2d7a2d">Public</span>{% else %}<span style="color:#888">Private</span>{% endif %}
+  {% if cl.is_featured %} · <strong>Featured</strong>{% endif %}
+  · Order: {{ cl.display_order }}
+</p>
+{% if cl.description %}
+<p>{{ cl.description }}</p>
+{% endif %}
+
+<details style="margin-bottom:1.5rem">
+  <summary>Edit list details</summary>
+  <form method="post" action="/ui/curated-lists/{{ cl.slug }}/edit" style="margin-top:0.75rem;max-width:600px">
+    <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+    <label for="edit_name">Name <sup>*</sup></label>
+    <input type="text" id="edit_name" name="name" value="{{ cl.name }}" required>
+    <label for="edit_description">Description</label>
+    <textarea id="edit_description" name="description" rows="3">{{ cl.description or '' }}</textarea>
+    <fieldset>
+      <label>
+        <input type="checkbox" name="is_public" value="1"{% if cl.is_public %} checked{% endif %}>
+        Public (visible to patrons)
+      </label>
+      <label>
+        <input type="checkbox" name="is_featured" value="1"{% if cl.is_featured %} checked{% endif %}>
+        Featured (appears on landing page)
+      </label>
+    </fieldset>
+    <div style="display:flex;gap:1rem;flex-wrap:wrap">
+      <div>
+        <label for="edit_display_order">Display Order</label>
+        <input type="number" id="edit_display_order" name="display_order" value="{{ cl.display_order }}" style="width:8rem">
+      </div>
+      <div>
+        <label for="edit_slug">Slug (rename)</label>
+        <input type="text" id="edit_slug" name="new_slug" value="{{ cl.slug }}" style="width:16rem" placeholder="Leave blank to auto-generate from name">
+      </div>
+    </div>
+    <div style="display:flex;gap:1rem;align-items:center;margin-top:1rem">
+      <button type="submit" style="width:auto">Save Changes</button>
+    </div>
+  </form>
+</details>
+
+<h3>Works ({{ entries | length }})</h3>
+{% if entries %}
+<table class="responsive-table">
+  <thead>
+    <tr>
+      <th>#</th>
+      <th>Work ID</th>
+      <th>Title</th>
+      <th>Annotation</th>
+      <th></th>
+    </tr>
+  </thead>
+  <tbody>
+    {% for entry in entries %}
+    <tr>
+      <td data-label="#">{{ entry.display_order }}</td>
+      <td data-label="Work ID"><a href="/ui/catalog/{{ entry.work_id }}">{{ entry.work_id }}</a></td>
+      <td data-label="Title">{% if entry.work %}{{ entry.work.title }}{% else %}—{% endif %}</td>
+      <td data-label="Annotation">{{ entry.annotation or '—' }}</td>
+      <td>
+        <form method="post" action="/ui/curated-lists/{{ cl.slug }}/works/{{ entry.work_id }}/remove" style="display:inline">
+          <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+          <button type="submit" style="width:auto" class="outline contrast">Remove</button>
+        </form>
+      </td>
+    </tr>
+    {% endfor %}
+  </tbody>
+</table>
+{% else %}
+<p>No works in this list yet.</p>
+{% endif %}
+
+<details style="margin-top:1rem">
+  <summary>Add a work</summary>
+  <form method="post" action="/ui/curated-lists/{{ cl.slug }}/works/add" style="margin-top:0.75rem">
+    <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+    <p style="font-size:0.85em;color:#666;margin-bottom:0.5rem">Enter the Work ID (numeric). You can find it in the catalog URL, e.g. <code>/ui/catalog/42</code>.</p>
+    <div style="display:flex;gap:0.5rem;align-items:flex-end;flex-wrap:wrap">
+      <div>
+        <label for="add_work_id">Work ID <sup>*</sup></label>
+        <input type="number" id="add_work_id" name="work_id" required min="1" style="width:8rem">
+      </div>
+      <div>
+        <label for="add_annotation">Annotation</label>
+        <input type="text" id="add_annotation" name="annotation" style="width:20rem" placeholder="Optional note for this entry">
+      </div>
+      <button type="submit" style="width:auto">Add Work</button>
+    </div>
+  </form>
+</details>
+
+{% if entries %}
+<details style="margin-top:0.5rem">
+  <summary>Reorder works</summary>
+  <form method="post" action="/ui/curated-lists/{{ cl.slug }}/works/reorder" style="margin-top:0.75rem">
+    <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+    <p style="font-size:0.85em;color:#666;margin-bottom:0.5rem">Enter work IDs as a comma-separated list in the desired order.</p>
+    <label for="work_order">Work order (comma-separated IDs)</label>
+    <input type="text" id="work_order" name="work_order" value="{{ entries | map(attribute='work_id') | join(', ') }}" style="width:100%;max-width:32rem" placeholder="e.g. 5, 3, 12, 1">
+    <div style="margin-top:0.5rem">
+      <button type="submit" style="width:auto">Save Order</button>
+    </div>
+  </form>
+</details>
+{% endif %}
+
+<hr>
+<form method="post" action="/ui/curated-lists/{{ cl.slug }}/delete">
+  <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+  <p style="color:#888;font-size:0.9em">Deleting this list is permanent and cannot be undone. Works are not affected.</p>
+  <button type="submit" class="outline contrast" style="width:auto"
+    hx-confirm="Delete the list '{{ cl.name }}'? This cannot be undone.">Delete List</button>
+</form>
+{% endblock %}

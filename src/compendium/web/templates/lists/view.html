@@ -1,0 +1,55 @@
+{% extends "base.html" %}
+{% from "_macros.html" import cover_url %}
+{% block title %}{{ cl.name }} — {{ library_name() }}{% endblock %}
+{% block content %}
+<nav aria-label="breadcrumb">
+  <ul>
+    <li><a href="/ui/catalog">Catalog</a></li>
+    <li><a href="/ui/lists">Curated Lists</a></li>
+    <li>{{ cl.name }}</li>
+  </ul>
+</nav>
+
+<h2>{{ cl.name }}</h2>
+{% if cl.description %}
+<p class="work-detail-description">{{ cl.description }}</p>
+{% endif %}
+
+{% if entries %}
+<ul class="work-list">
+  {% for entry in entries %}
+  <li>
+    <a class="work-card-link" href="/ui/catalog/{{ entry.work.id }}">
+      <div class="cover-thumb{% if not entry.work.cover_image_url %} cover-thumb-empty{% endif %}"
+           {% if not entry.work.cover_image_url %}data-media-type="{{ entry.work.media_type.code if entry.work.media_type else 'book' }}"{% endif %}
+           aria-hidden="true">
+        {% if entry.work.cover_image_url %}
+        <img src="{{ cover_url(entry.work.cover_image_url, entry.work.updated_at) }}" alt="" loading="lazy">
+        {% endif %}
+      </div>
+      <div class="work-entry">
+        <div class="work-entry-title">{{ entry.work.title }}</div>
+        {% if entry.work.creators %}
+        <div class="work-entry-creators">
+          {% for wc in entry.work.creators %}{{ wc.creator.display_name }}{% if not loop.last %}, {% endif %}{% endfor %}
+        </div>
+        {% endif %}
+        {% if entry.annotation %}
+        <div class="work-entry-meta"><em>{{ entry.annotation }}</em></div>
+        {% endif %}
+      </div>
+      <span class="work-card-punch" aria-hidden="true"></span>
+    </a>
+  </li>
+  {% endfor %}
+</ul>
+{% else %}
+<p class="empty-inline">This list has no items yet.</p>
+{% endif %}
+
+{% if user and has_permission(user, 'curatedlist.manage') %}
+<p style="margin-top:1.5rem">
+  <a href="/ui/curated-lists/{{ cl.slug }}" class="outline secondary" role="button" style="width:auto">Edit this list</a>
+</p>
+{% endif %}
+{% endblock %}

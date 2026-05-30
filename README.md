@@ -22,6 +22,7 @@ This paragraph here is about the only part of the project written by a human.
 - **Bulk import/export** — round-trippable CSV; MARC21 binary + MARCXML import/export; LibraryThing TSV import; GoodReads CSV import (all with lenient encoding for messy real-world exports)
 - **Backup/restore** — portable JSONL tarballs; backend-agnostic (SQLite ↔ Postgres); doubles as a DB migration path
 - **Labels** — Avery-template item labels (spine / pocket) and patron cards (full / sticker) as PDFs. Spine templates: `avery-5167-spine` (½" narrow face), `avery-5160-spine` (1" medium face, rotated), `avery-5160` (flat wrap-around, centered text), `avery-22805`/`avery-22806` (square classification labels). Live in-page SVG preview updates as you change kind/template/fields — no PDF round-trip needed.
+- **Curated lists** — librarian-editable named collections of Works ("Staff picks", "Summer reads") with slugs, per-work annotations, public/private and featured toggles; featured lists appear as a shelf on the OPAC landing page; public browse at `/ui/lists`
 - **Auth** — five preset roles (ReadOnly, Patron, Librarian, SystemAdmin, Administrator) plus custom roles via the admin UI; JWT for API, cookie-based for web UI
 - **Audit log** — synchronous trail of administrative mutations (Librarian + system tier); queryable via web UI, CLI, or REST
 - **DB-editable settings** — most configuration knobs (library name, fines, kiosk timeout, SMTP, retention, configurable nav shortcuts, etc.) editable from the UI / CLI / API; env vars still win as a break-glass
@@ -90,6 +91,7 @@ Run `compendium --help` for the full command tree, or `compendium <group> --help
 | `item` | `add` (--isbn / --upc / --mbid / --tmdb-id / --title), `add-manual`, `show`, `list`, `withdraw`, `set-loanable`; `note add/list/delete` |
 | `work` | `search`, `show`, `new-arrivals`, `recently-returned` |
 | `creator` | `list`, `show`, `merge` |
+| `curated-list` | `create`, `list`, `show`, `edit`, `delete`, `add-work`, `remove-work`, `reorder` |
 | `branch` | `list`, `set` |
 | `import` | `csv`, `marc` (use `-` for stdin) |
 | `export` | `csv`, `marc` (use `-` for stdout) |
@@ -139,8 +141,10 @@ Start the server with `compendium serve` and open your browser to `http://localh
 
 | URL | Audience | Description |
 |---|---|---|
-| `/ui/catalog` | Anyone | Search catalog with facets (media type, decade, availability) |
+| `/ui/catalog` | Anyone | Search catalog with facets (media type, decade, availability); featured curated lists shelf |
 | `/ui/catalog/{work_id}` | Anyone | Work detail, items, place-hold button |
+| `/ui/lists` | Anyone | Public OPAC browse of public curated lists |
+| `/ui/lists/{slug}` | Anyone | Public curated list detail with annotated works |
 | `/ui/login` | Anyone | Login form |
 | `/ui/me/loans` | Patron | Active loans with inline renew + "I returned this" claim |
 | `/ui/me/holds` | Patron | Active holds with inline cancel + suspend/resume |
@@ -165,6 +169,7 @@ Start the server with `compendium serve` and open your browser to `http://localh
 | `/ui/admin/import` | Librarian | Bulk CSV / GoodReads CSV / LibraryThing TSV / MARC import |
 | `/ui/admin/export` | Librarian | Bulk CSV/MARC export |
 | `/ui/admin/patron-categories` | Librarian | Manage patron categories |
+| `/ui/curated-lists` | Librarian | Curated list admin CRUD (`curatedlist.manage`) |
 | `/ui/admin/settings/general` | Librarian | Library name, default theme, guest search |
 | `/ui/admin/settings/circulation` | Librarian | Currency, fine thresholds, hold/overdue/due-soon defaults |
 | `/ui/admin/settings/kiosk` | Librarian | Kiosk idle timeout |
@@ -208,6 +213,7 @@ Below is a high-level inventory grouped by concern; the OpenAPI document is the 
 | **Labels** | `GET /labels/items`, `/labels/patrons` (PDF) | `labels.generate` |
 | **Policies** | `GET/POST /policies` | `item.view` / `policy.edit` |
 | **Users** | `POST /users`, `POST /users/{username}/{deactivate,reactivate}`, `POST/DELETE /users/{username}/patron` | `user.manage` |
+| **Curated lists** | `GET/POST /curated-lists`, `PATCH/DELETE /curated-lists/{slug}`, `POST/DELETE /curated-lists/{slug}/works` | guest / `curatedlist.manage` |
 | **Settings** | `GET /settings/`, `GET/PATCH/DELETE /settings/{key}` | `patron.manage` (librarian-tier) / `system.manage` (system-tier) |
 | **Calendar** | `GET /library-hours/`, `PATCH /library-hours/{weekday}`; `GET/POST /closed-dates/`, `PATCH/DELETE /closed-dates/{id}` | `calendar.manage` |
 | **Audit** | `GET /audit/` | `audit.view` |

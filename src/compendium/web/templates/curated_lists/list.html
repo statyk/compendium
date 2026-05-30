@@ -1,0 +1,44 @@
+{% extends "base.html" %}
+{% block title %}Curated Lists — {{ library_name() }}{% endblock %}
+{% block content %}
+<div style="display:flex;justify-content:space-between;align-items:baseline;margin-bottom:1rem">
+  <h2 style="margin:0">Curated Lists</h2>
+  <a href="/ui/curated-lists/new" role="button" class="outline" style="padding:0.25rem 0.75rem">+ New Curated List</a>
+</div>
+{% if request.query_params.get('msg') %}
+<p class="success-banner">{{ request.query_params.get('msg') }}</p>
+{% endif %}
+{% if request.query_params.get('error') %}
+<div class="error-banner">{{ request.query_params.get('error') }}</div>
+{% endif %}
+{% if lists %}
+<table class="responsive-table">
+  <thead>
+    <tr>
+      <th>Slug</th>
+      <th>Name</th>
+      <th>Status</th>
+      <th>Featured</th>
+      <th>Works</th>
+      <th>Order</th>
+      <th></th>
+    </tr>
+  </thead>
+  <tbody>
+    {% for cl in lists %}
+    <tr>
+      <td data-label="Slug"><code>{{ cl.slug }}</code></td>
+      <td data-label="Name"><a href="/ui/curated-lists/{{ cl.slug }}">{{ cl.name }}</a></td>
+      <td data-label="Status">{% if cl.is_public %}<span style="color:#2d7a2d">Public</span>{% else %}<span style="color:#888">Private</span>{% endif %}</td>
+      <td data-label="Featured">{% if cl.is_featured %}Yes{% else %}—{% endif %}</td>
+      <td data-label="Works">{{ cl.entries | length }}</td>
+      <td data-label="Order">{{ cl.display_order }}</td>
+      <td><a href="/ui/curated-lists/{{ cl.slug }}">Edit</a></td>
+    </tr>
+    {% endfor %}
+  </tbody>
+</table>
+{% else %}
+<p>No curated lists yet. <a href="/ui/curated-lists/new">Create one to get started.</a></p>
+{% endif %}
+{% endblock %}

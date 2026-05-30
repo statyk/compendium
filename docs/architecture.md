@@ -626,6 +626,37 @@ Routine circulation (checkout / checkin / renew / hold-fill) is **deliberately e
 
 ---
 
+## Curated lists
+
+`CuratedList` and `CuratedListEntry` are lightweight catalog feature models for librarian-curated collections ("Staff picks", "Summer reads").
+
+### Models
+
+- **`CuratedList`** — `id`, `slug` (unique, URL-safe, 96-char), `name`, `description`, `is_public`, `is_featured`, `display_order`, `created_at`, `updated_at`, plus a `entries` relationship.
+- **`CuratedListEntry`** — composite PK `(list_id, work_id)`, `display_order`, `annotation` (free-text per-work note). Cascades delete when the parent list is deleted.
+
+### External identifier
+
+`slug` is the only external-facing identifier — internal integer PKs are never exposed. `CuratedListService._unique_slug(name)` slugifies the list name (lowercase, hyphens) and appends a short random suffix on collision, ensuring globally unique, human-readable URLs.
+
+### Public vs featured
+
+- **`is_public`** — controls whether the list appears in the OPAC. Non-public lists are visible only to users with `curatedlist.manage`.
+- **`is_featured`** — when `True` and `is_public=True`, the list appears as a shelf on the OPAC landing page (`/ui/catalog`). Shelves render in `display_order` ascending order; works within each shelf render in entry `display_order` order.
+
+### Interfaces
+
+- **Web admin** — CRUD at `/ui/curated-lists` (requires `curatedlist.manage`); "Manage curated lists" link on work detail pages for users with that permission.
+- **Public OPAC** — `/ui/lists` (index of public lists) and `/ui/lists/{slug}` (list detail with annotated works). Guest access follows the `guest_search_enabled` site setting — same dependency used by catalog search.
+- **REST API** — `GET/POST /curated-lists`, `PATCH/DELETE /curated-lists/{slug}`, `POST/DELETE /curated-lists/{slug}/works`.
+- **CLI** — `compendium curated-list create/list/show/edit/delete/add-work/remove-work/reorder`.
+
+### Permission model
+
+`curatedlist.manage` gates all admin CRUD (create, edit, delete lists; add/remove/annotate/reorder works). Read access to public lists requires only `item.view` (or guest access when `guest_search_enabled=true`). The permission is included in the Librarian preset.
+
+---
+
 ## Notifications
 
 `services/notifications/` provides an outbox-pattern email notification pipeline. Triggers write `Notification` rows synchronously; a cron-invoked drainer (`compendium maintenance send-queued-notifications`) renders pending rows and delivers them via SMTP (stdlib `smtplib`). No extra runtime deps.

@@ -1,0 +1,33 @@
+{% extends "base.html" %}
+{% block title %}New Curated List — {{ library_name() }}{% endblock %}
+{% block content %}
+<div style="max-width:600px">
+  <h2>New Curated List</h2>
+  {% if error %}
+  <div class="error-banner">{{ error }}</div>
+  {% endif %}
+  <form method="post" action="/ui/curated-lists/new">
+    <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+    <label for="name">Name <sup>*</sup></label>
+    <input type="text" id="name" name="name" required autofocus placeholder="e.g. Staff Picks" value="{{ name or '' }}">
+    <label for="description">Description</label>
+    <textarea id="description" name="description" rows="3" placeholder="Optional description">{{ description or '' }}</textarea>
+    <fieldset>
+      <label>
+        <input type="checkbox" name="is_public" value="1"{% if is_public is not defined or is_public %} checked{% endif %}>
+        Public (visible to patrons)
+      </label>
+      <label>
+        <input type="checkbox" name="is_featured" value="1"{% if is_featured %} checked{% endif %}>
+        Featured (appears on landing page)
+      </label>
+    </fieldset>
+    <label for="display_order">Display Order</label>
+    <input type="number" id="display_order" name="display_order" value="{{ display_order if display_order is defined else 0 }}" style="width:8rem">
+    <div style="display:flex;gap:1rem;align-items:center;margin-top:1rem">
+      <button type="submit" style="width:auto">Create List</button>
+      <a href="/ui/curated-lists">Cancel</a>
+    </div>
+  </form>
+</div>
+{% endblock %}

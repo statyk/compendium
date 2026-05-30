@@ -1,0 +1,35 @@
+{% extends "base.html" %}
+{% block title %}Curated Lists — {{ library_name() }}{% endblock %}
+{% block content %}
+<nav aria-label="breadcrumb">
+  <ul>
+    <li><a href="/ui/catalog">Catalog</a></li>
+    <li>Curated Lists</li>
+  </ul>
+</nav>
+
+<h2>Curated Lists</h2>
+
+{% if lists %}
+<ul class="work-list">
+  {% for cl in lists %}
+  <li>
+    <a class="work-card-link" href="/ui/lists/{{ cl.slug }}">
+      <div class="work-entry">
+        <div class="work-entry-title">{{ cl.name }}</div>
+        {% if cl.description %}
+        <div class="work-entry-meta">{{ cl.description }}</div>
+        {% endif %}
+        <div class="work-entry-pills">
+          <span class="pill">{{ cl.entries | length }} work{{ 's' if cl.entries | length != 1 else '' }}</span>
+        </div>
+      </div>
+      <span class="work-card-punch" aria-hidden="true"></span>
+    </a>
+  </li>
+  {% endfor %}
+</ul>
+{% else %}
+<p class="empty-inline">No curated lists available.</p>
+{% endif %}
+{% endblock %}

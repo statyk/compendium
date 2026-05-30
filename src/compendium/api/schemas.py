@@ -448,3 +448,72 @@ class ItemNoteResponse(BaseModel):
     event_date: date | None
     is_system: bool
     created_at: datetime
+
+
+# Curated Lists
+class CreateCuratedListRequest(BaseModel):
+    name: str
+    description: str | None = None
+    is_public: bool = True
+    is_featured: bool = False
+    display_order: int = 0
+
+
+class UpdateCuratedListRequest(BaseModel):
+    name: str | None = None
+    description: str | None = None
+    is_public: bool | None = None
+    is_featured: bool | None = None
+    display_order: int | None = None
+    slug: str | None = None
+
+
+class AddWorkToCuratedListRequest(BaseModel):
+    work_id: int
+    annotation: str | None = None
+
+
+class ReorderCuratedListRequest(BaseModel):
+    work_ids: list[int]
+
+
+class SetAnnotationRequest(BaseModel):
+    annotation: str | None = None
+
+
+class CuratedListEntryResponse(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    list_id: int
+    work_id: int
+    display_order: int
+    annotation: str | None
+    work_title: str | None = None  # computed in route
+
+
+class CuratedListSummaryResponse(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    id: int
+    slug: str
+    name: str
+    description: str | None
+    is_public: bool
+    is_featured: bool
+    display_order: int
+    work_count: int = 0  # computed in route
+
+
+class CuratedListResponse(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    id: int
+    slug: str
+    name: str
+    description: str | None
+    is_public: bool
+    is_featured: bool
+    display_order: int
+    created_at: datetime
+    updated_at: datetime | None
+    entries: list[CuratedListEntryResponse] = []

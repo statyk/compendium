@@ -28,6 +28,7 @@ NAV_PAGES: list[dict] = [
     {"key": "audit_log", "section": "Admin", "label": "Audit Log", "url": "/ui/audit", "permission": "audit.view"},
     {"key": "users", "section": "Admin", "label": "Users", "url": "/ui/users", "permission": "user.manage"},
     {"key": "roles", "section": "Admin", "label": "Roles", "url": "/ui/roles", "permission": "role.manage"},
+    {"key": "curated_lists", "section": "Admin", "label": "Curated Lists", "url": "/ui/curated-lists", "permission": "curatedlist.manage"},
     # ── Settings ─────────────────────────────────────────────────────────────
     {"key": "settings_general", "section": "Settings", "label": "General Settings", "url": "/ui/admin/settings/general", "permission": "patron.manage"},
     {"key": "settings_circulation", "section": "Settings", "label": "Circulation Settings", "url": "/ui/admin/settings/circulation", "permission": "patron.manage"},

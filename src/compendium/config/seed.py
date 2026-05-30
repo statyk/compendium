@@ -50,6 +50,8 @@ _LIBRARIAN_PERMISSIONS = [
     # Administration
     "patron.manage", "patron.account.manage", "household.manage", "policy.edit",
     "branch.edit", "calendar.manage",
+    # Curated lists
+    "curatedlist.manage",
 ]
 
 # SystemAdmin preset — IT/sysadmin seat in multi-person deployments. Manages

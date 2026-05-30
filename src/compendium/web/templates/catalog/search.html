@@ -60,6 +60,33 @@
 
 {% if show_landing %}
 
+  {% if featured_lists %}
+  {% for cl in featured_lists %}
+  <div class="discovery-shelves">
+    <h3><a href="/ui/lists/{{ cl.slug }}">{{ cl.name }}</a></h3>
+    {% if cl.description %}<p class="shelf-description">{{ cl.description }}</p>{% endif %}
+    <ul class="cover-shelf">
+      {% for entry in cl.entries[:8] %}
+      <li>
+        <a href="/ui/catalog/{{ entry.work.id }}" title="{{ entry.work.title }}">
+          <div class="cover-thumb cover-thumb-shelf{% if not entry.work.cover_image_url %} cover-thumb-empty{% endif %}"
+               {% if not entry.work.cover_image_url %}data-media-type="{{ entry.work.media_type.code if entry.work.media_type else 'book' }}"{% endif %}
+               aria-hidden="true">
+            {% if entry.work.cover_image_url %}
+            <img src="{{ cover_url(entry.work.cover_image_url, entry.work.updated_at) }}" alt="" loading="lazy">
+            {% endif %}
+          </div>
+          <small class="shelf-title">{{ entry.work.title }}</small>
+          {% if entry.work.creators %}<small class="shelf-creator">{{ entry.work.creators[0].creator.display_name }}</small>{% endif %}
+        </a>
+      </li>
+      {% endfor %}
+    </ul>
+    <p class="shelf-more"><a href="/ui/lists/{{ cl.slug }}">View all {{ cl.entries | length }} item{{ 's' if cl.entries | length != 1 else '' }} &rarr;</a></p>
+  </div>
+  {% endfor %}
+  {% endif %}
+
   {% if new_arrivals %}
   <div class="discovery-shelves">
     <h3>New arrivals</h3>

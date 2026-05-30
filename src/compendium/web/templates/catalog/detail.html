@@ -38,6 +38,13 @@
   <a href="/ui/catalog/{{ work.id }}/creators" role="button" class="outline"><span class="btn-icon" aria-hidden="true">👥</span>Manage creators</a>
 </p>
 {% endif %}
+{% if has_permission(user, 'curatedlist.manage') %}
+{# Librarians navigate to the list admin to add this work. A full inline
+   list-picker widget would require a new route; this is the pragmatic v1 choice. #}
+<p>
+  <a href="/ui/curated-lists" class="outline secondary" role="button" style="width:auto">Manage curated lists</a>
+</p>
+{% endif %}
 
 <hr class="work-detail-rule">
 
