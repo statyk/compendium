@@ -29,6 +29,7 @@ from compendium.repositories.sql.counters import SqlCounterRepository
 from compendium.repositories.sql.work_repository import SqlWorkRepository
 from compendium.services.audit import AuditService
 from compendium.services.catalog import CatalogService
+from compendium.services.item_notes import ItemNoteService
 from compendium.services.metadata import (
     lookup_metadata,
     musicbrainz_search_title,
@@ -77,6 +78,16 @@ def _catalog_svc(session: Session, actor: AppUser) -> CatalogService:
         hold_repo=SqlHoldRepository(session),
         counter_repo=SqlCounterRepository(session),
         item_note_repo=SqlItemNoteRepository(session),
+    )
+
+
+def _note_svc(session: Session, actor: AppUser) -> ItemNoteService:
+    return ItemNoteService(
+        item_note_repo=SqlItemNoteRepository(session),
+        item_repo=SqlItemRepository(session),
+        audit_svc=AuditService(SqlAuditLogRepository(session)),
+        actor=actor,
+        source="web",
     )
 
 
@@ -421,6 +432,7 @@ def item_detail(
     loan_history: list = []
     if has_permission(user.role.permissions, "loan.view.any"):
         loan_history = SqlLoanRepository(session).list_for_item(item.id, limit=25)
+    note_entries = SqlItemNoteRepository(session).list_for_item(item.id)
     return _render(
         "items/detail.html",
         request,
@@ -429,6 +441,7 @@ def item_detail(
             "user": user,
             "item": item,
             "loan_history": loan_history,
+            "note_entries": note_entries,
             "message": message,
             "error": error,
         },
@@ -617,3 +630,56 @@ def withdraw_item(
     return RedirectResponse(
         f"/ui/items/{barcode}?message=Item+withdrawn.", status_code=303
     )
+
+
+@router.post("/items/{barcode}/notes/add")
+def add_item_note(
+    barcode: str,
+    request: Request,
+    kind: str = Form(default="general"),
+    note: str = Form(...),
+    event_date: str = Form(default=""),
+    csrf_token: str = Form(default=""),
+    user: AppUser = Depends(require_web_permission(_PERM_EDIT)),
+    session: Session = Depends(get_session),
+):
+    check_csrf_form(request, csrf_token)
+    from datetime import date as date_type
+
+    parsed_date: date_type | None = None
+    if event_date.strip():
+        try:
+            parsed_date = date_type.fromisoformat(event_date.strip())
+        except ValueError:
+            return RedirectResponse(
+                f"/ui/items/{barcode}?error={quote('Invalid date format.')}",
+                status_code=303,
+            )
+    try:
+        _note_svc(session, user).add_note(
+            barcode, kind=kind, note=note, event_date=parsed_date
+        )
+    except (ValidationError, NotFoundError) as exc:
+        return RedirectResponse(
+            f"/ui/items/{barcode}?error={quote(str(exc))}", status_code=303
+        )
+    return RedirectResponse(f"/ui/items/{barcode}", status_code=303)
+
+
+@router.post("/items/{barcode}/notes/{note_id}/delete")
+def delete_item_note(
+    barcode: str,
+    note_id: int,
+    request: Request,
+    csrf_token: str = Form(default=""),
+    user: AppUser = Depends(require_web_permission(_PERM_EDIT)),
+    session: Session = Depends(get_session),
+):
+    check_csrf_form(request, csrf_token)
+    try:
+        _note_svc(session, user).delete_note(barcode, note_id)
+    except (BusinessRuleError, NotFoundError) as exc:
+        return RedirectResponse(
+            f"/ui/items/{barcode}?error={quote(str(exc))}", status_code=303
+        )
+    return RedirectResponse(f"/ui/items/{barcode}", status_code=303)
