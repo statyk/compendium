@@ -163,7 +163,7 @@ def test_cli_fine_assess_overdue_for_patron(session):
 
 
 def test_cli_loan_declare_lost(session):
-    from compendium.cli.commands.loan import app as loan_app
+    from compendium.cli.commands.item import app as item_app
 
     _, item = _seed_work_item(session)
     p = _make_patron(session, "CLI_L0001")
@@ -171,9 +171,9 @@ def test_cli_loan_declare_lost(session):
     _make_overdue_loan(session, p, item, days_late=0)
 
     r = _runner(
-        session, loan_app,
+        session, item_app,
         ["declare-lost", "--barcode", item.barcode],
-        "compendium.cli.commands.loan",
+        "compendium.cli.commands.item",
     )
     assert r.exit_code == 0, r.output
     assert item.status == ItemStatus.LOST.value
@@ -184,7 +184,7 @@ def test_cli_loan_declare_lost(session):
 
 
 def test_cli_loan_mark_damaged_requires_note(session):
-    from compendium.cli.commands.loan import app as loan_app
+    from compendium.cli.commands.item import app as item_app
 
     _, item = _seed_work_item(session)
     _make_patron(session, "CLI_L0002")
@@ -192,9 +192,9 @@ def test_cli_loan_mark_damaged_requires_note(session):
 
     # Typer can't call without --note (required), so pass empty via arg — should validate.
     r = _runner(
-        session, loan_app,
+        session, item_app,
         ["mark-damaged", "--barcode", item.barcode, "--amount-cents", "500", "--note", ""],
-        "compendium.cli.commands.loan",
+        "compendium.cli.commands.item",
     )
     assert r.exit_code == 1
 

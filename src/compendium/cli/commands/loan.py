@@ -18,6 +18,8 @@ from compendium.repositories.sql.patron_repository import SqlPatronRepository
 from compendium.services.audit import AuditService
 from compendium.services.circulation import CirculationService
 from compendium.services.fines import FineService
+
+
 app = typer.Typer(help="Loan (checkout / checkin) commands.")
 
 
