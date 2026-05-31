@@ -114,7 +114,9 @@ def claim_returned(
     """Librarian-initiated claim. Patron access via /me/loans/{id}/claim-returned."""
     try:
         item = _circulation(session, user).claim_returned(barcode)
-    except (NotFoundError, BusinessRuleError) as exc:
+    except NotFoundError as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
+    except BusinessRuleError as exc:
         raise HTTPException(status_code=422, detail=str(exc)) from exc
     # Service marks item CLAIMS_RETURNED; re-fetch the active loan to return
     loan = SqlLoanRepository(session).get_active_for_item(item.id)
