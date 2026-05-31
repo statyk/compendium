@@ -307,8 +307,7 @@ wheels = [
 ]
 
 [[package]]
-name = "compendium"
-version = "0.1.0"
+name = "compendium-ils"
 source = { editable = "." }
 dependencies = [
     { name = "alembic" },
@@ -371,7 +370,7 @@ requires-dist = [
     { name = "typer", specifier = ">=0.12" },
     { name = "uvicorn", extras = ["standard"], specifier = ">=0.29" },
 ]
-provides-extras = ["postgres", "dev", "e2e"]
+provides-extras = ["dev", "e2e", "postgres"]
 
 [package.metadata.requires-dev]
 dev = [{ name = "testcontainers", extras = ["postgres"], specifier = ">=4.8" }]

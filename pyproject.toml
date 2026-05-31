@@ -1,6 +1,6 @@
 [project]
-name = "compendium"
-version = "0.1.0"
+name = "compendium-ils"
+dynamic = ["version"]
 description = "A library card catalog system for physical items"
 readme = "README.md"
 requires-python = ">=3.11"
@@ -8,6 +8,21 @@ license = { text = "MIT" }
 authors = [
     { name = "Shawn", email = "spmoore01@gmail.com" },
 ]
+keywords = ["library", "catalog", "ils", "circulation", "books", "marc", "opac", "lms"]
+classifiers = [
+    "Development Status :: 5 - Production/Stable",
+    "License :: OSI Approved :: MIT License",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+    "Programming Language :: Python :: 3.13",
+    "Framework :: FastAPI",
+    "Intended Audience :: Other Audience",
+    "Topic :: Other/Nonlisted Topic",
+    "Operating System :: POSIX",
+    "Operating System :: MacOS",
+]
+
 dependencies = [
     "sqlalchemy>=2.0,<3.0",
     "alembic>=1.13",
@@ -26,6 +41,12 @@ dependencies = [
     "cryptography>=42.0",
     "defusedxml>=0.7.1",
 ]
+
+[project.urls]
+Homepage = "https://github.com/statyk/compendium"
+Repository = "https://github.com/statyk/compendium"
+Issues = "https://github.com/statyk/compendium/issues"
+Documentation = "https://github.com/statyk/compendium/blob/master/README.md"
 
 [project.optional-dependencies]
 postgres = [
@@ -46,6 +67,9 @@ compendium = "compendium.cli.main:app"
 [build-system]
 requires = ["hatchling"]
 build-backend = "hatchling.build"
+
+[tool.hatch.version]
+path = "src/compendium/__init__.py"
 
 [tool.hatch.build.targets.wheel]
 packages = ["src/compendium"]

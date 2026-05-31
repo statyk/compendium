@@ -1,7 +1,8 @@
-from typing import Optional
+from typing import Annotated, Optional
 
 import typer
 
+import compendium
 from compendium.cli.commands import (
     audit,
     backup,
@@ -32,11 +33,27 @@ from compendium.cli.commands import (
     work,
 )
 
+def _version_callback(value: bool) -> None:
+    if value:
+        typer.echo(f"compendium {compendium.__version__}")
+        raise typer.Exit()
+
+
 app = typer.Typer(
     name="compendium",
     help="Compendium — a library card catalog system for physical items.",
     no_args_is_help=True,
 )
+
+
+@app.callback()
+def _main(
+    version: Annotated[
+        Optional[bool],
+        typer.Option("--version", callback=_version_callback, is_eager=True, help="Show version and exit."),
+    ] = None,
+) -> None:
+    pass
 
 app.add_typer(audit.app, name="audit")
 app.add_typer(branch.app, name="branch")

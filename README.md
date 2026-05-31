@@ -8,7 +8,7 @@ I guided the models (Sonnet and Opus, mostly) on design decisions and the like, 
 This paragraph here is about the only part of the project written by a human.
 
 
-**Status:** Active development. Core circulation, holds, patron management, and a full web UI are complete. See [`docs/architecture.md`](docs/architecture.md) for architecture and design decisions.
+**Status:** v1.0.0 — core feature-complete. Catalog, circulation, holds, fines, notifications, bulk import/export, web UI, REST API, and CLI are all shipped. See [`docs/architecture.md`](docs/architecture.md) for architecture and design decisions.
 
 ## Features
 
@@ -29,6 +29,20 @@ This paragraph here is about the only part of the project written by a human.
 - **Web UI** — HTMX + Jinja2 browser interface with catalog search, circulation desk (camera-based barcode scanning), patron self-service, light/dark/auto theme; per-user nav shortcut overrides via browser localStorage
 - **REST API** — FastAPI; consumed by the web UI and available for integrations
 - **CLI** — full librarian + sysadmin workflow without running a server, including stdin/stdout (`-`) for backup, import/export, and labels
+
+## Install
+
+```bash
+# Install the CLI as a standalone tool (recommended for production)
+uv tool install compendium-ils           # SQLite only
+uv tool install "compendium-ils[postgres]"  # + Postgres support
+
+# Or with pip
+pip install compendium-ils
+pip install "compendium-ils[postgres]"
+```
+
+The installed command is **`compendium`**.
 
 ## Quick start
 
