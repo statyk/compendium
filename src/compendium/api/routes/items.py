@@ -53,7 +53,6 @@ def _fine_svc(session: Session, user: AppUser | None) -> FineService:
 
 
 def _circulation(session: Session, user: AppUser | None) -> CirculationService:
-    settings = get_settings()
     audit = AuditService(SqlAuditLogRepository(session))
     return CirculationService(
         item_repo=SqlItemRepository(session),
@@ -72,10 +71,6 @@ def _circulation(session: Session, user: AppUser | None) -> CirculationService:
 
 
 def _catalog(session: Session, actor: AppUser | None = None) -> CatalogService:
-    from compendium.repositories.sql.audit_log_repository import SqlAuditLogRepository
-    from compendium.repositories.sql.hold_repository import SqlHoldRepository
-    from compendium.services.audit import AuditService
-
     return CatalogService(
         work_repo=SqlWorkRepository(session),
         item_repo=SqlItemRepository(session),

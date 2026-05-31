@@ -1,5 +1,4 @@
-"""API endpoints for fines, lost/damaged item transitions, and per-patron
-overdue materialization."""
+"""API endpoints for fines and per-patron overdue materialization."""
 
 from __future__ import annotations
 
