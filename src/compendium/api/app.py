@@ -14,6 +14,7 @@ from compendium.api.routes import (
     auth,
     branches,
     calendar as calendar_routes,
+    claims,
     creators,
     curated_lists,
     fines,
@@ -161,6 +162,7 @@ def create_app() -> FastAPI:
         patron_categories.router, prefix="/patron-categories", tags=["patron-categories"]
     )
     app.include_router(loans.router, prefix="/loans", tags=["loans"])
+    app.include_router(claims.router, prefix="/claims", tags=["claims"])
     app.include_router(holds.router, prefix="/holds", tags=["holds"])
     app.include_router(policies.router, prefix="/policies", tags=["policies"])
     app.include_router(me.router, prefix="/me", tags=["me"])

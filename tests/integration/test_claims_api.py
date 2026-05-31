@@ -140,7 +140,7 @@ class TestClaimsListing:
     def test_empty_list(self, cl_client, cl_session):
         _, token = _issue(cl_session, "lib", "Librarian")
         resp = cl_client.get(
-            "/loans/claims", headers={"Authorization": f"Bearer {token}"}
+            "/claims", headers={"Authorization": f"Bearer {token}"}
         )
         assert resp.status_code == 200
         assert resp.json() == []
@@ -148,7 +148,7 @@ class TestClaimsListing:
     def test_requires_loan_checkin(self, cl_client, cl_session):
         _, token = _issue(cl_session, "ro", "ReadOnly")
         resp = cl_client.get(
-            "/loans/claims", headers={"Authorization": f"Bearer {token}"}
+            "/claims", headers={"Authorization": f"Bearer {token}"}
         )
         assert resp.status_code == 403
 
@@ -158,7 +158,7 @@ class TestClaimEndpoint:
         _, token = _issue(cl_session, "cliblib", "Librarian")
         item, _, loan_id = _seed_and_checkout(cl_session, token, cl_client, "CLA")
         resp = cl_client.post(
-            f"/loans/{loan_id}/claim-returned",
+            f"/claims/{item.barcode}/returned",
             headers={"Authorization": f"Bearer {token}"},
         )
         assert resp.status_code == 200
@@ -173,7 +173,7 @@ class TestClaimEndpoint:
         item, _, loan_id = _seed_and_checkout(cl_session, lib_token, cl_client, "CLB")
         _, ro_token = _issue(cl_session, "ro2", "ReadOnly")
         resp = cl_client.post(
-            f"/loans/{loan_id}/claim-returned",
+            f"/claims/{item.barcode}/returned",
             headers={"Authorization": f"Bearer {ro_token}"},
         )
         assert resp.status_code == 403
@@ -184,11 +184,11 @@ class TestResolutions:
         _, token = _issue(cl_session, "lib3", "Librarian")
         item, _, loan_id = _seed_and_checkout(cl_session, token, cl_client, "CLC")
         cl_client.post(
-            f"/loans/{loan_id}/claim-returned",
+            f"/claims/{item.barcode}/returned",
             headers={"Authorization": f"Bearer {token}"},
         )
         resp = cl_client.post(
-            f"/items/{item.barcode}/verify-returned",
+            f"/claims/{item.barcode}/verify",
             headers={"Authorization": f"Bearer {token}"},
         )
         assert resp.status_code == 200
@@ -198,12 +198,12 @@ class TestResolutions:
         _, token = _issue(cl_session, "lib4", "Librarian")
         item, _, loan_id = _seed_and_checkout(cl_session, token, cl_client, "CLD")
         cl_client.post(
-            f"/loans/{loan_id}/claim-returned",
+            f"/claims/{item.barcode}/returned",
             headers={"Authorization": f"Bearer {token}"},
         )
         # Empty note → 422
         resp = cl_client.post(
-            f"/items/{item.barcode}/write-off-claim",
+            f"/claims/{item.barcode}/write-off",
             headers={"Authorization": f"Bearer {token}"},
             json={"note": ""},
         )
@@ -213,11 +213,11 @@ class TestResolutions:
         _, token = _issue(cl_session, "lib5", "Librarian")
         item, _, loan_id = _seed_and_checkout(cl_session, token, cl_client, "CLE")
         cl_client.post(
-            f"/loans/{loan_id}/claim-returned",
+            f"/claims/{item.barcode}/returned",
             headers={"Authorization": f"Bearer {token}"},
         )
         resp = cl_client.post(
-            f"/items/{item.barcode}/write-off-claim",
+            f"/claims/{item.barcode}/write-off",
             headers={"Authorization": f"Bearer {token}"},
             json={"note": "Accepted patron's account"},
         )

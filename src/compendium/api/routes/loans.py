@@ -1,5 +1,4 @@
 from fastapi import APIRouter, Depends, HTTPException, Path, Query
-from pydantic import BaseModel, ConfigDict
 from sqlalchemy.orm import Session
 
 from compendium.api.deps import require_permission
@@ -88,74 +87,6 @@ def renew(
     except (NotFoundError, BusinessRuleError) as exc:
         raise HTTPException(status_code=422, detail=str(exc)) from exc
     return LoanResponse.model_validate(loan)
-
-
-# ── Claims-returned ─────────────────────────────────────────────────────────
-
-
-class ClaimsListRow(BaseModel):
-    model_config = ConfigDict(from_attributes=True)
-
-    loan_id: int
-    barcode: str
-    title: str
-    patron_card: str
-    patron_name: str
-
-
-@router.get("/claims", response_model=list[ClaimsListRow])
-def list_claims(
-    limit: int = 200,
-    session: Session = Depends(get_session),
-    _user: AppUser = Depends(require_permission("loan.checkin")),
-) -> list[ClaimsListRow]:
-    from compendium.domain.enums import ItemStatus
-    from compendium.domain.models import Item, Loan, Patron, Work
-
-    rows = (
-        session.query(Loan, Item, Work, Patron)
-        .join(Item, Loan.item_id == Item.id)
-        .join(Work, Item.work_id == Work.id)
-        .join(Patron, Loan.patron_id == Patron.id)
-        .filter(
-            Loan.returned_at.is_(None),
-            Item.status == ItemStatus.CLAIMS_RETURNED.value,
-        )
-        .order_by(Loan.id)
-        .limit(min(limit, 500))
-        .all()
-    )
-    return [
-        ClaimsListRow(
-            loan_id=loan.id,
-            barcode=item.barcode,
-            title=work.title,
-            patron_card=patron.library_card_number,
-            patron_name=patron.full_name,
-        )
-        for (loan, item, work, patron) in rows
-    ]
-
-
-@router.post("/{loan_id}/claim-returned", response_model=LoanResponse)
-def claim_returned(
-    loan_id: int = Path(),
-    session: Session = Depends(get_session),
-    user: AppUser = Depends(require_permission("loan.checkin")),
-) -> LoanResponse:
-    """Librarian-initiated claim (patron has access via /me/loans/{id}/claim-returned)."""
-    loan = SqlLoanRepository(session).get(loan_id)
-    if loan is None:
-        raise HTTPException(status_code=404, detail=f"No loan with id={loan_id}")
-    item = SqlItemRepository(session).get(loan.item_id)
-    if item is None:
-        raise HTTPException(status_code=404, detail="Loan's item not found")
-    try:
-        _circulation(session, actor=user).claim_returned(item.barcode)
-    except (NotFoundError, BusinessRuleError) as exc:
-        raise HTTPException(status_code=422, detail=str(exc)) from exc
-    # Re-fetch the loan (still open; we surface the existing row)
-    return LoanResponse.model_validate(SqlLoanRepository(session).get(loan_id))
 
 
 @router.get("", response_model=list[LoanResponse])

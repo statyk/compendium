@@ -1,5 +1,4 @@
 from fastapi import APIRouter, Depends, HTTPException
-from pydantic import BaseModel
 from sqlalchemy.orm import Session
 
 from compendium.api.deps import require_permission
@@ -285,38 +284,3 @@ def clear_lost(
     return ItemDetail.model_validate(item)
 
 
-@router.post("/{barcode}/verify-returned", response_model=ItemDetail)
-def verify_returned(
-    barcode: str,
-    session: Session = Depends(get_session),
-    user: AppUser = Depends(require_permission("loan.checkin")),
-) -> ItemDetail:
-    try:
-        _circulation(session, user).verify_returned(barcode)
-    except NotFoundError as exc:
-        raise HTTPException(status_code=404, detail=str(exc)) from exc
-    except BusinessRuleError as exc:
-        raise HTTPException(status_code=422, detail=str(exc)) from exc
-    item = SqlItemRepository(session).get_by_barcode(barcode)
-    return ItemDetail.model_validate(item)
-
-
-class _WriteOffClaimRequest(BaseModel):
-    note: str
-
-
-@router.post("/{barcode}/write-off-claim", response_model=ItemDetail)
-def write_off_claim(
-    barcode: str,
-    body: _WriteOffClaimRequest,
-    session: Session = Depends(get_session),
-    user: AppUser = Depends(require_permission("loan.checkin")),
-) -> ItemDetail:
-    try:
-        _circulation(session, user).write_off_claim(barcode, note=body.note)
-    except NotFoundError as exc:
-        raise HTTPException(status_code=404, detail=str(exc)) from exc
-    except (BusinessRuleError, ValidationError) as exc:
-        raise HTTPException(status_code=422, detail=str(exc)) from exc
-    item = SqlItemRepository(session).get_by_barcode(barcode)
-    return ItemDetail.model_validate(item)
