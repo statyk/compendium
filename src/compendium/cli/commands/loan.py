@@ -18,8 +18,6 @@ from compendium.repositories.sql.patron_repository import SqlPatronRepository
 from compendium.services.audit import AuditService
 from compendium.services.circulation import CirculationService
 from compendium.services.fines import FineService
-from compendium.services.formatting import format_currency
-
 app = typer.Typer(help="Loan (checkout / checkin) commands.")
 
 
@@ -222,80 +220,6 @@ def item_history(
                 f"  loan={loan.id}  patron={loan.patron.library_card_number}  "
                 f"out={out}  returned={ret}  renewals={loan.renewal_count}"
             )
-
-
-@app.command("declare-lost")
-def declare_lost(
-    barcode: str = typer.Option(..., "--barcode", help="Item barcode"),
-    replacement_cost_cents: int | None = typer.Option(
-        None,
-        "--replacement-cost-cents",
-        help="Replacement cost (cents). Defaults to the policy's lost_item_default_cents.",
-    ),
-    note: str | None = typer.Option(None, "--note"),
-) -> None:
-    """Declare an item lost. Closes any active loan, cancels pending holds,
-    assesses lost + processing fees."""
-    try:
-        with session_scope() as session:
-            item = _circulation(session).declare_lost(
-                barcode, replacement_cost_cents=replacement_cost_cents, note=note
-            )
-            typer.echo(
-                f"Item {item.barcode} declared lost "
-                f"(replacement cost {format_currency(replacement_cost_cents or 0)})."
-            )
-    except DomainError as exc:
-        typer.echo(f"Error: {exc}", err=True)
-        raise typer.Exit(1) from exc
-
-
-@app.command("mark-damaged")
-def mark_damaged(
-    barcode: str = typer.Option(..., "--barcode", help="Item barcode"),
-    amount_cents: int = typer.Option(..., "--amount-cents"),
-    note: str = typer.Option(..., "--note"),
-) -> None:
-    """Mark an item damaged. Assesses a damaged fee."""
-    try:
-        with session_scope() as session:
-            item = _circulation(session).mark_damaged(
-                barcode, amount_cents=amount_cents, note=note
-            )
-            typer.echo(f"Item {item.barcode} marked damaged ({format_currency(amount_cents)}).")
-    except DomainError as exc:
-        typer.echo(f"Error: {exc}", err=True)
-        raise typer.Exit(1) from exc
-
-
-@app.command("clear-damage")
-def clear_damage(
-    barcode: str = typer.Option(..., "--barcode", help="Item barcode"),
-) -> None:
-    """Clear a damaged status and restore the item to AVAILABLE.
-    (Any associated damaged-fee is not modified.)"""
-    try:
-        with session_scope() as session:
-            item = _circulation(session).clear_damage(barcode)
-            typer.echo(f"Item {item.barcode} cleared, now {item.status}.")
-    except DomainError as exc:
-        typer.echo(f"Error: {exc}", err=True)
-        raise typer.Exit(1) from exc
-
-
-@app.command("clear-lost")
-def clear_lost(
-    barcode: str = typer.Option(..., "--barcode", help="Item barcode"),
-) -> None:
-    """Clear a lost status and restore the item to AVAILABLE.
-    (Any associated lost-fee is not modified.)"""
-    try:
-        with session_scope() as session:
-            item = _circulation(session).clear_lost(barcode)
-            typer.echo(f"Item {item.barcode} recovered, now {item.status}.")
-    except DomainError as exc:
-        typer.echo(f"Error: {exc}", err=True)
-        raise typer.Exit(1) from exc
 
 
 @app.command("claim-returned")

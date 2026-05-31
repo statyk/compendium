@@ -4,25 +4,34 @@ from typing import Optional
 
 import typer
 
+from compendium.db.engine import get_settings
 from compendium.db.session import session_scope
 from compendium.domain.errors import DomainError, ExternalLookupError
 from compendium.repositories.sql.audit_log_repository import SqlAuditLogRepository
 from compendium.repositories.sql.branch_repository import SqlBranchRepository
 from compendium.repositories.sql.creator_repository import SqlCreatorRepository
+from compendium.repositories.sql.fine_repository import SqlFineRepository
 from compendium.repositories.sql.hold_repository import SqlHoldRepository
 from compendium.repositories.sql.item_note_repository import SqlItemNoteRepository
 from compendium.repositories.sql.item_repository import SqlItemRepository
+from compendium.repositories.sql.loan_policy_repository import SqlLoanPolicyRepository
+from compendium.repositories.sql.loan_repository import SqlLoanRepository
 from compendium.repositories.sql.media_type_repository import SqlMediaTypeRepository
 from compendium.repositories.sql.counters import SqlCounterRepository
+from compendium.repositories.sql.patron_repository import SqlPatronRepository
 from compendium.repositories.sql.work_repository import SqlWorkRepository
 from compendium.services.audit import AuditService
 from compendium.services.catalog import CatalogService
+from compendium.services.circulation import CirculationService
+from compendium.services.fines import FineService
+from compendium.services.formatting import format_currency
 from compendium.services.item_notes import ItemNoteService
 from compendium.services.metadata import (
     musicbrainz_search_title,
     open_library_search_title,
     tmdb_search_title,
 )
+from compendium.services.site_settings import get_site_setting
 
 app = typer.Typer(help="Catalog item commands.")
 
@@ -105,6 +114,36 @@ def _catalog(session):
         hold_repo=SqlHoldRepository(session),
         source="cli",
         counter_repo=SqlCounterRepository(session),
+        item_note_repo=SqlItemNoteRepository(session),
+    )
+
+
+def _circulation(session) -> CirculationService:
+    settings = get_settings()
+    audit = AuditService(SqlAuditLogRepository(session))
+    fines = FineService(
+        fine_repo=SqlFineRepository(session),
+        patron_repo=SqlPatronRepository(session),
+        loan_repo=SqlLoanRepository(session),
+        item_repo=SqlItemRepository(session),
+        policy_repo=SqlLoanPolicyRepository(session),
+        settings=settings,
+        audit_svc=audit,
+        actor_label=f"cli:{getpass.getuser()}",
+        source="cli",
+    )
+    return CirculationService(
+        item_repo=SqlItemRepository(session),
+        loan_repo=SqlLoanRepository(session),
+        patron_repo=SqlPatronRepository(session),
+        branch_repo=SqlBranchRepository(session),
+        hold_repo=SqlHoldRepository(session),
+        policy_repo=SqlLoanPolicyRepository(session),
+        hold_pickup_days=get_site_setting("hold_pickup_days"),
+        fine_svc=fines,
+        audit_svc=audit,
+        actor_label=f"cli:{getpass.getuser()}",
+        source="cli",
         item_note_repo=SqlItemNoteRepository(session),
     )
 
@@ -434,6 +473,80 @@ def list_items(
             copies = len(work.items)
             suffix = f" [{copies} cop{'y' if copies == 1 else 'ies'}]"
             typer.echo(f"  {work.title}" + (f" — {creators}" if creators else "") + suffix)
+
+
+@app.command("declare-lost")
+def declare_lost(
+    barcode: str = typer.Option(..., "--barcode", help="Item barcode"),
+    replacement_cost_cents: int | None = typer.Option(
+        None,
+        "--replacement-cost-cents",
+        help="Replacement cost (cents). Defaults to the policy's lost_item_default_cents.",
+    ),
+    note: str | None = typer.Option(None, "--note"),
+) -> None:
+    """Declare an item lost. Closes any active loan, cancels pending holds,
+    assesses lost + processing fees."""
+    try:
+        with session_scope() as session:
+            item = _circulation(session).declare_lost(
+                barcode, replacement_cost_cents=replacement_cost_cents, note=note
+            )
+            typer.echo(
+                f"Item {item.barcode} declared lost "
+                f"(replacement cost {format_currency(replacement_cost_cents or 0)})."
+            )
+    except DomainError as exc:
+        typer.echo(f"Error: {exc}", err=True)
+        raise typer.Exit(1) from exc
+
+
+@app.command("mark-damaged")
+def mark_damaged(
+    barcode: str = typer.Option(..., "--barcode", help="Item barcode"),
+    amount_cents: int = typer.Option(..., "--amount-cents"),
+    note: str = typer.Option(..., "--note"),
+) -> None:
+    """Mark an item damaged. Assesses a damaged fee."""
+    try:
+        with session_scope() as session:
+            item = _circulation(session).mark_damaged(
+                barcode, amount_cents=amount_cents, note=note
+            )
+            typer.echo(f"Item {item.barcode} marked damaged ({format_currency(amount_cents)}).")
+    except DomainError as exc:
+        typer.echo(f"Error: {exc}", err=True)
+        raise typer.Exit(1) from exc
+
+
+@app.command("clear-damage")
+def clear_damage(
+    barcode: str = typer.Option(..., "--barcode", help="Item barcode"),
+) -> None:
+    """Clear a damaged status and restore the item to AVAILABLE.
+    (Any associated damaged-fee is not modified.)"""
+    try:
+        with session_scope() as session:
+            item = _circulation(session).clear_damage(barcode)
+            typer.echo(f"Item {item.barcode} cleared, now {item.status}.")
+    except DomainError as exc:
+        typer.echo(f"Error: {exc}", err=True)
+        raise typer.Exit(1) from exc
+
+
+@app.command("clear-lost")
+def clear_lost(
+    barcode: str = typer.Option(..., "--barcode", help="Item barcode"),
+) -> None:
+    """Clear a lost status and restore the item to AVAILABLE.
+    (Any associated lost-fee is not modified.)"""
+    try:
+        with session_scope() as session:
+            item = _circulation(session).clear_lost(barcode)
+            typer.echo(f"Item {item.barcode} recovered, now {item.status}.")
+    except DomainError as exc:
+        typer.echo(f"Error: {exc}", err=True)
+        raise typer.Exit(1) from exc
 
 
 # ---------------------------------------------------------------------------
