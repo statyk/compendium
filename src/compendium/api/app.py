@@ -170,7 +170,6 @@ def create_app() -> FastAPI:
     app.include_router(fines.fines_router, prefix="/fines", tags=["fines"])
     app.include_router(fines.patron_fines_router, prefix="/patrons", tags=["fines"])
     app.include_router(fines.me_fines_router, prefix="/me", tags=["fines"])
-    app.include_router(fines.items_lifecycle_router, prefix="/items", tags=["fines"])
     app.include_router(api_notifications.router, prefix="/notifications", tags=["notifications"])
     app.include_router(reports.router, prefix="/reports", tags=["reports"])
     app.include_router(labels.router, prefix="/labels", tags=["labels"])
