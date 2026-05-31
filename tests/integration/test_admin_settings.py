@@ -718,3 +718,127 @@ class TestSettingsApiValidation:
                 headers={"Authorization": f"Bearer {tok}"},
             )
         assert r.status_code == 200
+
+
+# ──────────────────────────────────────────────────────────────────────────
+# API — secrets must never be echoed in responses (security invariant)
+# ──────────────────────────────────────────────────────────────────────────
+
+
+class TestSettingsApiSecretsNotEchoed:
+    """The settings API is write-only for secret values.
+
+    GET /settings/ and GET /settings/{key} must return ``value=null`` for
+    secret descriptors, never the decrypted plaintext.  A boolean ``is_set``
+    field indicates whether a value is configured without revealing its content.
+    """
+
+    def _admin_token(self, s_session):
+        _, tok = _make_user(
+            s_session, role_name="Administrator", username="secrets_echo_admin"
+        )
+        return tok
+
+    def test_list_secret_value_null_before_set(self, client, s_session):
+        """Before any secret is written, value is null and is_set is False."""
+        tok = self._admin_token(s_session)
+        r = client.get("/settings/", headers={"Authorization": f"Bearer {tok}"})
+        assert r.status_code == 200
+        secret_rows = [row for row in r.json() if row.get("key") == "smtp_password"]
+        assert secret_rows, "smtp_password not present in list"
+        row = secret_rows[0]
+        assert row["value"] is None, "secret value must not be echoed"
+        assert row["is_set"] is False
+
+    def test_get_secret_value_null_before_set(self, client, s_session):
+        """GET /settings/smtp_password returns value=null before a value is set."""
+        tok = self._admin_token(s_session)
+        r = client.get(
+            "/settings/smtp_password",
+            headers={"Authorization": f"Bearer {tok}"},
+        )
+        assert r.status_code == 200
+        body = r.json()
+        assert body["value"] is None
+        assert body["is_set"] is False
+
+    def test_get_secret_value_null_after_set(self, client, s_session, monkeypatch):
+        """After writing a secret, GET still returns value=null but is_set=True."""
+        from cryptography.fernet import Fernet
+
+        fernet_key = Fernet.generate_key().decode()
+        monkeypatch.setenv("COMPENDIUM_SECRET_KEY", fernet_key)
+        monkeypatch.setattr(
+            "compendium.db.engine.get_engine", lambda: s_session.get_bind()
+        )
+
+        tok = self._admin_token(s_session)
+        # Write the secret
+        w = client.patch(
+            "/settings/smtp_password",
+            json={"value": "super-secret-password", "force_skip_validation": True},
+            headers={"Authorization": f"Bearer {tok}"},
+        )
+        assert w.status_code == 200
+        # PATCH response must not echo the value
+        assert w.json()["value"] is None
+        assert w.json()["is_set"] is True
+
+        # GET must also not echo it
+        r = client.get(
+            "/settings/smtp_password",
+            headers={"Authorization": f"Bearer {tok}"},
+        )
+        assert r.status_code == 200
+        body = r.json()
+        assert body["value"] is None, "decrypted secret must never appear in GET response"
+        assert body["is_set"] is True
+
+    def test_list_secret_is_set_true_after_write(self, client, s_session, monkeypatch):
+        """After writing a secret, the list endpoint reports is_set=True."""
+        from cryptography.fernet import Fernet
+
+        fernet_key = Fernet.generate_key().decode()
+        monkeypatch.setenv("COMPENDIUM_SECRET_KEY", fernet_key)
+        monkeypatch.setattr(
+            "compendium.db.engine.get_engine", lambda: s_session.get_bind()
+        )
+
+        tok = self._admin_token(s_session)
+        client.patch(
+            "/settings/smtp_password",
+            json={"value": "another-secret", "force_skip_validation": True},
+            headers={"Authorization": f"Bearer {tok}"},
+        )
+
+        r = client.get("/settings/", headers={"Authorization": f"Bearer {tok}"})
+        secret_rows = [row for row in r.json() if row.get("key") == "smtp_password"]
+        row = secret_rows[0]
+        assert row["value"] is None
+        assert row["is_set"] is True
+
+    def test_delete_secret_reports_not_set(self, client, s_session, monkeypatch):
+        """DELETE /settings/smtp_password returns is_set=False after clearing."""
+        from cryptography.fernet import Fernet
+
+        fernet_key = Fernet.generate_key().decode()
+        monkeypatch.setenv("COMPENDIUM_SECRET_KEY", fernet_key)
+        monkeypatch.setattr(
+            "compendium.db.engine.get_engine", lambda: s_session.get_bind()
+        )
+
+        tok = self._admin_token(s_session)
+        client.patch(
+            "/settings/smtp_password",
+            json={"value": "to-be-cleared", "force_skip_validation": True},
+            headers={"Authorization": f"Bearer {tok}"},
+        )
+
+        r = client.delete(
+            "/settings/smtp_password",
+            headers={"Authorization": f"Bearer {tok}"},
+        )
+        assert r.status_code == 200
+        body = r.json()
+        assert body["value"] is None
+        assert body["is_set"] is False
