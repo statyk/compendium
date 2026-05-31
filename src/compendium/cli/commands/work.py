@@ -314,8 +314,8 @@ def creator_remove(
         raise typer.Exit(1) from exc
 
 
-@creator_app.command("set-order")
-def creator_set_order(
+@creator_app.command("move")
+def creator_move(
     work_id: int | None = typer.Option(None, "--work-id"),
     isbn: str | None = typer.Option(None, "--isbn"),
     upc: str | None = typer.Option(None, "--upc"),
