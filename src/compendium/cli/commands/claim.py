@@ -86,7 +86,7 @@ def verify_returned(
 
 @app.command("write-off")
 def write_off(
-    barcode: str = typer.Option(..., "--barcode"),
+    barcode: str = typer.Option(..., "--barcode", help="Item barcode"),
     note: str = typer.Option(..., "--note", help="Required note explaining the write-off"),
 ) -> None:
     """Resolve a claims-returned item as written off. Closes the loan without
