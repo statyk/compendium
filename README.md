@@ -88,7 +88,7 @@ Run `compendium --help` for the full command tree, or `compendium <group> --help
 **Catalog & cataloging**
 | Group | Common subcommands |
 |---|---|
-| `item` | `add` (--isbn / --upc / --mbid / --tmdb-id / --title), `add-manual`, `show`, `list`, `withdraw`, `set-loanable`; `note add/list/delete` |
+| `item` | `add` (--isbn / --upc / --mbid / --tmdb-id / --title), `add-manual`, `show`, `list`, `withdraw`, `set-loanable`; `note add/list/delete`; `declare-lost`, `mark-damaged`, `clear-lost`, `clear-damage` |
 | `work` | `search`, `show`, `new-arrivals`, `recently-returned` |
 | `creator` | `list`, `show`, `merge` |
 | `curated-list` | `create`, `list`, `show`, `edit`, `delete`, `add-work`, `remove-work`, `reorder` |
@@ -99,7 +99,8 @@ Run `compendium --help` for the full command tree, or `compendium <group> --help
 **Circulation**
 | Group | Common subcommands |
 |---|---|
-| `loan` | `checkout`, `checkin`, `renew`, `active`, `list` (system-wide), `history`, `item-history`, `declare-lost`, `mark-damaged`, `clear-lost`, `clear-damage`, `claim-returned`, `verify-returned`, `write-off-claim`, `list-claims` |
+| `loan` | `checkout`, `checkin`, `renew`, `active`, `list` (system-wide), `history`, `item-history` |
+| `claim` | `returned` (patron disputes), `verify` (found), `write-off`, `list` |
 | `hold` | `place`, `cancel`, `list`, `queue`, `suspend`, `resume`, `list-suspended` |
 | `fine` | `list`, `pay`, `waive`, `assess`, `assess-overdue` |
 
@@ -201,9 +202,10 @@ Below is a high-level inventory grouped by concern; the OpenAPI document is the 
 | Group | Common endpoints | Min permission |
 |---|---|---|
 | **Auth** | `POST /auth/login` | none |
-| **Catalog** | `GET /works/search`, `/works/new-arrivals`, `/works/recently-returned`; `GET /items/{barcode}`; `POST /items/{barcode}/{withdraw,loanable,verify-returned,write-off-claim,lost,damaged,clear-lost,clear-damage}` | guest / `item.view` / `item.delete` |
+| **Catalog** | `GET /works/search`, `/works/new-arrivals`, `/works/recently-returned`; `GET /items/{barcode}`; `POST /items/{barcode}/{withdraw,loanable,lost,damaged,clear-lost,clear-damage}` | guest / `item.view` / `item.delete` / `fine.manage` |
 | **Patrons** | `GET/POST /patrons`, `PATCH /patrons/{card}`, `POST /patrons/{card}/{deactivate,reactivate}`, `POST /patrons/{card}/account`, `GET/POST /patron-categories`, `PATCH/DELETE /patron-categories/{id}` | `patron.manage` / `patron.account.manage` for account endpoints |
-| **Loans** | `POST /loans/checkout`, `/loans/{id}/{checkin,renew,claim-returned}`, `POST /loans/{id}/declare-lost`/`mark-damaged`; `GET /loans` (system-wide), `/loans/patron/{card}`, `/loans/item/{barcode}`, `/loans/claims` | `loan.*` (see below) |
+| **Loans** | `POST /loans/checkout`, `/loans/{id}/{checkin,renew}`; `GET /loans` (system-wide), `/loans/patron/{card}`, `/loans/item/{barcode}` | `loan.*` (see below) |
+| **Claims** | `GET /claims`; `POST /claims/{barcode}/{returned,verify,write-off}` | `loan.checkin` |
 | **Holds** | `GET /holds`, `/holds/queue/{work_id}`; `POST/DELETE /holds`, `/holds/{id}`; `POST /holds/{id}/{suspend,resume}` | `hold.*` |
 | **Fines** | `GET /fines`, `GET/POST /patrons/{card}/fines`, `POST /fines/{id}/{pay,waive}`, `POST /patrons/{card}/fines/assess-overdue` | `fine.manage` / `fine.view.self` |
 | **Self-service** | `GET /me/loans`, `/me/holds`; `POST /me/holds`, `/me/holds/{id}/{suspend,resume}`; `DELETE /me/holds/{id}`; `POST /me/loans/{id}/{renew,claim-returned}` | `*.self` permissions |

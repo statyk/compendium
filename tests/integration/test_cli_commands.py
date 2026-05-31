@@ -527,7 +527,7 @@ class TestWorkCli:
         assert "Brian Herbert" in r.output
         r = _invoke(
             session,
-            ["work", "creator", "set-order", "--work-id", str(work.id),
+            ["work", "creator", "move", "--work-id", str(work.id),
              "--name", "Brian Herbert", "--role", "author", "--position", "0"],
             "compendium.cli.commands.work",
         )
@@ -949,15 +949,15 @@ class TestLoanCli:
         )
         r = _invoke(
             session,
-            ["loan", "declare-lost", "--barcode", item.barcode, "--replacement-cost-cents", "2500"],
-            "compendium.cli.commands.loan",
+            ["item", "declare-lost", "--barcode", item.barcode, "--replacement-cost-cents", "2500"],
+            "compendium.cli.commands.item",
         )
         assert r.exit_code == 0, r.output
         assert "declared lost" in r.output
         r = _invoke(
             session,
-            ["loan", "clear-lost", "--barcode", item.barcode],
-            "compendium.cli.commands.loan",
+            ["item", "clear-lost", "--barcode", item.barcode],
+            "compendium.cli.commands.item",
         )
         assert r.exit_code == 0
         assert "recovered" in r.output
@@ -975,19 +975,19 @@ class TestLoanCli:
         r = _invoke(
             session,
             [
-                "loan", "mark-damaged",
+                "item", "mark-damaged",
                 "--barcode", item.barcode,
                 "--amount-cents", "500",
                 "--note", "cover torn",
             ],
-            "compendium.cli.commands.loan",
+            "compendium.cli.commands.item",
         )
         assert r.exit_code == 0, r.output
         assert "damaged" in r.output
         r = _invoke(
             session,
-            ["loan", "clear-damage", "--barcode", item.barcode],
-            "compendium.cli.commands.loan",
+            ["item", "clear-damage", "--barcode", item.barcode],
+            "compendium.cli.commands.item",
         )
         assert r.exit_code == 0
 
