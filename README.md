@@ -2,14 +2,6 @@
 
 A library card catalog system for physical items — books, vinyl records, DVDs, CDs.
 
-WARNING NOTICE CAVEAT EMPTOR:
-This project is 100% vibe coded.  Not only did I not write the code, I've barely even looked at it.
-I guided the models (Sonnet and Opus, mostly) on design decisions and the like, but it's pretty much all AI-generated code and documentation.
-This paragraph here is about the only part of the project written by a human.
-
-
-**Status:** v1.0.0 — core feature-complete. Catalog, circulation, holds, fines, notifications, bulk import/export, web UI, REST API, and CLI are all shipped. See [`docs/architecture.md`](docs/architecture.md) for architecture and design decisions.
-
 ## Features
 
 - **Catalog** — add items by ISBN / UPC / MusicBrainz ID / TMDb ID / title search (Google Books / Open Library, MusicBrainz, TMDb) or manually for obscure items; search and browse works and copies; faceted discovery (media type, decade, availability)
