@@ -1,0 +1,17 @@
+# Build-from-source override for docker-compose.yml.
+#
+# Use this when you want to build the Compendium image locally instead of
+# pulling the published image from GHCR. Typical use:
+#
+#   docker compose -f docker-compose.yml -f docker-compose.build.yml up -d --build
+#
+# This is useful for:
+#   - Local development / testing unreleased changes
+#   - Building a customised image (modified Dockerfile, extra packages, etc.)
+#   - Air-gapped deployments that cannot pull from ghcr.io
+
+services:
+  compendium:
+    build:
+      context: ..
+      dockerfile: docker/Dockerfile

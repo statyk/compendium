@@ -260,6 +260,22 @@ For everything else, run `compendium settings list` to see the current value, so
 
 See [`docs/deployment.md`](docs/deployment.md) for full deployment guidance, or [`docker/README.md`](docker/README.md) for the bundled Docker Compose setup (app + Postgres + nginx with auto-generated self-signed TLS).
 
+#### Docker quick start
+
+A pre-built multi-arch image (`linux/amd64` + `linux/arm64`) is published to
+GitHub Container Registry on every release:
+
+```bash
+cd docker
+cp .env.example .env && $EDITOR .env   # set passwords and JWT secret
+docker compose pull
+docker compose up -d
+```
+
+Image: `ghcr.io/statyk/compendium` — tags `latest`, `X.Y.Z`, `X.Y` are
+published for each release. Pin a version in `.env` with
+`COMPENDIUM_IMAGE=ghcr.io/statyk/compendium:1.0.2`.
+
 ### PostgreSQL
 
 SQLite is the default and fine for home or classroom use (up to ~10k items). For larger collections or multiple concurrent writers, use PostgreSQL:

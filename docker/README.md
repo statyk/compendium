@@ -8,8 +8,9 @@ to the host; the REST API is reachable only inside the Docker network.
 
 ```
 docker/
-├── Dockerfile              # app image (multi-stage, Python 3.11 + Postgres driver)
-├── docker-compose.yml      # db + compendium + nginx
+├── Dockerfile              # app image (multi-stage, Python 3.11 + Postgres driver; used by build override)
+├── docker-compose.yml      # db + compendium + nginx (pulls published image by default)
+├── docker-compose.build.yml  # build-from-source override (see "Build from source" below)
 ├── .env.example            # copy to .env and edit before first run
 ├── crontab.sample          # scheduled maintenance lines for host cron
 ├── install-cron.sh         # one-shot installer for the above (--log-file flag)
@@ -31,7 +32,21 @@ cp .env.example .env
 $EDITOR .env                       # change POSTGRES_PASSWORD, JWT secret (required), admin password
                                    # optionally add COMPENDIUM_SECRET_KEY for encrypted-secrets UI
 
-docker compose up -d --build
+docker compose pull                # pull the published image from ghcr.io/statyk/compendium
+docker compose up -d
+```
+
+The compose stack uses the published image from GHCR by default
+(`ghcr.io/statyk/compendium:latest`). To pin a specific version, set
+`COMPENDIUM_IMAGE=ghcr.io/statyk/compendium:1.0.2` in `.env`.
+
+### Build from source
+
+If you want to build the image locally (e.g. for local development or an
+air-gapped environment), use the build override:
+
+```bash
+docker compose -f docker-compose.yml -f docker-compose.build.yml up -d --build
 ```
 
 Browse to `https://<host>/` — the nginx server redirects plain HTTP to HTTPS and

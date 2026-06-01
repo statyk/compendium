@@ -8,6 +8,13 @@
 
 2. **GitHub Environment** — on https://github.com/statyk/compendium/settings/environments create an environment named `pypi` (no extra rules required; the name must match the workflow).
 
+3. **GHCR package visibility** — after the *first* image push, make the package public and link it to the repo:
+   - Go to https://github.com/users/statyk/packages/container/compendium/settings
+   - Set visibility to **Public**
+   - Under "Repository access", link to `statyk/compendium`
+   
+   This is a one-time step; all subsequent releases publish to the same public package automatically.
+
 ## How to cut a release
 
 ### 1. Bump the version
@@ -48,8 +55,11 @@ EOF
 gh release create v1.1.0 --title "Compendium 1.1.0" --notes-file /tmp/release-notes.md
 ```
 
-Publishing the release triggers `.github/workflows/release.yml`, which builds the
-package and publishes it to PyPI via OIDC (no token required).
+Publishing the release triggers `.github/workflows/release.yml`, which runs two
+parallel jobs:
+- **publish-pypi** — builds the package and publishes to PyPI via OIDC (no token required).
+- **publish-image** — builds a multi-arch (`linux/amd64` + `linux/arm64`) image and pushes
+  it to `ghcr.io/statyk/compendium` with tags `vX.Y.Z`, `X.Y`, and `latest`.
 
 ### 5. Verify
 
@@ -59,11 +69,18 @@ Watch the Actions run:
 gh run watch
 ```
 
-Then confirm the package is live:
+Then confirm both artifacts are live:
 
 ```bash
+# PyPI
 pip install --upgrade compendium-ils
 compendium --version   # should print the new version
+
+# GHCR image (replace X.Y.Z with the release version)
+docker pull ghcr.io/statyk/compendium:X.Y.Z
+docker pull ghcr.io/statyk/compendium:X.Y
+docker pull ghcr.io/statyk/compendium:latest
+docker run --rm ghcr.io/statyk/compendium:X.Y.Z compendium --version
 ```
 
 ## Version numbering

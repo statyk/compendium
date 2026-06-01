@@ -820,3 +820,19 @@ The harness in `tests/e2e/conftest.py` boots a real `compendium serve` subproces
 - `test_inline_policy_edit.py` — policy form submission and persistence.
 - `test_scanner_mocked.py` — barcode scanner with mocked BarcodeDetector.
 - `test_kiosk_session_flow.py` — kiosk card entry and session page.
+
+---
+
+## Release & distribution
+
+Every GitHub release triggers `.github/workflows/release.yml`, which runs two parallel jobs:
+
+- **publish-pypi** — builds the wheel/sdist via `uv build` and publishes to PyPI via OIDC
+  Trusted Publishing (no token required). Package name: `compendium-ils`.
+- **publish-image** — builds a multi-arch (`linux/amd64` + `linux/arm64`) Docker image and
+  pushes it to `ghcr.io/statyk/compendium`. Tags: `vX.Y.Z`, `X.Y`, `latest`.
+
+The image is built from `docker/Dockerfile` with the repo root as context. The
+`docker/docker-compose.yml` stack pulls the published image by default; operators can pin
+a specific version via `COMPENDIUM_IMAGE=ghcr.io/statyk/compendium:X.Y.Z` in `.env`.
+A `docker/docker-compose.build.yml` override exists for building from source.
