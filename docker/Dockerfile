@@ -18,7 +18,6 @@ WORKDIR /app
 
 COPY pyproject.toml uv.lock README.md LICENSE alembic.ini ./
 COPY src ./src
-COPY migrations ./migrations
 
 RUN uv sync --frozen --no-dev --extra postgres
 
