@@ -358,6 +358,10 @@ src/compendium/
 └── db/            # engine factory, session lifecycle
 ```
 
+## Changelog
+
+Release-by-release changes are recorded in [CHANGELOG.md](CHANGELOG.md).
+
 ## License
 
 MIT (to be finalised before first release).

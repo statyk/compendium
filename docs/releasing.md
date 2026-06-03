@@ -25,24 +25,47 @@ Edit `src/compendium/__init__.py` — it is the single source of truth:
 __version__ = "1.1.0"   # was 1.0.0
 ```
 
-### 2. Commit and push
+### 2. Update the changelog
+
+`CHANGELOG.md` follows [Keep a Changelog](https://keepachangelog.com/). Move the
+entries accumulated under `## [Unreleased]` into a new dated version section, and
+update the comparison links at the bottom of the file:
+
+```markdown
+## [Unreleased]
+
+## [1.1.0] - 2026-06-01
+
+### Added
+- ...
+```
+
+```markdown
+[Unreleased]: https://github.com/statyk/compendium/compare/v1.1.0...HEAD
+[1.1.0]: https://github.com/statyk/compendium/compare/v1.0.2...v1.1.0
+```
+
+The GitHub Release notes (step 4) are derived from this same set of changes, so
+write the changelog entry first and reuse it.
+
+### 3. Commit and push
 
 ```bash
-git add src/compendium/__init__.py
+git add src/compendium/__init__.py CHANGELOG.md
 git commit -m "chore(release): bump version to 1.1.0"
 git push origin master
 ```
 
-### 3. Tag
+### 4. Tag
 
 ```bash
 git tag -a v1.1.0 -m "Compendium 1.1.0"
 git push origin v1.1.0
 ```
 
-### 4. Create the GitHub Release
+### 5. Create the GitHub Release
 
-Write release notes to a temp file, then publish:
+Reuse the changelog entry from step 2. Write release notes to a temp file, then publish:
 
 ```bash
 cat > /tmp/release-notes.md << 'EOF'
@@ -61,7 +84,7 @@ parallel jobs:
 - **publish-image** — builds a multi-arch (`linux/amd64` + `linux/arm64`) image and pushes
   it to `ghcr.io/statyk/compendium` with tags `vX.Y.Z`, `X.Y`, and `latest`.
 
-### 5. Verify
+### 6. Verify
 
 Watch the Actions run:
 
