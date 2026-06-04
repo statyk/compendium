@@ -133,8 +133,10 @@ _SYSTEM_PAGES: dict[str, dict[str, Any]] = {
         ),
         "keys": [
             "book_metadata_source_preference",
+            "google_books_api_key",
             "book_metadata_fallback_enabled",
             "metadata_cache_ttl_days",
+            "tmdb_api_key",
         ],
     },
     "smtp": {
@@ -142,12 +144,13 @@ _SYSTEM_PAGES: dict[str, dict[str, Any]] = {
         "scope_perm": "system.manage",
         "intro": (
             "Outbound email configuration for hold-ready, due-soon, and "
-            "overdue notices. Set the SMTP password in the API Keys section below."
+            "overdue notices."
         ),
         "keys": [
             "smtp_host",
             "smtp_port",
             "smtp_username",
+            "smtp_password",
             "smtp_use_starttls",
             "smtp_use_ssl",
             "smtp_from_address",
@@ -225,21 +228,43 @@ def _render(name: str, request: Request, ctx: dict, status_code: int = 200):
     return resp
 
 
-def _build_rows(keys: list[str]) -> list[dict[str, Any]]:
-    """Hydrate descriptor + current value + env-override flag for each key."""
+def _build_rows(keys: list[str], session: Session | None = None) -> list[dict[str, Any]]:
+    """Hydrate descriptor + current value + env-override flag for each key.
+
+    Secret descriptors get a password-style row instead of a value-bearing one;
+    their stored value is never read or echoed (only a db_set boolean).
+    """
     rows = []
     for key in keys:
         desc = get_descriptor(key)
         env_var = desc.resolved_env_var()
         env_overridden = desc.env_overridden()
+        if desc.secret:
+            db_set = False
+            if session is not None:
+                from compendium.repositories.sql.site_setting_repository import (
+                    SqlSiteSettingRepository,
+                )
+                db_row = SqlSiteSettingRepository(session).get(desc.key)
+                db_set = db_row is not None and bool(db_row.value)
+            rows.append(
+                {
+                    "key": key,
+                    "display_name": desc.resolved_display_name(),
+                    "desc": desc,
+                    "env_var": env_var,
+                    "env_overridden": env_overridden,
+                    "is_secret": True,
+                    "db_set": db_set,
+                }
+            )
+            continue
         try:
             value = get_site_setting(key)
         except SettingValidationError:
             value = desc.default
-        # Form-rendering helpers
         type_repr = _type_repr(desc.type)
         choices = _literal_choices(desc.type)
-        # Availability hint (for conditional greying of specific choices)
         hint = desc.availability_hint() if desc.availability_hint is not None else None
         unavailable_choices: set[str] = set(hint.unavailable_choices) if hint else set()
         availability_warning: str | None = hint.warning if hint else None
@@ -260,6 +285,7 @@ def _build_rows(keys: list[str]) -> list[dict[str, Any]]:
                 "is_list": str(desc.type).startswith("list["),
                 "unavailable_choices": unavailable_choices,
                 "availability_warning": availability_warning,
+                "is_secret": False,
             }
         )
     return rows
@@ -316,9 +342,11 @@ def _show_page(
     message: str | None,
     error: str | None,
     user: AppUser,
+    session: Session | None = None,
     extra_ctx: dict[str, Any] | None = None,
 ):
-    rows = _build_rows(page_meta["keys"])
+    rows = _build_rows(page_meta["keys"], session=session)
+    has_secrets = any(r.get("is_secret") for r in rows)
     ctx: dict[str, Any] = {
         "request": request,
         "user": user,
@@ -329,11 +357,13 @@ def _show_page(
         "is_system": page_key in _SYSTEM_PAGES,
         "message": message,
         "error": error,
-        "secret_rows": [],
+        "has_secrets": has_secrets,
         "key_configured": False,
         "canary_mismatch": False,
         "settings_pages": SETTINGS_PAGES,
     }
+    if has_secrets and session is not None:
+        ctx.update(_secrets_banner_ctx(session))
     if extra_ctx:
         ctx.update(extra_ctx)
     return _render("admin/settings.html", request, ctx)
@@ -343,53 +373,56 @@ def _apply_form(
     page_key: str,
     page_meta: dict[str, Any],
     request: Request,
-    form_values: dict[str, str],
+    form: Any,
     reset_keys: list[str],
+    clear_keys: list[str],
     session: Session,
     user: AppUser,
 ) -> tuple[str | None, str | None]:
-    """Apply submitted form values + resets. Returns (message, error)."""
+    """Apply submitted settings + resets + inline secrets. Returns (message, error)."""
     audit = _audit_svc(session)
     errors: list[str] = []
     changed = 0
 
+    secret_keys = [k for k in page_meta["keys"] if get_descriptor(k).secret]
+    normal_keys = [k for k in page_meta["keys"] if k not in secret_keys]
+
     for key in reset_keys:
-        if key not in page_meta["keys"]:
+        if key not in normal_keys:
             continue
         if delete_site_setting(
             key, session=session, audit_svc=audit, actor=user, source="web"
         ):
             changed += 1
 
-    for key in page_meta["keys"]:
+    for key in normal_keys:
         if key in reset_keys:
             continue
         try:
             desc = get_descriptor(key)
         except UnknownSettingError:
             continue
-        # Skip keys whose env var is set — write would be silently masked.
         if desc.env_overridden():
             continue
-        raw = form_values.get(key, "")
-        # Bool: missing checkbox = false; otherwise treat the form value
-        # as the descriptor parses it.
+        raw = form.get(key, "")
         if desc.type is bool:
-            raw = "true" if key in form_values else "false"
+            raw = "true" if key in form else "false"
         try:
             parsed = parse(desc, raw)
             set_site_setting(
-                key,
-                parsed,
-                session=session,
-                updated_by_id=user.id,
-                audit_svc=audit,
-                actor=user,
-                source="web",
+                key, parsed, session=session, updated_by_id=user.id,
+                audit_svc=audit, actor=user, source="web",
             )
             changed += 1
         except SettingValidationError as exc:
             errors.append(f"{key}: {exc}")
+
+    if secret_keys:
+        s_changed, s_errors = _apply_secret_fields(
+            secret_keys, form, clear_keys, session, user, audit
+        )
+        changed += s_changed
+        errors.extend(s_errors)
 
     if errors:
         return (None, "; ".join(errors))
@@ -402,13 +435,14 @@ def _post_handler(
     page_key: str,
     page_meta: dict[str, Any],
     request: Request,
-    form_values: dict[str, str],
+    form: Any,
     reset_keys: list[str],
+    clear_keys: list[str],
     session: Session,
     user: AppUser,
 ):
     msg, err = _apply_form(
-        page_key, page_meta, request, form_values, reset_keys, session, user
+        page_key, page_meta, request, form, reset_keys, clear_keys, session, user
     )
     target = (
         f"/ui/admin/system/{page_key}"
@@ -465,8 +499,11 @@ def general_get(
     message: str | None = Query(default=None),
     error: str | None = Query(default=None),
     user: AppUser = Depends(require_web_permission("patron.manage")),
+    session: Session = Depends(get_session),
 ):
-    return _show_page("general", _PAGES["general"], request, message, error, user)
+    return _show_page(
+        "general", _PAGES["general"], request, message, error, user, session=session
+    )
 
 
 @router.post("/admin/settings/general")
@@ -478,9 +515,9 @@ async def general_post(
     form = await request.form()
     check_csrf_form(request, form.get("csrf_token", ""))
     reset_keys = form.getlist("reset")
-    form_values = {k: v for k, v in form.items() if k not in ("csrf_token", "reset")}
+    clear_keys = form.getlist("clear")
     return _post_handler(
-        "general", _PAGES["general"], request, form_values, reset_keys, session, user
+        "general", _PAGES["general"], request, form, reset_keys, clear_keys, session, user
     )
 
 
@@ -490,9 +527,10 @@ def circulation_get(
     message: str | None = Query(default=None),
     error: str | None = Query(default=None),
     user: AppUser = Depends(require_web_permission("patron.manage")),
+    session: Session = Depends(get_session),
 ):
     return _show_page(
-        "circulation", _PAGES["circulation"], request, message, error, user
+        "circulation", _PAGES["circulation"], request, message, error, user, session=session
     )
 
 
@@ -505,15 +543,9 @@ async def circulation_post(
     form = await request.form()
     check_csrf_form(request, form.get("csrf_token", ""))
     reset_keys = form.getlist("reset")
-    form_values = {k: v for k, v in form.items() if k not in ("csrf_token", "reset")}
+    clear_keys = form.getlist("clear")
     return _post_handler(
-        "circulation",
-        _PAGES["circulation"],
-        request,
-        form_values,
-        reset_keys,
-        session,
-        user,
+        "circulation", _PAGES["circulation"], request, form, reset_keys, clear_keys, session, user
     )
 
 
@@ -523,8 +555,11 @@ def kiosk_get(
     message: str | None = Query(default=None),
     error: str | None = Query(default=None),
     user: AppUser = Depends(require_web_permission("patron.manage")),
+    session: Session = Depends(get_session),
 ):
-    return _show_page("kiosk", _PAGES["kiosk"], request, message, error, user)
+    return _show_page(
+        "kiosk", _PAGES["kiosk"], request, message, error, user, session=session
+    )
 
 
 @router.post("/admin/settings/kiosk")
@@ -536,9 +571,9 @@ async def kiosk_post(
     form = await request.form()
     check_csrf_form(request, form.get("csrf_token", ""))
     reset_keys = form.getlist("reset")
-    form_values = {k: v for k, v in form.items() if k not in ("csrf_token", "reset")}
+    clear_keys = form.getlist("clear")
     return _post_handler(
-        "kiosk", _PAGES["kiosk"], request, form_values, reset_keys, session, user
+        "kiosk", _PAGES["kiosk"], request, form, reset_keys, clear_keys, session, user
     )
 
 
@@ -548,9 +583,10 @@ def identifiers_get(
     message: str | None = Query(default=None),
     error: str | None = Query(default=None),
     user: AppUser = Depends(require_web_permission("branch.edit")),
+    session: Session = Depends(get_session),
 ):
     return _show_page(
-        "identifiers", _PAGES["identifiers"], request, message, error, user
+        "identifiers", _PAGES["identifiers"], request, message, error, user, session=session
     )
 
 
@@ -563,15 +599,9 @@ async def identifiers_post(
     form = await request.form()
     check_csrf_form(request, form.get("csrf_token", ""))
     reset_keys = form.getlist("reset")
-    form_values = {k: v for k, v in form.items() if k not in ("csrf_token", "reset")}
+    clear_keys = form.getlist("clear")
     return _post_handler(
-        "identifiers",
-        _PAGES["identifiers"],
-        request,
-        form_values,
-        reset_keys,
-        session,
-        user,
+        "identifiers", _PAGES["identifiers"], request, form, reset_keys, clear_keys, session, user
     )
 
 
@@ -581,8 +611,11 @@ def labels_settings_get(
     message: str | None = Query(default=None),
     error: str | None = Query(default=None),
     user: AppUser = Depends(require_web_permission("labels.generate")),
+    session: Session = Depends(get_session),
 ):
-    return _show_page("labels", _PAGES["labels"], request, message, error, user)
+    return _show_page(
+        "labels", _PAGES["labels"], request, message, error, user, session=session
+    )
 
 
 @router.post("/admin/settings/labels")
@@ -594,9 +627,9 @@ async def labels_settings_post(
     form = await request.form()
     check_csrf_form(request, form.get("csrf_token", ""))
     reset_keys = form.getlist("reset")
-    form_values = {k: v for k, v in form.items() if k not in ("csrf_token", "reset")}
+    clear_keys = form.getlist("clear")
     return _post_handler(
-        "labels", _PAGES["labels"], request, form_values, reset_keys, session, user
+        "labels", _PAGES["labels"], request, form, reset_keys, clear_keys, session, user
     )
 
 
@@ -611,11 +644,9 @@ def smtp_get(
     user: AppUser = Depends(require_web_permission("system.manage")),
     session: Session = Depends(get_session),
 ):
-    secret_rows = _build_secrets_rows_filtered(["smtp_password"], session)
-    extra = _secrets_banner_ctx(session)
-    extra["secret_rows"] = secret_rows
-    extra["secrets_redirect_to"] = "/ui/admin/system/smtp"
-    return _show_page("smtp", _SYSTEM_PAGES["smtp"], request, message, error, user, extra_ctx=extra)
+    return _show_page(
+        "smtp", _SYSTEM_PAGES["smtp"], request, message, error, user, session=session
+    )
 
 
 @router.post("/admin/system/smtp")
@@ -627,9 +658,9 @@ async def smtp_post(
     form = await request.form()
     check_csrf_form(request, form.get("csrf_token", ""))
     reset_keys = form.getlist("reset")
-    form_values = {k: v for k, v in form.items() if k not in ("csrf_token", "reset")}
+    clear_keys = form.getlist("clear")
     return _post_handler(
-        "smtp", _SYSTEM_PAGES["smtp"], request, form_values, reset_keys, session, user
+        "smtp", _SYSTEM_PAGES["smtp"], request, form, reset_keys, clear_keys, session, user
     )
 
 
@@ -639,9 +670,10 @@ def retention_get(
     message: str | None = Query(default=None),
     error: str | None = Query(default=None),
     user: AppUser = Depends(require_web_permission("system.manage")),
+    session: Session = Depends(get_session),
 ):
     return _show_page(
-        "retention", _SYSTEM_PAGES["retention"], request, message, error, user
+        "retention", _SYSTEM_PAGES["retention"], request, message, error, user, session=session
     )
 
 
@@ -654,15 +686,9 @@ async def retention_post(
     form = await request.form()
     check_csrf_form(request, form.get("csrf_token", ""))
     reset_keys = form.getlist("reset")
-    form_values = {k: v for k, v in form.items() if k not in ("csrf_token", "reset")}
+    clear_keys = form.getlist("clear")
     return _post_handler(
-        "retention",
-        _SYSTEM_PAGES["retention"],
-        request,
-        form_values,
-        reset_keys,
-        session,
-        user,
+        "retention", _SYSTEM_PAGES["retention"], request, form, reset_keys, clear_keys, session, user
     )
 
 
@@ -672,9 +698,10 @@ def security_get(
     message: str | None = Query(default=None),
     error: str | None = Query(default=None),
     user: AppUser = Depends(require_web_permission("system.manage")),
+    session: Session = Depends(get_session),
 ):
     return _show_page(
-        "security", _SYSTEM_PAGES["security"], request, message, error, user
+        "security", _SYSTEM_PAGES["security"], request, message, error, user, session=session
     )
 
 
@@ -687,15 +714,9 @@ async def security_post(
     form = await request.form()
     check_csrf_form(request, form.get("csrf_token", ""))
     reset_keys = form.getlist("reset")
-    form_values = {k: v for k, v in form.items() if k not in ("csrf_token", "reset")}
+    clear_keys = form.getlist("clear")
     return _post_handler(
-        "security",
-        _SYSTEM_PAGES["security"],
-        request,
-        form_values,
-        reset_keys,
-        session,
-        user,
+        "security", _SYSTEM_PAGES["security"], request, form, reset_keys, clear_keys, session, user
     )
 
 
@@ -707,14 +728,14 @@ def metadata_get(
     user: AppUser = Depends(require_web_permission("system.manage")),
     session: Session = Depends(get_session),
 ):
-    secret_rows = _build_secrets_rows_filtered(
-        ["google_books_api_key", "tmdb_api_key"], session
-    )
-    extra = _secrets_banner_ctx(session)
-    extra["secret_rows"] = secret_rows
-    extra["secrets_redirect_to"] = "/ui/admin/system/metadata"
+    from compendium.services.metadata import get_book_primary_adapter_name
+
+    active = get_book_primary_adapter_name()
+    active_label = "Google Books" if active == "googlebooks" else "Open Library"
     return _show_page(
-        "metadata", _SYSTEM_PAGES["metadata"], request, message, error, user, extra_ctx=extra
+        "metadata", _SYSTEM_PAGES["metadata"], request, message, error, user,
+        session=session,
+        extra_ctx={"active_book_source": active_label},
     )
 
 
@@ -727,42 +748,10 @@ async def metadata_post(
     form = await request.form()
     check_csrf_form(request, form.get("csrf_token", ""))
     reset_keys = form.getlist("reset")
-    form_values = {k: v for k, v in form.items() if k not in ("csrf_token", "reset")}
+    clear_keys = form.getlist("clear")
     return _post_handler(
-        "metadata",
-        _SYSTEM_PAGES["metadata"],
-        request,
-        form_values,
-        reset_keys,
-        session,
-        user,
+        "metadata", _SYSTEM_PAGES["metadata"], request, form, reset_keys, clear_keys, session, user
     )
-
-
-def _build_secrets_rows_filtered(keys: list[str], session) -> list[dict]:
-    """Build secrets rows for a specific subset of secret keys."""
-    from compendium.repositories.sql.site_setting_repository import SqlSiteSettingRepository
-    from compendium.services.settings_registry import all_descriptors
-
-    repo = SqlSiteSettingRepository(session)
-    by_key = {d.key: d for d in all_descriptors() if d.secret}
-    rows = []
-    for key in keys:
-        desc = by_key.get(key)
-        if desc is None:
-            continue
-        db_row = repo.get(desc.key)
-        rows.append(
-            {
-                "key": desc.key,
-                "display_name": desc.resolved_display_name(),
-                "desc": desc,
-                "env_var": desc.resolved_env_var(),
-                "env_overridden": desc.env_overridden(),
-                "db_set": db_row is not None and bool(db_row.value),
-            }
-        )
-    return rows
 
 
 def _secrets_banner_ctx(session) -> dict[str, Any]:
@@ -778,33 +767,6 @@ def _secrets_banner_ctx(session) -> dict[str, Any]:
 
 
 # ── Secrets page ──────────────────────────────────────────────────────────────
-
-
-def _build_secrets_rows(session) -> list[dict]:
-    """Hydrate secret descriptors with status information for the secrets template."""
-    from compendium.services.settings_registry import all_descriptors
-    from compendium.repositories.sql.site_setting_repository import SqlSiteSettingRepository
-
-    repo = SqlSiteSettingRepository(session)
-    rows = []
-    for desc in sorted(
-        (d for d in all_descriptors() if d.secret), key=lambda d: d.key
-    ):
-        env_var = desc.resolved_env_var()
-        env_overridden = desc.env_overridden()
-        db_row = repo.get(desc.key)
-        db_set = db_row is not None and bool(db_row.value)
-        rows.append(
-            {
-                "key": desc.key,
-                "display_name": desc.resolved_display_name(),
-                "desc": desc,
-                "env_var": env_var,
-                "env_overridden": env_overridden,
-                "db_set": db_set,
-            }
-        )
-    return rows
 
 
 @router.get("/admin/system/secrets")
@@ -833,77 +795,52 @@ def _register_secret_validators() -> None:
 _register_secret_validators()
 
 
-@router.post("/admin/system/secrets")
-async def secrets_post(
-    request: Request,
-    user: AppUser = Depends(require_web_permission("system.manage")),
-    session: Session = Depends(get_session),
-):
-    from urllib.parse import quote
+def _apply_secret_fields(
+    secret_keys: list[str],
+    form: Any,
+    clear_keys: list[str],
+    session: Session,
+    user: AppUser,
+    audit: AuditService,
+) -> tuple[int, list[str]]:
+    """Apply secret sets/clears for the given keys. Returns (changed, errors).
 
+    `form` is the starlette FormData (supports .get). Validation failures are
+    returned as error strings (the page surfaces them via ?error=).
+    """
     from compendium.services.secrets import SecretKeyMissingError, SecretKeyMismatchError
     from compendium.services.settings_registry import all_descriptors
 
-    _SECRETS_REDIRECT_WHITELIST = {
-        "/ui/admin/system/metadata",
-        "/ui/admin/system/smtp",
-    }
-
-    form = await request.form()
-    check_csrf_form(request, form.get("csrf_token", ""))
-
-    # Page that the secrets form was embedded in — redirect there on completion.
-    redirect_to = form.get("redirect_to", "").strip()
-    if redirect_to not in _SECRETS_REDIRECT_WHITELIST:
-        redirect_to = "/ui/admin/system/metadata"
-
     secret_descs = {d.key: d for d in all_descriptors() if d.secret}
-    audit = _audit_svc(session)
-    errors: list[str] = []
     changed = 0
+    errors: list[str] = []
 
-    # Clears
-    clear_keys = form.getlist("clear")
     for key in clear_keys:
-        if key not in secret_descs:
+        if key not in secret_keys or key not in secret_descs:
             continue
         if delete_site_setting(key, session=session, audit_svc=audit, actor=user, source="web"):
             changed += 1
 
-    # Track per-key validation failures that the user may want to override.
-    validation_failures: dict[str, str] = {}
-
-    # Sets
-    for key, desc in secret_descs.items():
-        if key in clear_keys:
-            continue
-        if desc.env_overridden():
+    for key in secret_keys:
+        desc = secret_descs.get(key)
+        if desc is None or key in clear_keys or desc.env_overridden():
             continue
         raw = form.get(key, "").strip()
         if not raw:
             continue
-
-        # Run pre-save validator if registered for this key.
         validator = _SECRET_VALIDATORS.get(key)
         override_field = f"override_validation_{key}"
         if validator is not None and not form.get(override_field):
             result = validator(raw)
             if not result.ok:
-                validation_failures[key] = result.reason or "validation failed"
+                errors.append(f"{desc.resolved_display_name()}: {result.reason or 'validation failed'}")
                 continue
             if result.warning:
-                # Valid but quota-exhausted — save with a warning surfaced later.
                 errors.append(f"{desc.resolved_display_name()}: {result.warning}")
-
         try:
             set_site_setting(
-                key,
-                raw,
-                session=session,
-                updated_by_id=user.id,
-                audit_svc=audit,
-                actor=user,
-                source="web",
+                key, raw, session=session, updated_by_id=user.id,
+                audit_svc=audit, actor=user, source="web",
             )
             changed += 1
         except (SecretKeyMissingError, SecretKeyMismatchError) as exc:
@@ -911,10 +848,33 @@ async def secrets_post(
         except Exception as exc:
             errors.append(f"{key}: {exc}")
 
-    if validation_failures:
-        validation_error = "; ".join(f"{k}: {v}" for k, v in validation_failures.items())
-        qs = f"?error={quote(validation_error)}"
-        return RedirectResponse(redirect_to + qs, status_code=303)
+    return changed, errors
+
+
+@router.post("/admin/system/secrets")
+async def secrets_post(
+    request: Request,
+    user: AppUser = Depends(require_web_permission("system.manage")),
+    session: Session = Depends(get_session),
+):
+    from compendium.services.settings_registry import all_descriptors
+
+    _SECRETS_REDIRECT_WHITELIST = {
+        "/ui/admin/system/metadata",
+        "/ui/admin/system/smtp",
+    }
+    form = await request.form()
+    check_csrf_form(request, form.get("csrf_token", ""))
+    redirect_to = form.get("redirect_to", "").strip()
+    if redirect_to not in _SECRETS_REDIRECT_WHITELIST:
+        redirect_to = "/ui/admin/system/metadata"
+
+    secret_keys = [d.key for d in all_descriptors() if d.secret]
+    clear_keys = form.getlist("clear")
+    audit = _audit_svc(session)
+    changed, errors = _apply_secret_fields(
+        secret_keys, form, clear_keys, session, user, audit
+    )
 
     if errors:
         qs = f"?error={quote('; '.join(errors))}"

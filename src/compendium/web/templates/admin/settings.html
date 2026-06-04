@@ -20,6 +20,22 @@
 {% if message %}<p class="success-banner">{{ message }}</p>{% endif %}
 {% if error %}<p class="error-banner">{{ error }}</p>{% endif %}
 
+{% if has_secrets %}
+  {% if not key_configured %}
+  <p class="warning-banner">
+    Secret storage is disabled. Set <code>COMPENDIUM_SECRET_KEY</code> in your
+    environment to enable. Run <code>compendium keygen --secret</code> to generate
+    a key, then restart the service.
+  </p>
+  {% elif canary_mismatch %}
+  <p class="error-banner">
+    <strong>Key mismatch:</strong> <code>COMPENDIUM_SECRET_KEY</code> does not match
+    the key used to encrypt stored secrets. Restore the original key, or clear the
+    stored values below and re-enter them with the new key.
+  </p>
+  {% endif %}
+{% endif %}
+
 <form method="post">
   <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
 
@@ -39,15 +55,36 @@
           <div class="setting-key">{{ row.key }}</div>
           <small class="setting-help">{{ row.desc.help_text }}</small>
           {% if row.env_overridden %}
+            {% if row.is_secret %}
+            <small class="env-warning">
+              ⚠ Overridden by environment variable <code>{{ row.env_var }}</code>.
+              The DB value is stored but not read while the env var is set.
+            </small>
+            {% else %}
             <small class="env-warning">
               ⚠ This parameter was set by environment variable
               <code>{{ row.env_var }}</code> at start time and cannot be
               modified here. Contact your system administrator to make changes.
             </small>
+            {% endif %}
           {% endif %}
         </td>
         <td>
-          {% if row.desc.widget == 'shortcut_picker' %}
+          {% if row.is_secret %}
+            {% if row.env_overridden %}
+            <input type="password" name="{{ row.key }}" placeholder="set via {{ row.env_var }}"
+                   autocomplete="new-password" disabled>
+            {% elif not key_configured or canary_mismatch %}
+            <input type="password" name="{{ row.key }}"
+                   placeholder="{% if row.db_set %}••••••••{% else %}not set{% endif %}"
+                   autocomplete="new-password" disabled>
+            {% else %}
+            <input type="password" name="{{ row.key }}"
+                   placeholder="{% if row.db_set %}••••••••  (leave blank to keep current){% else %}not set{% endif %}"
+                   autocomplete="new-password">
+            {% if row.db_set %}<small>Currently set. Enter a new value to rotate, or use Clear to remove.</small>{% endif %}
+            {% endif %}
+          {% elif row.desc.widget == 'shortcut_picker' %}
             <input type="hidden" name="{{ row.key }}" id="sc-admin-value-{{ row.key }}"
                    value="{{ row.value_str }}"
                    {% if row.env_overridden %}disabled{% endif %}>
@@ -147,10 +184,18 @@
           {% endif %}
         </td>
         <td class="reset-cell">
+          {% if row.is_secret %}
+          <label>
+            <input type="checkbox" name="clear" value="{{ row.key }}"
+                   {% if not key_configured or canary_mismatch %}disabled{% endif %}>
+            <span>clear</span>
+          </label>
+          {% else %}
           <label>
             <input type="checkbox" name="reset" value="{{ row.key }}">
             <span>reset</span>
           </label>
+          {% endif %}
         </td>
       </tr>
       {% endfor %}
@@ -164,86 +209,6 @@
 <p><small>System-tier settings · changes audited under the <code>site_setting</code> entity type.</small></p>
 {% else %}
 <p><small>Librarian-tier settings · changes audited under the <code>site_setting</code> entity type.</small></p>
-{% endif %}
-
-{% if secret_rows %}
-<hr>
-<h3>API Keys</h3>
-<p>Stored encrypted at rest. Environment variables for each key take precedence when set.</p>
-
-{% if not key_configured %}
-<p class="warning-banner">
-  Secret storage is disabled. Set <code>COMPENDIUM_SECRET_KEY</code> in your
-  environment to enable. Run <code>compendium keygen --secret</code> to generate
-  a key, then restart the service.
-</p>
-{% elif canary_mismatch %}
-<p class="error-banner">
-  <strong>Key mismatch:</strong> <code>COMPENDIUM_SECRET_KEY</code> does not match
-  the key used to encrypt stored secrets. Restore the original key, or clear the
-  stored values below and re-enter them with the new key.
-</p>
-{% endif %}
-
-<form method="post" action="/ui/admin/system/secrets">
-  <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
-  <input type="hidden" name="redirect_to" value="{{ secrets_redirect_to }}">
-
-  <table class="settings-table">
-    <thead>
-      <tr>
-        <th style="width:35%">Key</th>
-        <th>Value</th>
-        <th style="width:5em">Clear</th>
-      </tr>
-    </thead>
-    <tbody>
-      {% for row in secret_rows %}
-      <tr>
-        <td>
-          <div class="setting-name">{{ row.display_name }}</div>
-          <div class="setting-key">{{ row.key }}</div>
-          <small class="setting-help">{{ row.desc.help_text }}</small>
-          {% if row.env_overridden %}
-          <small class="env-warning">
-            ⚠ Overridden by environment variable <code>{{ row.env_var }}</code>.
-            The DB value is stored but not read while the env var is set.
-          </small>
-          {% endif %}
-        </td>
-        <td>
-          {% if row.env_overridden %}
-          <input type="password" name="{{ row.key }}" placeholder="set via {{ row.env_var }}"
-                 autocomplete="new-password" disabled>
-          {% elif not key_configured or canary_mismatch %}
-          <input type="password" name="{{ row.key }}"
-                 placeholder="{% if row.db_set %}••••••••{% else %}not set{% endif %}"
-                 autocomplete="new-password" disabled>
-          {% else %}
-          <input type="password" name="{{ row.key }}"
-                 placeholder="{% if row.db_set %}••••••••  (leave blank to keep current){% else %}not set{% endif %}"
-                 autocomplete="new-password">
-          {% if row.db_set %}<small>Currently set. Enter a new value to rotate, or use Clear to remove.</small>{% endif %}
-          {% endif %}
-        </td>
-        <td class="reset-cell">
-          <label>
-            <input type="checkbox" name="clear" value="{{ row.key }}"
-                   {% if not key_configured or canary_mismatch %}disabled{% endif %}>
-            <span>clear</span>
-          </label>
-        </td>
-      </tr>
-      {% endfor %}
-    </tbody>
-  </table>
-
-  <button type="submit" {% if not key_configured or canary_mismatch %}disabled{% endif %}>Save API keys</button>
-</form>
-
-<p><small>Values are never logged in plaintext.
-  Backup: use <code>compendium backup --include-secret-key</code> to bundle the encryption
-  key with the backup file, or manage it separately (recommended).</small></p>
 {% endif %}
 
 </div><!-- .settings-main -->

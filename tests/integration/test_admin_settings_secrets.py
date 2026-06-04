@@ -164,6 +164,35 @@ def test_secrets_mismatch_banner_shown_on_metadata_page(client, s_session, monke
     assert "Key mismatch" in resp.text
 
 
+# ── Inline secrets on the metadata page ───────────────────────────────────
+
+
+def test_metadata_page_renders_inline_key_no_separate_section(client, s_session, monkeypatch):
+    monkeypatch.setenv("COMPENDIUM_SECRET_KEY", _FERNET_KEY)
+    _, token = _make_admin(s_session)
+    resp = client.get("/ui/admin/system/metadata", cookies={AUTH_COOKIE: token})
+    assert resp.status_code == 200
+    assert 'name="google_books_api_key"' in resp.text
+    assert "<h3>API Keys</h3>" not in resp.text
+    assert 'action="/ui/admin/system/secrets"' not in resp.text
+
+
+def test_metadata_page_post_saves_secret_inline(client, s_session, monkeypatch):
+    monkeypatch.setenv("COMPENDIUM_SECRET_KEY", _FERNET_KEY)
+    _, token = _make_admin(s_session)
+    raw_csrf, signed_csrf = _csrf_pair()
+    resp = client.post(
+        "/ui/admin/system/metadata",
+        data={"csrf_token": raw_csrf, "tmdb_api_key": "tmdb-secret-123"},
+        cookies={AUTH_COOKIE: token, CSRF_COOKIE: signed_csrf},
+    )
+    assert resp.status_code == 303
+    with Session(s_session.get_bind()) as s:
+        row = SqlSiteSettingRepository(s).get("tmdb_api_key")
+    assert row is not None
+    assert is_encrypted(row.value)
+
+
 # ── POST /admin/system/secrets ────────────────────────────────────────────
 
 
