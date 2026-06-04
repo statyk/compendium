@@ -1,7 +1,14 @@
 {% if report.dry_run %}
 <p class="success-banner">
-  Dry-run complete — no changes were written. Go back and uncheck <em>Dry run</em> to apply.
+  Dry-run complete — no changes were written.
 </p>
+<form method="post" action="/ui/admin/import/jobs/{{ job_id }}/apply" style="margin:0 0 1rem">
+  <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+  <button type="submit" style="width:auto">Apply import</button>
+  <small style="color:var(--pico-muted-color); margin-left:.75rem">
+    Re-runs this exact import, writing the changes.
+  </small>
+</form>
 {% else %}
 <p class="success-banner">
   Import applied.

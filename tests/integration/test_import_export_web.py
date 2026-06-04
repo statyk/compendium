@@ -309,6 +309,46 @@ def test_web_export_csv_downloads(client, db_session):
     assert "Dune" in resp.text
 
 
+def test_web_import_apply_after_dry_run(client, db_session):
+    _make_user(db_session, "Librarian", "web_imp_apply")
+    db_session.commit()
+    cookies = _login(client, "web_imp_apply")
+    raw, signed = _make_csrf_pair()
+    # 1. Dry run.
+    resp = client.post(
+        "/ui/admin/import",
+        data={
+            "format": "csv", "mode": "append", "dry_run": "1",
+            "default_media_type": "", "default_branch": "", "csrf_token": raw,
+        },
+        files={"file": ("in.csv", _csv_bytes("9780441013799"), "text/csv")},
+        cookies={**cookies, CSRF_COOKIE: signed},
+    )
+    assert resp.status_code == 303
+    dry_location = resp.headers["location"]              # /ui/admin/import/jobs/<id>
+    final = _wait_for_import(client, cookies, dry_location)
+    assert b"Dry-run complete" in final.content
+    assert b"Apply import" in final.content
+    assert SqlWorkRepository(db_session).get_by_isbn("9780441013799") is None
+
+    # 2. Click Apply.
+    job_id = dry_location.rstrip("/").split("/")[-1]
+    raw2, signed2 = _make_csrf_pair()
+    apply_resp = client.post(
+        f"/ui/admin/import/jobs/{job_id}/apply",
+        data={"csrf_token": raw2},
+        cookies={**cookies, CSRF_COOKIE: signed2},
+    )
+    assert apply_resp.status_code == 303
+    apply_location = apply_resp.headers["location"]
+    assert "/jobs/" in apply_location and job_id not in apply_location
+
+    applied = _wait_for_import(client, cookies, apply_location)
+    assert b"Import applied" in applied.content
+    db_session.expire_all()
+    assert SqlWorkRepository(db_session).get_by_isbn("9780441013799") is not None
+
+
 def test_web_export_marc_downloads(client, db_session):
     _make_user(db_session, "Librarian", "web_exp_marc")
     db_session.commit()

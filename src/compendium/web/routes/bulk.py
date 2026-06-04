@@ -60,6 +60,11 @@ class _JobState:
     enriched_rows: int = 0
     report: ImportReport | None = None
     error: str | None = None
+    # Retained ONLY for dry-run jobs so they can be re-applied in one click.
+    dry_run: bool = False
+    payload: str | bytes | None = None
+    options: ImportOptions | None = None
+    replaced: int = 0
     lock: threading.Lock = _field(default_factory=threading.Lock, repr=False)
 
 
@@ -342,11 +347,16 @@ async def import_submit(
     else:
         payload = data
 
+    is_dry = bool(dry_run)
     state = _JobState(
         status="pending",
         filename=file.filename,
         format=fmt,
         user_id=user.id,
+        dry_run=is_dry,
+        payload=payload if is_dry else None,
+        options=options if is_dry else None,
+        replaced=replaced if is_dry else 0,
     )
     job_id = _create_job(state)
 
@@ -409,6 +419,44 @@ def import_job_status(
         request,
         {"request": request, "user": user, "job_id": job_id, "state": snap},
     )
+
+
+@router.post("/admin/import/jobs/{job_id}/apply")
+async def import_job_apply(
+    job_id: str,
+    request: Request,
+    user: AppUser = Depends(require_web_permission("catalog.import")),
+):
+    form = await request.form()
+    check_csrf_form(request, form.get("csrf_token", ""))
+    state = _get_job(job_id)
+    if (
+        state is None
+        or state.user_id != user.id
+        or not state.dry_run
+        or state.payload is None
+        or state.options is None
+    ):
+        raise HTTPException(status_code=404, detail="Import job not available to apply.")
+
+    import dataclasses
+
+    apply_options = dataclasses.replace(state.options, dry_run=False)
+    new_state = _JobState(
+        status="pending",
+        filename=state.filename,
+        format=state.format,
+        user_id=user.id,
+        dry_run=False,
+    )
+    new_id = _create_job(new_state)
+    t = threading.Thread(
+        target=_run_import_job,
+        args=(new_state, state.format, state.payload, apply_options, state.replaced),
+        daemon=True,
+    )
+    t.start()
+    return RedirectResponse(f"/ui/admin/import/jobs/{new_id}", status_code=303)
 
 
 # ---------------------------------------------------------------------------
