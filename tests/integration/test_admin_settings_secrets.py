@@ -452,6 +452,10 @@ def test_metadata_page_shows_active_source_badge_when_no_key(client, s_session):
     assert "Open Library" in resp.text
     # The googlebooks option is relabeled to signal the key requirement.
     assert "Google Books (requires API key)" in resp.text
+    # Only the option *text* is relabeled — the submitted value stays the raw
+    # enum so the form keeps posting googlebooks/openlibrary, not the label.
+    assert 'value="googlebooks"' in resp.text
+    assert 'value="openlibrary"' in resp.text
 
 
 def test_metadata_page_clear_removes_secret_inline(client, s_session, monkeypatch):
