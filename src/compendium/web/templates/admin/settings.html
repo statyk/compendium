@@ -51,9 +51,18 @@
       {% for row in rows %}
       <tr>
         <td>
-          <div class="setting-name">{{ row.display_name }}</div>
+          <div class="setting-name">
+            {{ row.display_name }}
+            {% if row.desc.short_help and row.desc.help_text %}
+            <span class="field-hint" data-tooltip="{{ row.desc.help_text }}" data-placement="right">ⓘ</span>
+            {% endif %}
+          </div>
           <div class="setting-key">{{ row.key }}</div>
+          {% if row.desc.short_help %}
+          <small class="setting-help">{{ row.desc.short_help }}</small>
+          {% else %}
           <small class="setting-help">{{ row.desc.help_text }}</small>
+          {% endif %}
           {% if row.env_overridden %}
             {% if row.is_secret %}
             <small class="env-warning">

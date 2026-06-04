@@ -48,6 +48,7 @@ class SettingDescriptor:
     default: Any
     scope: Scope
     help_text: str
+    short_help: str = ""  # One-line summary shown inline; full help_text moves to a tooltip.
     display_name: str = ""  # Human-friendly label; falls back to key.title() if blank.
     validator: Callable[[Any], None] | None = None
     env_var: str | None = None
@@ -287,6 +288,7 @@ def _register_builtins() -> None:
             type=str,
             default="Compendium",
             scope="librarian",
+            short_help="Name of the library, shown in the nav, emails, and cards.",
             help_text=(
                 "Name of the library. Appears in the nav brand, email "
                 "templates, and printed patron cards."
@@ -300,6 +302,7 @@ def _register_builtins() -> None:
             type=str,
             default="UTC",
             scope="librarian",
+            short_help="IANA timezone used to compute due dates and closed days.",
             help_text=(
                 "IANA timezone name for the library (e.g. 'America/New_York', "
                 "'America/Chicago', 'America/Los_Angeles'). Used to compute "
@@ -317,6 +320,7 @@ def _register_builtins() -> None:
             type=Literal["light", "dark", "auto"],
             default="light",
             scope="librarian",
+            short_help="Default theme for visitors who haven't picked one.",
             help_text=(
                 "Server-rendered default theme for visitors who haven't "
                 "picked one. 'auto' follows prefers-color-scheme."
@@ -330,6 +334,7 @@ def _register_builtins() -> None:
             type=bool,
             default=True,
             scope="librarian",
+            short_help="Let unauthenticated visitors search the catalog.",
             help_text=(
                 "When enabled, unauthenticated visitors can search the "
                 "catalog. When disabled, all search endpoints require login."
@@ -364,6 +369,7 @@ def _register_builtins() -> None:
             default=None,
             nullable=True,
             scope="librarian",
+            short_help="Outstanding-fine level (cents) that blocks new checkouts.",
             help_text=(
                 "Outstanding-fine threshold (in cents) at which patrons "
                 "are blocked from new checkouts. Leave empty to disable."
@@ -378,6 +384,7 @@ def _register_builtins() -> None:
             type=bool,
             default=False,
             scope="librarian",
+            short_help="Also block placing holds when over the fine threshold.",
             help_text=(
                 "When enabled, the fine-block threshold also blocks placing "
                 "new holds. Default is to block checkouts only."
@@ -391,6 +398,7 @@ def _register_builtins() -> None:
             type=list[int],
             default=[3, 14, 30],
             scope="librarian",
+            short_help="Days-overdue checkpoints that trigger a notification.",
             help_text=(
                 "Days-overdue checkpoints that trigger a notification. "
                 "One notice per highest matching tier per loan."
@@ -405,6 +413,7 @@ def _register_builtins() -> None:
             type=list[str],
             default=["/ui/circ", "/ui/items/new", "/ui/patrons", "/ui/admin/holds", "/ui/admin/loans"],
             scope="librarian",
+            short_help="Up to 5 quick-access nav links for logged-in users.",
             help_text=(
                 "Up to 5 quick-access links shown in the nav bar for logged-in "
                 "users. Select internal pages using the picker below. "
@@ -433,6 +442,7 @@ def _register_builtins() -> None:
             type=int,
             default=60,
             scope="librarian",
+            short_help="Idle time before a kiosk session returns to the landing page.",
             help_text=(
                 "How long a self-checkout session waits idle before "
                 "redirecting back to the landing page."
@@ -447,6 +457,7 @@ def _register_builtins() -> None:
             type=int,
             default=14,
             scope="librarian",
+            short_help="Loan period used when no policy matches.",
             help_text=(
                 "Loan period applied when no policy matches the item's "
                 "media type / patron category."
@@ -488,6 +499,7 @@ def _register_builtins() -> None:
             type=Literal["10-digit", "14-digit"],
             default="10-digit",
             scope="librarian",
+            short_help="Format for newly minted item barcodes and patron cards.",
             help_text=(
                 "Format for newly minted item barcodes and patron card numbers. "
                 "'10-digit' omits the branch location prefix; '14-digit' embeds "
@@ -503,6 +515,7 @@ def _register_builtins() -> None:
             type=str,
             default="0000",
             scope="librarian",
+            short_help="Four-digit fallback location code for barcode minting.",
             help_text=(
                 "Four-digit fallback location code used when minting barcodes for "
                 "items with no assigned branch, or branches with no Location Code "
@@ -518,6 +531,7 @@ def _register_builtins() -> None:
             type=Literal["codabar", "code39", "code128"],
             default="code128",
             scope="librarian",
+            short_help="Barcode symbology for printed labels (Code 128 recommended).",
             help_text=(
                 "Barcode symbology for printed labels. Code 128 is recommended — "
                 "it produces shorter barcodes than Codabar or Code 39, which "
@@ -552,6 +566,7 @@ def _register_builtins() -> None:
             type=list[str],
             default=["call_number", "location", "cutter", "year"],
             scope="librarian",
+            short_help="Fields shown by default on spine labels.",
             help_text=(
                 "Fields shown by default on spine labels. "
                 "Allowed: call_number, barcode, location, branch, cutter, year. "
@@ -567,6 +582,7 @@ def _register_builtins() -> None:
             type=list[str],
             default=["barcode", "title", "author", "call_number", "cutter", "year"],
             scope="librarian",
+            short_help="Fields shown by default on pocket labels.",
             help_text=(
                 "Fields shown by default on pocket labels. "
                 "Allowed: title, author, call_number, barcode, cutter, year, branch, library_name. "
@@ -582,6 +598,7 @@ def _register_builtins() -> None:
             type=list[str],
             default=["barcode", "human_readable"],
             scope="librarian",
+            short_help="Fields shown by default on barcode-only stickers.",
             help_text=(
                 "Fields shown by default on barcode-only stickers. "
                 "Allowed: barcode, title, human_readable. "
@@ -597,6 +614,7 @@ def _register_builtins() -> None:
             type=list[str],
             default=["barcode", "card_number", "library_name", "subtitle", "patron_name", "expiry"],
             scope="librarian",
+            short_help="Fields shown by default on patron full cards.",
             help_text=(
                 "Fields shown by default on patron full cards. "
                 "Allowed: barcode, card_number, library_name, subtitle, patron_name, expiry, category. "
@@ -612,6 +630,7 @@ def _register_builtins() -> None:
             type=list[str],
             default=["barcode", "card_number"],
             scope="librarian",
+            short_help="Fields shown by default on patron stickers.",
             help_text=(
                 "Fields shown by default on patron stickers. "
                 "Allowed: barcode, card_number, patron_name. "
@@ -630,6 +649,7 @@ def _register_builtins() -> None:
             default=None,
             nullable=True,
             scope="system",
+            short_help="SMTP server hostname; leave empty to disable email.",
             help_text=(
                 "SMTP server hostname. Leave empty to disable email "
                 "delivery (notifications still queue but stay 'skipped')."
@@ -675,6 +695,7 @@ def _register_builtins() -> None:
             type=bool,
             default=False,
             scope="system",
+            short_help="Use SMTPS implicit TLS (port 465); excludes STARTTLS.",
             help_text=(
                 "Use SMTPS (implicit TLS, typically port 465). Mutually "
                 "exclusive with STARTTLS."
@@ -732,6 +753,7 @@ def _register_builtins() -> None:
             default=None,
             nullable=True,
             scope="system",
+            short_help="Auto-prune old sent/cancelled notifications; empty keeps forever.",
             help_text=(
                 "Auto-prune sent + cancelled notifications older than this "
                 "many days. Leave empty to keep forever."
@@ -747,6 +769,7 @@ def _register_builtins() -> None:
             default=None,
             nullable=True,
             scope="system",
+            short_help="Default age cutoff for the audit-log prune command.",
             help_text=(
                 "Default --older-than-days for the audit-log prune "
                 "maintenance command. Leave empty for no default."
@@ -761,6 +784,7 @@ def _register_builtins() -> None:
             type=int,
             default=10,
             scope="system",
+            short_help="Failed logins per identity allowed before blocking (0 disables).",
             help_text=(
                 "Number of consecutive failed login attempts (per username or "
                 "kiosk card number) allowed within the throttle window before "
@@ -776,6 +800,7 @@ def _register_builtins() -> None:
             type=int,
             default=300,
             scope="system",
+            short_help="Window (seconds) over which failed logins are counted.",
             help_text=(
                 "Sliding-window duration for counting failed login attempts. "
                 "Failures older than this (in seconds) are ignored. Default "
@@ -791,6 +816,7 @@ def _register_builtins() -> None:
             type=int,
             default=30,
             scope="system",
+            short_help="Failed logins per IP allowed before blocking (0 disables).",
             help_text=(
                 "Number of failed login attempts allowed from a single IP "
                 "address within the per-IP throttle window before further "
@@ -808,6 +834,7 @@ def _register_builtins() -> None:
             type=int,
             default=300,
             scope="system",
+            short_help="Window (seconds) over which per-IP failed logins are counted.",
             help_text=(
                 "Sliding-window duration for per-IP failed login counting. "
                 "Default 300 = 5 minutes."
@@ -822,6 +849,7 @@ def _register_builtins() -> None:
             type=int,
             default=8,
             scope="librarian",
+            short_help="Minimum character length for user passwords.",
             help_text=(
                 "Minimum character length for user passwords. "
                 "NIST SP 800-63B recommends at least 8. "
@@ -837,6 +865,7 @@ def _register_builtins() -> None:
             type=int,
             default=12,
             scope="system",
+            short_help="bcrypt cost factor for hashing new passwords (10-15).",
             help_text=(
                 "bcrypt cost factor used when hashing new passwords. "
                 "Higher values are slower and more resistant to brute-force. "
@@ -862,6 +891,7 @@ def _register_builtins() -> None:
             nullable=True,
             scope="system",
             secret=True,
+            short_help="Password for the outbound SMTP account.",
             help_text=(
                 "Password for the outbound SMTP account. "
                 "Stored encrypted at rest. "
@@ -878,6 +908,7 @@ def _register_builtins() -> None:
             nullable=True,
             scope="system",
             secret=True,
+            short_help="Enables TMDb film/TV metadata.",
             help_text=(
                 "API key for The Movie Database (TMDb), used to fetch film and "
                 "TV metadata. Obtain one at themoviedb.org → Settings → API. "
@@ -895,6 +926,7 @@ def _register_builtins() -> None:
             nullable=True,
             scope="system",
             secret=True,
+            short_help="Enables Google Books as a metadata source.",
             help_text=(
                 "API key for the Google Books API. When set and "
                 "'book_metadata_source_preference' is 'googlebooks', Google Books "
@@ -919,8 +951,8 @@ def _register_builtins() -> None:
             return AvailabilityHint(
                 unavailable_choices=frozenset({"googlebooks"}),
                 warning=(
-                    "Google Books requires an API key. Configure it in the "
-                    "API Keys section on this page to use Google Books as primary."
+                    "Google Books requires an API key. Configure the "
+                    "Google Books API Key below to use Google Books as primary."
                 ),
             )
         return None
@@ -932,9 +964,10 @@ def _register_builtins() -> None:
             type=Literal["googlebooks", "openlibrary"],
             default="googlebooks",
             scope="system",
+            short_help="Which service is tried first for ISBN lookups.",
             help_text=(
                 "Primary metadata adapter for books. "
-                "'googlebooks' requires an API key (configure it in the API Keys section below); "
+                "'googlebooks' requires an API key (configure the Google Books API Key below); "
                 "'openlibrary' is always available without a key. "
                 "When 'book_metadata_fallback_enabled' is on, the other source is "
                 "tried automatically on any miss — making the fallback symmetric in both directions. "
@@ -951,6 +984,7 @@ def _register_builtins() -> None:
             type=bool,
             default=True,
             scope="system",
+            short_help="Try the other source automatically on a miss.",
             help_text=(
                 "When enabled (the default), if the primary book metadata source returns "
                 "no data for an ISBN, the other source is tried automatically. "
@@ -968,6 +1002,7 @@ def _register_builtins() -> None:
             type=int,
             default=30,
             scope="system",
+            short_help="How long successful lookups are cached before refresh.",
             help_text=(
                 "How long to keep successful external metadata lookups cached in "
                 "the database (Google Books, Open Library, MusicBrainz, TMDb). "

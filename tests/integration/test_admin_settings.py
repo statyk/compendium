@@ -381,6 +381,17 @@ class TestSettingsWeb:
         assert b"library_name" in r.content
         assert b"default_theme" in r.content
 
+    def test_setting_with_short_help_renders_tooltip(self, client, s_session):
+        _make_user(s_session, role_name="Administrator", username="admin_short_help")
+        cookies = _login_cookies(client, "admin_short_help")
+        resp = client.get("/ui/admin/system/metadata", cookies=cookies)
+        assert resp.status_code == 200
+        # Short summary shown inline...
+        assert "Which service is tried first" in resp.text
+        # ...full detail tucked into a data-tooltip ⓘ icon.
+        assert "data-tooltip" in resp.text
+        assert 'class="field-hint"' in resp.text
+
     def test_circulation_page_renders(self, client, s_session):
         _make_user(s_session, role_name="Librarian", username="lib_web_c")
         cookies = _login_cookies(client, "lib_web_c")

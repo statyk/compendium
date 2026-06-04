@@ -53,20 +53,13 @@ _PAGES: dict[str, dict[str, Any]] = {
     "general": {
         "title": "General",
         "scope_perm": "patron.manage",
-        "intro": (
-            "Library identity and visitor experience. Changes apply on "
-            "the next page render — no restart required."
-        ),
+        "intro": "Library identity and visitor experience. No restart required.",
         "keys": ["library_name", "library_timezone", "default_theme", "guest_search_enabled", "custom_shortcuts"],
     },
     "circulation": {
         "title": "Circulation defaults",
         "scope_perm": "patron.manage",
-        "intro": (
-            "Fines, currency display, hold expiry, and overdue-notice "
-            "thresholds. These act as defaults; per-policy overrides on "
-            "individual loan policies take precedence."
-        ),
+        "intro": "Default fines, currency, hold expiry, and overdue thresholds. Per-policy overrides win.",
         "keys": [
             "default_loan_period_days",
             "currency_symbol",
@@ -88,12 +81,7 @@ _PAGES: dict[str, dict[str, Any]] = {
     "identifiers": {
         "title": "Identifiers & barcodes",
         "scope_perm": "branch.edit",
-        "intro": (
-            "Barcode format for newly minted item barcodes and patron cards. "
-            "Existing codes are not affected — both 10-digit and 14-digit "
-            "barcodes remain readable in any deployment. 'Barcode Format' "
-            "selects between the 10-digit and 14-digit format for new mints."
-        ),
+        "intro": "Barcode format and symbology for newly minted item barcodes and patron cards. Existing codes are unaffected.",
         "keys": [
             "barcode_format",
             "barcode_default_location_code",
@@ -103,12 +91,7 @@ _PAGES: dict[str, dict[str, Any]] = {
     "labels": {
         "title": "Label defaults",
         "scope_perm": "labels.generate",
-        "intro": (
-            "Default fields shown on each label kind. These act as the starting "
-            "point when the label form loads — staff can still toggle fields "
-            "per-generation. Every field is optional; disable any you never use "
-            "to keep the form tidy. Enter field names as a comma-separated list."
-        ),
+        "intro": "Default fields shown on each label kind; staff can still toggle fields per-generation.",
         "keys": [
             "label_spine_default_fields",
             "label_pocket_default_fields",
@@ -123,14 +106,7 @@ _SYSTEM_PAGES: dict[str, dict[str, Any]] = {
     "metadata": {
         "title": "Metadata sources",
         "scope_perm": "system.manage",
-        "intro": (
-            "Book metadata source configuration. "
-            "'Book Metadata Source' sets which service is tried first for ISBN lookups. "
-            "When 'Enable Fallback' is on (the default), the other service is tried "
-            "automatically on any miss, making the fallback symmetric in both directions. "
-            "Metadata Cache TTL controls how long successful lookups are stored in the DB "
-            "before a refresh against the upstream service."
-        ),
+        "intro": "Which service supplies book metadata, fallback behavior, and cache lifetime.",
         "keys": [
             "book_metadata_source_preference",
             "google_books_api_key",
@@ -142,10 +118,7 @@ _SYSTEM_PAGES: dict[str, dict[str, Any]] = {
     "smtp": {
         "title": "SMTP / email delivery",
         "scope_perm": "system.manage",
-        "intro": (
-            "Outbound email configuration for hold-ready, due-soon, and "
-            "overdue notices."
-        ),
+        "intro": "Outbound email for hold-ready, due-soon, and overdue notices.",
         "keys": [
             "smtp_host",
             "smtp_port",
@@ -174,15 +147,7 @@ _SYSTEM_PAGES: dict[str, dict[str, Any]] = {
     "security": {
         "title": "Security & rate limiting",
         "scope_perm": "system.manage",
-        "intro": (
-            "Per-identity login throttling (per username or kiosk card number). "
-            "After login_max_failures consecutive failures within the window, "
-            "further attempts are blocked with a 429 response until the oldest "
-            "failure ages out of the window. Set login_max_failures to 0 to "
-            "disable throttling. Note: credential-stuffing protection (one source "
-            "testing many usernames) is not covered here — configure rate limiting "
-            "at the reverse proxy for that."
-        ),
+        "intro": "Per-identity login throttling. See each field for details.",
         "keys": [
             "login_max_failures",
             "login_failure_window_seconds",
