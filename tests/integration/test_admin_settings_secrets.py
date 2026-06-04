@@ -431,3 +431,37 @@ def test_missing_secret_key_env_surfaces_before_validation(client, s_session):
     assert resp.status_code == 303
     assert "error=" in resp.headers["location"]
     assert "validation" not in resp.headers["location"]
+
+
+def test_smtp_page_renders_inline_password_no_separate_section(client, s_session, monkeypatch):
+    monkeypatch.setenv("COMPENDIUM_SECRET_KEY", _FERNET_KEY)
+    _, token = _make_admin(s_session)
+    resp = client.get("/ui/admin/system/smtp", cookies={AUTH_COOKIE: token})
+    assert resp.status_code == 200
+    assert 'name="smtp_password"' in resp.text
+    assert "<h3>API Keys</h3>" not in resp.text
+    assert 'action="/ui/admin/system/secrets"' not in resp.text
+
+
+def test_metadata_page_clear_removes_secret_inline(client, s_session, monkeypatch):
+    monkeypatch.setenv("COMPENDIUM_SECRET_KEY", _FERNET_KEY)
+    _, token = _make_admin(s_session)
+    # Seed a stored secret.
+    raw1, signed1 = _csrf_pair()
+    client.post(
+        "/ui/admin/system/metadata",
+        data={"csrf_token": raw1, "tmdb_api_key": "tmdb-to-clear"},
+        cookies={AUTH_COOKIE: token, CSRF_COOKIE: signed1},
+    )
+    with Session(s_session.get_bind()) as s:
+        assert SqlSiteSettingRepository(s).get("tmdb_api_key") is not None
+    # Clear it through the page form's clear checkbox.
+    raw2, signed2 = _csrf_pair()
+    resp = client.post(
+        "/ui/admin/system/metadata",
+        data={"csrf_token": raw2, "clear": "tmdb_api_key"},
+        cookies={AUTH_COOKIE: token, CSRF_COOKIE: signed2},
+    )
+    assert resp.status_code == 303
+    with Session(s_session.get_bind()) as s:
+        assert SqlSiteSettingRepository(s).get("tmdb_api_key") is None

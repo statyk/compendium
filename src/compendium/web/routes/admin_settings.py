@@ -688,7 +688,8 @@ async def retention_post(
     reset_keys = form.getlist("reset")
     clear_keys = form.getlist("clear")
     return _post_handler(
-        "retention", _SYSTEM_PAGES["retention"], request, form, reset_keys, clear_keys, session, user
+        "retention", _SYSTEM_PAGES["retention"], request, form, reset_keys, clear_keys,
+        session, user,
     )
 
 
@@ -730,6 +731,8 @@ def metadata_get(
 ):
     from compendium.services.metadata import get_book_primary_adapter_name
 
+    # active_book_source feeds the metadata-source widget (rendered in the
+    # source-preference template branch); always computed for the metadata page.
     active = get_book_primary_adapter_name()
     active_label = "Google Books" if active == "googlebooks" else "Open Library"
     return _show_page(
@@ -808,8 +811,7 @@ def _apply_secret_fields(
     `form` is the starlette FormData (supports .get). Validation failures are
     returned as error strings (the page surfaces them via ?error=).
     """
-    from compendium.services.secrets import SecretKeyMissingError, SecretKeyMismatchError
-    from compendium.services.settings_registry import all_descriptors
+    from compendium.services.secrets import SecretKeyMismatchError, SecretKeyMissingError
 
     secret_descs = {d.key: d for d in all_descriptors() if d.secret}
     changed = 0
@@ -833,7 +835,10 @@ def _apply_secret_fields(
         if validator is not None and not form.get(override_field):
             result = validator(raw)
             if not result.ok:
-                errors.append(f"{desc.resolved_display_name()}: {result.reason or 'validation failed'}")
+                errors.append(
+                    f"{desc.resolved_display_name()}: "
+                    f"{result.reason or 'validation failed'}"
+                )
                 continue
             if result.warning:
                 errors.append(f"{desc.resolved_display_name()}: {result.warning}")
@@ -857,8 +862,6 @@ async def secrets_post(
     user: AppUser = Depends(require_web_permission("system.manage")),
     session: Session = Depends(get_session),
 ):
-    from compendium.services.settings_registry import all_descriptors
-
     _SECRETS_REDIRECT_WHITELIST = {
         "/ui/admin/system/metadata",
         "/ui/admin/system/smtp",
