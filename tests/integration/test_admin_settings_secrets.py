@@ -443,6 +443,17 @@ def test_smtp_page_renders_inline_password_no_separate_section(client, s_session
     assert 'action="/ui/admin/system/secrets"' not in resp.text
 
 
+def test_metadata_page_shows_active_source_badge_when_no_key(client, s_session):
+    # No google_books_api_key set (env-isolation clears it) → effective source is OL.
+    _, token = _make_admin(s_session)
+    resp = client.get("/ui/admin/system/metadata", cookies={AUTH_COOKIE: token})
+    assert resp.status_code == 200
+    assert "Currently using:" in resp.text
+    assert "Open Library" in resp.text
+    # The googlebooks option is relabeled to signal the key requirement.
+    assert "Google Books (requires API key)" in resp.text
+
+
 def test_metadata_page_clear_removes_secret_inline(client, s_session, monkeypatch):
     monkeypatch.setenv("COMPENDIUM_SECRET_KEY", _FERNET_KEY)
     _, token = _make_admin(s_session)

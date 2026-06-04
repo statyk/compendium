@@ -165,9 +165,22 @@
               {% for choice in row.choices %}
               <option value="{{ choice }}"
                       {% if row.value == choice %}selected{% endif %}
-                      {% if choice in row.unavailable_choices %}disabled{% endif %}>{{ choice }}</option>
+                      {% if choice in row.unavailable_choices %}disabled{% endif %}>
+                {%- if row.key == 'book_metadata_source_preference' -%}
+                  {%- if choice == 'googlebooks' -%}
+                    Google Books{% if 'googlebooks' in row.unavailable_choices %} (requires API key){% endif %}
+                  {%- elif choice == 'openlibrary' -%}
+                    Open Library
+                  {%- else -%}{{ choice }}{%- endif -%}
+                {%- else -%}{{ choice }}{%- endif -%}
+              </option>
               {% endfor %}
             </select>
+            {% if row.key == 'book_metadata_source_preference' and active_book_source %}
+            <small class="form-help" style="margin:0.35rem 0 0">
+              Currently using: <strong>{{ active_book_source }}</strong>
+            </small>
+            {% endif %}
             {% if row.availability_warning %}
             <small class="env-warning">{{ row.availability_warning | safe }}</small>
             {% endif %}
