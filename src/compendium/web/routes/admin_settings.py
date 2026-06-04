@@ -59,7 +59,10 @@ _PAGES: dict[str, dict[str, Any]] = {
     "circulation": {
         "title": "Circulation defaults",
         "scope_perm": "patron.manage",
-        "intro": "Default fines, currency, hold expiry, and overdue thresholds. Per-policy overrides win.",
+        "intro": (
+            "Default fines, currency, hold expiry, and overdue thresholds. "
+            "Per-policy overrides win."
+        ),
         "keys": [
             "default_loan_period_days",
             "currency_symbol",
@@ -81,7 +84,10 @@ _PAGES: dict[str, dict[str, Any]] = {
     "identifiers": {
         "title": "Identifiers & barcodes",
         "scope_perm": "branch.edit",
-        "intro": "Barcode format and symbology for newly minted item barcodes and patron cards. Existing codes are unaffected.",
+        "intro": (
+            "Barcode format and symbology for newly minted item barcodes and "
+            "patron cards. Existing codes are unaffected."
+        ),
         "keys": [
             "barcode_format",
             "barcode_default_location_code",
@@ -91,7 +97,10 @@ _PAGES: dict[str, dict[str, Any]] = {
     "labels": {
         "title": "Label defaults",
         "scope_perm": "labels.generate",
-        "intro": "Default fields shown on each label kind; staff can still toggle fields per-generation.",
+        "intro": (
+            "Default fields shown on each label kind; staff can still toggle "
+            "fields per-generation."
+        ),
         "keys": [
             "label_spine_default_fields",
             "label_pocket_default_fields",
