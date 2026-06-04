@@ -348,6 +348,16 @@ def test_web_import_apply_after_dry_run(client, db_session):
     db_session.expire_all()
     assert SqlWorkRepository(db_session).get_by_isbn("9780441013799") is not None
 
+    # 3. Applying a NON-dry-run job (the real import we just ran) is refused.
+    real_job_id = apply_location.rstrip("/").split("/")[-1]
+    raw3, signed3 = _make_csrf_pair()
+    refused = client.post(
+        f"/ui/admin/import/jobs/{real_job_id}/apply",
+        data={"csrf_token": raw3},
+        cookies={**cookies, CSRF_COOKIE: signed3},
+    )
+    assert refused.status_code == 404
+
 
 def test_web_export_marc_downloads(client, db_session):
     _make_user(db_session, "Librarian", "web_exp_marc")
