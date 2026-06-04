@@ -121,7 +121,7 @@
               <input type="checkbox" name="{{ row.key }}" value="true"
                      {% if row.value %}checked{% endif %}
                      {% if row.env_overridden %}disabled{% endif %}>
-              {{ row.type_repr }}
+              Enabled
             </label>
           {% elif row.is_literal %}
             <select name="{{ row.key }}" {% if row.env_overridden %}disabled{% endif %}>

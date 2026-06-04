@@ -495,6 +495,15 @@ class TestSettingsWeb:
         ss.invalidate_cache()
         assert get_site_setting("library_name") == "Compendium"
 
+    def test_bool_setting_renders_enabled_label(self, client, s_session):
+        _make_user(s_session, role_name="Librarian", username="lib_bool_label")
+        cookies = _login_cookies(client, "lib_bool_label")
+        resp = client.get("/ui/admin/settings/general", cookies=cookies)
+        assert resp.status_code == 200
+        # New label text present, old ambiguous bool label gone.
+        assert "Enabled" in resp.text
+        assert "true / false" not in resp.text
+
     def test_env_override_indicator_shown(self, client, s_session, monkeypatch):
         monkeypatch.setenv("COMPENDIUM_LIBRARY_NAME", "ENV-Forced")
         ss.invalidate_cache()
