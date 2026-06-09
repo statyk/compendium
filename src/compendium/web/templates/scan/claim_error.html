@@ -1,0 +1,18 @@
+{# Scaffold — phone-facing claim failure page. #}
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Pairing failed — {{ library_name() }}</title>
+  <link rel="stylesheet" href="/ui/static/pico.min.css">
+  <link rel="stylesheet" href="/ui/static/compendium.css">
+</head>
+<body>
+  <main class="container">
+    <h1>Pairing failed</h1>
+    <p class="error-banner">{{ message }}</p>
+    <p>Ask the desk to generate a new pairing QR.</p>
+  </main>
+</body>
+</html>

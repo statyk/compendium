@@ -1,0 +1,16 @@
+{# Scaffold — pairing status poll partial. Styling expanded in Slice 5. #}
+<div class="scan-log">
+  {% if pairing.revoked_at %}
+    <p class="warning-banner">Unpaired.</p>
+  {% elif pairing.claimed_at %}
+    <p class="scan-status" data-claimed="1">
+      Active — mode: <strong>{{ pairing.mode }}</strong>,
+      items: <strong>{{ pairing.count }}</strong>
+      {% if pairing.borrower %}
+        , borrower: <strong>{{ pairing.borrower.library_card_number }}</strong>
+      {% endif %}
+    </p>
+  {% else %}
+    <p class="scan-status" data-claimed="0">Waiting for phone to pair…</p>
+  {% endif %}
+</div>

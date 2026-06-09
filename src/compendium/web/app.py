@@ -31,6 +31,7 @@ from compendium.web.routes import (
     policies,
     reports,
     roles,
+    scan,
     users,
 )
 
@@ -56,6 +57,7 @@ def create_web_router() -> APIRouter:
     router.include_router(covers.router)
     router.include_router(reports.router)
     router.include_router(kiosk.router)
+    router.include_router(scan.router)
     router.include_router(labels.router)
     router.include_router(admin_holds.router)
     router.include_router(admin_circulation.router)

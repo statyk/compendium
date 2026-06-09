@@ -1,0 +1,26 @@
+{# Scaffold — full CSP-nonced camera UI added in Slice 5 #}
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Phone Scanner — {{ library_name() }}</title>
+  <link rel="icon" type="image/svg+xml" href="/ui/static/favicon.svg">
+  <link rel="stylesheet" href="/ui/static/pico.min.css">
+  <link rel="stylesheet" href="/ui/static/compendium.css">
+</head>
+<body>
+  <main class="container" data-scan-phone
+        data-csrf-token="{{ csrf_token }}"
+        data-current-mode="{{ mode }}">
+    <h1>Paired</h1>
+    <p>This phone is now paired as a scanner. Camera UI loads here in Slice 5.</p>
+    <p>Current mode: <strong id="scan-mode">{{ mode }}</strong></p>
+    <ul id="scan-modes">
+      {% for m in allowed_modes %}
+      <li data-mode="{{ m }}">{{ m }}</li>
+      {% endfor %}
+    </ul>
+  </main>
+</body>
+</html>

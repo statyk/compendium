@@ -1,0 +1,19 @@
+{# Scaffold — desk-side QR + live log. Styling expanded in Slice 5. #}
+<div class="scan-pairing" id="scan-pairing-{{ pairing.id }}">
+  <div class="scan-qr">{{ qr_svg | safe }}</div>
+  <p class="scan-hint">Scan this QR with the library phone to pair.</p>
+
+  <div hx-get="/ui/scan/pairings/{{ pairing.id }}/log"
+       hx-trigger="every 1500ms"
+       hx-swap="innerHTML">
+    {% include "scan/_log_partial.html" %}
+  </div>
+
+  <form method="post" action="/ui/scan/pairings/{{ pairing.id }}/unpair"
+        hx-post="/ui/scan/pairings/{{ pairing.id }}/unpair"
+        hx-target="#scan-pairing-{{ pairing.id }}"
+        hx-swap="outerHTML">
+    <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+    <button type="submit" class="secondary" style="width:auto">Unpair</button>
+  </form>
+</div>

@@ -2,7 +2,8 @@
 
 from __future__ import annotations
 
-from datetime import timezone
+import hashlib
+from datetime import datetime, timezone
 
 import jwt
 from fastapi import Cookie, Depends, HTTPException, Request
@@ -10,13 +11,16 @@ from sqlalchemy.orm import Session
 
 from compendium.db.engine import get_settings
 from compendium.db.session import get_session
-from compendium.domain.models import AppUser, Patron
+from compendium.domain.models import AppUser, Patron, ScanPairing
 from compendium.repositories.sql.patron_repository import SqlPatronRepository
+from compendium.repositories.sql.scan_pairing_repository import SqlScanPairingRepository
 from compendium.repositories.sql.user_repository import SqlUserRepository
 from compendium.services.auth import has_permission
 from compendium.services.calendar import CalendarService
+from compendium.services.site_settings import get_site_setting
 
 AUTH_COOKIE = "compendium_auth"
+SCAN_COOKIE = "compendium_scan"
 
 
 class RequiresLoginException(Exception):
@@ -106,6 +110,44 @@ def require_web_permission(permission: str):
         return user
 
     return _dep
+
+
+def set_scan_cookie(response, secret: str) -> None:
+    """Set the phone-scan session cookie (distinct from the staff auth cookie)."""
+    settings = get_settings()
+    response.set_cookie(
+        SCAN_COOKIE,
+        secret,
+        httponly=True,
+        samesite="strict",
+        secure=settings.secure_cookies,
+        max_age=int(get_site_setting("scan_session_minutes")) * 60,
+    )
+
+
+def require_scan_pairing(
+    session: Session = Depends(get_session),
+    scan: str | None = Cookie(default=None, alias=SCAN_COOKIE),
+) -> ScanPairing:
+    """Authenticate a phone-scanner request via the rotated session secret.
+
+    The cookie carries the raw session secret; we hash it and match against the
+    stored ``token_hash``. A 403 is returned for any missing/expired/revoked/
+    unclaimed pairing — the phone JS surfaces this as "session ended".
+    """
+    if not scan:
+        raise HTTPException(status_code=403, detail="No scan session")
+    token_hash = hashlib.sha256(scan.encode()).hexdigest()
+    row = SqlScanPairingRepository(session).get_by_token_hash(token_hash)
+    if row is None:
+        raise HTTPException(status_code=403, detail="No scan session")
+    if row.revoked_at is not None:
+        raise HTTPException(status_code=403, detail="Scan session revoked")
+    if row.claimed_at is None:
+        raise HTTPException(status_code=403, detail="Scan session not claimed")
+    if row.expires_at < datetime.now(timezone.utc):
+        raise HTTPException(status_code=403, detail="Scan session expired")
+    return row
 
 
 def get_calendar_svc(session: Session = Depends(get_session)) -> CalendarService:
