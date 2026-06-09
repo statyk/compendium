@@ -205,8 +205,15 @@
       }
 
       try {
+        // Request a high-resolution rear camera. Without these hints WebKit
+        // defaults to ~640×480, which is too low-res for ZXing to reliably
+        // decode dense ISBN/EAN-13 barcodes — matches the one-shot openScanner.
         stream = await navigator.mediaDevices.getUserMedia({
-          video: { facingMode: 'environment' },
+          video: {
+            facingMode: 'environment',
+            width: { ideal: 1920 },
+            height: { ideal: 1080 },
+          },
         });
       } catch (_) {
         showError('Camera permission denied or unavailable.');
