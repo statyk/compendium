@@ -6,6 +6,15 @@
 
   const BEEP_KEY = 'compendium-beep-enabled';
 
+  // Backend resolved once by detectBackend() on DOMContentLoaded; read by
+  // startRemoteScan. Module-scoped so it does not depend on the published
+  // global staying intact.
+  let detectedBackend = null;
+
+  // How many consecutive no-detection ticks must pass before the same code
+  // is accepted again (i.e. the barcode left the frame and came back).
+  const BURST_MISS_THRESHOLD = 8;
+
   function playBeep() {
     if (localStorage.getItem(BEEP_KEY) === 'false') return;
     try {
@@ -41,48 +50,72 @@
     return null;
   }
 
-  function startNative(video, onResult) {
-    const detector = new BarcodeDetector({
-      formats: ['ean_13', 'ean_8', 'code_128', 'code_39', 'upc_a', 'upc_e', 'qr_code'],
-    });
+  // Public API — consumed downstream (LitCat); changes go in CHANGELOG
+  function runContinuous(video, backend, { onCode, onMiss } = {}) {
     let active = true;
+    let lastAccepted = null;
+    let missCount = 0;
+    let zxingControls = null;
 
-    function tick() {
+    function handleDetected(rawValue) {
       if (!active) return;
-      detector.detect(video)
-        .then(results => {
-          if (!active) return;
-          if (results.length > 0) {
-            active = false;
-            onResult(results[0].rawValue);
-          } else {
-            requestAnimationFrame(tick);
-          }
-        })
-        .catch(() => active && requestAnimationFrame(tick));
+      if (rawValue === lastAccepted && missCount < BURST_MISS_THRESHOLD) {
+        // Same code still in frame — suppress burst repeat.
+        return;
+      }
+      lastAccepted = rawValue;
+      missCount = 0;
+      onCode(rawValue);
     }
-    requestAnimationFrame(tick);
-    return () => { active = false; };
-  }
 
-  async function startZXing(video, onResult) {
-    const reader = new ZXingBrowser.BrowserMultiFormatReader();
-    let controls = null;
-    let done = false;
+    function handleMiss() {
+      if (!active) return;
+      missCount++;
+      if (onMiss) onMiss();
+    }
 
-    try {
-      controls = await reader.decodeFromStream(video.srcObject, video, (result) => {
-        if (done) return;
-        if (result) {
-          done = true;
-          if (controls) controls.stop();
-          onResult(result.getText());
-        }
+    function stop() {
+      active = false;
+      if (zxingControls) { zxingControls.stop(); zxingControls = null; }
+    }
+
+    if (backend === 'native') {
+      const detector = new BarcodeDetector({
+        formats: ['ean_13', 'ean_8', 'code_128', 'code_39', 'upc_a', 'upc_e', 'qr_code'],
       });
-      return () => { done = true; if (controls) controls.stop(); };
-    } catch (_) {
-      return () => {};
+
+      function tick() {
+        if (!active) return;
+        detector.detect(video)
+          .then(results => {
+            if (!active) return;
+            if (results.length > 0) {
+              handleDetected(results[0].rawValue);
+            } else {
+              handleMiss();
+            }
+            requestAnimationFrame(tick);
+          })
+          .catch(() => active && requestAnimationFrame(tick));
+      }
+      requestAnimationFrame(tick);
+    } else {
+      // ZXing path: decodeFromStream fires continuously via its own internal loop.
+      const reader = new ZXingBrowser.BrowserMultiFormatReader();
+      reader.decodeFromStream(video.srcObject, video, (result) => {
+        if (!active) return;
+        if (result) {
+          handleDetected(result.getText());
+        } else {
+          handleMiss();
+        }
+      }).then(controls => {
+        if (!active) { controls.stop(); return; }
+        zxingControls = controls;
+      }).catch(() => {});
     }
+
+    return stop;
   }
 
   async function openScanner(targetInput, backend) {
@@ -131,21 +164,43 @@
     await video.play().catch(() => {});
     dialog.showModal();
 
-    const onScan = (value) => {
-      targetInput.value = value;
-      playBeep();
-      dialog.close();
-    };
+    stopScan = runContinuous(video, backend, {
+      onCode: (value) => {
+        // One-shot: stop immediately after the first accepted code.
+        if (stopScan) { stopScan(); stopScan = null; }
+        targetInput.value = value;
+        playBeep();
+        dialog.close();
+      },
+    });
 
-    if (backend === 'native') {
-      stopScan = startNative(video, onScan);
-    } else {
-      startZXing(video, onScan).then(stop => {
-        if (cancelled) stop();
-        else stopScan = stop;
-      });
+    if (cancelled) {
+      // Cleaned up before runContinuous returned (e.g. dialog closed synchronously).
+      if (stopScan) { stopScan(); stopScan = null; }
     }
   }
+
+  // Public API — consumed downstream (LitCat); changes go in CHANGELOG
+  function startRemoteScan(video, { post } = {}) {
+    if (!detectedBackend) {
+      // Called before detectBackend() resolved; fall back to a no-op stop fn.
+      return () => {};
+    }
+    return runContinuous(video, detectedBackend, {
+      onCode: (code) => {
+        if (post) post(code);
+      },
+    });
+  }
+
+  // Expose the public API on a stable global namespace so phone-page inline
+  // scripts and downstream consumers (LitCat) can reach these functions.
+  // Internals (playBeep, stopStream, openScanner) are NOT exposed.
+  window.CompendiumScanner = {
+    detectBackend,
+    runContinuous,
+    startRemoteScan,
+  };
 
   document.addEventListener('DOMContentLoaded', async () => {
     const beepToggle = document.getElementById('scanner-beep-toggle');
@@ -157,6 +212,7 @@
     }
 
     const backend = await detectBackend();
+    detectedBackend = backend;
 
     document.querySelectorAll('[data-scan-target]').forEach(btn => {
       const target = document.getElementById(btn.dataset.scanTarget);
