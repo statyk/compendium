@@ -5,7 +5,6 @@ from fastapi.responses import HTMLResponse
 from markupsafe import escape
 from sqlalchemy.orm import Session
 
-from compendium.services.site_settings import get_site_setting
 from compendium.db.engine import get_settings
 from compendium.db.session import get_session
 from compendium.domain.errors import BusinessRuleError, HoldQueueBlockError, NotFoundError
@@ -19,11 +18,14 @@ from compendium.repositories.sql.loan_policy_repository import SqlLoanPolicyRepo
 from compendium.repositories.sql.loan_repository import SqlLoanRepository
 from compendium.repositories.sql.patron_repository import SqlPatronRepository
 from compendium.services.audit import AuditService
+from compendium.services.auth import has_permission
 from compendium.services.calendar import CalendarService
 from compendium.services.circulation import CirculationService
+from compendium.services.site_settings import get_site_setting
 from compendium.web.csrf import check_csrf_form, ensure_csrf, set_csrf_cookie
 from compendium.web.deps import get_calendar_svc, require_web_permission
 from compendium.web.jinja import templates
+from compendium.web.routes.scan import MODE_PERMISSION
 
 router = APIRouter()
 
@@ -67,7 +69,15 @@ def circ_desk(
     request: Request,
     user: AppUser = Depends(require_web_permission(_PERM)),
 ):
-    return _render("circ/desk.html", request, {"request": request, "user": user})
+    scan_modes = [
+        m for m, perm in MODE_PERMISSION.items()
+        if has_permission(user.role.permissions, perm)
+    ]
+    return _render(
+        "circ/desk.html",
+        request,
+        {"request": request, "user": user, "scan_modes": scan_modes},
+    )
 
 
 @router.post("/circ/checkout", response_class=HTMLResponse)

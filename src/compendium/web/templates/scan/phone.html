@@ -1,4 +1,4 @@
-{# Scaffold — full CSP-nonced camera UI added in Slice 5 #}
+{# Full-screen phone scanner page — standalone (no base.html). #}
 <!doctype html>
 <html lang="en">
 <head>
@@ -6,21 +6,212 @@
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>Phone Scanner — {{ library_name() }}</title>
   <link rel="icon" type="image/svg+xml" href="/ui/static/favicon.svg">
-  <link rel="stylesheet" href="/ui/static/pico.min.css">
   <link rel="stylesheet" href="/ui/static/compendium.css">
 </head>
 <body>
-  <main class="container" data-scan-phone
-        data-csrf-token="{{ csrf_token }}"
-        data-current-mode="{{ mode }}">
-    <h1>Paired</h1>
-    <p>This phone is now paired as a scanner. Camera UI loads here in Slice 5.</p>
-    <p>Current mode: <strong id="scan-mode">{{ mode }}</strong></p>
-    <ul id="scan-modes">
-      {% for m in allowed_modes %}
-      <li data-mode="{{ m }}">{{ m }}</li>
-      {% endfor %}
-    </ul>
-  </main>
+  {#
+    data-csrf-token — read by the nonced script; avoids inline JS
+    data-current-mode — initial mode from the server
+  #}
+  <div class="scan-phone-wrapper"
+       data-scan-phone
+       data-csrf-token="{{ csrf_token }}"
+       data-current-mode="{{ mode }}">
+
+    <video class="scan-phone-video"
+           id="scan-video"
+           autoplay
+           playsinline
+           muted></video>
+
+    <div class="scan-phone-overlay">
+      <div class="scan-phone-top">
+        <div class="scan-phone-status" id="scan-status" aria-live="polite">
+          Starting camera…
+        </div>
+        <div class="scan-phone-meta" id="scan-meta">Mode: {{ mode }}</div>
+      </div>
+
+      <div class="scan-phone-bottom" id="scan-mode-btns" role="group" aria-label="Scan mode">
+        {% for m in allowed_modes %}
+        <button type="button"
+                class="scan-phone-mode-btn{% if m == mode %} active{% endif %}"
+                data-mode="{{ m }}"
+                aria-pressed="{{ 'true' if m == mode else 'false' }}">
+          {{ m }}
+        </button>
+        {% endfor %}
+      </div>
+    </div>
+
+    {# Shown only when camera / backend is unavailable (overlays the video area) #}
+    <div class="scan-phone-message" id="scan-error-msg" hidden></div>
+  </div>
+
+  {% include "_partials/scanner_scripts.html" %}
+
+  <script nonce="{{ csp_nonce(request) }}">
+  (function () {
+    'use strict';
+
+    // Outer-scope references so releaseCamera() can reach them from any
+    // callback (403 handlers, pagehide) regardless of the async startup path.
+    var stream   = null;
+    var video    = null;
+
+    function releaseCamera() {
+      if (stream) { stream.getTracks().forEach(function (t) { t.stop(); }); stream = null; }
+      if (video)  { video.srcObject = null; }
+    }
+
+    window.addEventListener('pagehide', releaseCamera);
+
+    document.addEventListener('DOMContentLoaded', async function () {
+      var wrapper  = document.querySelector('[data-scan-phone]');
+      video        = document.getElementById('scan-video');
+      var statusEl = document.getElementById('scan-status');
+      var metaEl   = document.getElementById('scan-meta');
+      var errorEl  = document.getElementById('scan-error-msg');
+      var modePane = document.getElementById('scan-mode-btns');
+
+      var csrf     = wrapper.dataset.csrfToken;
+      var currentMode = wrapper.dataset.currentMode;
+      var stopScan = null;
+
+      // ── helpers ───────────────────────────────────────────────
+
+      function showError(msg) {
+        errorEl.textContent = msg;
+        errorEl.hidden = false;
+        statusEl.textContent = '';
+        metaEl.textContent = '';
+      }
+
+      function setStatus(msg) {
+        statusEl.textContent = msg;
+      }
+
+      function setMeta(mode, borrower, count) {
+        var parts = ['Mode: ' + mode];
+        if (borrower) {
+          parts.push('Borrower: ' + borrower + ' (' + (count || 0) + ')');
+        }
+        metaEl.textContent = parts.join(' — ');
+      }
+
+      function highlightMode(mode) {
+        modePane.querySelectorAll('.scan-phone-mode-btn').forEach(function (btn) {
+          var active = btn.dataset.mode === mode;
+          btn.classList.toggle('active', active);
+          btn.setAttribute('aria-pressed', active ? 'true' : 'false');
+        });
+      }
+
+      // ── dispatch a scanned code to the server ─────────────────
+
+      function postCode(code) {
+        var body = 'code=' + encodeURIComponent(code)
+                 + '&csrf_token=' + encodeURIComponent(csrf);
+        fetch('/ui/scan/dispatch', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+          body: body,
+          credentials: 'same-origin',
+        })
+        .then(function (resp) {
+          if (resp.status === 403) {
+            if (stopScan) { stopScan(); stopScan = null; }
+            releaseCamera();
+            showError('Pairing ended — ask the desk to re-pair.');
+            return null;
+          }
+          return resp.json();
+        })
+        .then(function (data) {
+          if (!data) return;
+          setStatus(data.message || '');
+          currentMode = data.mode || currentMode;
+          setMeta(currentMode, data.borrower, data.count);
+          if (data.ok && navigator.vibrate) {
+            navigator.vibrate(60);
+          }
+        })
+        .catch(function () {
+          setStatus('Network error — check connection.');
+        });
+      }
+
+      // ── mode switch ────────────────────────────────────────────
+
+      modePane.addEventListener('click', function (e) {
+        var btn = e.target.closest('.scan-phone-mode-btn');
+        if (!btn) return;
+        var mode = btn.dataset.mode;
+        var body = 'mode=' + encodeURIComponent(mode)
+                 + '&csrf_token=' + encodeURIComponent(csrf);
+        fetch('/ui/scan/mode', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+          body: body,
+          credentials: 'same-origin',
+        })
+        .then(function (resp) {
+          if (resp.status === 403) {
+            if (stopScan) { stopScan(); stopScan = null; }
+            releaseCamera();
+            showError('Pairing ended — ask the desk to re-pair.');
+            return null;
+          }
+          return resp.json();
+        })
+        .then(function (data) {
+          if (!data) return;
+          currentMode = data.mode || mode;
+          highlightMode(currentMode);
+          setStatus(data.message || '');
+          setMeta(currentMode, data.borrower, data.count);
+        })
+        .catch(function () {
+          setStatus('Network error — could not switch mode.');
+        });
+      });
+
+      // ── camera + scanner startup ───────────────────────────────
+
+      // Detect backend OURSELVES rather than relying on the module-scoped
+      // detectedBackend set on DOMContentLoaded — on this standalone page there
+      // is a timing race where that cached value may not be set yet.
+      var backend = await window.CompendiumScanner.detectBackend();
+      if (!backend) {
+        showError('Camera scanning is not supported on this browser.');
+        return;
+      }
+
+      try {
+        stream = await navigator.mediaDevices.getUserMedia({
+          video: { facingMode: 'environment' },
+        });
+      } catch (_) {
+        showError('Camera permission denied or unavailable.');
+        return;
+      }
+
+      video.srcObject = stream;
+      try {
+        await video.play();
+      } catch (_) {
+        showError('Could not start camera preview.');
+        return;
+      }
+
+      setStatus('Ready — point camera at a barcode.');
+      setMeta(currentMode, null, 0);
+
+      stopScan = window.CompendiumScanner.runContinuous(video, backend, {
+        onCode: postCode,
+      });
+    });
+  })();
+  </script>
 </body>
 </html>

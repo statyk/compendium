@@ -1311,3 +1311,122 @@ article > footer {
   .label-preview-pane { position: static; }
 }
 
+/* ── Phone scanner page (scan/phone.html) ───────────────────── */
+.scan-phone-wrapper {
+  position: fixed;
+  inset: 0;
+  background: #000;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  color: #fff;
+  font-family: var(--cmp-font-body);
+}
+
+.scan-phone-video {
+  flex: 1 1 auto;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  display: block;
+}
+
+.scan-phone-overlay {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  display: flex;
+  flex-direction: column;
+  justify-content: space-between;
+}
+
+.scan-phone-top {
+  pointer-events: auto;
+  background: rgba(0, 0, 0, 0.55);
+  padding: 0.6rem 0.9rem;
+  display: flex;
+  flex-direction: column;
+  gap: 0.25rem;
+}
+
+.scan-phone-status {
+  font-size: 1rem;
+  font-weight: 600;
+  min-height: 1.4em;
+}
+
+.scan-phone-meta {
+  font-size: 0.85rem;
+  opacity: 0.85;
+  min-height: 1.2em;
+}
+
+.scan-phone-bottom {
+  pointer-events: auto;
+  background: rgba(0, 0, 0, 0.55);
+  padding: 0.6rem 0.9rem;
+  display: flex;
+  gap: 0.5rem;
+  flex-wrap: wrap;
+  justify-content: center;
+}
+
+.scan-phone-mode-btn {
+  padding: 0.4rem 1rem;
+  border-radius: 20px;
+  border: 2px solid rgba(255, 255, 255, 0.6);
+  background: transparent;
+  color: #fff;
+  font-size: 0.9rem;
+  cursor: pointer;
+  text-transform: capitalize;
+  transition: background 0.15s, border-color 0.15s;
+}
+
+.scan-phone-mode-btn.active,
+.scan-phone-mode-btn[aria-pressed="true"] {
+  background: rgba(255, 255, 255, 0.25);
+  border-color: #fff;
+  font-weight: 700;
+}
+
+.scan-phone-message {
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  transform: translate(-50%, -50%);
+  background: rgba(0, 0, 0, 0.75);
+  color: #fff;
+  padding: 1rem 1.5rem;
+  border-radius: 8px;
+  font-size: 1rem;
+  text-align: center;
+  max-width: 80vw;
+  pointer-events: none;
+}
+
+/* ── Desk "Pair a phone" section (circ/desk.html) ───────────── */
+.scan-pair-article {
+  margin-top: 1.5rem;
+}
+
+.scan-pair-modes {
+  display: flex;
+  gap: 1rem;
+  flex-wrap: wrap;
+  margin-bottom: 0.75rem;
+}
+
+.scan-pair-modes label {
+  display: flex;
+  align-items: center;
+  gap: 0.3rem;
+  font-size: 0.95rem;
+  text-transform: capitalize;
+  cursor: pointer;
+}
+
+#scan-pair-result {
+  margin-top: 0.75rem;
+}
+

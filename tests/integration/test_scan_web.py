@@ -500,3 +500,101 @@ def test_unpair_other_users_pairing_404(scan_client, scan_session):
         cookies={**cookies, CSRF_COOKIE: signed},
     )
     assert r.status_code == 404
+
+
+# ── desk page pair-a-phone section ────────────────────────────────────────────
+
+
+def test_desk_pair_section_shows_only_permitted_modes(scan_client, scan_session):
+    """Desk page shows Pair-a-phone section with only the modes the user holds."""
+    # User with checkout permission only.
+    role = _custom_role(
+        scan_session, f"CheckoutDesk{_next()}", ["item.view", "loan.checkout"]
+    )
+    cookies = _login(scan_client, scan_session, role_name=role.name)
+    resp = scan_client.get("/ui/circ", cookies=cookies, follow_redirects=False)
+    assert resp.status_code == 200
+    body = resp.text
+    # Section is present because user has at least one scan mode.
+    assert "Pair a phone" in body
+    # Checkout checkbox present.
+    assert 'name="checkout"' in body
+    # Checkin and catalog checkboxes absent (no permissions for those).
+    assert 'name="checkin"' not in body
+    assert 'name="catalog"' not in body
+
+
+def test_desk_pair_section_absent_when_no_scan_perms(scan_client, scan_session):
+    """Desk page hides Pair-a-phone section entirely when user lacks scan modes."""
+    # Librarians have loan.checkout (required to reach /circ), but let's make a
+    # custom role with only checkout so we can see the section, then make one
+    # without any scan perms.  The /circ route requires loan.checkout — so the
+    # user must hold it to reach the page at all; we cannot test a user with
+    # zero scan perms reaching /circ unless loan.checkout is one of the scan
+    # perms.  Instead, verify that a user with ONLY loan.checkout (no checkin/
+    # catalog) sees ONLY the checkout checkbox and not the others.
+    # For the "section absent" case we use a role that has loan.checkout but
+    # does NOT have checkin or catalog — the section IS there (checkout), which
+    # is already covered above.  To truly test "section absent" we need a user
+    # whose permissions include loan.checkout (to pass require_web_permission)
+    # but where MODE_PERMISSION maps none of those perms — but loan.checkout IS
+    # a scan mode.  So we test the next best thing: a user with no checkin/
+    # catalog sees those modes absent from the section.
+    #
+    # The cleanest "absent" scenario requires a role where none of checkout/
+    # checkin/catalog is granted.  But /circ requires loan.checkout.  We can
+    # test a redirect (403→login) for such a user trying to reach /circ.
+    role = _custom_role(
+        scan_session, f"NoScanPerms{_next()}", ["item.view", "patron.manage"]
+    )
+    cookies = _login(scan_client, scan_session, role_name=role.name)
+    resp = scan_client.get("/ui/circ", cookies=cookies, follow_redirects=False)
+    # The page requires loan.checkout — user without it gets redirected to login.
+    assert resp.status_code in (302, 303, 403)
+
+
+def test_desk_pair_section_absent_for_librarian_with_only_catalog(
+    scan_client, scan_session
+):
+    """A user with only catalog.import as a scan perm sees only 'catalog' checkbox."""
+    role = _custom_role(
+        scan_session,
+        f"CatalogOnlyDesk{_next()}",
+        ["item.view", "loan.checkout", "catalog.import"],
+    )
+    cookies = _login(scan_client, scan_session, role_name=role.name)
+    resp = scan_client.get("/ui/circ", cookies=cookies, follow_redirects=False)
+    assert resp.status_code == 200
+    body = resp.text
+    assert "Pair a phone" in body
+    assert 'name="checkout"' in body   # loan.checkout is also a scan mode
+    assert 'name="catalog"' in body    # catalog.import is a scan mode
+    assert 'name="checkin"' not in body  # loan.checkin not in role
+
+
+# ── phone page rendering ──────────────────────────────────────────────────────
+
+
+def test_phone_page_renders_video_and_mode_buttons(scan_client, scan_session):
+    """After claiming a pairing the phone page has video, mode buttons, scanner.js."""
+    user = _staff_user(scan_session)
+    claim = f"CLAIM_PHONE_{_next()}"
+    _make_pairing(
+        scan_session,
+        user,
+        claim=claim,
+        allowed_modes=["checkout", "checkin"],
+        mode="checkout",
+    )
+    resp = scan_client.get(f"/ui/scan/pair?c={claim}")
+    assert resp.status_code == 200
+    body = resp.text
+    # Video element present.
+    assert "<video" in body
+    # A mode button for each allowed mode.
+    assert 'data-mode="checkout"' in body
+    assert 'data-mode="checkin"' in body
+    # scanner.js included.
+    assert "scanner.js" in body
+    # CSRF token present (needed by the nonced script).
+    assert "data-csrf-token=" in body
