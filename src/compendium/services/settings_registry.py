@@ -452,6 +452,43 @@ def _register_builtins() -> None:
     )
     register(
         SettingDescriptor(
+            key="public_base_url",
+            display_name="Public Base URL",
+            type=str,
+            default=None,
+            nullable=True,
+            scope="librarian",
+            short_help="Externally reachable base URL for phone-pairing QR codes.",
+            help_text=(
+                "The externally reachable base URL of this server (e.g. "
+                "'https://library.example.org'), used to build the QR code a "
+                "phone scans to pair. Must be https — phone cameras refuse to "
+                "start on a non-secure origin. Leave empty to derive it from the "
+                "staff request (honoring X-Forwarded-Proto behind a reverse "
+                "proxy). The env var COMPENDIUM_PUBLIC_BASE_URL overrides the DB "
+                "value."
+            ),
+        )
+    )
+    register(
+        SettingDescriptor(
+            key="scan_session_minutes",
+            display_name="Phone Scan Session Lifetime (minutes)",
+            type=int,
+            default=60,
+            scope="librarian",
+            short_help="How long a paired phone-scanner session stays valid.",
+            help_text=(
+                "Lifetime, in minutes, of a paired phone-scanner desk session "
+                "before it expires and the phone must re-pair. Parallels the "
+                "kiosk idle timeout. The env var COMPENDIUM_SCAN_SESSION_MINUTES "
+                "overrides the DB value."
+            ),
+            validator=_positive_int,
+        )
+    )
+    register(
+        SettingDescriptor(
             key="default_loan_period_days",
             display_name="Default Loan Period (days)",
             type=int,

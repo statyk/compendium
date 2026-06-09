@@ -553,3 +553,44 @@ class MetadataCache(Base):
     payload: Mapped[str | None] = mapped_column(Text, nullable=True)
     is_negative: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)
     fetched_at: Mapped[datetime] = mapped_column(UtcDateTime, nullable=False, index=True)
+
+
+class ScanPairing(Base):
+    """A staff member's paired phone-scanner session.
+
+    Created when a staff member generates a pairing QR (pre-claim), then
+    upgraded in place when a phone claims it. We store only the SHA-256 hex
+    digest of the *current* secret (the claim secret before claim, the session
+    secret after) — never the raw secret. Lookups hash the presented secret and
+    match against ``token_hash``.
+
+    ``mode`` is the current scanner mode (one of checkout/checkin/catalog) and
+    ``allowed_modes`` is the subset the staff member permitted at pairing time.
+    ``count`` tracks items handled this session; ``borrower_patron_id`` is the
+    current borrower in checkout mode.
+    """
+
+    __tablename__ = "scan_pairing"
+    __table_args__ = (
+        Index("ix_scan_pairing_token_hash", "token_hash", unique=True),
+        Index("ix_scan_pairing_expires_at", "expires_at"),
+    )
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    token_hash: Mapped[str] = mapped_column(String(64), nullable=False)
+    user_id: Mapped[int] = mapped_column(ForeignKey("app_user.id"), nullable=False)
+    allowed_modes: Mapped[list[str]] = mapped_column(JSON, nullable=False)
+    mode: Mapped[str] = mapped_column(String(16), nullable=False)
+    borrower_patron_id: Mapped[int | None] = mapped_column(
+        ForeignKey("patron.id"), nullable=True
+    )
+    count: Mapped[int] = mapped_column(Integer, default=0, nullable=False)
+    created_at: Mapped[datetime] = mapped_column(
+        UtcDateTime, server_default=func.now()
+    )
+    expires_at: Mapped[datetime] = mapped_column(UtcDateTime, nullable=False)
+    claimed_at: Mapped[datetime | None] = mapped_column(UtcDateTime, nullable=True)
+    revoked_at: Mapped[datetime | None] = mapped_column(UtcDateTime, nullable=True)
+
+    user: Mapped[AppUser] = relationship()
+    borrower: Mapped[Patron | None] = relationship()
