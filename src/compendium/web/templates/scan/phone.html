@@ -30,6 +30,8 @@
           Starting camera…
         </div>
         <div class="scan-phone-meta" id="scan-meta">Mode: {{ mode }}</div>
+        {# TEMP diagnostic readout — remove once camera decoding is confirmed. #}
+        <div class="scan-phone-meta" id="scan-debug" aria-hidden="true"></div>
       </div>
 
       <div class="scan-phone-bottom" id="scan-mode-btns" role="group" aria-label="Scan mode">
@@ -77,6 +79,19 @@
       var csrf     = wrapper.dataset.csrfToken;
       var currentMode = wrapper.dataset.currentMode;
       var stopScan = null;
+
+      // ── TEMP diagnostics (remove once decoding confirmed) ─────
+      var dbgEl = document.getElementById('scan-debug');
+      var dbg = { backend: '?', codes: 0, miss: 0, last: '—', err: '' };
+      function updateDebug() {
+        if (!dbgEl) return;
+        dbgEl.textContent =
+          'dbg: ' + dbg.backend +
+          ' codes:' + dbg.codes +
+          ' miss:' + dbg.miss +
+          ' last:' + dbg.last +
+          (dbg.err ? ' err:' + dbg.err : '');
+      }
 
       // ── helpers ───────────────────────────────────────────────
 
@@ -182,6 +197,8 @@
       // detectedBackend set on DOMContentLoaded — on this standalone page there
       // is a timing race where that cached value may not be set yet.
       var backend = await window.CompendiumScanner.detectBackend();
+      dbg.backend = backend || 'none';
+      updateDebug();
       if (!backend) {
         showError('Camera scanning is not supported on this browser.');
         return;
@@ -206,10 +223,25 @@
 
       setStatus('Ready — point camera at a barcode.');
       setMeta(currentMode, null, 0);
+      updateDebug();
 
-      stopScan = window.CompendiumScanner.runContinuous(video, backend, {
-        onCode: postCode,
-      });
+      try {
+        stopScan = window.CompendiumScanner.runContinuous(video, backend, {
+          onCode: function (code) {
+            dbg.codes++; dbg.last = code; updateDebug();
+            postCode(code);
+          },
+          onMiss: function () {
+            dbg.miss++;
+            // Throttle the readout so it doesn't repaint every frame.
+            if (dbg.miss % 15 === 0) updateDebug();
+          },
+        });
+      } catch (e) {
+        dbg.err = (e && e.name ? e.name : 'startfail');
+        updateDebug();
+        showError('Scanner failed to start: ' + (e && e.message ? e.message : e));
+      }
     });
   })();
   </script>
