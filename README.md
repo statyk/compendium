@@ -18,6 +18,7 @@ A library card catalog system for physical items — books, vinyl records, DVDs,
 - **Auth** — five preset roles (ReadOnly, Patron, Librarian, SystemAdmin, Administrator) plus custom roles via the admin UI; JWT for API, cookie-based for web UI
 - **Audit log** — synchronous trail of administrative mutations (Librarian + system tier); queryable via web UI, CLI, or REST
 - **DB-editable settings** — most configuration knobs (library name, fines, kiosk timeout, SMTP, retention, configurable nav shortcuts, etc.) editable from the UI / CLI / API; env vars still win as a break-glass
+- **Remote phone scanner** — pair a phone to the circulation desk via QR code; the phone camera dispatches scans to the desk in real time without installing an app. Supports checkout, checkin, and catalog-lookup modes. Pairing is ephemeral: a short-TTL claim secret lives in the QR; after the phone claims it, the secret rotates to a session cookie; the librarian can unpair from the desk at any time. Requires HTTPS on both the server and the phone browser (secure context for camera). Settings: `public_base_url` (DB-editable, env `COMPENDIUM_PUBLIC_BASE_URL`) and `scan_session_minutes` (DB-editable, env `COMPENDIUM_SCAN_SESSION_MINUTES`, default 60).
 - **Web UI** — HTMX + Jinja2 browser interface with catalog search, circulation desk (camera-based barcode scanning), patron self-service, light/dark/auto theme; per-user nav shortcut overrides via browser localStorage
 - **REST API** — FastAPI; consumed by the web UI and available for integrations
 - **CLI** — full librarian + sysadmin workflow without running a server, including stdin/stdout (`-`) for backup, import/export, and labels
@@ -134,7 +135,7 @@ Run `compendium --help` for the full command tree, or `compendium <group> --help
 | `compendium backup --output <path-or->` | Write a portable JSONL tarball backup |
 | `compendium restore <path-or->` | Restore from a backup tarball (lenient — auto-migrates) |
 | `compendium settings list/get/set/reset` | Inspect & edit DB-backed site settings |
-| `compendium maintenance ...` | Cron-invoked tasks: `expire-holds`, `resume-expired-suspends`, `assess-overdue-fines`, `queue-due-soon-notices`, `queue-overdue-notices`, `send-queued-notifications`, `prune-notifications`, `prune-audit-log`, `deactivate-expired-patrons`, `prune-cover-cache`, `prune-metadata-cache`, `refresh-metadata` |
+| `compendium maintenance ...` | Cron-invoked tasks: `expire-holds`, `resume-expired-suspends`, `assess-overdue-fines`, `queue-due-soon-notices`, `queue-overdue-notices`, `send-queued-notifications`, `prune-notifications`, `prune-audit-log`, `deactivate-expired-patrons`, `prune-cover-cache`, `prune-metadata-cache`, `prune-scan-pairings`, `refresh-metadata` |
 | `compendium metadata cache stats` | Show metadata cache row counts by adapter and TTL status |
 | `compendium metadata cache clear` | Delete all metadata cache rows (audited) |
 
@@ -180,6 +181,9 @@ Start the server with `compendium serve` and open your browser to `http://localh
 | `/ui/admin/settings/general` | Librarian | Library name, default theme, guest search |
 | `/ui/admin/settings/circulation` | Librarian | Currency, fine thresholds, hold/overdue/due-soon defaults |
 | `/ui/admin/settings/kiosk` | Librarian | Kiosk idle timeout |
+| `/ui/scan/pair` | Librarian | Generate a QR code to pair a phone as a remote barcode scanner |
+| `/ui/scan/desk` | Librarian | Desk-side view: shows live scan count and unpair button for an active phone session |
+| `/ui/scan/phone/*` | Phone browser | Phone-side claim, mode selector, and continuous scan loop (camera; requires HTTPS / secure context) |
 | `/ui/policies` | Librarian | Loan policy list with inline edit |
 | `/ui/policies/new` | Librarian | Create loan policy (per media type + patron category) |
 | `/ui/branches` | Librarian | Branch list with classification scheme |
@@ -255,6 +259,8 @@ Most settings (library name, theme, fine thresholds, hold/overdue defaults, kios
 | `COMPENDIUM_MAX_UPLOAD_BYTES` | Hard cap on bulk-import upload size (default 100 MB / 104857600). Env-only so a compromised admin token can't raise it. |
 | `COMPENDIUM_LOGIN_MAX_FAILURES` | Max consecutive failed logins before the identity is throttled (default 10). DB-editable at **System → Security**. |
 | `COMPENDIUM_LOGIN_FAILURE_WINDOW_SECONDS` | Sliding window for counting failures in seconds (default 300 = 5 min). DB-editable at **System → Security**. |
+| `COMPENDIUM_PUBLIC_BASE_URL` | External HTTPS origin used to build QR codes for phone pairing (e.g. `https://library.example.org`). The QR base URL is normally derived from the request, honoring `X-Forwarded-Proto` — the bundled nginx sets this header, so the shipped Docker stack works without this setting. Set it when your proxy does not set that header, or to pin a specific hostname. A non-HTTPS value is refused at QR-render time. DB-editable at **Admin → Settings → General**; env wins. |
+| `COMPENDIUM_SCAN_SESSION_MINUTES` | How long a paired phone session stays active in minutes (default 60). DB-editable at **Admin → Settings → General**; env wins. |
 
 For everything else, run `compendium settings list` to see the current value, source (env vs db/default), and per-key help text. The web admin UI shows the same with an "⚠ Overridden by env var" indicator on rows where an env var is currently masking the DB value.
 

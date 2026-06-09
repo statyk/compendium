@@ -765,6 +765,46 @@ POST   /notifications/{id}/retry
 
 ---
 
+## Remote phone scanner
+
+A librarian can pair a smartphone as a wireless barcode scanner without installing a native app. The phone's browser camera continuously reads barcodes and dispatches them to the desk session in real time via a lightweight polling endpoint.
+
+### Pairing lifecycle
+
+1. **Desk creates pairing** — a librarian visits `/ui/scan/pair`. Compendium creates a `ScanPairing` row with a short-TTL claim secret (hashed; raw secret is never stored). The secret and pairing URL are encoded into a QR rendered inline as SVG.
+2. **Phone claims** — the phone camera scans the QR, POSTs the claim secret to `/ui/scan/phone/claim`, and receives a session cookie. The claim secret is rotated at this point (the hash is updated; the old secret is invalidated).
+3. **Phone dispatches scans** — the phone browser POSTs each decoded barcode to `/ui/scan/phone/dispatch`. The server returns the result (work title, patron name, etc.) based on the active mode.
+4. **Desk receives results** — the desk page polls `/ui/scan/desk` (via HTMX) to show the latest scan count and any mode-change prompts.
+5. **Session ends** — the librarian clicks "Unpair" (or closes the browser), which sets `revoked_at` on the `ScanPairing` row. The phone's next dispatch request sees a 401 and shows a "session ended" message. Sessions also expire automatically when `expires_at` passes (controlled by `scan_session_minutes`, default 60 min).
+
+Expiry and revocation are enforced on every phone action (claim, dispatch, mode-change) — there is no grace window.
+
+### Multi-mode state machine
+
+A pairing is created with an `allowed_modes` list (`checkout`, `checkin`, `catalog`) set at pairing time. The phone can toggle among the allowed modes. The active `mode` is stored on the `ScanPairing` row and read on every dispatch. In checkout mode, a `borrower_patron_id` is also tracked on the pairing (the librarian or patron selects the borrower on the desk; the phone sees just the scan).
+
+### HTTPS / secure-context requirement
+
+The phone camera API (`getUserMedia`, `BarcodeDetector`) requires a **secure context** — `https://` or `localhost`. The QR URL Compendium encodes must therefore use `https://`. Compendium derives the base URL from the staff request, honoring `X-Forwarded-Proto` when your reverse proxy sets it — the bundled `docker/nginx/nginx.conf` sets `X-Forwarded-Proto https`, so phone pairing works out-of-the-box behind the shipped nginx stack. Compendium refuses to render a QR code when the resolved base URL is not HTTPS (except `localhost` for development).
+
+Set `COMPENDIUM_PUBLIC_BASE_URL` (or the DB-editable `public_base_url` setting) to your external `https://` origin when your proxy does **not** set `X-Forwarded-Proto`, or to pin a specific public hostname. The Docker compose file passes this through from `.env`; see `docker/README.md` for details.
+
+### Shared decoder module seam (downstream consumers)
+
+`scanner.js` exposes a stable public API for downstream projects (e.g. LitCat):
+
+```js
+runContinuous(videoElement, backend, { onCode, onMiss })
+```
+
+`backend` is `"native"` (BarcodeDetector) or `"zxing"` (ZXing-js fallback). `onCode(value)` is called for each decoded barcode; `onMiss()` is called each scan cycle when no barcode is found. This signature is **pinned** — changes are announced in CHANGELOG.
+
+### Maintenance
+
+`compendium maintenance prune-scan-pairings --older-than-days N` deletes terminal pairing rows (those whose `expires_at` is older than the cutoff, or whose `revoked_at` is set and older than the cutoff). Live, unexpired sessions are never pruned. Suggested cadence: daily, `--older-than-days 7`.
+
+---
+
 ## Site settings
 
 Most runtime configuration is DB-editable via the `site_setting` table, with environment variables as a break-glass override.

@@ -184,8 +184,9 @@ Cadences taken from `docker/crontab.sample`:
 | daily 08:00 / 08:15  | `queue-due-soon-notices` / `queue-overdue-notices` | enqueues reminder emails |
 
 Optional (commented out in the sample): `prune-audit-log`,
-`prune-notifications`, `prune-cover-cache`, `prune-metadata-cache`. Uncomment
-and edit the retention windows to suit your deployment.
+`prune-notifications`, `prune-cover-cache`, `prune-metadata-cache`,
+`prune-scan-pairings`. Uncomment and edit the retention windows to suit your
+deployment.
 
 ### Caveats
 
@@ -211,6 +212,35 @@ You can always run a maintenance command ad-hoc:
 ```bash
 docker compose exec compendium compendium maintenance send-queued-notifications
 docker compose exec compendium compendium maintenance expire-holds
+```
+
+## Remote phone scanner
+
+Compendium supports pairing a phone as a wireless barcode scanner via a QR
+code. The phone camera dispatches scans to the desk in real time without
+installing an app.
+
+The bundled `nginx.conf` sets `X-Forwarded-Proto https`, so the pairing QR
+correctly encodes `https://` without any extra configuration. If you replace
+the bundled nginx with a proxy that does **not** set that header, set
+`COMPENDIUM_PUBLIC_BASE_URL` to your external `https://` URL in `.env`:
+
+```dotenv
+COMPENDIUM_PUBLIC_BASE_URL=https://library.example.org
+```
+
+The `docker-compose.yml` passes this through from `.env` automatically.
+`COMPENDIUM_SCAN_SESSION_MINUTES` (default 60) controls how long a paired
+session stays active; override it the same way. The phone camera requires a
+secure context (HTTPS); if the resolved base URL is not secure, the QR is
+refused with a warning rather than handing out a dead link.
+
+`prune-scan-pairings` removes terminal (expired or revoked) pairing rows.
+Add the commented-out entry from `docker/crontab.sample` to your crontab:
+
+```
+35 3 * * * docker compose --project-directory /path/to/docker exec -T compendium \
+    compendium maintenance prune-scan-pairings --older-than-days 7
 ```
 
 ## Secret management

@@ -165,6 +165,49 @@ def prune_audit_log(
         typer.echo(f"Pruned {count} audit row(s) older than {days} day(s).")
 
 
+@app.command("prune-scan-pairings")
+def prune_scan_pairings(
+    older_than_days: int = typer.Option(
+        ..., "--older-than-days",
+        help="Delete terminal scan-pairing rows older than this many days.",
+    ),
+    dry_run: bool = typer.Option(
+        False, "--dry-run",
+        help="Report what would be deleted without touching the database.",
+    ),
+) -> None:
+    """Delete old terminal scan-pairing rows.
+
+    Scan pairings are ephemeral: a claim secret is valid for roughly 2 minutes,
+    and the resulting phone session lasts ``scan_session_minutes`` (default 60).
+    Once a pairing expires or is revoked it can never be used again, so terminal
+    rows can be pruned aggressively -- a daily or weekly cadence is fine.
+
+    Only pairings that are no longer usable are pruned: rows where
+    ``expires_at`` is older than the cutoff, or where ``revoked_at`` is set and
+    older than the cutoff.  Live, unexpired sessions are never touched.
+
+    Suggested cron cadence: daily.
+    """
+    from compendium.repositories.sql.scan_pairing_repository import SqlScanPairingRepository
+
+    if older_than_days < 1:
+        typer.echo("Error: --older-than-days must be at least 1.", err=True)
+        raise typer.Exit(1)
+
+    cutoff = datetime.now(timezone.utc) - timedelta(days=older_than_days)
+    with session_scope() as session:
+        repo = SqlScanPairingRepository(session)
+        if dry_run:
+            count = repo.count_terminal_older_than(cutoff)
+            typer.echo(
+                f"Would prune {count} scan-pairing row(s) older than {older_than_days} day(s)."
+            )
+            return
+        count = repo.delete_terminal_older_than(cutoff)
+        typer.echo(f"Pruned {count} scan-pairing row(s) older than {older_than_days} day(s).")
+
+
 @app.command("prune-failed-logins")
 def prune_failed_logins(
     older_than_days: int = typer.Option(

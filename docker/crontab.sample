@@ -57,6 +57,11 @@
 # already outside the 5-minute throttle window, so this is just housekeeping).
 # 30 3 * * 0 docker compose --project-directory COMPENDIUM_DIR exec -T compendium compendium maintenance prune-failed-logins --older-than-days 7 LOG_REDIRECT
 
+# Optional: prune terminal scan-pairing rows (daily — pairings are ephemeral;
+# claim TTL is ~2 min and session TTL is scan_session_minutes, so anything
+# older than a day is already dead).
+# 35 3 * * * docker compose --project-directory COMPENDIUM_DIR exec -T compendium compendium maintenance prune-scan-pairings --older-than-days 7 LOG_REDIRECT
+
 # Optional: fill missing metadata for newly-imported Works (description,
 # cover, publisher, language) from external sources. --limit caps the
 # nightly batch; the eligible-set drains to 0 once the catalog is clean.

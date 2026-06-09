@@ -7,6 +7,29 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- **Remote phone scanner** — pair a smartphone to the circulation desk via QR
+  code. The phone camera dispatches barcodes to the desk in real time without
+  installing a native app. Supports checkout, checkin, and catalog-lookup modes.
+  Pairing is ephemeral: a short-TTL claim secret lives in the QR; after the
+  phone claims it, the secret rotates to a session cookie; the librarian can
+  unpair from the desk at any time.
+  - New settings: `public_base_url` (DB-editable, env `COMPENDIUM_PUBLIC_BASE_URL`)
+    and `scan_session_minutes` (DB-editable, env `COMPENDIUM_SCAN_SESSION_MINUTES`,
+    default 60).
+  - `COMPENDIUM_PUBLIC_BASE_URL` **must** be set to the external `https://` URL
+    when running behind a reverse proxy — uvicorn cannot infer `X-Forwarded-Proto`,
+    so without it the QR encodes an `http://` URL, which browsers reject as a
+    non-secure context (camera access requires HTTPS).
+  - New maintenance command: `compendium maintenance prune-scan-pairings
+    --older-than-days N` — deletes terminal (expired or revoked) pairing rows.
+    Suggested cadence: daily, `--older-than-days 7`.
+  - **Public API seam (downstream consumers):** `runContinuous(video, backend,
+    {onCode, onMiss})` in `scanner.js` is now a pinned public API consumed
+    downstream (LitCat). Breaking changes to this signature will be called out
+    explicitly in future changelog entries.
+
 ## [1.1.0] - 2026-06-01
 
 ### Added

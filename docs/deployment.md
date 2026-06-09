@@ -77,6 +77,14 @@ COMPENDIUM_SECURE_COOKIES=true            # default; set `false` for plain-HTTP 
 # COMPENDIUM_BOOK_METADATA_FALLBACK_ENABLED=true  # set 'false' to disable secondary-source fallback
 # COMPENDIUM_METADATA_CACHE_TTL_DAYS=30  # positive-hit TTL for metadata cache (days)
 # COMPENDIUM_LIBRARY_TIMEZONE=America/New_York  # IANA timezone for due-date rolling (default: UTC)
+
+# Remote phone-scanner settings.
+# COMPENDIUM_PUBLIC_BASE_URL=https://library.example.org  # External HTTPS base URL for QR codes.
+#   The QR base URL is normally derived from the request, honoring X-Forwarded-Proto (set by
+#   the bundled nginx). Set this when your proxy does not set that header, or to pin a hostname.
+#   The phone camera requires HTTPS (secure context); a non-HTTPS value is refused at QR time.
+#   DB-editable at Admin → Settings → General; env wins.
+# COMPENDIUM_SCAN_SESSION_MINUTES=60  # Phone session TTL in minutes. DB-editable; env wins.
 ```
 
 **`JWT_SECRET_KEY` must be set to a strong random value.** The built-in default is intentionally weak — the server refuses to start when it's detected. Generate one with `python -c "import secrets; print(secrets.token_urlsafe(48))"` (or `openssl rand -base64 48`). For first-run / dev work you may set `COMPENDIUM_ALLOW_INSECURE_JWT=1` to bypass the check, which downgrades it to a startup warning; do not use that in production.
@@ -203,6 +211,7 @@ Several maintenance commands should run periodically:
 - `maintenance deactivate-expired-patrons` — flips `is_active=false` for patrons whose `expires_at` has passed.
 - `maintenance prune-cover-cache --max-mb N` — bound the on-disk cover-image cache.
 - `maintenance prune-metadata-cache` — delete expired metadata cache rows (past positive or negative TTL).
+- `maintenance prune-scan-pairings --older-than-days N` — delete terminal (expired or revoked) phone-scanner pairing rows. Pairings are ephemeral (claim TTL ~2 min; session TTL = `scan_session_minutes`), so terminal rows can be pruned aggressively. Suggested cadence: daily.
 - `metadata cache clear` — delete all metadata cache rows (audited); useful if a metadata source's response shape changes.
 - `metadata cache stats` — print cache row counts by adapter and TTL status.
 
@@ -281,7 +290,11 @@ compendium maintenance send-queued-notifications
 
 ## HTTPS / TLS
 
-Camera-based barcode scanning requires HTTPS (browsers block camera access on plain HTTP, except on `localhost`). Three options:
+Camera-based barcode scanning requires HTTPS (browsers block camera access on plain HTTP, except on `localhost`). This applies equally to the **remote phone scanner**: the phone browser needs a secure context to access the camera, so the URL the QR code encodes must be an `https://` URL.
+
+The pairing QR base URL is normally derived from the staff request, honoring `X-Forwarded-Proto` when your reverse proxy sets it — the bundled `docker/nginx/nginx.conf` sets `X-Forwarded-Proto https`, so phone pairing works out-of-the-box behind the shipped nginx stack. Set `COMPENDIUM_PUBLIC_BASE_URL` (or the DB-editable `public_base_url` setting) to your external `https://` origin when your proxy does **not** set that header, or to pin a specific public hostname. Compendium refuses to render a QR code when the resolved base URL is not HTTPS (except on `localhost` for development). DB-editable at **Admin → Settings → General**; env wins.
+
+Three options:
 
 ### Option A — Native TLS (manual cert)
 

@@ -58,6 +58,12 @@ services:
       COMPENDIUM_METADATA_CACHE_TTL_DAYS: ${COMPENDIUM_METADATA_CACHE_TTL_DAYS:-}
       COMPENDIUM_LIBRARY_TIMEZONE: ${COMPENDIUM_LIBRARY_TIMEZONE:-}
       COMPENDIUM_MAX_UPLOAD_BYTES: ${COMPENDIUM_MAX_UPLOAD_BYTES:-}
+      # Remote phone-scanner base URL. The bundled nginx sets X-Forwarded-Proto https,
+      # so QR codes work out-of-the-box. Set this when using a proxy that does NOT
+      # set that header, or to pin a specific public hostname (e.g. https://library.example.org).
+      COMPENDIUM_PUBLIC_BASE_URL: ${COMPENDIUM_PUBLIC_BASE_URL:-}
+      # Phone session TTL in minutes (default 60). Optional; omit to use DB setting.
+      COMPENDIUM_SCAN_SESSION_MINUTES: ${COMPENDIUM_SCAN_SESSION_MINUTES:-}
       # Dev-only escape hatch — leave unset in production.
       COMPENDIUM_ALLOW_INSECURE_JWT: ${COMPENDIUM_ALLOW_INSECURE_JWT:-}
       # First-run admin bootstrap (only used if the username doesn't exist yet).

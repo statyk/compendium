@@ -31,6 +31,7 @@ the same bucket, while each interface keeps its own native idiom.
 | `POST /me/loans/{id}/claim-returned` | API/Web-only | Patron self-service uses loan_id (patron sees their own loan list); the librarian path uses barcode via `POST /claims/{barcode}/returned` |
 | `/ui/login`, `/ui/logout` | Web-only | CLI trust is OS-level; no login needed |
 | `/ui/kiosk/*` | Web-only | Physical self-checkout terminal; no CLI analog |
+| `/ui/scan/*` | Web-only | Phone-as-scanner pairing: QR generation, phone claim/dispatch are inherently interactive browser flows tied to a physical device; no meaningful CLI analog |
 
 ## Naming conventions
 
