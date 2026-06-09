@@ -1430,3 +1430,25 @@ article > footer {
   margin-top: 0.75rem;
 }
 
+/* Bound the pairing QR — qr_svg() emits a viewBox-only <svg> with no intrinsic
+   width/height, which would otherwise expand to the full column width. */
+.scan-pairing {
+  max-width: 320px;
+}
+
+.scan-qr {
+  max-width: 240px;
+  margin: 0 auto 0.5rem;
+}
+
+.scan-qr svg {
+  width: 100%;
+  height: auto;
+  display: block;
+}
+
+.scan-hint {
+  font-size: 0.85rem;
+  opacity: 0.8;
+}
+
