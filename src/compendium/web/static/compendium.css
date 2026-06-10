@@ -1405,6 +1405,19 @@ article > footer {
   pointer-events: none;
 }
 
+.scan-phone-flash { margin-top: 8px; padding: 10px 12px; border-radius: 8px;
+  font-weight: 700; color: #fff; }
+.scan-phone-flash.ok  { background: #1f9d55; }
+.scan-phone-flash.err { background: #c0392b; }
+.scan-phone-recent { list-style: none; margin: 8px 0 0; padding: 0;
+  display: flex; flex-direction: column; gap: 4px; }
+.scan-phone-recent li { font-size: 0.8rem; padding: 4px 8px; border-radius: 6px;
+  background: rgba(0,0,0,.45); color: #fff; }
+.scan-phone-recent li.ok  { border-left: 3px solid #4f9; }
+.scan-phone-recent li.err { border-left: 3px solid #ff6b6b; }
+.scan-phone-review { color: #fff; font-size: 0.85rem; display: inline-flex;
+  align-items: center; gap: 6px; margin-left: 8px; }
+
 /* ── Desk "Pair a phone" section (circ/desk.html) ───────────── */
 .scan-pair-article {
   margin-top: 1.5rem;

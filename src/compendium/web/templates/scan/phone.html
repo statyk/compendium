@@ -30,6 +30,8 @@
           Starting camera…
         </div>
         <div class="scan-phone-meta" id="scan-meta">Mode: {{ mode }}</div>
+        <div class="scan-phone-flash" id="scan-flash" hidden></div>
+        <ul class="scan-phone-recent" id="scan-recent" aria-live="polite"></ul>
       </div>
 
       <div class="scan-phone-bottom" id="scan-mode-btns" role="group" aria-label="Scan mode">
@@ -41,6 +43,9 @@
           {{ m }}
         </button>
         {% endfor %}
+        <label class="scan-phone-review" id="scan-review-wrap" hidden>
+          <input type="checkbox" id="scan-review-cb"> Review first
+        </label>
       </div>
     </div>
 
@@ -107,6 +112,34 @@
         });
       }
 
+      var recentEl   = document.getElementById('scan-recent');
+      var flashEl    = document.getElementById('scan-flash');
+      var reviewWrap = document.getElementById('scan-review-wrap');
+      var reviewCb   = document.getElementById('scan-review-cb');
+      var flashTimer = null;
+
+      function flash(ok, msg) {
+        flashEl.textContent = msg;
+        flashEl.className = 'scan-phone-flash ' + (ok ? 'ok' : 'err');
+        flashEl.hidden = false;
+        if (flashTimer) clearTimeout(flashTimer);
+        flashTimer = setTimeout(function () { flashEl.hidden = true; }, 1500);
+      }
+
+      function pushRecent(ok, msg) {
+        var li = document.createElement('li');
+        li.className = ok ? 'ok' : 'err';
+        li.textContent = (ok ? '✓ ' : '✗ ') + msg;
+        recentEl.insertBefore(li, recentEl.firstChild);
+        while (recentEl.children.length > 5) {
+          recentEl.removeChild(recentEl.lastChild);
+        }
+      }
+
+      function syncReviewVisibility() {
+        reviewWrap.hidden = (currentMode !== 'catalog');
+      }
+
       // ── dispatch a scanned code to the server ─────────────────
 
       function postCode(code) {
@@ -132,8 +165,14 @@
           setStatus(data.message || '');
           currentMode = data.mode || currentMode;
           setMeta(currentMode, data.borrower, data.count);
+          if (data.kind !== 'ignored') {
+            flash(data.ok, data.message || '');
+            pushRecent(data.ok, data.message || '');
+          }
           if (data.ok && navigator.vibrate) {
             navigator.vibrate(60);
+          } else if (!data.ok && navigator.vibrate) {
+            navigator.vibrate([40, 40, 40]);
           }
         })
         .catch(function () {
@@ -168,12 +207,32 @@
           if (!data) return;
           currentMode = data.mode || mode;
           highlightMode(currentMode);
+          syncReviewVisibility();
           setStatus(data.message || '');
           setMeta(currentMode, data.borrower, data.count);
         })
         .catch(function () {
           setStatus('Network error — could not switch mode.');
         });
+      });
+
+      // ── review-first toggle ────────────────────────────────────
+
+      reviewCb.addEventListener('change', function () {
+        var body = 'enabled=' + (reviewCb.checked ? '1' : '0')
+                 + '&csrf_token=' + encodeURIComponent(csrf);
+        fetch('/ui/scan/review', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+          body: body,
+          credentials: 'same-origin',
+        })
+        .then(function (resp) { return resp.status === 403 ? null : resp.json(); })
+        .then(function (data) {
+          if (!data) return;
+          setStatus(data.message || '');
+        })
+        .catch(function () { setStatus('Network error — could not change review mode.'); });
       });
 
       // ── camera + scanner startup ───────────────────────────────
@@ -213,6 +272,7 @@
 
       setStatus('Ready — point camera at a barcode.');
       setMeta(currentMode, null, 0);
+      syncReviewVisibility();
 
       stopScan = window.CompendiumScanner.runContinuous(video, backend, {
         onCode: postCode,
