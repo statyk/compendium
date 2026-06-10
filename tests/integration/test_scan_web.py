@@ -456,3 +456,28 @@ def test_phone_page_renders_video_and_mode_buttons(scan_client, scan_session):
     assert "scanner.js" in body
     # CSRF token present (needed by the nonced script).
     assert "data-csrf-token=" in body
+
+
+# ── heartbeat ─────────────────────────────────────────────────────────────────
+
+
+def test_heartbeat_204_when_live(scan_client, scan_session):
+    user = _staff_user(scan_session)
+    claim = f"CLAIM_HB_{_next()}"
+    _make_pairing(scan_session, user, claim=claim, allowed_modes=["checkout"])
+    resp = scan_client.get(f"/ui/scan/pair?c={claim}")
+    scan_cookie = resp.cookies[SCAN_COOKIE]
+    r = scan_client.get("/ui/scan/heartbeat", cookies={SCAN_COOKIE: scan_cookie})
+    assert r.status_code == 204
+
+
+def test_heartbeat_403_after_unpair(scan_client, scan_session):
+    user = _staff_user(scan_session)
+    claim = f"CLAIM_HB_REV_{_next()}"
+    row = _make_pairing(scan_session, user, claim=claim, allowed_modes=["checkout"])
+    resp = scan_client.get(f"/ui/scan/pair?c={claim}")
+    scan_cookie = resp.cookies[SCAN_COOKIE]
+    row.revoked_at = datetime.now(timezone.utc)
+    scan_session.flush()
+    r = scan_client.get("/ui/scan/heartbeat", cookies={SCAN_COOKIE: scan_cookie})
+    assert r.status_code == 403

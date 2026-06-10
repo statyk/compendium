@@ -61,10 +61,12 @@
 
     // Outer-scope references so releaseCamera() can reach them from any
     // callback (403 handlers, pagehide) regardless of the async startup path.
-    var stream   = null;
-    var video    = null;
+    var stream        = null;
+    var video         = null;
+    var heartbeatTimer = null;
 
     function releaseCamera() {
+      if (heartbeatTimer) { clearInterval(heartbeatTimer); heartbeatTimer = null; }
       if (stream) { stream.getTracks().forEach(function (t) { t.stop(); }); stream = null; }
       if (video)  { video.srcObject = null; }
     }
@@ -140,6 +142,24 @@
         reviewWrap.hidden = (currentMode !== 'catalog');
       }
 
+      var HEARTBEAT_MS = 5000;
+
+      function endSession(msg) {
+        if (stopScan) { stopScan(); stopScan = null; }
+        releaseCamera();               // also clears heartbeatTimer
+        showError(msg);
+      }
+
+      function fetchHeartbeat() {
+        fetch('/ui/scan/heartbeat', { credentials: 'same-origin' })
+          .then(function (resp) {
+            if (resp.status === 403) {
+              endSession('Pairing ended — ask the desk to re-pair.');
+            }
+          })
+          .catch(function () { /* transient network error — ignore */ });
+      }
+
       // ── dispatch a scanned code to the server ─────────────────
 
       function postCode(code) {
@@ -153,9 +173,7 @@
         })
         .then(function (resp) {
           if (resp.status === 403) {
-            if (stopScan) { stopScan(); stopScan = null; }
-            releaseCamera();
-            showError('Pairing ended — ask the desk to re-pair.');
+            endSession('Pairing ended — ask the desk to re-pair.');
             return null;
           }
           return resp.json();
@@ -196,9 +214,7 @@
         })
         .then(function (resp) {
           if (resp.status === 403) {
-            if (stopScan) { stopScan(); stopScan = null; }
-            releaseCamera();
-            showError('Pairing ended — ask the desk to re-pair.');
+            endSession('Pairing ended — ask the desk to re-pair.');
             return null;
           }
           return resp.json();
@@ -227,7 +243,10 @@
           body: body,
           credentials: 'same-origin',
         })
-        .then(function (resp) { return resp.status === 403 ? null : resp.json(); })
+        .then(function (resp) {
+          if (resp.status === 403) { endSession('Pairing ended — ask the desk to re-pair.'); return null; }
+          return resp.json();
+        })
         .then(function (data) {
           if (!data) return;
           setStatus(data.message || '');
@@ -277,6 +296,7 @@
       stopScan = window.CompendiumScanner.runContinuous(video, backend, {
         onCode: postCode,
       });
+      heartbeatTimer = setInterval(fetchHeartbeat, HEARTBEAT_MS);
     });
   })();
   </script>

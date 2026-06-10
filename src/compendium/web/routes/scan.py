@@ -24,7 +24,7 @@ import time
 from datetime import datetime, timedelta, timezone
 
 from fastapi import APIRouter, Depends, Form, Request
-from fastapi.responses import HTMLResponse, JSONResponse
+from fastapi.responses import HTMLResponse, JSONResponse, Response
 from markupsafe import escape
 from sqlalchemy.orm import Session
 
@@ -680,6 +680,13 @@ def set_review(
     reply = _reply(row, True, "review_set", msg)
     reply["catalog_review"] = row.catalog_review
     return JSONResponse(reply)
+
+
+@router.get("/scan/heartbeat")
+def heartbeat(row: ScanPairing = Depends(require_scan_pairing)) -> Response:
+    """Liveness ping for the phone. ``require_scan_pairing`` raises 403 for a
+    revoked/expired/unclaimed pairing; a live session returns 204 No Content."""
+    return Response(status_code=204)
 
 
 @router.post("/scan/pairings/{pairing_id}/unpair", response_class=HTMLResponse)
