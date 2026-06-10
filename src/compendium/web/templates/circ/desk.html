@@ -64,28 +64,7 @@
 <span id="circ-ind" class="htmx-indicator" aria-label="Processing…" style="font-size:1.5rem; display:none; margin:0.5rem 0"></span>
 <div id="circ-result"></div>
 
-{% if scan_modes %}
-<article class="scan-pair-article">
-  <header><strong>Pair a phone</strong></header>
-  <p>Generate a QR code to pair a phone as a wireless barcode scanner for this session.</p>
-  <form hx-post="/ui/scan/pairings"
-        hx-target="#scan-pair-result"
-        hx-swap="innerHTML"
-        hx-include="#scan-pair-form-fields">
-    <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
-    <div class="scan-pair-modes" id="scan-pair-form-fields">
-      {% for m in scan_modes %}
-      <label>
-        <input type="checkbox" name="{{ m }}" value="on" checked>
-        {{ m }}
-      </label>
-      {% endfor %}
-    </div>
-    <button type="submit" style="width:auto">Generate pairing QR</button>
-  </form>
-  <div id="scan-pair-result"></div>
-</article>
-{% endif %}
+{% include "scan/_pair_panel.html" %}
 
 {% include "_partials/scanner_dialog.html" %}
 {% endblock %}

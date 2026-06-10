@@ -33,6 +33,7 @@ from compendium.repositories.sql.scan_pending_item_repository import (
 )
 from compendium.repositories.sql.work_repository import SqlWorkRepository
 from compendium.services.audit import AuditService
+from compendium.services.auth import has_permission
 from compendium.services.catalog import CatalogService
 from compendium.services.item_notes import ItemNoteService
 from compendium.services.metadata import (
@@ -170,6 +171,11 @@ def item_new_form(
         "copy_work": None,
         "pending_id": None,
         "prefill": None,
+        "scan_modes": (
+            ["catalog"]
+            if has_permission(user.role.permissions, "catalog.import")
+            else []
+        ),
     }
     if work_id:
         work = SqlWorkRepository(session).get(work_id)
@@ -191,6 +197,7 @@ def item_lookup(
     request: Request,
     media_type: str = Form(default="book"),
     identifier: str = Form(default=""),
+    pending_id: str = Form(default=""),
     csrf_token: str = Form(default=""),
     user: AppUser = Depends(require_web_permission(_PERM_MANAGE)),
     session: Session = Depends(get_session),
@@ -250,6 +257,7 @@ def item_lookup(
                 "meta": None,
                 "existing": True,
                 "suggested_call_number": existing_work.classification_code,
+                "pending_id": pending_id,
             },
         )
 
@@ -277,6 +285,7 @@ def item_lookup(
             "meta": meta,
             "existing": False,
             "suggested_call_number": suggested,
+            "pending_id": pending_id,
         },
     )
 
@@ -461,7 +470,6 @@ def item_detail(
             status_code=404,
         )
     from compendium.repositories.sql.loan_repository import SqlLoanRepository
-    from compendium.services.auth import has_permission
 
     loan_history: list = []
     if has_permission(user.role.permissions, "loan.view.any"):

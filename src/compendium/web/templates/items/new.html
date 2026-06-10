@@ -65,6 +65,7 @@
     hx-swap="innerHTML"
   >
     <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+    {% if pending_id %}<input type="hidden" name="pending_id" value="{{ pending_id }}">{% endif %}
     <fieldset>
       <legend>Media type</legend>
       <label><input type="radio" name="media_type" value="book" {% if _pm == 'book' %}checked{% endif %}> <span>Book <small>(title or ISBN)</small></span></label>
@@ -76,7 +77,7 @@
     </fieldset>
     <label for="identifier">Identifier</label>
     <fieldset role="group">
-      <input type="text" id="identifier" name="identifier" placeholder="Scan or type ISBN / UPC / title" autocomplete="off" autofocus>
+      <input type="text" id="identifier" name="identifier" value="{{ prefill.isbn if prefill else '' }}" placeholder="Scan or type ISBN / UPC / title" autocomplete="off" autofocus>
       <button type="button" class="outline secondary" data-scan-target="identifier">Scan</button>
     </fieldset>
     <button type="submit" style="width:auto">Look Up</button>
@@ -92,6 +93,8 @@
 </article>
 
 <div id="item-preview"></div>
+
+{% include "scan/_pair_panel.html" %}
 
 <p><small>Can't find it? <a href="/ui/items/new/manual{% if preset_media_type and preset_media_type != 'book' %}?media_type={{ preset_media_type }}{% endif %}">Enter manually</a> instead.</small></p>
 

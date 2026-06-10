@@ -46,6 +46,7 @@
   <input type="hidden" name="media_type" value="{{ media_type }}">
   <input type="hidden" name="identifier_kind" value="{{ identifier_kind }}">
   <input type="hidden" name="identifier_value" value="{{ identifier_value }}">
+  {% if pending_id %}<input type="hidden" name="pending_id" value="{{ pending_id }}">{% endif %}
   <label for="ip-location">Location <small>(optional)</small></label>
   <input type="text" id="ip-location" name="location" placeholder="e.g. Shelf A3" autocomplete="off">
   <label for="ip-call-number">Call number <small>(optional)</small></label>

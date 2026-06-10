@@ -1,0 +1,23 @@
+{# Shared "Pair a phone" panel. Caller passes scan_modes (list) and csrf_token. #}
+{% if scan_modes %}
+<article class="scan-pair-article">
+  <header><strong>Pair a phone</strong></header>
+  <p>Generate a QR code to pair a phone as a wireless barcode scanner for this session.</p>
+  <form hx-post="/ui/scan/pairings"
+        hx-target="#scan-pair-result"
+        hx-swap="innerHTML"
+        hx-include="#scan-pair-form-fields">
+    <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+    <div class="scan-pair-modes" id="scan-pair-form-fields">
+      {% for m in scan_modes %}
+      <label>
+        <input type="checkbox" name="{{ m }}" value="on" checked>
+        {{ m }}
+      </label>
+      {% endfor %}
+    </div>
+    <button type="submit" style="width:auto">Generate pairing QR</button>
+  </form>
+  <div id="scan-pair-result"></div>
+</article>
+{% endif %}
