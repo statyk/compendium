@@ -58,3 +58,6 @@ web_import_test_db
 
 # Agent / dev output
 out/
+
+# Brainstorming visual companion (local-only)
+.superpowers/
