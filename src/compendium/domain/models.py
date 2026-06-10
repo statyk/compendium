@@ -5,6 +5,7 @@ from typing import Any
 
 from sqlalchemy import BigInteger, Boolean, Date, ForeignKey, Index, Integer, String, Text, Time, func, text
 from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column, relationship
+from sqlalchemy.sql import expression
 from sqlalchemy.types import JSON
 
 from compendium.domain.enums import HoldStatus, ItemNoteKind, ItemStatus
@@ -585,6 +586,9 @@ class ScanPairing(Base):
         ForeignKey("patron.id"), nullable=True
     )
     count: Mapped[int] = mapped_column(Integer, default=0, nullable=False)
+    catalog_review: Mapped[bool] = mapped_column(
+        Boolean, default=False, server_default=expression.false(), nullable=False
+    )
     created_at: Mapped[datetime] = mapped_column(
         UtcDateTime, server_default=func.now()
     )
@@ -594,3 +598,68 @@ class ScanPairing(Base):
 
     user: Mapped[AppUser] = relationship()
     borrower: Mapped[Patron | None] = relationship()
+
+
+class ScanEvent(Base):
+    """One row per non-ignored phone-scanner dispatch — the desk live feed log.
+
+    Append-only and ephemeral; pruned alongside terminal pairings. ``kind`` is
+    ``"ok"`` or ``"error"`` (the dispatch reply's ok flag); the 2-second
+    idempotency collapse (``kind == "ignored"``) is never written.
+    """
+
+    __tablename__ = "scan_event"
+    __table_args__ = (Index("ix_scan_event_pairing_id", "pairing_id"),)
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    pairing_id: Mapped[int] = mapped_column(
+        ForeignKey("scan_pairing.id"), nullable=False
+    )
+    mode: Mapped[str] = mapped_column(String(16), nullable=False)
+    kind: Mapped[str] = mapped_column(String(16), nullable=False)
+    message: Mapped[str] = mapped_column(String(255), nullable=False)
+    item_id: Mapped[int | None] = mapped_column(
+        ForeignKey("item.id"), nullable=True
+    )
+    patron_id: Mapped[int | None] = mapped_column(
+        ForeignKey("patron.id"), nullable=True
+    )
+    created_at: Mapped[datetime] = mapped_column(
+        UtcDateTime, server_default=func.now()
+    )
+
+    item: Mapped[Item | None] = relationship()
+
+
+class ScanPendingItem(Base):
+    """A catalog scan held for desk review (review-first mode).
+
+    Created when an ISBN is scanned while the pairing's ``catalog_review`` flag
+    is on. No Item exists yet; ``meta_json`` is the fetched metadata snapshot
+    used to create the Work+Item on approve.
+    """
+
+    __tablename__ = "scan_pending_item"
+    __table_args__ = (Index("ix_scan_pending_item_pairing_id", "pairing_id"),)
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    pairing_id: Mapped[int] = mapped_column(
+        ForeignKey("scan_pairing.id"), nullable=False
+    )
+    isbn: Mapped[str] = mapped_column(String(20), nullable=False)
+    title: Mapped[str] = mapped_column(String(512), nullable=False)
+    meta_json: Mapped[dict] = mapped_column(JSON, nullable=False)
+    cover_url: Mapped[str | None] = mapped_column(String(1024), nullable=True)
+    status: Mapped[str] = mapped_column(
+        String(16), default="pending", server_default="pending", nullable=False
+    )
+    created_at: Mapped[datetime] = mapped_column(
+        UtcDateTime, server_default=func.now()
+    )
+    resolved_at: Mapped[datetime | None] = mapped_column(UtcDateTime, nullable=True)
+    resolved_by: Mapped[int | None] = mapped_column(
+        ForeignKey("app_user.id"), nullable=True
+    )
+    created_item_id: Mapped[int | None] = mapped_column(
+        ForeignKey("item.id"), nullable=True
+    )
