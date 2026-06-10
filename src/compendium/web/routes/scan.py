@@ -216,13 +216,22 @@ def run_state_machine(
     """Advance a scan session by one scanned ``code``.
 
     Mutates ``row`` (mode/borrower/count) in place and returns the JSON reply
-    dict ``{ok, kind, message, mode, borrower, count}``. Service interactions
-    are injected as callables so this is unit-testable with mocks:
+    dict ``{ok, kind, message, mode, borrower, count, item_id, patron_id}``
+    (``item_id``/``patron_id`` are ``None`` unless the action touched a specific
+    item/patron). ``kind`` is one of ``borrower_set``, ``checkout``, ``checkin``,
+    ``ignored``, ``error``, ``catalog_added``, or ``catalog_queued`` (the last
+    when catalog review is on and the scan is parked for later approval).
+
+    Service interactions are injected as callables so this is unit-testable with
+    mocks:
 
     - ``checkout(barcode, card_number)`` → loan (with ``.item.work.title``)
     - ``checkin(barcode)`` → loan
     - ``add_from_isbn(code)`` → (work, item)
     - ``patron_repo.get_by_card_number(card)`` → Patron | None
+    - ``fetch_metadata(code)`` → metadata dict | None (catalog mode)
+    - ``queue_pending(code, meta)`` → None; parks a pending item for review
+      (catalog mode with review enabled)
     """
     code = code.strip()
     parsed = validate_barcode(code)

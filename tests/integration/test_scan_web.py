@@ -1,163 +1,45 @@
-"""Web UI tests for /ui/scan/* phone-scanner pairing."""
+"""Web UI tests for /ui/scan/* phone-scanner pairing.
+
+Shared scaffolding (the ``scan_engine`` / ``scan_session`` / ``scan_client``
+fixtures and the helper functions) lives in ``conftest.py`` and
+``scan_helpers.py``; this file only adds the assertions specific to pairing.
+"""
 
 from __future__ import annotations
 
 import hashlib
 from datetime import datetime, timedelta, timezone
-from unittest.mock import patch
 
-import pytest
-from fastapi.testclient import TestClient
-from sqlalchemy import create_engine
-from sqlalchemy.orm import sessionmaker
-from sqlalchemy.pool import StaticPool
-
-from compendium.api.app import create_app
-from compendium.config.seed import seed_defaults
-from compendium.config.settings import Settings
-from compendium.db.session import get_session
-from compendium.domain.identifiers import format_item_barcode, format_patron_card
-from compendium.domain.models import (
-    AppUser,
-    Base,
-    Item,
-    MediaType,
-    Patron,
-    Role,
-    ScanPairing,
-    Work,
-)
-from compendium.repositories.sql.branch_repository import SqlBranchRepository
-from compendium.repositories.sql.role_repository import SqlRoleRepository
-from compendium.repositories.sql.user_repository import SqlUserRepository
-from compendium.services.auth import hash_password
+from compendium.domain.models import ScanPairing
 from compendium.web.csrf import _COOKIE as CSRF_COOKIE
-from compendium.web.csrf import _derive_csrf_secret, _sign, generate_token
 from compendium.web.deps import SCAN_COOKIE
-from tests.helpers import setup_sqlite_fts
-
-_SECRET = "insecure-default-change-in-production"
-_TEST_SETTINGS = Settings(database_url="sqlite:///:memory:", jwt_secret_key=_SECRET)
-
-# A loopback public_base_url so resolve_public_base_url accepts the test request.
-_BASE_URL = "https://library.example.org"
-
-
-def _csrf_pair() -> tuple[str, str]:
-    raw = generate_token()
-    return raw, f"{raw}.{_sign(raw, _derive_csrf_secret(_SECRET))}"
-
-
-@pytest.fixture(scope="module")
-def scan_engine():
-    eng = create_engine(
-        "sqlite:///:memory:",
-        connect_args={"check_same_thread": False},
-        poolclass=StaticPool,
-    )
-    Base.metadata.create_all(eng)
-    setup_sqlite_fts(eng)
-    return eng
-
-
-@pytest.fixture
-def scan_session(scan_engine, monkeypatch):
-    factory = sessionmaker(bind=scan_engine, autoflush=False, expire_on_commit=False)
-    s = factory()
-    seed_defaults(s)
-    s.commit()
-    # The site-settings cache reads from its own lazy engine (not this in-memory
-    # test engine), so set public_base_url via env — env wins on read and
-    # bypasses the cache. This lets resolve_public_base_url pass the HTTPS gate.
-    from compendium.services.site_settings import invalidate_cache
-
-    monkeypatch.setenv("COMPENDIUM_PUBLIC_BASE_URL", _BASE_URL)
-    invalidate_cache()
-    yield s
-    s.rollback()
-    s.close()
-
-
-@pytest.fixture
-def scan_client(scan_session):
-    app = create_app()
-    app.dependency_overrides[get_session] = lambda: scan_session
-    with patch("compendium.db.engine.get_settings", return_value=_TEST_SETTINGS):
-        with TestClient(app, raise_server_exceptions=True, follow_redirects=False) as c:
-            yield c
-
-
-_n = {"i": 0}
-
-
-def _next() -> int:
-    _n["i"] += 1
-    return _n["i"]
-
-
-def _login(client, session, *, role_name="Librarian", username=None) -> dict:
-    username = username or f"scanstaff{_next()}"
-    role = SqlRoleRepository(session).get_by_name(role_name)
-    user = AppUser(
-        username=username, password_hash=hash_password("secret"), role_id=role.id
-    )
-    SqlUserRepository(session).add(user)
-    session.flush()
-    raw, signed = _csrf_pair()
-    resp = client.post(
-        "/ui/login",
-        data={"username": username, "password": "secret", "csrf_token": raw},
-        cookies={CSRF_COOKIE: signed},
-    )
-    assert resp.status_code == 303
-    return dict(resp.cookies)
-
-
-def _custom_role(session, name, permissions) -> Role:
-    role = Role(name=name, permissions=permissions, is_system=False)
-    session.add(role)
-    session.flush()
-    return role
-
-
-def _book(session, title="Dune") -> Item:
-    mt = session.query(MediaType).filter_by(code="book").one()
-    w = Work(title=title, media_type_id=mt.id)
-    session.add(w)
-    session.flush()
-    branch = SqlBranchRepository(session).get_default()
-    n = _next()
-    it = Item(
-        work_id=w.id,
-        branch_id=branch.id,
-        barcode=format_item_barcode(f"{n:08d}", location_code=None),
-        accession_number=f"SACC{n:06d}",
-    )
-    session.add(it)
-    session.flush()
-    return it
-
-
-def _patron(session) -> Patron:
-    n = _next()
-    p = Patron(
-        library_card_number=format_patron_card(f"{n:08d}", location_code=None),
-        full_name=f"Scan Patron {n}",
-        is_active=True,
-    )
-    session.add(p)
-    session.flush()
-    return p
-
-
-def _create_pairing(client, cookies, *, modes=("checkout", "checkin", "catalog")):
-    raw, signed = _csrf_pair()
-    cookies = {**cookies, CSRF_COOKIE: signed}
-    data = dict.fromkeys(modes, "on")
-    data["csrf_token"] = raw
-    resp = client.post("/ui/scan/pairings", data=data, cookies=cookies)
-    return resp
-
+from tests.integration.scan_helpers import (
+    book as _book,
+)
+from tests.integration.scan_helpers import (
+    create_pairing as _create_pairing,
+)
+from tests.integration.scan_helpers import (
+    csrf_pair as _csrf_pair,
+)
+from tests.integration.scan_helpers import (
+    custom_role as _custom_role,
+)
+from tests.integration.scan_helpers import (
+    login as _login,
+)
+from tests.integration.scan_helpers import (
+    make_pairing as _make_pairing,
+)
+from tests.integration.scan_helpers import (
+    next_id as _next,
+)
+from tests.integration.scan_helpers import (
+    patron as _patron,
+)
+from tests.integration.scan_helpers import (
+    staff_user as _staff_user,
+)
 
 # ── pairing creation ──────────────────────────────────────────────────────────
 
@@ -206,33 +88,8 @@ def test_create_pairing_no_allowed_modes_400(scan_client, scan_session):
 # ── claim lifecycle ───────────────────────────────────────────────────────────
 #
 # The route hashes the claim secret, so we can't recover it from the row. We
-# manufacture a pairing directly with a known claim secret to drive the claim.
-
-
-def _make_pairing(session, user, *, claim, allowed_modes, mode=None, ttl_minutes=2):
-    now = datetime.now(timezone.utc)
-    row = ScanPairing(
-        token_hash=hashlib.sha256(claim.encode()).hexdigest(),
-        user_id=user.id,
-        allowed_modes=allowed_modes,
-        mode=mode or allowed_modes[0],
-        count=0,
-        created_at=now,
-        expires_at=now + timedelta(minutes=ttl_minutes),
-    )
-    session.add(row)
-    session.flush()
-    return row
-
-
-def _staff_user(session, role_name="Librarian"):
-    role = SqlRoleRepository(session).get_by_name(role_name)
-    u = AppUser(
-        username=f"scanu{_next()}", password_hash=hash_password("x"), role_id=role.id
-    )
-    SqlUserRepository(session).add(u)
-    session.flush()
-    return u
+# manufacture a pairing directly with a known claim secret to drive the claim
+# (see scan_helpers._make_pairing).
 
 
 def test_claim_rotates_and_is_single_use(scan_client, scan_session):
@@ -262,11 +119,12 @@ def test_claim_expired_rejected(scan_client, scan_session):
 
 
 def _claim_and_get_scan_cookie(client, session, user, *, allowed_modes, mode=None):
-    claim = f"CLAIM_{_next()}"
-    _make_pairing(session, user, claim=claim, allowed_modes=allowed_modes, mode=mode)
-    resp = client.get(f"/ui/scan/pair?c={claim}")
-    assert resp.status_code == 200
-    return resp.cookies[SCAN_COOKIE]
+    from tests.integration.scan_helpers import claim as _claim
+
+    _row, cookie = _claim(
+        client, session, user, allowed_modes=allowed_modes, mode=mode
+    )
+    return cookie
 
 
 # ── dispatch ──────────────────────────────────────────────────────────────────
