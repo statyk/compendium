@@ -1,4 +1,5 @@
 {# Desk live feed + review queue (poll target, swapped every 1500ms). #}
+{% from "_macros.html" import cover_url %}
 {% if pairing.revoked_at %}
   <p class="warning-banner">Unpaired.</p>
 {% else %}
@@ -19,7 +20,7 @@
     <h4 class="scan-review-h">⚑ Needs review ({{ pending|length }})</h4>
     {% for p in pending %}
     <div class="scan-review-item">
-      {% if p.cover_url %}<img class="scan-review-cover" src="{{ p.cover_url }}" alt="">
+      {% if p.cover_url %}<img class="scan-review-cover" src="{{ cover_url(p.cover_url) }}" alt="">
       {% else %}<span class="scan-review-cover"></span>{% endif %}
       <div class="scan-review-meta">
         <div class="scan-review-title">{{ p.title }}</div>

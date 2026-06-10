@@ -400,7 +400,10 @@ def _render_activity(
         request=request, pairing=pairing, events=events,
         pending=pending, csrf_token=csrf,
     )
-    resp = HTMLResponse(html)
+    # The desk polls this partial every 1.5s at a fixed URL. Without no-store the
+    # browser (WebKit especially) serves the cached first render, so the desk
+    # freezes on "Waiting for phone to pair…" and never shows the claim/scans.
+    resp = HTMLResponse(html, headers={"Cache-Control": "no-store"})
     if fresh:
         set_csrf_cookie(resp, fresh)
     return resp

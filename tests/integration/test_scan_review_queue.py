@@ -423,6 +423,40 @@ def test_edit_form_prefills_snapshot(scan_client, scan_session):
     assert pend.meta_json["title"] in r.text
 
 
+def test_edit_modal_renders_cover_via_proxy(scan_client, scan_session):
+    """The modal cover must go through the same-origin /ui/covers proxy; a raw
+    upstream src is blocked by the CSP img-src and renders broken."""
+    cookies, owner, pairing, pend = _owner_with_pending(scan_client, scan_session)
+    pend.cover_url = "https://covers.example/giver.jpg"
+    scan_session.flush()
+    r = scan_client.get(
+        f"/ui/scan/pairings/{pairing.id}/pending/{pend.id}/edit", cookies=cookies
+    )
+    assert r.status_code == 200
+    assert "/ui/covers?url=" in r.text
+    assert 'src="https://covers.example/giver.jpg"' not in r.text
+
+
+def test_review_queue_renders_cover_via_proxy(scan_session):
+    """The desk review-queue thumbnail must also use the /ui/covers proxy."""
+    from compendium.web.jinja import templates
+
+    user = _staff_user(scan_session)
+    pairing = _make_pairing(
+        scan_session, user, claim=f"RC{_next()}", allowed_modes=["catalog"]
+    )
+    pairing.claimed_at = pairing.created_at
+    pend = _pending_row(scan_session, pairing)
+    pend.cover_url = "https://covers.example/giver.jpg"
+    scan_session.flush()
+
+    html = templates.get_template("scan/_activity_partial.html").render(
+        request=None, pairing=pairing, events=[], pending=[pend], csrf_token="x"
+    )
+    assert "/ui/covers?url=" in html
+    assert 'src="https://covers.example/giver.jpg"' not in html
+
+
 def test_edit_save_creates_item_with_edits_and_resolves(scan_client, scan_session):
     cookies, owner, pairing, pend = _owner_with_pending(scan_client, scan_session)
     raw, signed = _csrf_pair()

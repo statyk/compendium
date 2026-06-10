@@ -1,9 +1,12 @@
 {# Inline edit modal for a pending catalog scan. Loaded into #scan-modal, which
    sits OUTSIDE the 1.5s live-feed poll region, so the form is never clobbered. #}
+{% from "_macros.html" import cover_url %}
 <div class="scan-modal-backdrop" id="scan-modal-backdrop">
   <div class="scan-modal" role="dialog" aria-modal="true" aria-label="Edit catalog item">
     <div class="scan-modal-head">
-      {% if pend.cover_url %}<img class="scan-modal-cover" src="{{ pend.cover_url }}" alt="">{% endif %}
+      {# Cover via the same-origin /ui/covers proxy — CSP img-src blocks the raw
+         upstream URL, so a direct src renders broken. #}
+      {% if pend.cover_url %}<img class="scan-modal-cover" src="{{ cover_url(pend.cover_url) }}" alt="">{% endif %}
       <div>
         <strong>Edit before cataloging</strong>
         <div class="scan-modal-isbn">ISBN {{ pend.isbn }}</div>

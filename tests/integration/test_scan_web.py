@@ -10,7 +10,7 @@ from __future__ import annotations
 import hashlib
 from datetime import datetime, timedelta, timezone
 
-from compendium.domain.models import ScanPairing
+from compendium.domain.models import AppUser, ScanPairing
 from compendium.web.csrf import _COOKIE as CSRF_COOKIE
 from compendium.web.deps import SCAN_COOKIE
 from tests.integration.scan_helpers import (
@@ -481,3 +481,20 @@ def test_heartbeat_403_after_unpair(scan_client, scan_session):
     scan_session.flush()
     r = scan_client.get("/ui/scan/heartbeat", cookies={SCAN_COOKIE: scan_cookie})
     assert r.status_code == 403
+
+
+# ── desk live-feed poll must not be browser-cached ────────────────────────────
+
+
+def test_log_poll_sets_no_store(scan_client, scan_session):
+    """The desk polls /log at a fixed URL every 1.5s; without no-store the
+    browser caches the first render and the desk freezes on 'Waiting…'."""
+    uname = f"logowner{_next()}"
+    cookies = _login(scan_client, scan_session, username=uname)
+    owner = scan_session.query(AppUser).filter_by(username=uname).one()
+    row = _make_pairing(
+        scan_session, owner, claim=f"L_{_next()}", allowed_modes=["checkout"]
+    )
+    r = scan_client.get(f"/ui/scan/pairings/{row.id}/log", cookies=cookies)
+    assert r.status_code == 200
+    assert r.headers["cache-control"] == "no-store"
