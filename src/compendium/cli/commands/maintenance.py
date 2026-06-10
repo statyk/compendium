@@ -189,7 +189,15 @@ def prune_scan_pairings(
 
     Suggested cron cadence: daily.
     """
-    from compendium.repositories.sql.scan_pairing_repository import SqlScanPairingRepository
+    from compendium.repositories.sql.scan_event_repository import (
+        SqlScanEventRepository,
+    )
+    from compendium.repositories.sql.scan_pairing_repository import (
+        SqlScanPairingRepository,
+    )
+    from compendium.repositories.sql.scan_pending_item_repository import (
+        SqlScanPendingItemRepository,
+    )
 
     if older_than_days < 1:
         typer.echo("Error: --older-than-days must be at least 1.", err=True)
@@ -198,14 +206,19 @@ def prune_scan_pairings(
     cutoff = datetime.now(timezone.utc) - timedelta(days=older_than_days)
     with session_scope() as session:
         repo = SqlScanPairingRepository(session)
+        ids = repo.terminal_deletable_ids(cutoff)
         if dry_run:
-            count = repo.count_terminal_older_than(cutoff)
             typer.echo(
-                f"Would prune {count} scan-pairing row(s) older than {older_than_days} day(s)."
+                f"Would prune {len(ids)} scan-pairing row(s) older than "
+                f"{older_than_days} day(s)."
             )
             return
-        count = repo.delete_terminal_older_than(cutoff)
-        typer.echo(f"Pruned {count} scan-pairing row(s) older than {older_than_days} day(s).")
+        SqlScanEventRepository(session).delete_for_pairings(ids)
+        SqlScanPendingItemRepository(session).delete_resolved_older_than(cutoff)
+        count = repo.delete_by_ids(ids)
+        typer.echo(
+            f"Pruned {count} scan-pairing row(s) older than {older_than_days} day(s)."
+        )
 
 
 @app.command("prune-failed-logins")

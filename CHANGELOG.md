@@ -25,6 +25,24 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - New maintenance command: `compendium maintenance prune-scan-pairings
     --older-than-days N` — deletes terminal (expired or revoked) pairing rows.
     Suggested cadence: daily, `--older-than-days 7`.
+  - **Desk live feed** — the desk page polls every 1500 ms and shows a real-time
+    event log (`scan_event` table) for the active session, with barcode, mode,
+    and success/error indicator per scan.
+  - **Per-pairing review-first toggle** (`catalog_review` DB flag) — when enabled
+    at pairing time, catalog-mode ISBN scans are held in a desk review queue
+    (`scan_pending_item` table) instead of immediately creating an item. The
+    librarian approves, edits, or discards each entry from the desk; approving
+    creates the Work+Item from the stored metadata snapshot.
+  - **Richer phone feedback** — the phone scanner page flashes a colour-coded
+    result banner on each dispatch (green/red) and shows a scrollable recent-scan
+    list so the operator can see the last few barcodes without looking at the desk.
+  - **Add-Item pairing entry point** — the Add-Item web flow accepts an optional
+    `pairing_id` parameter that routes newly created items back to the phone
+    session's desk page.
+  - `prune-scan-pairings` now cascade-deletes `scan_event` and resolved
+    `scan_pending_item` rows when a terminal pairing is pruned. Pairings that
+    still have un-resolved (`status="pending"`) pending items are skipped
+    entirely — no pending desk-review work is ever silently dropped.
   - **Public API seam (downstream consumers):** `runContinuous(video, backend,
     {onCode, onMiss})` in `scanner.js` is now a pinned public API consumed
     downstream (LitCat). Breaking changes to this signature will be called out

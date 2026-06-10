@@ -6,8 +6,10 @@ from datetime import datetime, timedelta, timezone
 from typer.testing import CliRunner
 
 from compendium.cli.commands.maintenance import app as maintenance_app
-from compendium.domain.models import AppUser, ScanPairing
+from compendium.domain.models import AppUser, ScanEvent, ScanPairing, ScanPendingItem
+from compendium.repositories.sql.scan_event_repository import SqlScanEventRepository
 from compendium.repositories.sql.scan_pairing_repository import SqlScanPairingRepository
+from compendium.repositories.sql.scan_pending_item_repository import SqlScanPendingItemRepository
 
 
 # ── Helpers ───────────────────────────────────────────────────────────────────
@@ -187,3 +189,117 @@ def test_cli_prunes_and_reports_count(session):
     assert "Pruned 2" in result.output
     remaining = {p.id for p in session.query(ScanPairing).all()}
     assert remaining == {live.id}
+
+
+# ── Cascade (events + pending items) ─────────────────────────────────────────
+
+def _mk_scan_event(session, pairing_id: int) -> ScanEvent:
+    event = ScanEvent(
+        pairing_id=pairing_id,
+        mode="catalog",
+        kind="ok",
+        message="9780000000001",
+    )
+    session.add(event)
+    session.flush()
+    return event
+
+
+def _mk_pending_item(
+    session,
+    pairing_id: int,
+    *,
+    status: str = "pending",
+    resolved_at: datetime | None = None,
+) -> ScanPendingItem:
+    item = ScanPendingItem(
+        pairing_id=pairing_id,
+        isbn="9780000000001",
+        title="Test Book",
+        meta_json={},
+        status=status,
+        resolved_at=resolved_at,
+    )
+    session.add(item)
+    session.flush()
+    return item
+
+
+def test_cascade_deletes_events_and_resolved_pending_skips_unresolved(session):
+    """Prune cascades to scan_event + resolved scan_pending_item rows.
+
+    - A terminal pairing with a ScanEvent and a *resolved* ScanPendingItem IS
+      deleted, together with its event and resolved-pending rows.
+    - A terminal pairing that still has an *un-resolved* (status="pending")
+      ScanPendingItem is SKIPPED entirely; its pending row survives.
+    """
+    now = datetime.now(timezone.utc)
+    ago_40 = now - timedelta(days=40)
+
+    # Pairing 1: deletable — expired 40 days ago, has resolved pending row
+    p1 = _mk_pairing(session, expires_at=ago_40, token_hash="d" * 64)
+    ev1 = _mk_scan_event(session, p1.id)
+    pi1 = _mk_pending_item(
+        session, p1.id, status="approved", resolved_at=ago_40
+    )
+
+    # Pairing 2: NOT deletable — expired 40 days ago, but has un-resolved pending row
+    p2 = _mk_pairing(session, expires_at=ago_40, token_hash="e" * 64)
+    pi2 = _mk_pending_item(session, p2.id, status="pending")
+
+    cutoff = now - timedelta(days=7)
+    pairing_repo = SqlScanPairingRepository(session)
+    event_repo = SqlScanEventRepository(session)
+    pending_repo = SqlScanPendingItemRepository(session)
+
+    ids = pairing_repo.terminal_deletable_ids(cutoff)
+
+    # Only pairing 1 is deletable
+    assert ids == [p1.id]
+
+    # Execute cascade in FK-safe order
+    event_repo.delete_for_pairings(ids)
+    pending_repo.delete_resolved_older_than(cutoff)
+    count = pairing_repo.delete_by_ids(ids)
+
+    assert count == 1
+
+    # Pairing 1 and its children are gone (use fresh queries to bypass identity map)
+    assert session.query(ScanPairing).filter(ScanPairing.id == p1.id).count() == 0
+    assert session.query(ScanEvent).filter(ScanEvent.id == ev1.id).count() == 0
+    assert session.query(ScanPendingItem).filter(ScanPendingItem.id == pi1.id).count() == 0
+
+    # Pairing 2 and its un-resolved pending row survive
+    assert session.query(ScanPairing).filter(ScanPairing.id == p2.id).count() == 1
+    assert session.query(ScanPendingItem).filter(ScanPendingItem.id == pi2.id).count() == 1
+
+
+def test_cascade_dry_run_reports_deletable_count(session):
+    """CLI --dry-run reports the count of deletable pairings (not all terminal)."""
+    now = datetime.now(timezone.utc)
+    ago_40 = now - timedelta(days=40)
+
+    # Deletable: expired + resolved children only
+    p1 = _mk_pairing(session, expires_at=ago_40, token_hash="f" * 64)
+    _mk_pending_item(session, p1.id, status="approved", resolved_at=ago_40)
+
+    # Not deletable: expired but has un-resolved pending
+    p2 = _mk_pairing(session, expires_at=ago_40, token_hash="g" * 64)
+    _mk_pending_item(session, p2.id, status="pending")
+
+    runner = CliRunner()
+
+    @contextmanager
+    def _scope():
+        yield session
+
+    with patch_session_scope(_scope):
+        result = runner.invoke(
+            maintenance_app,
+            ["prune-scan-pairings", "--older-than-days", "7", "--dry-run"],
+        )
+
+    assert result.exit_code == 0
+    assert "Would prune 1" in result.output
+    # Nothing deleted
+    assert session.query(ScanPairing).filter(ScanPairing.id.in_([p1.id, p2.id])).count() == 2

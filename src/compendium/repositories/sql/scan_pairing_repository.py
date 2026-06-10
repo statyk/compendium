@@ -60,3 +60,37 @@ class SqlScanPairingRepository:
         )
         self._s.flush()
         return int(deleted)
+
+    def terminal_deletable_ids(self, cutoff: datetime) -> list[int]:
+        """Return IDs of terminal pairings that are safe to delete.
+
+        A pairing is deletable only when it has NO un-resolved
+        (``status="pending"``) pending items. Pairings whose pending queue still
+        contains unresolved rows are skipped so no patron-visible work is lost.
+        """
+        from compendium.domain.models import ScanPendingItem
+
+        pending_subq = (
+            self._s.query(ScanPendingItem.pairing_id)
+            .filter(ScanPendingItem.status == "pending")
+            .subquery()
+        )
+        rows = (
+            self._s.query(ScanPairing.id)
+            .filter(self._terminal_filter(cutoff))
+            .filter(ScanPairing.id.notin_(self._s.query(pending_subq.c.pairing_id)))
+            .all()
+        )
+        return [r[0] for r in rows]
+
+    def delete_by_ids(self, ids: list[int]) -> int:
+        """Delete pairings by explicit ID list. Returns row count deleted."""
+        if not ids:
+            return 0
+        deleted = (
+            self._s.query(ScanPairing)
+            .filter(ScanPairing.id.in_(ids))
+            .delete(synchronize_session=False)
+        )
+        self._s.flush()
+        return int(deleted)

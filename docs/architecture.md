@@ -779,6 +779,12 @@ A librarian can pair a smartphone as a wireless barcode scanner without installi
 
 Expiry and revocation are enforced on every phone action (claim, dispatch, mode-change) — there is no grace window.
 
+### Desk live feed and review queue
+
+Each non-ignored phone dispatch appends a row to the `scan_event` table (`kind` is `"ok"` or `"error"`; the 2-second idempotency collapse is never written). The desk page polls `/ui/scan/desk` every 1500 ms via HTMX and renders the most recent events as a live feed.
+
+When a pairing's `catalog_review` flag is on (a per-pairing toggle the librarian sets at pairing time), catalog-mode ISBN scans are held for desk review instead of immediately creating an item. Each held scan lands in the `scan_pending_item` table with `status="pending"`. The librarian reviews the queue at `POST /ui/scan/review` and can approve (`POST /ui/scan/pairings/{id}/pending/{pid}/approve`), edit-then-approve, or discard (`POST /ui/scan/pairings/{id}/pending/{pid}/discard`) each entry. Approving creates the Work+Item using the stored metadata snapshot. Discarding sets `status="discarded"`. The Add-Item web flow also supports a pairing entry point that routes newly created items back to the phone session's desk page.
+
 ### Multi-mode state machine
 
 A pairing is created with an `allowed_modes` list (`checkout`, `checkin`, `catalog`) set at pairing time. The phone can toggle among the allowed modes. The active `mode` is stored on the `ScanPairing` row and read on every dispatch. In checkout mode, a `borrower_patron_id` is also tracked on the pairing (the librarian or patron selects the borrower on the desk; the phone sees just the scan).
@@ -801,7 +807,7 @@ runContinuous(videoElement, backend, { onCode, onMiss })
 
 ### Maintenance
 
-`compendium maintenance prune-scan-pairings --older-than-days N` deletes terminal pairing rows (those whose `expires_at` is older than the cutoff, or whose `revoked_at` is set and older than the cutoff). Live, unexpired sessions are never pruned. Suggested cadence: daily, `--older-than-days 7`.
+`compendium maintenance prune-scan-pairings --older-than-days N` deletes terminal pairing rows (those whose `expires_at` is older than the cutoff, or whose `revoked_at` is set and older than the cutoff) together with their child `scan_event` rows and resolved (non-`"pending"`) `scan_pending_item` rows. A pairing is **skipped entirely** if it still has any `status="pending"` pending items — un-resolved desk-review work is never silently dropped. Resolved pending rows whose pairing is not being deleted this run are also swept by `delete_resolved_older_than`. Live, unexpired sessions are never pruned. Suggested cadence: daily, `--older-than-days 7`.
 
 ---
 
