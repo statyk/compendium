@@ -376,6 +376,22 @@ def _qr_partial_html(
         pairing=pairing,
         qr_svg=svg,
         csrf_token=csrf,
+        events=[],
+        pending=[],
+    )
+    resp = HTMLResponse(html)
+    if fresh:
+        set_csrf_cookie(resp, fresh)
+    return resp
+
+
+def _render_activity(request, session, pairing, user) -> HTMLResponse:
+    events = SqlScanEventRepository(session).recent_for_pairing(pairing.id, limit=25)
+    pending = SqlScanPendingItemRepository(session).pending_for_user(user.id)
+    csrf, fresh = ensure_csrf(request)
+    html = templates.get_template("scan/_activity_partial.html").render(
+        request=request, pairing=pairing, events=events,
+        pending=pending, csrf_token=csrf,
     )
     resp = HTMLResponse(html)
     if fresh:
@@ -456,11 +472,7 @@ def pairing_log(
         return HTMLResponse(
             '<p class="error-banner">Pairing not found.</p>', status_code=404
         )
-    return templates.TemplateResponse(
-        request,
-        "scan/_log_partial.html",
-        {"pairing": pairing},
-    )
+    return _render_activity(request, session, pairing, user)
 
 
 @router.get("/scan/pair")
@@ -679,3 +691,94 @@ def unpair(
     pairing.revoked_at = _now()
     session.flush()
     return HTMLResponse('<p class="success-banner">Phone unpaired.</p>')
+
+
+def _owned_pairing_or_404(session, pairing_id, user):
+    pairing = SqlScanPairingRepository(session).get(pairing_id)
+    if pairing is None or pairing.user_id != user.id:
+        return None
+    return pairing
+
+
+@router.post(
+    "/scan/pairings/{pairing_id}/pending/{pending_id}/approve",
+    response_class=HTMLResponse,
+)
+def approve_pending(
+    pairing_id: int,
+    pending_id: int,
+    request: Request,
+    csrf_token: str = Form(default=""),
+    user: AppUser = Depends(require_web_user),
+    session: Session = Depends(get_session),
+):
+    check_csrf_form(request, csrf_token)
+    if not has_permission(user.role.permissions, MODE_PERMISSION["catalog"]):
+        return HTMLResponse(
+            '<p class="error-banner">You don\'t have permission to catalog items.</p>',
+            status_code=403,
+        )
+    pairing = _owned_pairing_or_404(session, pairing_id, user)
+    if pairing is None:
+        return HTMLResponse(
+            '<p class="error-banner">Pairing not found.</p>', status_code=404
+        )
+    pend_repo = SqlScanPendingItemRepository(session)
+    pend = pend_repo.get(pending_id)
+    if pend is None or pend.pairing_id != pairing_id or pend.status != "pending":
+        return HTMLResponse(
+            '<p class="error-banner">Item already resolved.</p>', status_code=404
+        )
+    try:
+        _work, item = _catalog_svc(session, user).add_from_metadata(
+            pend.meta_json, media_type_code="book"
+        )
+    except (BusinessRuleError, NotFoundError, ValidationError) as exc:
+        return HTMLResponse(
+            f'<p class="error-banner">{escape(str(exc))}</p>', status_code=400
+        )
+    pend.status = "approved"
+    pend.resolved_at = _now()
+    pend.resolved_by = user.id
+    pend.created_item_id = item.id
+    SqlScanEventRepository(session).add(
+        ScanEvent(
+            pairing_id=pairing_id, mode="catalog", kind="ok",
+            message=f"Catalogued: {pend.title}"[:255], item_id=item.id,
+        )
+    )
+    session.flush()
+    return _render_activity(request, session, pairing, user)
+
+
+@router.post(
+    "/scan/pairings/{pairing_id}/pending/{pending_id}/discard",
+    response_class=HTMLResponse,
+)
+def discard_pending(
+    pairing_id: int,
+    pending_id: int,
+    request: Request,
+    csrf_token: str = Form(default=""),
+    user: AppUser = Depends(require_web_user),
+    session: Session = Depends(get_session),
+):
+    check_csrf_form(request, csrf_token)
+    if not has_permission(user.role.permissions, MODE_PERMISSION["catalog"]):
+        return HTMLResponse(
+            '<p class="error-banner">You don\'t have permission to catalog items.</p>',
+            status_code=403,
+        )
+    pairing = _owned_pairing_or_404(session, pairing_id, user)
+    if pairing is None:
+        return HTMLResponse(
+            '<p class="error-banner">Pairing not found.</p>', status_code=404
+        )
+    pend_repo = SqlScanPendingItemRepository(session)
+    pend = pend_repo.get(pending_id)
+    if pend is not None and pend.pairing_id == pairing_id and pend.status == "pending":
+        pend.status = "discarded"
+        pend.resolved_at = _now()
+        pend.resolved_by = user.id
+        session.flush()
+    return _render_activity(request, session, pairing, user)

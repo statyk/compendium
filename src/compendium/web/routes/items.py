@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import re
+from datetime import datetime, timezone
 from urllib.parse import quote
 
 from fastapi import APIRouter, Depends, Form, Query, Request
@@ -139,6 +140,7 @@ def item_new_form(
     work_id: int | None = Query(default=None),
     media_type: str | None = Query(default=None),
     added: str | None = Query(default=None),
+    pending_id: int | None = Query(default=None),
     user: AppUser = Depends(require_web_permission(_PERM_MANAGE)),
     session: Session = Depends(get_session),
 ):
@@ -151,6 +153,8 @@ def item_new_form(
         "added_title": None,
         "added_work_id": work_id,
         "copy_work": None,
+        "pending_id": None,
+        "prefill": None,
     }
     if work_id:
         work = SqlWorkRepository(session).get(work_id)
@@ -158,6 +162,15 @@ def item_new_form(
             ctx["added_title"] = work.title if work else None
         else:
             ctx["copy_work"] = work
+    if pending_id:
+        from compendium.repositories.sql.scan_pending_item_repository import (
+            SqlScanPendingItemRepository,
+        )
+        pend = SqlScanPendingItemRepository(session).get(pending_id)
+        if pend is not None and pend.status == "pending":
+            ctx["pending_id"] = pend.id
+            ctx["prefill"] = pend.meta_json
+            ctx["preset_media_type"] = "book"
     return _render("items/new.html", request, ctx)
 
 
@@ -358,6 +371,7 @@ def item_create(
     call_number: str = Form(default=""),
     condition: str = Form(default=""),
     copy_work_id: str = Form(default=""),
+    pending_id: str = Form(default=""),
     csrf_token: str = Form(default=""),
     user: AppUser = Depends(require_web_permission(_PERM_MANAGE)),
     session: Session = Depends(get_session),
@@ -402,6 +416,17 @@ def item_create(
         item.call_number = call_number.strip()
     if condition.strip():
         item.condition = condition.strip()
+    if pending_id.strip():
+        from compendium.repositories.sql.scan_pending_item_repository import (
+            SqlScanPendingItemRepository,
+        )
+        pend = SqlScanPendingItemRepository(session).get(int(pending_id.strip()))
+        if pend is not None and pend.status == "pending":
+            pend.status = "approved"
+            pend.resolved_at = datetime.now(timezone.utc)
+            pend.resolved_by = user.id
+            pend.created_item_id = item.id
+            session.flush()
     mt = media_type.strip()
     return RedirectResponse(
         f"/ui/items/new?media_type={quote(mt)}&added={quote(item.barcode)}&work_id={work.id}",

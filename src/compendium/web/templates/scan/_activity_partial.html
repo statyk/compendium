@@ -1,0 +1,61 @@
+{# Desk live feed + review queue (poll target, swapped every 1500ms). #}
+{% if pairing.revoked_at %}
+  <p class="warning-banner">Unpaired.</p>
+{% else %}
+  {% if pairing.claimed_at %}
+  <div class="scan-statusbar" data-claimed="1">
+    <span class="scan-dot">●</span>
+    Paired · <strong>{{ pairing.mode }}</strong> · {{ pairing.count }} scans
+    {% if pairing.borrower %} · {{ pairing.borrower.library_card_number }}{% endif %}
+  </div>
+  {# Hide the now-dead single-use QR once claimed (out-of-band). #}
+  <div id="scan-qr-box" hx-swap-oob="outerHTML"></div>
+  {% else %}
+  <p class="scan-status" data-claimed="0">Waiting for phone to pair…</p>
+  {% endif %}
+
+  {% if pending %}
+  <section class="scan-review" aria-label="Items needing review">
+    <h4 class="scan-review-h">⚑ Needs review ({{ pending|length }})</h4>
+    {% for p in pending %}
+    <div class="scan-review-item">
+      {% if p.cover_url %}<img class="scan-review-cover" src="{{ p.cover_url }}" alt="">
+      {% else %}<span class="scan-review-cover"></span>{% endif %}
+      <div class="scan-review-meta">
+        <div class="scan-review-title">{{ p.title }}</div>
+        <div class="scan-review-sub">{{ p.isbn }}</div>
+      </div>
+      <div class="scan-review-btns">
+        <a class="secondary" role="button"
+           href="/ui/items/new?pending_id={{ p.id }}&pairing_id={{ pairing.id }}">Edit</a>
+        <form hx-post="/ui/scan/pairings/{{ pairing.id }}/pending/{{ p.id }}/approve"
+              hx-target="#scan-pairing-{{ pairing.id }}" hx-swap="innerHTML"
+              style="display:inline">
+          <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+          <button type="submit" style="width:auto">Approve</button>
+        </form>
+        <form hx-post="/ui/scan/pairings/{{ pairing.id }}/pending/{{ p.id }}/discard"
+              hx-target="#scan-pairing-{{ pairing.id }}" hx-swap="innerHTML"
+              hx-confirm="Discard this scan without cataloging it?"
+              style="display:inline">
+          <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+          <button type="submit" class="secondary outline" style="width:auto">Discard</button>
+        </form>
+      </div>
+    </div>
+    {% endfor %}
+  </section>
+  {% endif %}
+
+  <h4 class="scan-feed-h">Live activity</h4>
+  <div class="scan-feed">
+    {% for e in events %}
+    <div class="scan-ev scan-ev-{{ e.kind }}">
+      <span class="scan-ev-ic scan-ev-{{ e.mode }}"></span>
+      <span class="scan-ev-tx">{{ e.message }}</span>
+    </div>
+    {% else %}
+    <p class="scan-feed-empty">Waiting for scans…</p>
+    {% endfor %}
+  </div>
+{% endif %}

@@ -1,12 +1,13 @@
-{# Desk-side QR + live pairing-status log, swapped in after creating a pairing. #}
+{# Desk-side QR + live feed/review queue, swapped in after creating a pairing. #}
 <div class="scan-pairing" id="scan-pairing-{{ pairing.id }}">
-  <div class="scan-qr">{{ qr_svg | safe }}</div>
-  <p class="scan-hint">Scan this QR with the library phone to pair.</p>
+  <div class="scan-qr" id="scan-qr-box">{{ qr_svg | safe }}
+    <p class="scan-hint">Scan this QR with the library phone to pair.</p>
+  </div>
 
   <div hx-get="/ui/scan/pairings/{{ pairing.id }}/log"
        hx-trigger="every 1500ms"
        hx-swap="innerHTML">
-    {% include "scan/_log_partial.html" %}
+    {% include "scan/_activity_partial.html" %}
   </div>
 
   <form method="post" action="/ui/scan/pairings/{{ pairing.id }}/unpair"
