@@ -170,9 +170,9 @@ class CatalogService:
             )
             return existing, item
 
-        _session = self._works._s
         meta = lookup_metadata(
-            media_type_code, identifier_kind, identifier_value, session=_session
+            media_type_code, identifier_kind, identifier_value,
+            session=self._works._s,
         )
         if not meta:
             raise ExternalLookupError(
@@ -180,7 +180,41 @@ class CatalogService:
                 "Check the identifier and try again."
             )
 
-        if media_type_code == "book" and not meta.get("cover_image_url") and meta.get("isbn"):
+        if (
+            media_type_code == "book"
+            and not meta.get("cover_image_url")
+            and meta.get("isbn")
+        ):
+            from compendium.services.metadata import get_book_primary_adapter_name
+            from compendium.services.site_settings import get_site_setting
+
+            meta["cover_image_url"] = lookup_cover_fallbacks(
+                meta["isbn"],
+                google_books_key=get_site_setting("google_books_api_key"),
+                primary=get_book_primary_adapter_name(),
+                session=self._works._s,
+            )
+
+        return self.add_from_metadata(
+            meta, media_type_code=media_type_code, location=location
+        )
+
+    def fetch_book_metadata(self, raw_isbn: str) -> dict:
+        """Fetch book metadata for an ISBN without persisting anything.
+
+        Used by review-first scanning to preview + snapshot. Applies the same
+        cover fallback ``add_from_lookup`` uses. Raises ``ExternalLookupError``
+        if nothing is found.
+        """
+        isbn = normalize_isbn(raw_isbn)
+        _session = self._works._s
+        meta = lookup_metadata("book", "isbn", isbn, session=_session)
+        if not meta:
+            raise ExternalLookupError(
+                f"No metadata found for isbn '{isbn}'. "
+                "Check the identifier and try again."
+            )
+        if not meta.get("cover_image_url") and meta.get("isbn"):
             from compendium.services.metadata import get_book_primary_adapter_name
             from compendium.services.site_settings import get_site_setting
 
@@ -190,18 +224,35 @@ class CatalogService:
                 primary=get_book_primary_adapter_name(),
                 session=_session,
             )
+        return meta
 
-        # For MBID lookups the returned meta may carry a UPC — check for an
-        # existing Work by that UPC to avoid duplicate records.
-        if identifier_kind == "mbid" and meta.get("upc"):
+    def add_from_metadata(
+        self,
+        meta: dict,
+        *,
+        media_type_code: str = "book",
+        location: str | None = None,
+    ) -> tuple[Work, Item]:
+        """Create a Work+Item from an already-fetched metadata dict.
+
+        If a Work with this meta's ISBN or UPC already exists, adds a copy to it
+        instead of creating a duplicate. Used by review-first approve and by
+        ``add_from_lookup`` (after it fetches).
+        """
+        branch = self._branches.get_default()
+
+        existing: Work | None = None
+        if meta.get("isbn"):
+            existing = self._works.get_by_isbn(meta["isbn"])
+        if existing is None and meta.get("upc"):
             existing = self._works.get_by_upc(meta["upc"])
-            if existing is not None:
-                item = self._create_item(existing, location=location, branch=branch)
-                self._record(
-                    AuditEntityType.ITEM, item.id, AuditAction.CREATE,
-                    {"snapshot": {"barcode": item.barcode, "work_id": existing.id}},
-                )
-                return existing, item
+        if existing is not None:
+            item = self._create_item(existing, location=location, branch=branch)
+            self._record(
+                AuditEntityType.ITEM, item.id, AuditAction.CREATE,
+                {"snapshot": {"barcode": item.barcode, "work_id": existing.id}},
+            )
+            return existing, item
 
         work = self._create_work(meta, media_type_code, branch=branch)
         item = self._create_item(work, location=location, branch=branch)
