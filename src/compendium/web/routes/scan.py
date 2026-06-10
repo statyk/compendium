@@ -39,7 +39,7 @@ from compendium.domain.errors import (
     ValidationError,
 )
 from compendium.domain.identifiers import ITEM_TYPE, PATRON_TYPE, validate_barcode
-from compendium.domain.models import AppUser, ScanPairing
+from compendium.domain.models import AppUser, ScanEvent, ScanPairing, ScanPendingItem
 from compendium.repositories.sql.audit_log_repository import SqlAuditLogRepository
 from compendium.repositories.sql.branch_repository import SqlBranchRepository
 from compendium.repositories.sql.counters import SqlCounterRepository
@@ -53,7 +53,11 @@ from compendium.repositories.sql.loan_policy_repository import SqlLoanPolicyRepo
 from compendium.repositories.sql.loan_repository import SqlLoanRepository
 from compendium.repositories.sql.media_type_repository import SqlMediaTypeRepository
 from compendium.repositories.sql.patron_repository import SqlPatronRepository
+from compendium.repositories.sql.scan_event_repository import SqlScanEventRepository
 from compendium.repositories.sql.scan_pairing_repository import SqlScanPairingRepository
+from compendium.repositories.sql.scan_pending_item_repository import (
+    SqlScanPendingItemRepository,
+)
 from compendium.repositories.sql.work_repository import SqlWorkRepository
 from compendium.services.audit import AuditService
 from compendium.services.auth import has_permission
@@ -61,6 +65,7 @@ from compendium.services.calendar import CalendarService
 from compendium.services.catalog import CatalogService
 from compendium.services.circulation import CirculationService
 from compendium.services.fines import FineService
+from compendium.services.metadata import normalize_isbn
 from compendium.services.rate_limit import RateLimitService
 from compendium.services.site_settings import get_site_setting
 from compendium.web.base_url import InsecureContextError, resolve_public_base_url
@@ -205,6 +210,8 @@ def run_state_machine(
     checkout,
     checkin,
     add_from_isbn,
+    fetch_metadata=None,
+    queue_pending=None,
 ) -> dict:
     """Advance a scan session by one scanned ``code``.
 
@@ -229,7 +236,9 @@ def run_state_machine(
             row.borrower_patron_id = patron.id
             row.count = 0
             name = patron.full_name or code
-            return _reply(row, True, "borrower_set", f"Borrower: {name}")
+            return _reply(
+                row, True, "borrower_set", f"Borrower: {name}", patron_id=patron.id
+            )
         if parsed is not None and parsed.type == ITEM_TYPE:
             if row.borrower_patron_id is None:
                 return _reply(row, False, "error", "Scan a patron card first")
@@ -240,7 +249,14 @@ def run_state_machine(
                 return _circ_error(row, exc)
             row.count += 1
             title = _loan_title(loan)
-            return _reply(row, True, "checkout", f"Checked out: {title}")
+            return _reply(
+                row,
+                True,
+                "checkout",
+                f"Checked out: {title}",
+                item_id=(loan.item.id if loan and loan.item else None),
+                patron_id=row.borrower_patron_id,
+            )
         return _reply(row, False, "error", "Scan a patron card or item barcode")
 
     if mode == "checkin":
@@ -251,13 +267,33 @@ def run_state_machine(
                 return _circ_error(row, exc)
             row.count += 1
             title = _loan_title(loan)
-            return _reply(row, True, "checkin", f"Checked in: {title}")
+            return _reply(
+                row,
+                True,
+                "checkin",
+                f"Checked in: {title}",
+                item_id=(loan.item.id if loan and loan.item else None),
+            )
         return _reply(row, False, "error", "Scan an item barcode")
 
     # catalog
     if parsed is not None:
         return _reply(row, False, "error", "That's not a catalog identifier")
     if _looks_like_isbn(code):
+        if row.catalog_review:
+            try:
+                meta = fetch_metadata(code)
+            except (
+                BusinessRuleError,
+                NotFoundError,
+                ExternalLookupError,
+                ValidationError,
+            ) as exc:
+                return _reply(row, False, "error", str(exc))
+            queue_pending(code, meta)
+            row.count += 1
+            title = meta.get("title") or "title"
+            return _reply(row, True, "catalog_queued", f"Queued for review: {title}")
         try:
             work, _item = add_from_isbn(code)
         except (
@@ -296,7 +332,15 @@ def _circ_error(row: ScanPairing, exc: Exception) -> dict:
     raise exc
 
 
-def _reply(row: ScanPairing, ok: bool, kind: str, message: str) -> dict:
+def _reply(
+    row: ScanPairing,
+    ok: bool,
+    kind: str,
+    message: str,
+    *,
+    item_id: int | None = None,
+    patron_id: int | None = None,
+) -> dict:
     borrower = row.borrower.library_card_number if row.borrower else None
     return {
         "ok": ok,
@@ -305,6 +349,8 @@ def _reply(row: ScanPairing, ok: bool, kind: str, message: str) -> dict:
         "mode": row.mode,
         "borrower": borrower,
         "count": row.count,
+        "item_id": item_id,
+        "patron_id": patron_id,
     }
 
 
@@ -512,6 +558,18 @@ def dispatch(
 
     circ = _circ(session, actor, calendar_svc)
     cat = _catalog_svc(session, actor)
+
+    def _queue_pending(code: str, meta: dict) -> None:
+        pending = ScanPendingItem(
+            pairing_id=row.id,
+            isbn=normalize_isbn(code) or code,
+            title=(meta.get("title") or "Untitled")[:512],
+            meta_json=meta,
+            cover_url=meta.get("cover_image_url"),
+            status="pending",
+        )
+        SqlScanPendingItemRepository(session).add(pending)
+
     reply = run_state_machine(
         row,
         code,
@@ -519,8 +577,24 @@ def dispatch(
         checkout=circ.checkout,
         checkin=circ.checkin,
         add_from_isbn=cat.add_from_isbn,
+        fetch_metadata=cat.fetch_book_metadata,
+        queue_pending=_queue_pending,
     )
     session.flush()
+
+    if reply["kind"] != "ignored":
+        SqlScanEventRepository(session).add(
+            ScanEvent(
+                pairing_id=row.id,
+                mode=row.mode,
+                kind="ok" if reply["ok"] else "error",
+                message=reply["message"][:255],
+                item_id=reply.get("item_id"),
+                patron_id=reply.get("patron_id"),
+            )
+        )
+        session.flush()
+
     return JSONResponse(reply)
 
 
@@ -551,6 +625,32 @@ def switch_mode(
     row.mode = mode
     session.flush()
     return JSONResponse(_reply(row, True, "mode_set", f"Mode: {mode}"))
+
+
+@router.post("/scan/review")
+def set_review(
+    request: Request,
+    enabled: str = Form(default=""),
+    csrf_token: str = Form(default=""),
+    row: ScanPairing = Depends(require_scan_pairing),
+    session: Session = Depends(get_session),
+):
+    check_csrf_form(request, csrf_token)
+    if not row.user.is_active:
+        return JSONResponse(
+            _reply(row, False, "error", "Session ended."), status_code=403
+        )
+    if "catalog" not in row.allowed_modes:
+        return JSONResponse(
+            _reply(row, False, "error", "Catalog mode not enabled for this session."),
+            status_code=400,
+        )
+    row.catalog_review = enabled.strip().lower() in ("1", "true", "on", "yes")
+    session.flush()
+    msg = "Review first: on" if row.catalog_review else "Review first: off"
+    reply = _reply(row, True, "review_set", msg)
+    reply["catalog_review"] = row.catalog_review
+    return JSONResponse(reply)
 
 
 @router.post("/scan/pairings/{pairing_id}/unpair", response_class=HTMLResponse)

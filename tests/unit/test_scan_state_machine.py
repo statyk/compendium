@@ -11,7 +11,7 @@ ITEM_BC = format_item_barcode("00010001", location_code=None)
 PATRON_BC = format_patron_card("00020002", location_code=None)
 
 
-def _row(mode, *, allowed=None, borrower=None, count=0):
+def _row(mode, *, allowed=None, borrower=None, count=0, catalog_review=False):
     return SimpleNamespace(
         id=1,
         mode=mode,
@@ -19,6 +19,7 @@ def _row(mode, *, allowed=None, borrower=None, count=0):
         borrower_patron_id=borrower.id if borrower else None,
         borrower=borrower,
         count=count,
+        catalog_review=catalog_review,
     )
 
 
@@ -26,9 +27,9 @@ def _patron(card=PATRON_BC, name="Jane Doe", pid=42):
     return SimpleNamespace(id=pid, library_card_number=card, full_name=name)
 
 
-def _loan(title="Dune"):
+def _loan(title="Dune", item_id=7):
     work = SimpleNamespace(title=title)
-    item = SimpleNamespace(work=work)
+    item = SimpleNamespace(id=item_id, work=work)
     return SimpleNamespace(item=item)
 
 
@@ -139,6 +140,60 @@ def test_catalog_non_isbn_non_barcode_errors_gracefully():
     reply = _call(row, "SOMERANDOMUPC123")
     assert reply["kind"] == "error"
     assert "at the desk" in reply["message"].lower()
+
+
+def test_catalog_review_on_queues_pending_no_item():
+    row = _row("catalog", catalog_review=True)
+    queued = {}
+
+    def fetch_metadata(code):
+        return {"title": "The Giver", "isbn": "9780544336261"}
+
+    def queue_pending(code, meta):
+        queued["code"] = code
+        queued["meta"] = meta
+        return object()
+
+    def add_from_isbn(code):  # must NOT be called in review mode
+        raise AssertionError("add_from_isbn called in review mode")
+
+    reply = run_state_machine(
+        row,
+        "9780544336261",
+        patron_repo=None,
+        checkout=None,
+        checkin=None,
+        add_from_isbn=add_from_isbn,
+        fetch_metadata=fetch_metadata,
+        queue_pending=queue_pending,
+    )
+    assert reply["ok"] is True
+    assert reply["kind"] == "catalog_queued"
+    assert "Queued for review" in reply["message"]
+    assert queued["meta"]["title"] == "The Giver"
+    assert row.count == 1
+
+
+def test_catalog_review_off_still_adds():
+    row = _row("catalog", catalog_review=False)
+    added = {}
+
+    def add_from_isbn(code):
+        added["code"] = code
+        return (type("W", (), {"title": "The Giver"})(), object())
+
+    reply = run_state_machine(
+        row,
+        "9780544336261",
+        patron_repo=None,
+        checkout=None,
+        checkin=None,
+        add_from_isbn=add_from_isbn,
+        fetch_metadata=None,
+        queue_pending=None,
+    )
+    assert reply["kind"] == "catalog_added"
+    assert added["code"] == "9780544336261"
 
 
 # ── idempotency guard ─────────────────────────────────────────────────────────
