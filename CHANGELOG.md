@@ -47,6 +47,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
     {onCode, onMiss})` in `scanner.js` is now a pinned public API consumed
     downstream (LitCat). Breaking changes to this signature will be called out
     explicitly in future changelog entries.
+  - **Inline edit of pending catalog scans** — the Edit button in the desk
+    review queue opens an inline modal on the desk page; the librarian can
+    correct metadata and approve without navigating away from the desk.
+  - **Phone detects unpair within ~5 s** — the phone polls
+    `GET /ui/scan/heartbeat` every ~5 seconds; when the librarian clicks Unpair
+    the phone's session ends within one heartbeat interval.
 
 ## [1.1.0] - 2026-06-01
 

@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 import re
-from datetime import datetime, timezone
 from urllib.parse import quote
 
 from fastapi import APIRouter, Depends, Form, Query, Request
@@ -27,10 +26,6 @@ from compendium.repositories.sql.item_note_repository import SqlItemNoteReposito
 from compendium.repositories.sql.item_repository import SqlItemRepository
 from compendium.repositories.sql.media_type_repository import SqlMediaTypeRepository
 from compendium.repositories.sql.counters import SqlCounterRepository
-from compendium.repositories.sql.scan_pairing_repository import SqlScanPairingRepository
-from compendium.repositories.sql.scan_pending_item_repository import (
-    SqlScanPendingItemRepository,
-)
 from compendium.repositories.sql.work_repository import SqlWorkRepository
 from compendium.services.audit import AuditService
 from compendium.services.auth import has_permission
@@ -69,17 +64,6 @@ _MBID_RE = re.compile(
 )
 _FILM_TYPES = {"dvd", "bluray", "vhs"}
 _MUSIC_TYPES = {"vinyl", "cd"}
-
-
-def _owned_pending(session: Session, pending_id: int, user: AppUser):
-    """Return the pending scan row iff it's still pending and owned by `user`."""
-    pend = SqlScanPendingItemRepository(session).get(pending_id)
-    if pend is None or pend.status != "pending":
-        return None
-    pairing = SqlScanPairingRepository(session).get(pend.pairing_id)
-    if pairing is None or pairing.user_id != user.id:
-        return None
-    return pend
 
 
 def _catalog_svc(session: Session, actor: AppUser) -> CatalogService:
@@ -156,7 +140,6 @@ def item_new_form(
     work_id: int | None = Query(default=None),
     media_type: str | None = Query(default=None),
     added: str | None = Query(default=None),
-    pending_id: int | None = Query(default=None),
     user: AppUser = Depends(require_web_permission(_PERM_MANAGE)),
     session: Session = Depends(get_session),
 ):
@@ -169,8 +152,6 @@ def item_new_form(
         "added_title": None,
         "added_work_id": work_id,
         "copy_work": None,
-        "pending_id": None,
-        "prefill": None,
         "scan_modes": (
             ["catalog"]
             if has_permission(user.role.permissions, "catalog.import")
@@ -183,12 +164,6 @@ def item_new_form(
             ctx["added_title"] = work.title if work else None
         else:
             ctx["copy_work"] = work
-    if pending_id:
-        pend = _owned_pending(session, pending_id, user)
-        if pend is not None:
-            ctx["pending_id"] = pend.id
-            ctx["prefill"] = pend.meta_json
-            ctx["preset_media_type"] = "book"
     return _render("items/new.html", request, ctx)
 
 
@@ -197,7 +172,6 @@ def item_lookup(
     request: Request,
     media_type: str = Form(default="book"),
     identifier: str = Form(default=""),
-    pending_id: str = Form(default=""),
     csrf_token: str = Form(default=""),
     user: AppUser = Depends(require_web_permission(_PERM_MANAGE)),
     session: Session = Depends(get_session),
@@ -257,7 +231,6 @@ def item_lookup(
                 "meta": None,
                 "existing": True,
                 "suggested_call_number": existing_work.classification_code,
-                "pending_id": pending_id,
             },
         )
 
@@ -285,7 +258,6 @@ def item_lookup(
             "meta": meta,
             "existing": False,
             "suggested_call_number": suggested,
-            "pending_id": pending_id,
         },
     )
 
@@ -392,7 +364,6 @@ def item_create(
     call_number: str = Form(default=""),
     condition: str = Form(default=""),
     copy_work_id: str = Form(default=""),
-    pending_id: str = Form(default=""),
     csrf_token: str = Form(default=""),
     user: AppUser = Depends(require_web_permission(_PERM_MANAGE)),
     session: Session = Depends(get_session),
@@ -437,14 +408,6 @@ def item_create(
         item.call_number = call_number.strip()
     if condition.strip():
         item.condition = condition.strip()
-    if pending_id.strip():
-        pend = _owned_pending(session, int(pending_id.strip()), user)
-        if pend is not None:
-            pend.status = "approved"
-            pend.resolved_at = datetime.now(timezone.utc)
-            pend.resolved_by = user.id
-            pend.created_item_id = item.id
-            session.flush()
     mt = media_type.strip()
     return RedirectResponse(
         f"/ui/items/new?media_type={quote(mt)}&added={quote(item.barcode)}&work_id={work.id}",
