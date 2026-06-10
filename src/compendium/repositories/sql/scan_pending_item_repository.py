@@ -40,6 +40,8 @@ class SqlScanPendingItemRepository:
             .filter(ScanPendingItem.status != "pending")
             .filter(ScanPendingItem.resolved_at.isnot(None))
             .filter(ScanPendingItem.resolved_at < cutoff)
+            # "evaluate" (not False) so a same-session get() after the prune
+            # returns None instead of a stale identity-map object.
             .delete(synchronize_session="evaluate")
         )
         self._s.flush()
