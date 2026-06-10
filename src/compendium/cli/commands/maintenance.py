@@ -214,6 +214,13 @@ def prune_scan_pairings(
             )
             return
         SqlScanEventRepository(session).delete_for_pairings(ids)
+        # Delete ALL pending children of the pairings being removed (all are
+        # resolved by construction — terminal_deletable_ids excludes any pairing
+        # with a status="pending" row). Mirrors the event repo's cascade so no
+        # pending row is left orphaned regardless of its resolved_at.
+        SqlScanPendingItemRepository(session).delete_for_pairings(ids)
+        # Separately sweep old resolved pending rows on pairings NOT being
+        # deleted this run.
         SqlScanPendingItemRepository(session).delete_resolved_older_than(cutoff)
         count = repo.delete_by_ids(ids)
         typer.echo(

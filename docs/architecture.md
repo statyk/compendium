@@ -807,7 +807,7 @@ runContinuous(videoElement, backend, { onCode, onMiss })
 
 ### Maintenance
 
-`compendium maintenance prune-scan-pairings --older-than-days N` deletes terminal pairing rows (those whose `expires_at` is older than the cutoff, or whose `revoked_at` is set and older than the cutoff) together with their child `scan_event` rows and resolved (non-`"pending"`) `scan_pending_item` rows. A pairing is **skipped entirely** if it still has any `status="pending"` pending items — un-resolved desk-review work is never silently dropped. Resolved pending rows whose pairing is not being deleted this run are also swept by `delete_resolved_older_than`. Live, unexpired sessions are never pruned. Suggested cadence: daily, `--older-than-days 7`.
+`compendium maintenance prune-scan-pairings --older-than-days N` deletes terminal pairing rows (those whose `expires_at` is older than the cutoff, or whose `revoked_at` is set and older than the cutoff). When such a pairing is pruned, all of its child `scan_event` rows and **all** of its `scan_pending_item` rows are deleted with it (they are all resolved by construction — see below). A pairing is **skipped entirely** if it still has any `status="pending"` pending items — un-resolved desk-review work is never silently dropped, so no pending row is ever deleted. Separately, old resolved pending rows on pairings that are *not* being deleted this run are swept by the cutoff. Live, unexpired sessions are never pruned. Suggested cadence: daily, `--older-than-days 7`.
 
 ---
 

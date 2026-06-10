@@ -274,6 +274,48 @@ def test_cascade_deletes_events_and_resolved_pending_skips_unresolved(session):
     assert session.query(ScanPendingItem).filter(ScanPendingItem.id == pi2.id).count() == 1
 
 
+def test_cascade_deletes_recently_resolved_pending_no_orphan(session):
+    """Regression: a long-expired deletable pairing whose pending item was
+    resolved *recently* (resolved_at >= cutoff) must still have that pending row
+    deleted along with the pairing — no orphaned pairing_id.
+
+    The earlier cascade only swept resolved rows with resolved_at < cutoff, so a
+    recently-resolved row survived while its pairing was deleted (FK violation /
+    orphan). delete_for_pairings closes that window.
+    """
+    now = datetime.now(timezone.utc)
+    ago_40 = now - timedelta(days=40)
+    ago_1 = now - timedelta(days=1)  # >= cutoff for older_than_days=7
+
+    # Deletable pairing: expired 40 days ago (terminal, old), with one resolved
+    # pending item whose resolved_at is RECENT, plus a scan_event.
+    p1 = _mk_pairing(session, expires_at=ago_40, token_hash="h" * 64)
+    ev1 = _mk_scan_event(session, p1.id)
+    pi1 = _mk_pending_item(session, p1.id, status="approved", resolved_at=ago_1)
+
+    runner = CliRunner()
+
+    @contextmanager
+    def _scope():
+        yield session
+
+    with patch_session_scope(_scope):
+        result = runner.invoke(
+            maintenance_app, ["prune-scan-pairings", "--older-than-days", "7"]
+        )
+
+    assert result.exit_code == 0
+    assert "Pruned 1" in result.output
+
+    # Pairing deleted, AND its recently-resolved pending item is gone (no
+    # orphan), AND its scan_event is gone.
+    assert session.query(ScanPairing).filter(ScanPairing.id == p1.id).count() == 0
+    assert (
+        session.query(ScanPendingItem).filter(ScanPendingItem.id == pi1.id).count() == 0
+    )
+    assert session.query(ScanEvent).filter(ScanEvent.id == ev1.id).count() == 0
+
+
 def test_cascade_dry_run_reports_deletable_count(session):
     """CLI --dry-run reports the count of deletable pairings (not all terminal)."""
     now = datetime.now(timezone.utc)

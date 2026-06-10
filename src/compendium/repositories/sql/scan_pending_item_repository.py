@@ -34,6 +34,17 @@ class SqlScanPendingItemRepository:
             .all()
         )
 
+    def delete_for_pairings(self, pairing_ids: list[int]) -> int:
+        if not pairing_ids:
+            return 0
+        deleted = (
+            self._s.query(ScanPendingItem)
+            .filter(ScanPendingItem.pairing_id.in_(pairing_ids))
+            .delete(synchronize_session=False)
+        )
+        self._s.flush()
+        return int(deleted)
+
     def delete_resolved_older_than(self, cutoff: datetime) -> int:
         deleted = (
             self._s.query(ScanPendingItem)
