@@ -472,6 +472,136 @@ def test_approve_cross_pairing_non_owner_of_pending_rejected(
     assert scan_session.query(Item).count() == items_before
 
 
+# ── inline edit modal for pending catalog scans ───────────────────────────────
+
+_EDIT_META = {
+    "title": "Orig",
+    "authors": ["X"],
+    "isbn": "9780000000001",
+    "publisher": "P",
+    "publication_year": 1999,
+    "cover_image_url": None,
+    "external_ids": {},
+    "extra_metadata": {},
+}
+
+
+def _owner_with_pending(scan_client, scan_session):
+    """Log in an owner, make a claimed pairing, queue a pending row.
+
+    Returns ``(cookies, owner, pairing, pend)``.
+    """
+    cookies, owner = _login_owner(scan_client, scan_session)
+    pairing = _make_pairing(
+        scan_session, owner, claim=f"C_{_next()}", allowed_modes=["catalog"]
+    )
+    pend = ScanPendingItem(
+        pairing_id=pairing.id,
+        isbn=_EDIT_META["isbn"],
+        title=_EDIT_META["title"],
+        meta_json=dict(_EDIT_META),
+        cover_url=None,
+        status="pending",
+    )
+    scan_session.add(pend)
+    scan_session.flush()
+    return cookies, owner, pairing, pend
+
+
+def test_edit_form_prefills_snapshot(scan_client, scan_session):
+    cookies, owner, pairing, pend = _owner_with_pending(scan_client, scan_session)
+    r = scan_client.get(
+        f"/ui/scan/pairings/{pairing.id}/pending/{pend.id}/edit", cookies=cookies
+    )
+    assert r.status_code == 200
+    assert 'name="title"' in r.text
+    assert pend.meta_json["title"] in r.text
+
+
+def test_edit_save_creates_item_with_edits_and_resolves(scan_client, scan_session):
+    cookies, owner, pairing, pend = _owner_with_pending(scan_client, scan_session)
+    raw, signed = _csrf_pair()
+    r = scan_client.post(
+        f"/ui/scan/pairings/{pairing.id}/pending/{pend.id}/edit",
+        data={
+            "title": "Edited Title", "subtitle": "", "authors": "A. Writer",
+            "publisher": "Pub", "year": "2001", "location": "Shelf 3",
+            "call_number": "CN1", "condition": "Good", "csrf_token": raw,
+        },
+        cookies={**cookies, CSRF_COOKIE: signed},
+    )
+    assert r.status_code == 200
+    assert "hx-swap-oob" in r.text
+    assert f'id="scan-activity-{pairing.id}"' in r.text
+    pend2 = scan_session.get(ScanPendingItem, pend.id)
+    assert pend2.status == "approved"
+    assert pend2.created_item_id is not None
+    item = scan_session.get(Item, pend2.created_item_id)
+    assert item.work.title == "Edited Title"
+    assert item.call_number == "CN1"
+    assert item.location == "Shelf 3"
+
+
+def test_edit_save_blank_title_400(scan_client, scan_session):
+    cookies, owner, pairing, pend = _owner_with_pending(scan_client, scan_session)
+    raw, signed = _csrf_pair()
+    r = scan_client.post(
+        f"/ui/scan/pairings/{pairing.id}/pending/{pend.id}/edit",
+        data={"title": "  ", "authors": "", "year": "", "csrf_token": raw},
+        cookies={**cookies, CSRF_COOKIE: signed},
+    )
+    assert r.status_code == 400
+
+
+def test_edit_save_bad_year_400(scan_client, scan_session):
+    cookies, owner, pairing, pend = _owner_with_pending(scan_client, scan_session)
+    raw, signed = _csrf_pair()
+    r = scan_client.post(
+        f"/ui/scan/pairings/{pairing.id}/pending/{pend.id}/edit",
+        data={"title": "T", "authors": "", "year": "notayear", "csrf_token": raw},
+        cookies={**cookies, CSRF_COOKIE: signed},
+    )
+    assert r.status_code == 400
+
+
+def test_edit_non_owner_of_pending_404(scan_client, scan_session):
+    """User B owns displayed pairing B + has catalog.import, but the pending row
+    belongs to user A's pairing → 404, no mutation. Mirrors the cross-pairing
+    approve test."""
+    owner_a = _staff_user(scan_session)
+    pairing_a = _make_pairing(
+        scan_session, owner_a, claim=f"C_{_next()}", allowed_modes=["catalog"]
+    )
+    pend = ScanPendingItem(
+        pairing_id=pairing_a.id,
+        isbn=_EDIT_META["isbn"],
+        title=_EDIT_META["title"],
+        meta_json=dict(_EDIT_META),
+        cover_url=None,
+        status="pending",
+    )
+    scan_session.add(pend)
+    scan_session.flush()
+
+    cookies_b, owner_b = _login_owner(scan_client, scan_session)
+    assert owner_b.id != owner_a.id
+    pairing_b = _make_pairing(
+        scan_session, owner_b, claim=f"C_{_next()}", allowed_modes=["catalog"]
+    )
+
+    items_before = scan_session.query(Item).count()
+    raw, signed = _csrf_pair()
+    r = scan_client.post(
+        f"/ui/scan/pairings/{pairing_b.id}/pending/{pend.id}/edit",
+        data={"title": "X", "authors": "", "year": "", "csrf_token": raw},
+        cookies={**cookies_b, CSRF_COOKIE: signed},
+    )
+    assert r.status_code == 404
+    scan_session.refresh(pend)
+    assert pend.status == "pending"
+    assert scan_session.query(Item).count() == items_before
+
+
 def test_log_renders_feed_and_pending(scan_client, scan_session):
     cookies, owner = _login_owner(scan_client, scan_session)
     pairing = _make_pairing(

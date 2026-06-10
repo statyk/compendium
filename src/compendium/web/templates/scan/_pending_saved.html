@@ -1,0 +1,6 @@
+{# Response to a successful inline edit. The body is consumed as #scan-modal's
+   innerHTML; the only content is an OOB swap, so after HTMX lifts it out the
+   modal is left empty (closed) and the live queue is refreshed immediately. #}
+<div id="scan-activity-{{ pairing.id }}" hx-swap-oob="innerHTML">
+  {% include "scan/_activity_partial.html" %}
+</div>

@@ -1,0 +1,50 @@
+{# Inline edit modal for a pending catalog scan. Loaded into #scan-modal, which
+   sits OUTSIDE the 1.5s live-feed poll region, so the form is never clobbered. #}
+<div class="scan-modal-backdrop" id="scan-modal-backdrop">
+  <div class="scan-modal" role="dialog" aria-modal="true" aria-label="Edit catalog item">
+    <div class="scan-modal-head">
+      {% if pend.cover_url %}<img class="scan-modal-cover" src="{{ pend.cover_url }}" alt="">{% endif %}
+      <div>
+        <strong>Edit before cataloging</strong>
+        <div class="scan-modal-isbn">ISBN {{ pend.isbn }}</div>
+      </div>
+    </div>
+    <form hx-post="/ui/scan/pairings/{{ pairing.id }}/pending/{{ pend.id }}/edit"
+          hx-target="#scan-modal" hx-swap="innerHTML">
+      <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+      <label>Title<input type="text" name="title" value="{{ meta.title or '' }}" required></label>
+      <label>Subtitle<input type="text" name="subtitle" value="{{ meta.subtitle or '' }}"></label>
+      <label>Author(s) <small>(comma-separated)</small>
+        <input type="text" name="authors" value="{{ authors }}"></label>
+      <label>Publisher<input type="text" name="publisher" value="{{ meta.publisher or '' }}"></label>
+      <label>Year<input type="text" name="year" inputmode="numeric" value="{{ meta.publication_year or '' }}"></label>
+      <label>Location<input type="text" name="location" autocomplete="off"></label>
+      <label>Call number<input type="text" name="call_number" autocomplete="off"></label>
+      <label>Condition
+        <select name="condition">
+          <option value="">—</option><option>New</option><option>Good</option>
+          <option>Fair</option><option>Poor</option>
+        </select>
+      </label>
+      <div class="scan-modal-actions">
+        <button type="submit" style="width:auto">Save &amp; catalog</button>
+        <button type="button" class="secondary" data-scan-modal-close style="width:auto">Cancel</button>
+      </div>
+    </form>
+  </div>
+  <script nonce="{{ csp_nonce(request) }}">
+  (function () {
+    var modal = document.getElementById('scan-modal');
+    var backdrop = document.getElementById('scan-modal-backdrop');
+    if (!modal || !backdrop) return;
+    if (window.__scanModalOnKey) document.removeEventListener('keydown', window.__scanModalOnKey);
+    function close() { modal.innerHTML = ''; document.removeEventListener('keydown', onKey); window.__scanModalOnKey = null; }
+    function onKey(e) { if (e.key === 'Escape') close(); }
+    window.__scanModalOnKey = onKey;
+    backdrop.addEventListener('click', function (e) {
+      if (e.target === backdrop || e.target.closest('[data-scan-modal-close]')) close();
+    });
+    document.addEventListener('keydown', onKey);
+  })();
+  </script>
+</div>

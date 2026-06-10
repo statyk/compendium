@@ -11,6 +11,9 @@
     {% include "scan/_activity_partial.html" %}
   </div>
 
+  {# Modal mount: OUTSIDE the poll target so the 1.5s swap can't clobber an open form. #}
+  <div id="scan-modal"></div>
+
   <form method="post" action="/ui/scan/pairings/{{ pairing.id }}/unpair"
         hx-post="/ui/scan/pairings/{{ pairing.id }}/unpair"
         hx-target="#scan-pairing-{{ pairing.id }}"

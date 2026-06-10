@@ -386,12 +386,17 @@ def _qr_partial_html(
 
 
 def _render_activity(
-    request: Request, session: Session, pairing: ScanPairing, user: AppUser
+    request: Request,
+    session: Session,
+    pairing: ScanPairing,
+    user: AppUser,
+    *,
+    template: str = "scan/_activity_partial.html",
 ) -> HTMLResponse:
     events = SqlScanEventRepository(session).recent_for_pairing(pairing.id, limit=25)
     pending = SqlScanPendingItemRepository(session).pending_for_user(user.id)
     csrf, fresh = ensure_csrf(request)
-    html = templates.get_template("scan/_activity_partial.html").render(
+    html = templates.get_template(template).render(
         request=request, pairing=pairing, events=events,
         pending=pending, csrf_token=csrf,
     )
@@ -705,6 +710,40 @@ def _owned_pairing_or_404(
     return pairing
 
 
+def _authorized_pending(
+    session: Session, pairing_id: int, pending_id: int, user: AppUser
+) -> tuple[ScanPairing, ScanPendingItem] | HTMLResponse:
+    """Shared authz for the desk pending-item actions (approve/discard/edit).
+
+    Returns ``(displayed_pairing, pending_row)`` if the user may act, else an
+    ``HTMLResponse`` error to return as-is. Gates, in order: ``catalog.import``
+    permission; the displayed pairing is owned; the pending row exists and is
+    still ``"pending"``; the pending row is authorized via ITS OWN pairing's
+    owner (the queue spans the user's pairings and survives unpair).
+    """
+    if not has_permission(user.role.permissions, MODE_PERMISSION["catalog"]):
+        return HTMLResponse(
+            '<p class="error-banner">You don\'t have permission to catalog items.</p>',
+            status_code=403,
+        )
+    pairing = _owned_pairing_or_404(session, pairing_id, user)
+    if pairing is None:
+        return HTMLResponse(
+            '<p class="error-banner">Pairing not found.</p>', status_code=404
+        )
+    pend = SqlScanPendingItemRepository(session).get(pending_id)
+    if pend is None or pend.status != "pending":
+        return HTMLResponse(
+            '<p class="error-banner">Item already resolved.</p>', status_code=404
+        )
+    pend_pairing = SqlScanPairingRepository(session).get(pend.pairing_id)
+    if pend_pairing is None or pend_pairing.user_id != user.id:
+        return HTMLResponse(
+            '<p class="error-banner">Item not found.</p>', status_code=404
+        )
+    return pairing, pend
+
+
 @router.post(
     "/scan/pairings/{pairing_id}/pending/{pending_id}/approve",
     response_class=HTMLResponse,
@@ -718,30 +757,10 @@ def approve_pending(
     session: Session = Depends(get_session),
 ):
     check_csrf_form(request, csrf_token)
-    if not has_permission(user.role.permissions, MODE_PERMISSION["catalog"]):
-        return HTMLResponse(
-            '<p class="error-banner">You don\'t have permission to catalog items.</p>',
-            status_code=403,
-        )
-    pairing = _owned_pairing_or_404(session, pairing_id, user)
-    if pairing is None:
-        return HTMLResponse(
-            '<p class="error-banner">Pairing not found.</p>', status_code=404
-        )
-    pend_repo = SqlScanPendingItemRepository(session)
-    pend = pend_repo.get(pending_id)
-    if pend is None or pend.status != "pending":
-        return HTMLResponse(
-            '<p class="error-banner">Item already resolved.</p>', status_code=404
-        )
-    # Authorize the pending row via ITS OWN pairing — the review queue spans the
-    # user's pairings and survives unpair, so the pending row need not belong to
-    # the displayed pairing, but it MUST be owned by this user.
-    pend_pairing = SqlScanPairingRepository(session).get(pend.pairing_id)
-    if pend_pairing is None or pend_pairing.user_id != user.id:
-        return HTMLResponse(
-            '<p class="error-banner">Item not found.</p>', status_code=404
-        )
+    result = _authorized_pending(session, pairing_id, pending_id, user)
+    if isinstance(result, HTMLResponse):
+        return result
+    pairing, pend = result
     try:
         _work, item = _catalog_svc(session, user).add_from_metadata(
             pend.meta_json, media_type_code="book"
@@ -777,32 +796,123 @@ def discard_pending(
     session: Session = Depends(get_session),
 ):
     check_csrf_form(request, csrf_token)
-    if not has_permission(user.role.permissions, MODE_PERMISSION["catalog"]):
-        return HTMLResponse(
-            '<p class="error-banner">You don\'t have permission to catalog items.</p>',
-            status_code=403,
-        )
-    pairing = _owned_pairing_or_404(session, pairing_id, user)
-    if pairing is None:
-        return HTMLResponse(
-            '<p class="error-banner">Pairing not found.</p>', status_code=404
-        )
-    pend_repo = SqlScanPendingItemRepository(session)
-    pend = pend_repo.get(pending_id)
-    if pend is None or pend.status != "pending":
-        return HTMLResponse(
-            '<p class="error-banner">Item already resolved.</p>', status_code=404
-        )
-    # Authorize the pending row via ITS OWN pairing (see approve_pending): the
-    # queue spans the user's pairings, so it need not match the displayed one,
-    # but it MUST be owned by this user.
-    pend_pairing = SqlScanPairingRepository(session).get(pend.pairing_id)
-    if pend_pairing is None or pend_pairing.user_id != user.id:
-        return HTMLResponse(
-            '<p class="error-banner">Item not found.</p>', status_code=404
-        )
+    result = _authorized_pending(session, pairing_id, pending_id, user)
+    if isinstance(result, HTMLResponse):
+        return result
+    pairing, pend = result
     pend.status = "discarded"
     pend.resolved_at = _now()
     pend.resolved_by = user.id
     session.flush()
     return _render_activity(request, session, pairing, user)
+
+
+@router.get(
+    "/scan/pairings/{pairing_id}/pending/{pending_id}/edit",
+    response_class=HTMLResponse,
+)
+def edit_pending_form(
+    pairing_id: int,
+    pending_id: int,
+    request: Request,
+    user: AppUser = Depends(require_web_user),
+    session: Session = Depends(get_session),
+):
+    result = _authorized_pending(session, pairing_id, pending_id, user)
+    if isinstance(result, HTMLResponse):
+        return result
+    pairing, pend = result
+    meta = pend.meta_json or {}
+    csrf, fresh = ensure_csrf(request)
+    resp = templates.TemplateResponse(
+        request,
+        "scan/_pending_edit_modal.html",
+        {
+            "request": request,
+            "pairing": pairing,
+            "pend": pend,
+            "meta": meta,
+            "authors": ", ".join(meta.get("authors") or []),
+            "csrf_token": csrf,
+        },
+    )
+    if fresh:
+        set_csrf_cookie(resp, fresh)
+    return resp
+
+
+@router.post(
+    "/scan/pairings/{pairing_id}/pending/{pending_id}/edit",
+    response_class=HTMLResponse,
+)
+def edit_pending_save(
+    pairing_id: int,
+    pending_id: int,
+    request: Request,
+    title: str = Form(default=""),
+    subtitle: str = Form(default=""),
+    authors: str = Form(default=""),
+    publisher: str = Form(default=""),
+    year: str = Form(default=""),
+    location: str = Form(default=""),
+    call_number: str = Form(default=""),
+    condition: str = Form(default=""),
+    csrf_token: str = Form(default=""),
+    user: AppUser = Depends(require_web_user),
+    session: Session = Depends(get_session),
+):
+    check_csrf_form(request, csrf_token)
+    result = _authorized_pending(session, pairing_id, pending_id, user)
+    if isinstance(result, HTMLResponse):
+        return result
+    pairing, pend = result
+
+    if not title.strip():
+        return HTMLResponse(
+            '<p class="error-banner">Title is required.</p>', status_code=400
+        )
+    parsed_year = None
+    if year.strip():
+        try:
+            parsed_year = int(year.strip())
+        except ValueError:
+            return HTMLResponse(
+                '<p class="error-banner">Year must be a number.</p>',
+                status_code=400,
+            )
+
+    meta = dict(pend.meta_json or {})
+    meta["title"] = title.strip()
+    meta["subtitle"] = subtitle.strip() or None
+    meta["authors"] = [a.strip() for a in authors.split(",") if a.strip()]
+    meta["publisher"] = publisher.strip() or None
+    meta["publication_year"] = parsed_year
+
+    try:
+        _work, item = _catalog_svc(session, user).add_from_metadata(
+            meta, media_type_code="book", location=location.strip() or None
+        )
+    except (BusinessRuleError, NotFoundError, ValidationError) as exc:
+        return HTMLResponse(
+            f'<p class="error-banner">{escape(str(exc))}</p>', status_code=400
+        )
+    if call_number.strip():
+        item.call_number = call_number.strip()
+    if condition.strip():
+        item.condition = condition.strip()
+
+    pend.status = "approved"
+    pend.resolved_at = _now()
+    pend.resolved_by = user.id
+    pend.created_item_id = item.id
+    SqlScanEventRepository(session).add(
+        ScanEvent(
+            pairing_id=pairing_id, mode="catalog", kind="ok",
+            message=f"Catalogued: {meta['title']}"[:255], item_id=item.id,
+        )
+    )
+    session.flush()
+
+    return _render_activity(
+        request, session, pairing, user, template="scan/_pending_saved.html"
+    )

@@ -26,8 +26,10 @@
         <div class="scan-review-sub">{{ p.isbn }}</div>
       </div>
       <div class="scan-review-btns">
-        <a class="secondary" role="button"
-           href="/ui/items/new?pending_id={{ p.id }}&pairing_id={{ pairing.id }}">Edit</a>
+        <button type="button" class="secondary"
+                hx-get="/ui/scan/pairings/{{ pairing.id }}/pending/{{ p.id }}/edit"
+                hx-target="#scan-modal" hx-swap="innerHTML"
+                style="width:auto">Edit</button>
         <form hx-post="/ui/scan/pairings/{{ pairing.id }}/pending/{{ p.id }}/approve"
               hx-target="#scan-activity-{{ pairing.id }}" hx-swap="innerHTML"
               style="display:inline">
