@@ -4,7 +4,8 @@
     <p class="scan-hint">Scan this QR with the library phone to pair.</p>
   </div>
 
-  <div hx-get="/ui/scan/pairings/{{ pairing.id }}/log"
+  <div id="scan-activity-{{ pairing.id }}"
+       hx-get="/ui/scan/pairings/{{ pairing.id }}/log"
        hx-trigger="every 1500ms"
        hx-swap="innerHTML">
     {% include "scan/_activity_partial.html" %}

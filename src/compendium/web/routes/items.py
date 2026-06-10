@@ -27,6 +27,10 @@ from compendium.repositories.sql.item_note_repository import SqlItemNoteReposito
 from compendium.repositories.sql.item_repository import SqlItemRepository
 from compendium.repositories.sql.media_type_repository import SqlMediaTypeRepository
 from compendium.repositories.sql.counters import SqlCounterRepository
+from compendium.repositories.sql.scan_pairing_repository import SqlScanPairingRepository
+from compendium.repositories.sql.scan_pending_item_repository import (
+    SqlScanPendingItemRepository,
+)
 from compendium.repositories.sql.work_repository import SqlWorkRepository
 from compendium.services.audit import AuditService
 from compendium.services.catalog import CatalogService
@@ -64,6 +68,17 @@ _MBID_RE = re.compile(
 )
 _FILM_TYPES = {"dvd", "bluray", "vhs"}
 _MUSIC_TYPES = {"vinyl", "cd"}
+
+
+def _owned_pending(session: Session, pending_id: int, user: AppUser):
+    """Return the pending scan row iff it's still pending and owned by `user`."""
+    pend = SqlScanPendingItemRepository(session).get(pending_id)
+    if pend is None or pend.status != "pending":
+        return None
+    pairing = SqlScanPairingRepository(session).get(pend.pairing_id)
+    if pairing is None or pairing.user_id != user.id:
+        return None
+    return pend
 
 
 def _catalog_svc(session: Session, actor: AppUser) -> CatalogService:
@@ -163,22 +178,8 @@ def item_new_form(
         else:
             ctx["copy_work"] = work
     if pending_id:
-        from compendium.repositories.sql.scan_pending_item_repository import (
-            SqlScanPendingItemRepository,
-        )
-        from compendium.repositories.sql.scan_pairing_repository import (
-            SqlScanPairingRepository,
-        )
-        pend = SqlScanPendingItemRepository(session).get(pending_id)
-        pairing = (
-            SqlScanPairingRepository(session).get(pend.pairing_id) if pend else None
-        )
-        if (
-            pend is not None
-            and pend.status == "pending"
-            and pairing is not None
-            and pairing.user_id == user.id
-        ):
+        pend = _owned_pending(session, pending_id, user)
+        if pend is not None:
             ctx["pending_id"] = pend.id
             ctx["prefill"] = pend.meta_json
             ctx["preset_media_type"] = "book"
@@ -428,22 +429,8 @@ def item_create(
     if condition.strip():
         item.condition = condition.strip()
     if pending_id.strip():
-        from compendium.repositories.sql.scan_pending_item_repository import (
-            SqlScanPendingItemRepository,
-        )
-        from compendium.repositories.sql.scan_pairing_repository import (
-            SqlScanPairingRepository,
-        )
-        pend = SqlScanPendingItemRepository(session).get(int(pending_id.strip()))
-        pairing = (
-            SqlScanPairingRepository(session).get(pend.pairing_id) if pend else None
-        )
-        if (
-            pend is not None
-            and pend.status == "pending"
-            and pairing is not None
-            and pairing.user_id == user.id
-        ):
+        pend = _owned_pending(session, int(pending_id.strip()), user)
+        if pend is not None:
             pend.status = "approved"
             pend.resolved_at = datetime.now(timezone.utc)
             pend.resolved_by = user.id

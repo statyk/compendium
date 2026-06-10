@@ -385,7 +385,9 @@ def _qr_partial_html(
     return resp
 
 
-def _render_activity(request, session, pairing, user) -> HTMLResponse:
+def _render_activity(
+    request: Request, session: Session, pairing: ScanPairing, user: AppUser
+) -> HTMLResponse:
     events = SqlScanEventRepository(session).recent_for_pairing(pairing.id, limit=25)
     pending = SqlScanPendingItemRepository(session).pending_for_user(user.id)
     csrf, fresh = ensure_csrf(request)
@@ -693,7 +695,9 @@ def unpair(
     return HTMLResponse('<p class="success-banner">Phone unpaired.</p>')
 
 
-def _owned_pairing_or_404(session, pairing_id, user):
+def _owned_pairing_or_404(
+    session: Session, pairing_id: int, user: AppUser
+) -> ScanPairing | None:
     pairing = SqlScanPairingRepository(session).get(pairing_id)
     if pairing is None or pairing.user_id != user.id:
         return None

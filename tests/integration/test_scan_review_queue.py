@@ -160,6 +160,37 @@ def _pending_row(scan_session, pairing):
     return pend
 
 
+def test_qr_partial_retargets_approve_discard_at_inner_poll_div(scan_session):
+    """The poll-loop <div> must carry id="scan-activity-<id>" and the
+    approve/discard forms must target it (not the outer wrapper), so a swap
+    leaves the poll loop + Unpair button in the DOM."""
+    from compendium.web.jinja import templates
+
+    user = _staff_user(scan_session)
+    pairing = _make_pairing(
+        scan_session, user, claim=f"QRP{_next()}", allowed_modes=["catalog"]
+    )
+    pend = _pending_row(scan_session, pairing)
+
+    html = templates.get_template("scan/_qr_partial.html").render(
+        request=None,
+        pairing=pairing,
+        qr_svg="<svg></svg>",
+        csrf_token="t",
+        events=[],
+        pending=[pend],
+    )
+    inner_id = f'id="scan-activity-{pairing.id}"'
+    target = f'hx-target="#scan-activity-{pairing.id}"'
+    # The persistent poll div carries the inner id and the every-1500ms trigger.
+    assert inner_id in html
+    assert 'hx-trigger="every 1500ms"' in html
+    # Both action forms target the inner poll container, not the outer wrapper.
+    assert html.count(target) == 2
+    # The only remaining outer-wrapper target is the Unpair form (outerHTML swap).
+    assert html.count(f'hx-target="#scan-pairing-{pairing.id}"') == 1
+
+
 def test_approve_creates_item_and_removes_pending(scan_client, scan_session):
     cookies, owner = _login_owner(scan_client, scan_session)
     pairing = _make_pairing(
