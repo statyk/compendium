@@ -252,6 +252,101 @@ def test_discard_other_users_pairing_rejected(scan_client, scan_session):
     assert pend.status == "pending"
 
 
+def _capture_new_form_ctx(scan_client, monkeypatch, *, cookies, pending_id):
+    """Drive GET /ui/items/new and capture the template context dict.
+
+    ``items/new.html`` does not (yet) render ``prefill``/``pending_id``, so the
+    only observable difference between an owner and a non-owner is in the route
+    context. We capture it here by intercepting the template render.
+    """
+    from compendium.web.jinja import templates
+
+    captured: dict = {}
+    orig = templates.TemplateResponse
+
+    def _spy(request, name, context=None, *args, **kwargs):
+        if name == "items/new.html":
+            captured.update(context or {})
+        return orig(request, name, context, *args, **kwargs)
+
+    monkeypatch.setattr(templates, "TemplateResponse", _spy)
+    resp = scan_client.get(
+        f"/ui/items/new?pending_id={pending_id}", cookies=cookies
+    )
+    assert resp.status_code == 200
+    return captured
+
+
+def test_add_item_prefill_does_not_leak_across_users(
+    scan_client, scan_session, monkeypatch
+):
+    """IDOR: GET /ui/items/new?pending_id=<A's> must not prefill for user B.
+
+    User A owns a pending scan. A different staff user B (also holding
+    ``catalog.import``) requests the Add-Item form with A's ``pending_id``.
+    B must be treated as if no ``pending_id`` was passed: the route context
+    carries neither A's snapshot (``prefill``) nor the ``pending_id`` carrier.
+    """
+    owner_cookies, owner = _login_owner(scan_client, scan_session)
+    pairing = _make_pairing(
+        scan_session, owner, claim=f"C_{_next()}", allowed_modes=["catalog"]
+    )
+    pend = _pending_row(scan_session, pairing)
+
+    # B is a different staff user who also holds catalog.import.
+    other_cookies, other = _login_owner(scan_client, scan_session)
+    assert other.id != owner.id
+
+    # Positive control — owner A: gate open → prefill + pending_id present.
+    owner_ctx = _capture_new_form_ctx(
+        scan_client, monkeypatch, cookies=owner_cookies, pending_id=pend.id
+    )
+    assert owner_ctx.get("pending_id") == pend.id
+    assert owner_ctx.get("prefill") == dict(_GIVER_META)
+
+    # Non-owner B: gate closed → no prefill, no pending_id.
+    other_ctx = _capture_new_form_ctx(
+        scan_client, monkeypatch, cookies=other_cookies, pending_id=pend.id
+    )
+    assert other_ctx.get("pending_id") is None
+    assert other_ctx.get("prefill") is None
+
+
+def test_add_item_create_does_not_consume_other_users_pending(
+    scan_client, scan_session
+):
+    """IDOR (write): B posting A's pending_id must not approve A's pending row."""
+    owner = _staff_user(scan_session)
+    pairing = _make_pairing(
+        scan_session, owner, claim=f"C_{_next()}", allowed_modes=["catalog"]
+    )
+    pend = _pending_row(scan_session, pairing)
+
+    cookies, other = _login_owner(scan_client, scan_session)
+    assert other.id != owner.id
+
+    raw, signed = _csrf_pair()
+    resp = scan_client.post(
+        "/ui/items/new",
+        data={
+            "media_type": "book",
+            "identifier_kind": "isbn",
+            "identifier_value": _GIVER_ISBN,
+            "pending_id": str(pend.id),
+            "csrf_token": raw,
+        },
+        cookies={**cookies, CSRF_COOKIE: signed},
+        follow_redirects=False,
+    )
+    # The create itself may succeed (B is allowed to add items); what must NOT
+    # happen is consuming A's pending row.
+    assert resp.status_code in (200, 303)
+    scan_session.refresh(pend)
+    assert pend.status == "pending"
+    assert pend.created_item_id is None
+    assert pend.resolved_by is None
+
+
 def test_log_renders_feed_and_pending(scan_client, scan_session):
     cookies, owner = _login_owner(scan_client, scan_session)
     pairing = _make_pairing(

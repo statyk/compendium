@@ -166,8 +166,19 @@ def item_new_form(
         from compendium.repositories.sql.scan_pending_item_repository import (
             SqlScanPendingItemRepository,
         )
+        from compendium.repositories.sql.scan_pairing_repository import (
+            SqlScanPairingRepository,
+        )
         pend = SqlScanPendingItemRepository(session).get(pending_id)
-        if pend is not None and pend.status == "pending":
+        pairing = (
+            SqlScanPairingRepository(session).get(pend.pairing_id) if pend else None
+        )
+        if (
+            pend is not None
+            and pend.status == "pending"
+            and pairing is not None
+            and pairing.user_id == user.id
+        ):
             ctx["pending_id"] = pend.id
             ctx["prefill"] = pend.meta_json
             ctx["preset_media_type"] = "book"
@@ -420,8 +431,19 @@ def item_create(
         from compendium.repositories.sql.scan_pending_item_repository import (
             SqlScanPendingItemRepository,
         )
+        from compendium.repositories.sql.scan_pairing_repository import (
+            SqlScanPairingRepository,
+        )
         pend = SqlScanPendingItemRepository(session).get(int(pending_id.strip()))
-        if pend is not None and pend.status == "pending":
+        pairing = (
+            SqlScanPairingRepository(session).get(pend.pairing_id) if pend else None
+        )
+        if (
+            pend is not None
+            and pend.status == "pending"
+            and pairing is not None
+            and pairing.user_id == user.id
+        ):
             pend.status = "approved"
             pend.resolved_at = datetime.now(timezone.utc)
             pend.resolved_by = user.id
