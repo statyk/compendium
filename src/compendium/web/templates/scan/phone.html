@@ -44,7 +44,7 @@
         </button>
         {% endfor %}
         <label class="scan-phone-review" id="scan-review-wrap" hidden>
-          <input type="checkbox" id="scan-review-cb"> Review first
+          <input type="checkbox" id="scan-review-cb"{% if catalog_review %} checked{% endif %}> Review first
         </label>
       </div>
     </div>

@@ -378,6 +378,100 @@ def test_add_item_create_does_not_consume_other_users_pending(
     assert pend.resolved_by is None
 
 
+def test_approve_pending_from_different_displayed_pairing(scan_client, scan_session):
+    """The review queue spans all the owner's pairings and survives unpair, so
+    approving via a DIFFERENT (displayed) pairing the owner also owns must work.
+
+    Owner has pairings A and B. A pending row sits on A. The desk currently
+    displays B and builds the approve URL with B's id. Approving must authorize
+    the pending row via A (its own pairing) and re-render B's container.
+    """
+    cookies, owner = _login_owner(scan_client, scan_session)
+    pairing_a = _make_pairing(
+        scan_session, owner, claim=f"C_{_next()}", allowed_modes=["catalog"]
+    )
+    pairing_b = _make_pairing(
+        scan_session, owner, claim=f"C_{_next()}", allowed_modes=["catalog"]
+    )
+    pend = _pending_row(scan_session, pairing_a)
+
+    items_before = scan_session.query(Item).count()
+    raw, signed = _csrf_pair()
+    resp = scan_client.post(
+        f"/ui/scan/pairings/{pairing_b.id}/pending/{pend.id}/approve",
+        data={"csrf_token": raw},
+        cookies={**cookies, CSRF_COOKIE: signed},
+    )
+    assert resp.status_code == 200
+    # An Item was created from A's pending snapshot.
+    assert scan_session.query(Item).count() == items_before + 1
+    scan_session.refresh(pend)
+    assert pend.status == "approved"
+    assert pend.created_item_id is not None
+    assert pend.resolved_by == owner.id
+    # The resolved row is no longer listed in the (re-rendered) queue.
+    assert f"/pending/{pend.id}/approve" not in resp.text
+
+
+def test_discard_pending_from_different_displayed_pairing(scan_client, scan_session):
+    """Discard cross-pairing success path — mirror of the approve case."""
+    cookies, owner = _login_owner(scan_client, scan_session)
+    pairing_a = _make_pairing(
+        scan_session, owner, claim=f"C_{_next()}", allowed_modes=["catalog"]
+    )
+    pairing_b = _make_pairing(
+        scan_session, owner, claim=f"C_{_next()}", allowed_modes=["catalog"]
+    )
+    pend = _pending_row(scan_session, pairing_a)
+
+    items_before = scan_session.query(Item).count()
+    raw, signed = _csrf_pair()
+    resp = scan_client.post(
+        f"/ui/scan/pairings/{pairing_b.id}/pending/{pend.id}/discard",
+        data={"csrf_token": raw},
+        cookies={**cookies, CSRF_COOKIE: signed},
+    )
+    assert resp.status_code == 200
+    assert scan_session.query(Item).count() == items_before
+    scan_session.refresh(pend)
+    assert pend.status == "discarded"
+    assert f"/pending/{pend.id}/discard" not in resp.text
+
+
+def test_approve_cross_pairing_non_owner_of_pending_rejected(
+    scan_client, scan_session
+):
+    """Security: ownership is enforced via the pending row's OWN pairing.
+
+    User B owns pairing B but NOT pairing A (owned by A). B targets A's pending
+    row via B's pairing id in the URL. Even though B owns the displayed pairing,
+    the pending row belongs to A, so it must be rejected and left untouched.
+    """
+    owner_a = _staff_user(scan_session)
+    pairing_a = _make_pairing(
+        scan_session, owner_a, claim=f"C_{_next()}", allowed_modes=["catalog"]
+    )
+    pend = _pending_row(scan_session, pairing_a)
+
+    cookies_b, owner_b = _login_owner(scan_client, scan_session)
+    assert owner_b.id != owner_a.id
+    pairing_b = _make_pairing(
+        scan_session, owner_b, claim=f"C_{_next()}", allowed_modes=["catalog"]
+    )
+
+    items_before = scan_session.query(Item).count()
+    raw, signed = _csrf_pair()
+    resp = scan_client.post(
+        f"/ui/scan/pairings/{pairing_b.id}/pending/{pend.id}/approve",
+        data={"csrf_token": raw},
+        cookies={**cookies_b, CSRF_COOKIE: signed},
+    )
+    assert resp.status_code == 404
+    scan_session.refresh(pend)
+    assert pend.status == "pending"
+    assert scan_session.query(Item).count() == items_before
+
+
 def test_log_renders_feed_and_pending(scan_client, scan_session):
     cookies, owner = _login_owner(scan_client, scan_session)
     pairing = _make_pairing(

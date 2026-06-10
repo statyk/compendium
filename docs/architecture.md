@@ -774,16 +774,16 @@ A librarian can pair a smartphone as a wireless barcode scanner without installi
 1. **Desk creates pairing** — a librarian visits `/ui/scan/pair`. Compendium creates a `ScanPairing` row with a short-TTL claim secret (hashed; raw secret is never stored). The secret and pairing URL are encoded into a QR rendered inline as SVG.
 2. **Phone claims** — the phone camera scans the QR, POSTs the claim secret to `/ui/scan/phone/claim`, and receives a session cookie. The claim secret is rotated at this point (the hash is updated; the old secret is invalidated).
 3. **Phone dispatches scans** — the phone browser POSTs each decoded barcode to `/ui/scan/phone/dispatch`. The server returns the result (work title, patron name, etc.) based on the active mode.
-4. **Desk receives results** — the desk page polls `/ui/scan/desk` (via HTMX) to show the latest scan count and any mode-change prompts.
+4. **Desk receives results** — the desk page polls `GET /ui/scan/pairings/{id}/log` (via HTMX) to show the latest scan count and any mode-change prompts.
 5. **Session ends** — the librarian clicks "Unpair" (or closes the browser), which sets `revoked_at` on the `ScanPairing` row. The phone's next dispatch request sees a 401 and shows a "session ended" message. Sessions also expire automatically when `expires_at` passes (controlled by `scan_session_minutes`, default 60 min).
 
 Expiry and revocation are enforced on every phone action (claim, dispatch, mode-change) — there is no grace window.
 
 ### Desk live feed and review queue
 
-Each non-ignored phone dispatch appends a row to the `scan_event` table (`kind` is `"ok"` or `"error"`; the 2-second idempotency collapse is never written). The desk page polls `/ui/scan/desk` every 1500 ms via HTMX and renders the most recent events as a live feed.
+Each non-ignored phone dispatch appends a row to the `scan_event` table (`kind` is `"ok"` or `"error"`; the 2-second idempotency collapse is never written). The desk page polls `GET /ui/scan/pairings/{id}/log` every 1500 ms via HTMX and renders the most recent events as a live feed plus the review queue (below).
 
-When a pairing's `catalog_review` flag is on (a per-pairing toggle the librarian sets at pairing time), catalog-mode ISBN scans are held for desk review instead of immediately creating an item. Each held scan lands in the `scan_pending_item` table with `status="pending"`. The librarian reviews the queue at `POST /ui/scan/review` and can approve (`POST /ui/scan/pairings/{id}/pending/{pid}/approve`), edit-then-approve, or discard (`POST /ui/scan/pairings/{id}/pending/{pid}/discard`) each entry. Approving creates the Work+Item using the stored metadata snapshot. Discarding sets `status="discarded"`. The Add-Item web flow also supports a pairing entry point that routes newly created items back to the phone session's desk page.
+When a pairing's `catalog_review` flag is on (a per-pairing toggle the phone sets at any time via `POST /ui/scan/review`, available in catalog mode only), catalog-mode ISBN scans are held for desk review instead of immediately creating an item. Each held scan lands in the `scan_pending_item` table with `status="pending"`. The desk review queue is rendered as part of the `GET /ui/scan/pairings/{id}/log` poll partial; the librarian can approve (`POST /ui/scan/pairings/{id}/pending/{pid}/approve`), edit-then-approve, or discard (`POST /ui/scan/pairings/{id}/pending/{pid}/discard`) each entry. Approving creates the Work+Item using the stored metadata snapshot. Discarding sets `status="discarded"`. The queue spans all of the librarian's pairings and survives unpairing, so a held scan can still be approved after the original pairing ends; approve/discard authorize each entry via its own pairing's owner. The Add-Item web flow also supports a pairing entry point that routes newly created items back to the phone session's desk page.
 
 ### Multi-mode state machine
 

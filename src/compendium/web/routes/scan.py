@@ -529,6 +529,7 @@ def claim_pairing(
             "pairing": row,
             "allowed_modes": row.allowed_modes,
             "mode": row.mode,
+            "catalog_review": row.catalog_review,
             "csrf_token": csrf,
         },
     )
@@ -729,9 +730,17 @@ def approve_pending(
         )
     pend_repo = SqlScanPendingItemRepository(session)
     pend = pend_repo.get(pending_id)
-    if pend is None or pend.pairing_id != pairing_id or pend.status != "pending":
+    if pend is None or pend.status != "pending":
         return HTMLResponse(
             '<p class="error-banner">Item already resolved.</p>', status_code=404
+        )
+    # Authorize the pending row via ITS OWN pairing — the review queue spans the
+    # user's pairings and survives unpair, so the pending row need not belong to
+    # the displayed pairing, but it MUST be owned by this user.
+    pend_pairing = SqlScanPairingRepository(session).get(pend.pairing_id)
+    if pend_pairing is None or pend_pairing.user_id != user.id:
+        return HTMLResponse(
+            '<p class="error-banner">Item not found.</p>', status_code=404
         )
     try:
         _work, item = _catalog_svc(session, user).add_from_metadata(
@@ -780,9 +789,20 @@ def discard_pending(
         )
     pend_repo = SqlScanPendingItemRepository(session)
     pend = pend_repo.get(pending_id)
-    if pend is not None and pend.pairing_id == pairing_id and pend.status == "pending":
-        pend.status = "discarded"
-        pend.resolved_at = _now()
-        pend.resolved_by = user.id
-        session.flush()
+    if pend is None or pend.status != "pending":
+        return HTMLResponse(
+            '<p class="error-banner">Item already resolved.</p>', status_code=404
+        )
+    # Authorize the pending row via ITS OWN pairing (see approve_pending): the
+    # queue spans the user's pairings, so it need not match the displayed one,
+    # but it MUST be owned by this user.
+    pend_pairing = SqlScanPairingRepository(session).get(pend.pairing_id)
+    if pend_pairing is None or pend_pairing.user_id != user.id:
+        return HTMLResponse(
+            '<p class="error-banner">Item not found.</p>', status_code=404
+        )
+    pend.status = "discarded"
+    pend.resolved_at = _now()
+    pend.resolved_by = user.id
+    session.flush()
     return _render_activity(request, session, pairing, user)
