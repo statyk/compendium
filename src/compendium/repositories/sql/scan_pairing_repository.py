@@ -40,27 +40,6 @@ class SqlScanPairingRepository:
             (ScanPairing.revoked_at.isnot(None)) & (ScanPairing.revoked_at < cutoff),
         )
 
-    def count_terminal_older_than(self, cutoff: datetime) -> int:
-        """Count pairings that are no longer usable and older than cutoff."""
-        return (
-            self._s.query(ScanPairing)
-            .filter(self._terminal_filter(cutoff))
-            .count()
-        )
-
-    def delete_terminal_older_than(self, cutoff: datetime) -> int:
-        """Delete pairings that are no longer usable and older than cutoff.
-
-        Returns the number of rows deleted.
-        """
-        deleted = (
-            self._s.query(ScanPairing)
-            .filter(self._terminal_filter(cutoff))
-            .delete(synchronize_session=False)
-        )
-        self._s.flush()
-        return int(deleted)
-
     def terminal_deletable_ids(self, cutoff: datetime) -> list[int]:
         """Return IDs of terminal pairings that are safe to delete.
 

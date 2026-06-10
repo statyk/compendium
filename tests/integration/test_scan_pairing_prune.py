@@ -7,9 +7,6 @@ from typer.testing import CliRunner
 
 from compendium.cli.commands.maintenance import app as maintenance_app
 from compendium.domain.models import AppUser, ScanEvent, ScanPairing, ScanPendingItem
-from compendium.repositories.sql.scan_event_repository import SqlScanEventRepository
-from compendium.repositories.sql.scan_pairing_repository import SqlScanPairingRepository
-from compendium.repositories.sql.scan_pending_item_repository import SqlScanPendingItemRepository
 
 
 # ── Helpers ───────────────────────────────────────────────────────────────────
@@ -78,59 +75,6 @@ def _seed(session) -> tuple[ScanPairing, ScanPairing, ScanPairing]:
         token_hash="c" * 64,
     )
     return old_expired, old_revoked, live_recent
-
-
-# ── Repository ────────────────────────────────────────────────────────────────
-
-def test_count_terminal_older_than_both_old_rows(session):
-    _seed(session)
-    cutoff = datetime.now(timezone.utc) - timedelta(days=7)
-
-    count = SqlScanPairingRepository(session).count_terminal_older_than(cutoff)
-
-    assert count == 2
-
-
-def test_count_terminal_older_than_zero_when_nothing_old(session):
-    _seed(session)
-    cutoff = datetime.now(timezone.utc) - timedelta(days=365)
-
-    assert SqlScanPairingRepository(session).count_terminal_older_than(cutoff) == 0
-
-
-def test_count_terminal_excludes_live_session_with_tight_cutoff(session):
-    _seed(session)
-    # Use a cutoff that is in the past (7 days ago). The live_recent row
-    # expires_at is ~1 hour from now (well above the cutoff) and it has no
-    # revoked_at, so it must not be counted.
-    cutoff = datetime.now(timezone.utc) - timedelta(days=7)
-
-    count = SqlScanPairingRepository(session).count_terminal_older_than(cutoff)
-
-    # Only the two terminal-and-old rows (expired 100 days ago / revoked 100 days ago)
-    # should be included.
-    assert count == 2
-
-
-def test_delete_terminal_older_than_removes_only_terminal_old_rows(session):
-    old_expired, old_revoked, live_recent = _seed(session)
-    cutoff = datetime.now(timezone.utc) - timedelta(days=7)
-
-    deleted = SqlScanPairingRepository(session).delete_terminal_older_than(cutoff)
-
-    assert deleted == 2
-    remaining = {p.id for p in session.query(ScanPairing).all()}
-    assert remaining == {live_recent.id}
-
-
-def test_delete_terminal_older_than_noop_when_nothing_old(session):
-    _seed(session)
-    cutoff = datetime.now(timezone.utc) - timedelta(days=365)
-
-    deleted = SqlScanPairingRepository(session).delete_terminal_older_than(cutoff)
-
-    assert deleted == 0
-    assert session.query(ScanPairing).count() == 3
 
 
 # ── CLI ───────────────────────────────────────────────────────────────────────
@@ -228,6 +172,9 @@ def _mk_pending_item(
 def test_cascade_deletes_events_and_resolved_pending_skips_unresolved(session):
     """Prune cascades to scan_event + resolved scan_pending_item rows.
 
+    Drives the real CLI prune command so the actual production cascade
+    (events → pending-for-pairings → resolved-older-than → pairings) runs.
+
     - A terminal pairing with a ScanEvent and a *resolved* ScanPendingItem IS
       deleted, together with its event and resolved-pending rows.
     - A terminal pairing that still has an *un-resolved* (status="pending")
@@ -247,22 +194,19 @@ def test_cascade_deletes_events_and_resolved_pending_skips_unresolved(session):
     p2 = _mk_pairing(session, expires_at=ago_40, token_hash="e" * 64)
     pi2 = _mk_pending_item(session, p2.id, status="pending")
 
-    cutoff = now - timedelta(days=7)
-    pairing_repo = SqlScanPairingRepository(session)
-    event_repo = SqlScanEventRepository(session)
-    pending_repo = SqlScanPendingItemRepository(session)
+    runner = CliRunner()
 
-    ids = pairing_repo.terminal_deletable_ids(cutoff)
+    @contextmanager
+    def _scope():
+        yield session
 
-    # Only pairing 1 is deletable
-    assert ids == [p1.id]
+    with patch_session_scope(_scope):
+        result = runner.invoke(
+            maintenance_app, ["prune-scan-pairings", "--older-than-days", "7"]
+        )
 
-    # Execute cascade in FK-safe order
-    event_repo.delete_for_pairings(ids)
-    pending_repo.delete_resolved_older_than(cutoff)
-    count = pairing_repo.delete_by_ids(ids)
-
-    assert count == 1
+    assert result.exit_code == 0
+    assert "Pruned 1" in result.output
 
     # Pairing 1 and its children are gone (use fresh queries to bypass identity map)
     assert session.query(ScanPairing).filter(ScanPairing.id == p1.id).count() == 0
