@@ -534,7 +534,13 @@ CREATE INDEX ix_scan_pending_item_pairing_id ON scan_pending_item(pairing_id);
 | `b2c3d4e5f6a7` | Add counters table (auto-sequence for accession numbers) |
 | `c3d4e5f6a7b8` | Revamp identifiers (barcode format + external ID normalization) |
 | `d7e8f9a0b1c2` | Add work.sort_title (article-ignoring catalog sort key) |
+| `e9f0a1b2c3d4` | Fix failed_login.id column type (Integer, not BigInteger, for SQLite autoincrement) |
+| `fab1c2d3e4f5` | Add patron.account.manage permission to Librarian; partial unique index on patron.user_id |
+| `611abe9ea6e5` | Add metadata_cache table (persistent external-lookup cache) |
+| `a1b2c3d4e5f6` | Add app_user.password_changed_at (backfilled; pwd_iat JWT-invalidation claim) |
+| `1b17e2ba445c` | Consolidate barcode settings (barcode_length + barcode_location_enabled → barcode_format) |
 | `c4d5e6f7a8b9` | Add library_hours + closed_date; calendar.manage permission on Librarian |
+| `5b9e539aca65` | Add household table + patron.household_id; household.manage permission on Librarian |
 | `443891bfaa50` | Add item_note table (condition / lifecycle history trail) |
 | `b1c2d3e4f5a6` | Add curated_list + curated_list_entry; curatedlist.manage permission on Librarian |
 | `c2d3e4f5a6b7` | Add scan_pairing (remote phone-scanner sessions) |
