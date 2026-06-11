@@ -43,6 +43,7 @@ from compendium.services.metadata import (
 from compendium.web.csrf import check_csrf_form, ensure_csrf, set_csrf_cookie
 from compendium.web.deps import require_web_permission
 from compendium.web.jinja import templates
+from compendium.web.routes.scan import permitted_scan_modes
 
 router = APIRouter()
 
@@ -143,6 +144,11 @@ def item_new_form(
     user: AppUser = Depends(require_web_permission(_PERM_MANAGE)),
     session: Session = Depends(get_session),
 ):
+    scan_modes = permitted_scan_modes(user.role.permissions)
+    # This is the cataloging page: pre-check Catalog, leave Checkout/Checkin
+    # available but unchecked. Fall back to all permitted so at least one box
+    # is always checked.
+    scan_modes_checked = [m for m in scan_modes if m == "catalog"] or scan_modes
     ctx: dict = {
         "request": request,
         "user": user,
@@ -152,11 +158,8 @@ def item_new_form(
         "added_title": None,
         "added_work_id": work_id,
         "copy_work": None,
-        "scan_modes": (
-            ["catalog"]
-            if has_permission(user.role.permissions, "catalog.import")
-            else []
-        ),
+        "scan_modes": scan_modes,
+        "scan_modes_checked": scan_modes_checked,
     }
     if work_id:
         work = SqlWorkRepository(session).get(work_id)

@@ -789,7 +789,7 @@ The phone polls `GET /ui/scan/heartbeat` approximately every 5 seconds. When the
 
 ### Multi-mode state machine
 
-A pairing is created with an `allowed_modes` list (`checkout`, `checkin`, `catalog`) set at pairing time. The phone can toggle among the allowed modes. The active `mode` is stored on the `ScanPairing` row and read on every dispatch. In checkout mode, a `borrower_patron_id` is also tracked on the pairing (the librarian or patron selects the borrower on the desk; the phone sees just the scan).
+A pairing is created with an `allowed_modes` list (`checkout`, `checkin`, `catalog`) set at pairing time. Both the circulation desk and the Add-Item page offer every mode the librarian has permission for; they differ only in which they **pre-check** — the desk pre-checks the circulation modes (Checkout/Checkin), the Add-Item page pre-checks Catalog — and the librarian can opt into the others before generating the QR. The phone's initial `mode` is the first allowed mode, and the phone can toggle among the allowed modes thereafter. The active `mode` is stored on the `ScanPairing` row and read on every dispatch. In checkout mode, a `borrower_patron_id` is also tracked on the pairing (the librarian or patron selects the borrower on the desk; the phone sees just the scan).
 
 ### HTTPS / secure-context requirement
 

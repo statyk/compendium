@@ -88,6 +88,20 @@ MODE_PERMISSION = {
     "catalog": "catalog.import",
 }
 
+
+def permitted_scan_modes(permissions) -> list[str]:
+    """Scan modes the holder of ``permissions`` may use, in canonical order.
+
+    Both the circ desk and the Add-Item page offer the full set of permitted
+    modes (the phone is one roaming multi-mode device); the page only differs in
+    which modes it pre-checks.
+    """
+    return [
+        m for m, perm in MODE_PERMISSION.items()
+        if has_permission(permissions, perm)
+    ]
+
+
 _CLAIM_TTL = timedelta(minutes=2)  # short pre-claim TTL; session TTL set at claim
 
 

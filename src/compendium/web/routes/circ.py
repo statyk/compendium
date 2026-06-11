@@ -18,14 +18,13 @@ from compendium.repositories.sql.loan_policy_repository import SqlLoanPolicyRepo
 from compendium.repositories.sql.loan_repository import SqlLoanRepository
 from compendium.repositories.sql.patron_repository import SqlPatronRepository
 from compendium.services.audit import AuditService
-from compendium.services.auth import has_permission
 from compendium.services.calendar import CalendarService
 from compendium.services.circulation import CirculationService
 from compendium.services.site_settings import get_site_setting
 from compendium.web.csrf import check_csrf_form, ensure_csrf, set_csrf_cookie
 from compendium.web.deps import get_calendar_svc, require_web_permission
 from compendium.web.jinja import templates
-from compendium.web.routes.scan import MODE_PERMISSION
+from compendium.web.routes.scan import permitted_scan_modes
 
 router = APIRouter()
 
@@ -69,14 +68,22 @@ def circ_desk(
     request: Request,
     user: AppUser = Depends(require_web_permission(_PERM)),
 ):
-    scan_modes = [
-        m for m, perm in MODE_PERMISSION.items()
-        if has_permission(user.role.permissions, perm)
-    ]
+    scan_modes = permitted_scan_modes(user.role.permissions)
+    # This is the circulation page: pre-check the circulation modes, leave
+    # Catalog available but unchecked. Fall back to all permitted so at least
+    # one box is always checked.
+    scan_modes_checked = [
+        m for m in scan_modes if m in ("checkout", "checkin")
+    ] or scan_modes
     return _render(
         "circ/desk.html",
         request,
-        {"request": request, "user": user, "scan_modes": scan_modes},
+        {
+            "request": request,
+            "user": user,
+            "scan_modes": scan_modes,
+            "scan_modes_checked": scan_modes_checked,
+        },
     )
 
 

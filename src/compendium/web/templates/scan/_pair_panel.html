@@ -1,5 +1,8 @@
-{# Shared "Pair a phone" panel. Caller passes scan_modes (list) and csrf_token. #}
+{# Shared "Pair a phone" panel. Caller passes scan_modes (all permitted modes),
+   optionally scan_modes_checked (the subset to pre-check; defaults to all), and
+   csrf_token. #}
 {% if scan_modes %}
+{% set checked_modes = scan_modes_checked if scan_modes_checked is defined else scan_modes %}
 <article class="scan-pair-article">
   <header><strong>Pair a phone</strong></header>
   <p>Generate a QR code to pair a phone as a wireless barcode scanner for this session.</p>
@@ -11,7 +14,7 @@
     <div class="scan-pair-modes" id="scan-pair-form-fields">
       {% for m in scan_modes %}
       <label>
-        <input type="checkbox" name="{{ m }}" value="on" checked>
+        <input type="checkbox" name="{{ m }}" value="on"{% if m in checked_modes %} checked{% endif %}>
         {{ m }}
       </label>
       {% endfor %}
