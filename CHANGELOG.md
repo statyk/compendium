@@ -7,52 +7,50 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.2.0] - 2026-06-11
+
 ### Added
 
 - **Remote phone scanner** — pair a smartphone to the circulation desk via QR
   code. The phone camera dispatches barcodes to the desk in real time without
-  installing a native app. Supports checkout, checkin, and catalog-lookup modes.
+  installing a native app. Supports checkout, checkin, and catalog modes.
   Pairing is ephemeral: a short-TTL claim secret lives in the QR; after the
   phone claims it, the secret rotates to a session cookie; the librarian can
-  unpair from the desk at any time.
+  unpair from the desk at any time, and the phone detects the unpair within ~5 s.
   - New settings: `public_base_url` (DB-editable, env `COMPENDIUM_PUBLIC_BASE_URL`)
     and `scan_session_minutes` (DB-editable, env `COMPENDIUM_SCAN_SESSION_MINUTES`,
     default 60).
-  - `COMPENDIUM_PUBLIC_BASE_URL` **must** be set to the external `https://` URL
-    when running behind a reverse proxy — uvicorn cannot infer `X-Forwarded-Proto`,
-    so without it the QR encodes an `http://` URL, which browsers reject as a
-    non-secure context (camera access requires HTTPS).
-  - New maintenance command: `compendium maintenance prune-scan-pairings
-    --older-than-days N` — deletes terminal (expired or revoked) pairing rows.
-    Suggested cadence: daily, `--older-than-days 7`.
+  - The phone camera API requires a secure context, so the QR must encode an
+    `https://` URL. Compendium derives the base URL from the staff request,
+    honoring `X-Forwarded-Proto` — the bundled `docker/nginx` config sets it, so
+    pairing works out-of-the-box behind the shipped stack. Set
+    `COMPENDIUM_PUBLIC_BASE_URL` only when your proxy does not set that header, or
+    to pin a specific public hostname; a non-HTTPS base URL is refused.
+  - **Pairing on both the circulation desk and the Add-Item page** — both offer
+    every scan mode the librarian has permission for, with page-appropriate modes
+    pre-checked (desk: checkout/checkin; Add-Item: catalog).
   - **Desk live feed** — the desk page polls every 1500 ms and shows a real-time
     event log (`scan_event` table) for the active session, with barcode, mode,
     and success/error indicator per scan.
   - **Per-pairing review-first toggle** (`catalog_review` DB flag) — when enabled
     at pairing time, catalog-mode ISBN scans are held in a desk review queue
     (`scan_pending_item` table) instead of immediately creating an item. The
-    librarian approves, edits, or discards each entry from the desk; approving
-    creates the Work+Item from the stored metadata snapshot.
+    librarian approves, edits (in an inline modal on the desk page — no
+    navigating away), or discards each entry; approving creates the Work+Item
+    from the stored metadata snapshot.
   - **Richer phone feedback** — the phone scanner page flashes a colour-coded
     result banner on each dispatch (green/red) and shows a scrollable recent-scan
     list so the operator can see the last few barcodes without looking at the desk.
-  - **Add-Item pairing entry point** — the Add-Item web flow accepts an optional
-    `pairing_id` parameter that routes newly created items back to the phone
-    session's desk page.
-  - `prune-scan-pairings` now cascade-deletes `scan_event` and resolved
-    `scan_pending_item` rows when a terminal pairing is pruned. Pairings that
-    still have un-resolved (`status="pending"`) pending items are skipped
-    entirely — no pending desk-review work is ever silently dropped.
+  - New maintenance command: `compendium maintenance prune-scan-pairings
+    --older-than-days N` — deletes terminal (expired or revoked) pairing rows and
+    cascade-deletes their `scan_event` and resolved `scan_pending_item` rows.
+    Pairings with un-resolved (`status="pending"`) review items are skipped
+    entirely — no pending desk-review work is ever silently dropped. Suggested
+    cadence: daily, `--older-than-days 7`.
   - **Public API seam (downstream consumers):** `runContinuous(video, backend,
     {onCode, onMiss})` in `scanner.js` is now a pinned public API consumed
     downstream (LitCat). Breaking changes to this signature will be called out
     explicitly in future changelog entries.
-  - **Inline edit of pending catalog scans** — the Edit button in the desk
-    review queue opens an inline modal on the desk page; the librarian can
-    correct metadata and approve without navigating away from the desk.
-  - **Phone detects unpair within ~5 s** — the phone polls
-    `GET /ui/scan/heartbeat` every ~5 seconds; when the librarian clicks Unpair
-    the phone's session ends within one heartbeat interval.
 
 ## [1.1.0] - 2026-06-01
 
@@ -119,7 +117,8 @@ First public release.
 - **Auth** — five preset roles + custom roles; JWT (API) + cookie (web);
   role-escalation guardrail.
 
-[Unreleased]: https://github.com/statyk/compendium/compare/v1.1.0...HEAD
+[Unreleased]: https://github.com/statyk/compendium/compare/v1.2.0...HEAD
+[1.2.0]: https://github.com/statyk/compendium/compare/v1.1.0...v1.2.0
 [1.1.0]: https://github.com/statyk/compendium/compare/v1.0.2...v1.1.0
 [1.0.2]: https://github.com/statyk/compendium/compare/v1.0.1...v1.0.2
 [1.0.1]: https://github.com/statyk/compendium/compare/v1.0.0...v1.0.1
