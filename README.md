@@ -1,5 +1,7 @@
 # Compendium
 
+[![PyPI](https://img.shields.io/pypi/v/compendium-ils)](https://pypi.org/project/compendium-ils/)
+
 A library card catalog system for physical items — books, vinyl records, DVDs, CDs.
 
 ## Features
