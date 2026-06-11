@@ -7,6 +7,20 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.2.1] - 2026-06-11
+
+### Changed
+
+- **CI:** bumped the `docker/*` actions in the release workflow to their
+  Node-24-compatible major versions (`setup-qemu-action` v4, `setup-buildx-action`
+  v4, `login-action` v4, `metadata-action` v6, `build-push-action` v7), ahead of
+  GitHub's Node-20 runtime retirement.
+
+### Fixed
+
+- **Docs:** added 6 missing rows to the migration-history table in
+  `docs/schema.md` so it matches `alembic history` (now 30 rows).
+
 ## [1.2.0] - 2026-06-11
 
 ### Added
