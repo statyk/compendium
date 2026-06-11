@@ -443,6 +443,74 @@ Index: `ix_closed_date_start` on `start_date`.
 
 ---
 
+### `scan_pairing`
+
+A staff member's paired phone-scanner session (remote phone scanner). The pre-claim row is created when a librarian generates a pairing QR, then upgraded in place when a phone claims it — only the SHA-256 of the *current* secret (claim secret before claim, session secret after) is stored, never the raw secret. Terminal (expired/revoked) rows are pruned by `compendium maintenance prune-scan-pairings`.
+
+```sql
+CREATE TABLE scan_pairing (
+    id                 INTEGER PRIMARY KEY,
+    token_hash         VARCHAR(64) NOT NULL,      -- SHA-256 of the current secret; raw secret never stored
+    user_id            INTEGER NOT NULL REFERENCES app_user(id),
+    allowed_modes      JSON NOT NULL,             -- subset of ["checkout","checkin","catalog"] set at pairing time
+    mode               VARCHAR(16) NOT NULL,      -- current scanner mode
+    borrower_patron_id INTEGER REFERENCES patron(id),  -- current borrower in checkout mode
+    count              INTEGER NOT NULL DEFAULT 0, -- items handled this session
+    catalog_review     BOOLEAN NOT NULL DEFAULT 0, -- hold catalog scans for desk review (review-first)
+    created_at         DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    expires_at         DATETIME NOT NULL,
+    claimed_at         DATETIME,                  -- set when a phone claims the QR
+    revoked_at         DATETIME                   -- set on Unpair
+);
+CREATE UNIQUE INDEX ix_scan_pairing_token_hash ON scan_pairing(token_hash);
+CREATE INDEX ix_scan_pairing_expires_at ON scan_pairing(expires_at);
+```
+
+---
+
+### `scan_event`
+
+Append-only desk live-feed log; one row per non-ignored phone dispatch (the 2-second idempotency collapse, `kind="ignored"`, is never written). Pruned alongside its terminal pairing.
+
+```sql
+CREATE TABLE scan_event (
+    id          INTEGER PRIMARY KEY,
+    pairing_id  INTEGER NOT NULL REFERENCES scan_pairing(id),
+    mode        VARCHAR(16) NOT NULL,
+    kind        VARCHAR(16) NOT NULL,    -- "ok" | "error"
+    message     VARCHAR(255) NOT NULL,
+    item_id     INTEGER REFERENCES item(id),
+    patron_id   INTEGER REFERENCES patron(id),
+    created_at  DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP
+);
+CREATE INDEX ix_scan_event_pairing_id ON scan_event(pairing_id);
+```
+
+---
+
+### `scan_pending_item`
+
+A catalog scan held for desk review (review-first mode, `scan_pairing.catalog_review`). No Item exists yet; `meta_json` is the fetched metadata snapshot used to create the Work+Item on approve. The review queue spans all of a librarian's pairings and survives unpairing, so un-resolved (`status="pending"`) rows are never pruned.
+
+```sql
+CREATE TABLE scan_pending_item (
+    id              INTEGER PRIMARY KEY,
+    pairing_id      INTEGER NOT NULL REFERENCES scan_pairing(id),
+    isbn            VARCHAR(20) NOT NULL,
+    title           VARCHAR(512) NOT NULL,
+    meta_json       JSON NOT NULL,        -- metadata snapshot; Work+Item created from it on approve
+    cover_url       VARCHAR(1024),        -- upstream cover URL (rendered via the same-origin /ui/covers proxy)
+    status          VARCHAR(16) NOT NULL DEFAULT 'pending',  -- pending | approved | discarded
+    created_at      DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    resolved_at     DATETIME,
+    resolved_by     INTEGER REFERENCES app_user(id),
+    created_item_id INTEGER REFERENCES item(id)   -- the Item created on approve
+);
+CREATE INDEX ix_scan_pending_item_pairing_id ON scan_pending_item(pairing_id);
+```
+
+---
+
 ## Migration history
 
 | Revision | Description |
@@ -468,4 +536,6 @@ Index: `ix_closed_date_start` on `start_date`.
 | `d7e8f9a0b1c2` | Add work.sort_title (article-ignoring catalog sort key) |
 | `c4d5e6f7a8b9` | Add library_hours + closed_date; calendar.manage permission on Librarian |
 | `443891bfaa50` | Add item_note table (condition / lifecycle history trail) |
-| (next) | Add curated_list + curated_list_entry; curatedlist.manage permission on Librarian |
+| `b1c2d3e4f5a6` | Add curated_list + curated_list_entry; curatedlist.manage permission on Librarian |
+| `c2d3e4f5a6b7` | Add scan_pairing (remote phone-scanner sessions) |
+| `d3e4f5a6b7c8` | Add scan_event + scan_pending_item; scan_pairing.catalog_review (desk live feed + review queue) |
