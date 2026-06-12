@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from types import SimpleNamespace
 
+from compendium.domain.errors import AmbiguousItemError, BusinessRuleError
 from compendium.domain.identifiers import format_item_barcode, format_patron_card
 from compendium.web.routes.scan import IdempotencyGuard, run_state_machine
 
@@ -281,3 +282,29 @@ def test_checkin_garbage_code_still_rejected():
     row = _row("checkin")
     reply = _call(row, "HELLO-123")
     assert reply["kind"] == "error"
+
+
+def test_checkin_isbn_ambiguous_translates_to_error():
+    # AmbiguousItemError must reach the phone as a friendly error reply, not
+    # re-raise out of _circ_error (it relies on the BusinessRuleError subclass).
+    row = _row("checkin")
+
+    def _checkin(bc):
+        raise AmbiguousItemError(bc, "Dune", [])
+
+    reply = _call(row, ISBN, checkin=_checkin)
+    assert reply["kind"] == "error"
+    assert "Multiple copies" in reply["message"]
+    assert row.count == 0
+
+
+def test_checkin_isbn_no_copies_translates_to_error():
+    row = _row("checkin")
+
+    def _checkin(bc):
+        raise BusinessRuleError("No copies of 'Dune' are checked out")
+
+    reply = _call(row, ISBN, checkin=_checkin)
+    assert reply["kind"] == "error"
+    assert "are checked out" in reply["message"]
+    assert row.count == 0
