@@ -245,3 +245,36 @@ def test_checkin_exact_barcode_never_ambiguous(session, copies, patron, patron2)
     circ.checkout(ISBN13, patron2.library_card_number)
     loan = circ.checkin("ISBNTEST-2")
     assert loan.item_id == copies[1].id
+
+
+# ── renew ─────────────────────────────────────────────────────────────────────
+
+
+def test_renew_by_isbn_scopes_to_patron(session, copies, patron, patron2):
+    circ = _circulation(session)
+    my_loan = circ.checkout(ISBN13, patron.library_card_number)
+    circ.checkout(ISBN13, patron2.library_card_number)
+    renewed = circ.renew(ISBN13, patron.library_card_number)
+    assert renewed.id == my_loan.id
+    assert renewed.renewal_count == 1
+
+
+def test_renew_by_isbn_no_loan_for_patron(session, copies, patron, patron2):
+    circ = _circulation(session)
+    circ.checkout(ISBN13, patron2.library_card_number)
+    with pytest.raises(BusinessRuleError, match="on loan to card"):
+        circ.renew(ISBN13, patron.library_card_number)
+
+
+def test_renew_by_isbn_same_patron_two_copies_renews_earliest_due(
+    session, copies, patron
+):
+    from datetime import timedelta
+
+    circ = _circulation(session)
+    first = circ.checkout(ISBN13, patron.library_card_number)
+    second = circ.checkout(ISBN13, patron.library_card_number)
+    second.due_at = first.due_at - timedelta(days=3)
+    session.flush()
+    renewed = circ.renew(ISBN13, patron.library_card_number)
+    assert renewed.id == second.id

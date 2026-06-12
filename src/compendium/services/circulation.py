@@ -194,6 +194,31 @@ class CirculationService:
             raise AmbiguousItemError(code, work.title, active)
         return active[0].item
 
+    def _resolve_copy_for_renew(self, code: str, card_number: str) -> Item:
+        """Resolve an ISBN/UPC to a copy on loan to *this* patron.
+
+        Renewal carries patron context, so scope to their loans; if the same
+        patron somehow has several copies, renew the one due soonest."""
+        work = self._resolve_work_by_code(code)
+        if work is None:
+            raise self._code_not_found(code)
+        patron = self._patrons.get_by_card_number(card_number)
+        if patron is None:
+            raise BusinessRuleError(
+                f"Loan does not belong to patron with card '{card_number}'"
+            )
+        own = [
+            loan
+            for i in work.items
+            if (loan := self._loans.get_active_for_item(i.id)) is not None
+            and loan.patron_id == patron.id
+        ]
+        if not own:
+            raise BusinessRuleError(
+                f"No copies of '{work.title}' are on loan to card '{card_number}'"
+            )
+        return min(own, key=lambda loan: loan.due_at).item
+
     def _promote_hold(self, item: Item) -> None:
         """After checkin: promote oldest WAITING hold to AVAILABLE, or free the item."""
         hold = self._holds.get_oldest_waiting_for_work(item.work_id)
@@ -356,7 +381,7 @@ class CirculationService:
     def renew(self, barcode: str, card_number: str) -> Loan:
         item = self._items.get_by_barcode(barcode)
         if item is None:
-            raise NotFoundError(f"No item with barcode '{barcode}'")
+            item = self._resolve_copy_for_renew(barcode, card_number)
 
         loan = self._loans.get_active_for_item(item.id)
         if loan is None:
