@@ -13,10 +13,14 @@ from tests.helpers import setup_sqlite_fts
 from compendium.config.seed import seed_defaults
 from compendium.config.settings import Settings
 from compendium.db.session import get_session
-from compendium.domain.models import AppUser, Base, Patron
+from compendium.domain.errors import BusinessRuleError
+from compendium.domain.models import AppUser, Base, Item, Patron
 from compendium.repositories.sql.branch_repository import SqlBranchRepository
 from compendium.repositories.sql.creator_repository import SqlCreatorRepository
+from compendium.repositories.sql.hold_repository import SqlHoldRepository
 from compendium.repositories.sql.item_repository import SqlItemRepository
+from compendium.repositories.sql.loan_policy_repository import SqlLoanPolicyRepository
+from compendium.repositories.sql.loan_repository import SqlLoanRepository
 from compendium.repositories.sql.media_type_repository import SqlMediaTypeRepository
 from compendium.repositories.sql.patron_repository import SqlPatronRepository
 from compendium.repositories.sql.role_repository import SqlRoleRepository
@@ -24,6 +28,7 @@ from compendium.repositories.sql.user_repository import SqlUserRepository
 from compendium.repositories.sql.work_repository import SqlWorkRepository
 from compendium.services.auth import hash_password
 from compendium.services.catalog import CatalogService
+from compendium.services.circulation import CirculationService
 import compendium.services.site_settings as ss
 from compendium.web.csrf import _COOKIE as CSRF_COOKIE
 from compendium.web.csrf import _derive_csrf_secret, _sign, generate_token
@@ -1909,3 +1914,55 @@ def test_desk_checkout_by_isbn(web_client, web_session, work):
     assert resp.status_code == 200
     assert b"Checked out" in resp.content
     assert item.status == "checked_out"
+
+
+def test_desk_checkin_ambiguous_isbn_shows_picker(web_client, web_session, work):
+    w, item1 = work
+    role = SqlRoleRepository(web_session).get_by_name("Administrator")
+    u = AppUser(username="lib_isbn02", password_hash=hash_password("secret"), role_id=role.id)
+    SqlUserRepository(web_session).add(u)
+    branch = SqlBranchRepository(web_session).get_default()
+    item2 = Item(
+        work_id=w.id,
+        branch_id=branch.id,
+        barcode="AMBIG-2",
+        accession_number="AMBIG-A2",
+    )
+    SqlItemRepository(web_session).add(item2)
+    p1 = Patron(library_card_number="AMBIG01", full_name="Amber One")
+    p2 = Patron(library_card_number="AMBIG02", full_name="Amber Two")
+    SqlPatronRepository(web_session).add(p1)
+    SqlPatronRepository(web_session).add(p2)
+    web_session.flush()
+    circ = CirculationService(
+        item_repo=SqlItemRepository(web_session),
+        loan_repo=SqlLoanRepository(web_session),
+        patron_repo=SqlPatronRepository(web_session),
+        branch_repo=SqlBranchRepository(web_session),
+        hold_repo=SqlHoldRepository(web_session),
+        policy_repo=SqlLoanPolicyRepository(web_session),
+    )
+    # Clear any active loan left on this work's copies by earlier tests
+    # (module-scoped engine accumulates committed state).
+    for existing in (item1,):
+        try:
+            circ.checkin(existing.barcode)
+        except BusinessRuleError:
+            pass
+    circ.checkout(item1.barcode, "AMBIG01")
+    circ.checkout("AMBIG-2", "AMBIG02")
+    web_session.flush()
+
+    cookies = _login(web_client, "lib_isbn02")
+    raw, signed = _make_csrf_pair()
+    resp = web_client.post(
+        "/ui/circ/checkin",
+        data={"barcode": _ISBN, "csrf_token": raw},
+        cookies={**cookies, CSRF_COOKIE: signed},
+    )
+    assert resp.status_code == 200
+    assert b"Which copy came back?" in resp.content
+    assert b"Amber One" in resp.content
+    assert b"Amber Two" in resp.content
+    assert item1.barcode.encode() in resp.content
+    assert b"AMBIG-2" in resp.content
