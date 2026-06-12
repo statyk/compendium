@@ -5,7 +5,7 @@ import typer
 from compendium.services.site_settings import get_site_setting
 from compendium.db.engine import get_settings
 from compendium.db.session import session_scope
-from compendium.domain.errors import DomainError
+from compendium.domain.errors import AmbiguousItemError, DomainError
 from compendium.repositories.sql.audit_log_repository import SqlAuditLogRepository
 from compendium.repositories.sql.branch_repository import SqlBranchRepository
 from compendium.repositories.sql.fine_repository import SqlFineRepository
@@ -88,11 +88,29 @@ def checkin(
     """Check an item back in."""
     try:
         with session_scope() as session:
-            loan = _circulation(session).checkin(barcode)
-            typer.echo(f"\nChecked in: {loan.item.work.title}")
-            typer.echo(f"  Barcode : {loan.item.barcode}")
-            card_num = loan.patron.library_card_number
-            typer.echo(f"  Was on loan to: {loan.patron.full_name} ({card_num})")
+            try:
+                loan = _circulation(session).checkin(barcode)
+                typer.echo(f"\nChecked in: {loan.item.work.title}")
+                typer.echo(f"  Barcode : {loan.item.barcode}")
+                card_num = loan.patron.library_card_number
+                typer.echo(f"  Was on loan to: {loan.patron.full_name} ({card_num})")
+            except AmbiguousItemError as exc:
+                # Read all loan attributes while the session is still open —
+                # session.close() expunges ORM objects, causing
+                # DetachedInstanceError if accessed after the with-block exits.
+                typer.echo(f"Error: {exc}", err=True)
+                typer.echo("Copies currently on loan:", err=True)
+                for loan in exc.loans:
+                    due = loan.due_at.strftime("%Y-%m-%d")
+                    typer.echo(
+                        f"  barcode={loan.item.barcode}  accession={loan.item.accession_number}  "
+                        f"patron={loan.patron.library_card_number}  due={due}",
+                        err=True,
+                    )
+                typer.echo("Re-run with the copy's --barcode.", err=True)
+                raise typer.Exit(1) from exc
+    except typer.Exit:
+        raise
     except DomainError as exc:
         typer.echo(f"Error: {exc}", err=True)
         raise typer.Exit(1) from exc
