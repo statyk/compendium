@@ -355,4 +355,31 @@ def test_kiosk_session_mentions_isbn_when_enabled(kiosk_client, kiosk_session):
         f"/ui/kiosk/session/{patron.library_card_number}", cookies=cookies
     )
     assert resp.status_code == 200
-    assert b"ISBN" in resp.content
+    assert b"Item barcode / ISBN" in resp.content
+
+
+def test_kiosk_isbn_checkout_all_copies_out_friendly_error(
+    kiosk_client, kiosk_session
+):
+    """The 'No available copy ...' service error maps to patron-friendly text."""
+    cookies = _login_kiosk(kiosk_client, kiosk_session, "kl_isbn_allout")
+    p1 = _patron(kiosk_session)
+    p2 = _patron(kiosk_session)
+    item = _book(kiosk_session)
+    item.work.isbn = "9780441013593"
+    kiosk_session.flush()
+    raw, signed = _csrf_pair()
+    cookies[CSRF_COOKIE] = signed
+    kiosk_client.post(
+        f"/ui/kiosk/session/{p1.library_card_number}/checkout",
+        data={"barcode": item.barcode, "csrf_token": raw},
+        cookies=cookies,
+    )
+    resp = kiosk_client.post(
+        f"/ui/kiosk/session/{p2.library_card_number}/checkout",
+        data={"barcode": "9780441013593", "csrf_token": raw},
+        cookies=cookies,
+    )
+    assert resp.status_code == 200
+    assert "error-banner" in resp.text
+    assert "All copies of this title are currently checked out." in resp.text

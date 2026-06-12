@@ -1978,4 +1978,4 @@ def test_circ_desk_mentions_isbn_when_enabled(web_client, web_session):
     cookies = _login(web_client, "lib_isbn03")
     resp = web_client.get("/ui/circ", cookies=cookies)
     assert resp.status_code == 200
-    assert b"ISBN" in resp.content
+    assert b"Item barcode / ISBN / UPC" in resp.content
