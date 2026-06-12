@@ -13,7 +13,6 @@ from tests.helpers import setup_sqlite_fts
 from compendium.config.seed import seed_defaults
 from compendium.config.settings import Settings
 from compendium.db.session import get_session
-from compendium.domain.errors import BusinessRuleError
 from compendium.domain.models import AppUser, Base, Item, Patron
 from compendium.repositories.sql.branch_repository import SqlBranchRepository
 from compendium.repositories.sql.creator_repository import SqlCreatorRepository
@@ -1942,13 +1941,6 @@ def test_desk_checkin_ambiguous_isbn_shows_picker(web_client, web_session, work)
         hold_repo=SqlHoldRepository(web_session),
         policy_repo=SqlLoanPolicyRepository(web_session),
     )
-    # Clear any active loan left on this work's copies by earlier tests
-    # (module-scoped engine accumulates committed state).
-    for existing in (item1,):
-        try:
-            circ.checkin(existing.barcode)
-        except BusinessRuleError:
-            pass
     circ.checkout(item1.barcode, "AMBIG01")
     circ.checkout("AMBIG-2", "AMBIG02")
     web_session.flush()
@@ -1966,3 +1958,13 @@ def test_desk_checkin_ambiguous_isbn_shows_picker(web_client, web_session, work)
     assert b"Amber Two" in resp.content
     assert item1.barcode.encode() in resp.content
     assert b"AMBIG-2" in resp.content
+
+    # Click-through: re-posting a picker button's embedded barcode completes
+    # the checkin (CSRF token is reusable within the cookie's validity).
+    resp = web_client.post(
+        "/ui/circ/checkin",
+        data={"barcode": item1.barcode, "csrf_token": raw},
+        cookies={**cookies, CSRF_COOKIE: signed},
+    )
+    assert resp.status_code == 200
+    assert b"Checked in" in resp.content

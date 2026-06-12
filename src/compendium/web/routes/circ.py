@@ -7,7 +7,12 @@ from sqlalchemy.orm import Session
 
 from compendium.db.engine import get_settings
 from compendium.db.session import get_session
-from compendium.domain.errors import AmbiguousItemError, BusinessRuleError, HoldQueueBlockError, NotFoundError
+from compendium.domain.errors import (
+    AmbiguousItemError,
+    BusinessRuleError,
+    HoldQueueBlockError,
+    NotFoundError,
+)
 from compendium.domain.models import AppUser
 from compendium.repositories.sql.audit_log_repository import SqlAuditLogRepository
 from compendium.repositories.sql.branch_repository import SqlBranchRepository
