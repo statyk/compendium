@@ -73,6 +73,7 @@ _PAGES: dict[str, dict[str, Any]] = {
             "hold_pickup_days",
             "due_soon_days_before",
             "overdue_tiers",
+            "circulation_scan_isbn_enabled",
         ],
     },
     "kiosk": {

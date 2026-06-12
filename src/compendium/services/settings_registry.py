@@ -527,6 +527,24 @@ def _register_builtins() -> None:
             validator=_positive_int,
         )
     )
+    register(
+        SettingDescriptor(
+            key="circulation_scan_isbn_enabled",
+            display_name="Circulate by ISBN / UPC",
+            type=bool,
+            default=True,
+            scope="librarian",
+            short_help="Let checkout / checkin / renew accept a printed ISBN or UPC.",
+            help_text=(
+                "When a scanned circulation code is not a Compendium item "
+                "barcode, try to resolve it as an ISBN or UPC and pick a copy "
+                "automatically. Checkout picks any available copy; checkin "
+                "requires exactly one copy on loan (otherwise the desk shows "
+                "a copy picker). Lets home and classroom libraries circulate "
+                "books by their printed barcode without printing labels."
+            ),
+        )
+    )
 
     # ── Identifiers & barcodes ─────────────────────────────────────────────
     register(
