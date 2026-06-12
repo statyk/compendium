@@ -10,7 +10,7 @@ from compendium.domain.errors import (
     NotFoundError,
     ValidationError,
 )
-from compendium.domain.models import AppUser, Hold, Item, Loan, Patron
+from compendium.domain.models import AppUser, Hold, Item, Loan, Patron, Work
 from compendium.repositories.base import (
     BranchRepository,
     HoldRepository,
@@ -19,6 +19,7 @@ from compendium.repositories.base import (
     LoanPolicyRepository,
     LoanRepository,
     PatronRepository,
+    WorkRepository,
 )
 from compendium.services.audit import AuditAction, AuditEntityType, AuditService
 from compendium.services.calendar import CalendarService
@@ -29,6 +30,17 @@ from compendium.services.site_settings import get_site_setting
 # max_renewals is still hardcoded — there's no registry descriptor for it
 # and no per-deployment knob today. Migrate alongside if ever needed.
 _DEFAULT_MAX_RENEWALS = 2
+
+
+def _upc_variants(upc: str) -> list[str]:
+    """Scanned vs stored UPC forms can differ by a leading zero (UPC-A is the
+    12-digit subset of EAN-13). Try both."""
+    variants = [upc]
+    if len(upc) == 13 and upc.startswith("0"):
+        variants.append(upc[1:])
+    elif len(upc) == 12:
+        variants.append("0" + upc)
+    return variants
 
 
 class CirculationService:
@@ -49,6 +61,7 @@ class CirculationService:
         actor_label: str | None = None,
         source: str = "system",
         item_note_repo: ItemNoteRepository | None = None,
+        work_repo: WorkRepository | None = None,
     ) -> None:
         self._items = item_repo
         self._loans = loan_repo
@@ -65,6 +78,7 @@ class CirculationService:
         self._actor_label = actor_label
         self._source = source
         self._item_notes = item_note_repo
+        self._works = work_repo
 
     def _record(
         self,
@@ -92,6 +106,70 @@ class CirculationService:
             return get_site_setting("default_loan_period_days"), _DEFAULT_MAX_RENEWALS
         return policy.loan_period_days, policy.max_renewals
 
+    def _fallback_active(self) -> bool:
+        return self._works is not None and bool(
+            get_site_setting("circulation_scan_isbn_enabled")
+        )
+
+    def _code_not_found(self, code: str) -> NotFoundError:
+        if self._fallback_active():
+            return NotFoundError(f"No item barcode, ISBN, or UPC matching '{code}'")
+        return NotFoundError(f"No item with barcode '{code}'")
+
+    def _resolve_work_by_code(self, code: str) -> Work | None:
+        """Interpret *code* as an ISBN, then UPC/EAN, and find the matching work.
+
+        Returns None when the fallback is inactive (no work repo wired, or
+        the site setting is off) or when nothing matches. A 13-digit code is
+        tried as ISBN first — 978/979 Bookland EANs are ISBNs — then as EAN-13.
+        """
+        if not self._fallback_active():
+            return None
+        # Local import: keeps `compendium loan ...` CLI startup from paying
+        # for the metadata module's HTTP stack when the fallback never fires.
+        from compendium.services.metadata import normalize_isbn, normalize_upc
+
+        assert self._works is not None
+        try:
+            work = self._works.get_by_isbn(normalize_isbn(code))
+            if work is not None:
+                return work
+        except ValidationError:
+            pass
+        try:
+            upc = normalize_upc(code)
+        except ValidationError:
+            return None
+        for candidate in _upc_variants(upc):
+            work = self._works.get_by_upc(candidate)
+            if work is not None:
+                return work
+        return None
+
+    def _pick_copy_for_checkout(self, work: Work, patron: Patron, code: str) -> Item:
+        """Choose a copy when checkout was requested by ISBN/UPC.
+
+        Preference: the copy already on the pickup shelf for this patron's
+        hold, then any loanable AVAILABLE copy (lowest accession number —
+        deterministic; holds are work-level so the choice is otherwise
+        immaterial)."""
+        hold = self._holds.get_available_for_patron_work(patron.id, work.id)
+        if hold is not None and hold.held_item_id is not None:
+            held = self._items.get(hold.held_item_id)
+            if held is not None:
+                return held
+        candidates = [
+            i
+            for i in work.items
+            if i.is_loanable and i.status == ItemStatus.AVAILABLE
+        ]
+        if not candidates:
+            raise BusinessRuleError(
+                f"No available copy of '{work.title}' for '{code}' "
+                f"({len(work.items)} total)"
+            )
+        return min(candidates, key=lambda i: i.accession_number)
+
     def _promote_hold(self, item: Item) -> None:
         """After checkin: promote oldest WAITING hold to AVAILABLE, or free the item."""
         hold = self._holds.get_oldest_waiting_for_work(item.work_id)
@@ -116,8 +194,11 @@ class CirculationService:
         override_holds: bool = False,
     ) -> Loan:
         item = self._items.get_by_barcode(barcode)
+        fallback_work: Work | None = None
         if item is None:
-            raise NotFoundError(f"No item with barcode '{barcode}'")
+            fallback_work = self._resolve_work_by_code(barcode)
+            if fallback_work is None:
+                raise self._code_not_found(barcode)
 
         patron = self._patrons.get_by_card_number(card_number)
         if patron is None:
@@ -131,6 +212,10 @@ class CirculationService:
                 raise BusinessRuleError(
                     f"Patron card '{card_number}' expired on {patron.expires_at.isoformat()}"
                 )
+
+        if item is None:
+            assert fallback_work is not None
+            item = self._pick_copy_for_checkout(fallback_work, patron, code=barcode)
 
         if self._fines is not None:
             status = self._fines.checkout_status(patron)
