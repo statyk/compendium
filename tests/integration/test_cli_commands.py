@@ -999,6 +999,7 @@ class TestLoanCli:
         assert "CLIAMB-1" in r.output
         assert "CLIAMB-2" in r.output
         assert "CLIAMB01" in r.output
+        assert "Re-run with the copy's --barcode." in r.output
 
     def test_mark_damaged_then_clear(self, session):
         _, item = _seed_work(session)

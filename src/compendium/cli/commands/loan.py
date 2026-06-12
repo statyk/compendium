@@ -96,21 +96,19 @@ def checkin(
                 typer.echo(f"  Was on loan to: {loan.patron.full_name} ({card_num})")
             except AmbiguousItemError as exc:
                 # Read all loan attributes while the session is still open —
-                # session.close() expunges ORM objects, causing
-                # DetachedInstanceError if accessed after the with-block exits.
+                # rollback()/close() on scope exit expire and detach the ORM
+                # objects, so they can't be rendered after the with-block.
                 typer.echo(f"Error: {exc}", err=True)
                 typer.echo("Copies currently on loan:", err=True)
-                for loan in exc.loans:
-                    due = loan.due_at.strftime("%Y-%m-%d")
+                for candidate in exc.loans:
+                    due = candidate.due_at.strftime("%Y-%m-%d")
                     typer.echo(
-                        f"  barcode={loan.item.barcode}  accession={loan.item.accession_number}  "
-                        f"patron={loan.patron.library_card_number}  due={due}",
+                        f"  barcode={candidate.item.barcode}  accession={candidate.item.accession_number}  "
+                        f"patron={candidate.patron.library_card_number}  due={due}",
                         err=True,
                     )
                 typer.echo("Re-run with the copy's --barcode.", err=True)
                 raise typer.Exit(1) from exc
-    except typer.Exit:
-        raise
     except DomainError as exc:
         typer.echo(f"Error: {exc}", err=True)
         raise typer.Exit(1) from exc
