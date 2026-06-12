@@ -226,6 +226,17 @@ def test_checkin_by_isbn_two_loans_is_ambiguous(session, copies, patron, patron2
         circ.checkin(ISBN13)
     assert len(exc_info.value.loans) == 2
     assert exc_info.value.work_title == "Dune"
+    assert exc_info.value.code == ISBN13
+
+
+def test_checkin_by_isbn_disabled_by_setting(session, copies, patron):
+    circ = _circulation(session)
+    circ.checkout("ISBNTEST-1", patron.library_card_number)
+    with patch(
+        "compendium.services.circulation.get_site_setting", side_effect=_setting_off
+    ):
+        with pytest.raises(NotFoundError, match="No item with barcode"):
+            circ.checkin(ISBN13)
 
 
 def test_checkin_exact_barcode_never_ambiguous(session, copies, patron, patron2):
