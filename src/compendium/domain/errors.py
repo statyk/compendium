@@ -48,6 +48,25 @@ class HoldQueueBlockError(BusinessRuleError):
         )
 
 
+class AmbiguousItemError(BusinessRuleError):
+    """An ISBN/UPC circulation code matched several copies and the operation
+    needs exactly one (checkin while multiple copies of the work are on loan).
+
+    ``loans`` carries the candidate active loans so interfaces can render a
+    disambiguation picker; the message is the fallback for surfaces that
+    can't (phone scanner, CLI without a TTY, API).
+    """
+
+    def __init__(self, code: str, work_title: str, loans: list):
+        self.code = code
+        self.work_title = work_title
+        self.loans = loans
+        super().__init__(
+            f"Multiple copies of '{work_title}' are checked out — "
+            "scan the copy's item label, or pick the copy at the desk."
+        )
+
+
 class ExternalLookupError(DomainError):
     """An external metadata source failed or returned nothing usable."""
 

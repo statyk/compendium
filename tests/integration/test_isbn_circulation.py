@@ -9,7 +9,7 @@ from unittest.mock import patch
 import pytest
 
 from compendium.domain.enums import HoldStatus, ItemStatus
-from compendium.domain.errors import BusinessRuleError, NotFoundError
+from compendium.domain.errors import AmbiguousItemError, BusinessRuleError, NotFoundError
 from compendium.domain.models import Hold, Item, MediaType, Patron, Work
 from compendium.repositories.sql.branch_repository import SqlBranchRepository
 from compendium.repositories.sql.hold_repository import SqlHoldRepository
@@ -200,3 +200,37 @@ def test_checkout_by_ean13_form_of_stored_upc(session, dvd_copy, patron):
     # Scanners often report UPC-A as 13-digit EAN with a leading zero.
     loan = _circulation(session).checkout("0" + UPC, patron.library_card_number)
     assert loan.item_id == dvd_copy.id
+
+
+# ── checkin ───────────────────────────────────────────────────────────────────
+
+
+def test_checkin_by_isbn_single_loan(session, copies, patron):
+    circ = _circulation(session)
+    circ.checkout(ISBN13, patron.library_card_number)
+    loan = circ.checkin(ISBN13)
+    assert loan.returned_at is not None
+    assert loan.item_id == copies[0].id
+
+
+def test_checkin_by_isbn_nothing_on_loan(session, copies):
+    with pytest.raises(BusinessRuleError, match="are checked out"):
+        _circulation(session).checkin(ISBN13)
+
+
+def test_checkin_by_isbn_two_loans_is_ambiguous(session, copies, patron, patron2):
+    circ = _circulation(session)
+    circ.checkout(ISBN13, patron.library_card_number)
+    circ.checkout(ISBN13, patron2.library_card_number)
+    with pytest.raises(AmbiguousItemError) as exc_info:
+        circ.checkin(ISBN13)
+    assert len(exc_info.value.loans) == 2
+    assert exc_info.value.work_title == "Dune"
+
+
+def test_checkin_exact_barcode_never_ambiguous(session, copies, patron, patron2):
+    circ = _circulation(session)
+    circ.checkout(ISBN13, patron.library_card_number)
+    circ.checkout(ISBN13, patron2.library_card_number)
+    loan = circ.checkin("ISBNTEST-2")
+    assert loan.item_id == copies[1].id

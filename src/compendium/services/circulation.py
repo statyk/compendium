@@ -4,6 +4,7 @@ from datetime import datetime, timedelta, timezone
 
 from compendium.domain.enums import HoldStatus, ItemStatus
 from compendium.domain.errors import (
+    AmbiguousItemError,
     BlockedByFinesError,
     BusinessRuleError,
     HoldQueueBlockError,
@@ -173,6 +174,26 @@ class CirculationService:
             )
         return min(candidates, key=lambda i: i.accession_number)
 
+    def _resolve_copy_for_checkin(self, code: str) -> Item:
+        """Resolve an ISBN/UPC to the single copy that is currently on loan.
+
+        Never guesses: with several copies out, closing the wrong loan would
+        misattribute overdue fines and history, so raise AmbiguousItemError
+        and let the desk pick."""
+        work = self._resolve_work_by_code(code)
+        if work is None:
+            raise self._code_not_found(code)
+        active = [
+            loan
+            for i in work.items
+            if (loan := self._loans.get_active_for_item(i.id)) is not None
+        ]
+        if not active:
+            raise BusinessRuleError(f"No copies of '{work.title}' are checked out")
+        if len(active) > 1:
+            raise AmbiguousItemError(code, work.title, active)
+        return active[0].item
+
     def _promote_hold(self, item: Item) -> None:
         """After checkin: promote oldest WAITING hold to AVAILABLE, or free the item."""
         hold = self._holds.get_oldest_waiting_for_work(item.work_id)
@@ -295,7 +316,7 @@ class CirculationService:
     def checkin(self, barcode: str) -> Loan:
         item = self._items.get_by_barcode(barcode)
         if item is None:
-            raise NotFoundError(f"No item with barcode '{barcode}'")
+            item = self._resolve_copy_for_checkin(barcode)
 
         loan = self._loans.get_active_for_item(item.id)
         if loan is None:
