@@ -278,3 +278,13 @@ def test_renew_by_isbn_same_patron_two_copies_renews_earliest_due(
     session.flush()
     renewed = circ.renew(ISBN13, patron.library_card_number)
     assert renewed.id == second.id
+
+
+def test_renew_by_isbn_disabled_by_setting(session, copies, patron):
+    circ = _circulation(session)
+    circ.checkout("ISBNTEST-1", patron.library_card_number)
+    with patch(
+        "compendium.services.circulation.get_site_setting", side_effect=_setting_off
+    ):
+        with pytest.raises(NotFoundError, match="No item with barcode"):
+            circ.renew(ISBN13, patron.library_card_number)
