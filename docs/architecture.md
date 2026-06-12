@@ -821,13 +821,13 @@ Checkout, checkin, and renew accept a book's printed ISBN barcode or a disc's UP
 
 1. **Exact Compendium barcode** — always wins; no ISBN lookup attempted.
 2. **ISBN** — ISBN-10 is normalized to ISBN-13 before the lookup.
-3. **UPC/EAN** — a leading-zero variant is tried both ways when the code is 12 digits (UPC-A ↔ EAN-13 with `0` prefix).
+3. **UPC/EAN** — the leading-zero variant is tried both ways (a stored 12-digit UPC-A matches a scanned 13-digit `0`-prefixed EAN-13, and vice versa).
 
 ### Why scanned codes can't collide
 
-Scanned barcodes are EAN-8 (8 digits), UPC-A (12 digits), or EAN-13 (13 digits). Compendium item barcodes use a 14-digit Luhn format; patron card numbers use a 10-digit Luhn format. The digit-length ranges don't overlap with scanned EAN/UPC barcodes, so a barcode physically printed on an ISBN book can never be mistaken for a Compendium-format code.
+Scanned barcodes are EAN-8 (8 digits), UPC-A (12 digits), or EAN-13 (13 digits). Compendium barcodes — item barcodes and patron cards alike — are 10 or 14 digits (`barcode_format` setting; type prefix digit 2 = patron, 3 = item; Luhn check digit). The digit-length ranges don't overlap, so a barcode physically printed on a book or disc can never be mistaken for a Compendium-format code.
 
-**Typed ISBN-10 caveat.** A hand-typed all-digit ISBN-10 (10 digits) *does* overlap with the 10-digit Compendium patron-card format. Approximately 10% of ISBN-10s pass the Compendium Luhn check, and two LOC prefix groups (group 2 = French, group 3 = German) map to patron-prefix ranges. In that case, Compendium interprets the code as a patron card first — if no matching patron exists, it falls through to the ISBN-10 interpretation. Practical exposure is negligible because book barcodes are always printed as EAN-13; this only surfaces if a librarian manually types a bare ISBN-10 into the scanner checkout field.
+**Typed ISBN-10 caveat.** A hand-typed all-digit ISBN-10 (10 digits) *does* overlap with the 10-digit Compendium format. Roughly 10% of ISBN-10s pass the Luhn check, and two ISBN registration groups collide with the type prefixes: group 3 (German) parses as an *item* barcode — harmless, because the exact-barcode lookup misses and the code falls through to ISBN resolution anyway; group 2 (French) parses as a *patron card*, so in the phone scanner's checkout mode it stops at "Card not recognized" rather than resolving as an ISBN. Practical exposure is negligible because book barcodes are always printed as EAN-13; this only surfaces if someone manually types a bare ISBN-10.
 
 ### Per-operation copy selection
 
