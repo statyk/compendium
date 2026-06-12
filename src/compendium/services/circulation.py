@@ -150,9 +150,9 @@ class CirculationService:
         """Choose a copy when checkout was requested by ISBN/UPC.
 
         Preference: the copy already on the pickup shelf for this patron's
-        hold, then any loanable AVAILABLE copy (lowest accession number —
-        deterministic; holds are work-level so the choice is otherwise
-        immaterial)."""
+        hold, then any loanable AVAILABLE copy (lexicographically first
+        accession number — deterministic; holds are work-level so the choice
+        is otherwise immaterial)."""
         hold = self._holds.get_available_for_patron_work(patron.id, work.id)
         if hold is not None and hold.held_item_id is not None:
             held = self._items.get(hold.held_item_id)
@@ -164,9 +164,12 @@ class CirculationService:
             if i.is_loanable and i.status == ItemStatus.AVAILABLE
         ]
         if not candidates:
+            circulating = [
+                i for i in work.items if i.status != ItemStatus.WITHDRAWN
+            ]
             raise BusinessRuleError(
                 f"No available copy of '{work.title}' for '{code}' "
-                f"({len(work.items)} total)"
+                f"({len(circulating)} total)"
             )
         return min(candidates, key=lambda i: i.accession_number)
 

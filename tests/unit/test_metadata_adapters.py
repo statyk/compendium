@@ -11,8 +11,41 @@ from compendium.services.metadata import (
     TMDbAdapter,
     _parse_mb_release,
     _parse_tmdb_movie,
+    normalize_isbn,
     normalize_upc,
 )
+
+# ---------------------------------------------------------------------------
+# normalize_isbn
+# ---------------------------------------------------------------------------
+
+def test_normalize_isbn_strips_hyphens():
+    assert normalize_isbn("978-0-441-01359-3") == "9780441013593"
+
+
+def test_normalize_isbn_converts_isbn10():
+    assert normalize_isbn("0441013597") == "9780441013593"
+
+
+def test_normalize_isbn_accepts_isbn10_with_x_check():
+    # ISBN-10 check digits can legally be 'X' (value 10).
+    result = normalize_isbn("019853553X")
+    assert result.startswith("978") and len(result) == 13
+
+
+def test_normalize_isbn_rejects_alphanumeric_10_char():
+    from compendium.domain.errors import ValidationError as CompendiumValidationError
+
+    with pytest.raises(CompendiumValidationError):
+        normalize_isbn("MYLIB12345")
+
+
+def test_normalize_isbn_rejects_short_input():
+    from compendium.domain.errors import ValidationError as CompendiumValidationError
+
+    with pytest.raises(CompendiumValidationError):
+        normalize_isbn("123")
+
 
 # ---------------------------------------------------------------------------
 # normalize_upc

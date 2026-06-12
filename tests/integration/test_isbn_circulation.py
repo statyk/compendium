@@ -142,6 +142,13 @@ def test_checkout_unknown_isbn_raises_not_found(session, copies, patron):
         _circulation(session).checkout("9799999999999", patron.library_card_number)
 
 
+def test_checkout_alphanumeric_unknown_code_raises_not_found(session, copies, patron):
+    # 10-char alphanumeric codes must yield NotFoundError, not a ValueError leak
+    # from ISBN-10 normalization (e.g. labels from another library system).
+    with pytest.raises(NotFoundError, match="matching"):
+        _circulation(session).checkout("MYLIB12345", patron.library_card_number)
+
+
 def test_checkout_by_isbn_disabled_by_setting(session, copies, patron):
     with patch(
         "compendium.services.circulation.get_site_setting", side_effect=_setting_off

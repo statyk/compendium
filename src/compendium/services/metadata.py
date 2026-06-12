@@ -28,7 +28,7 @@ _GOOGLE_BOOKS_URL = "https://www.googleapis.com/books/v1/volumes"
 
 def normalize_isbn(raw: str) -> str:
     isbn = re.sub(r"[\s\-]", "", raw)
-    if len(isbn) == 10:
+    if len(isbn) == 10 and isbn[:9].isdigit() and (isbn[9].isdigit() or isbn[9] in "Xx"):
         isbn = _isbn10_to_13(isbn)
     if len(isbn) != 13 or not isbn.isdigit():
         raise ValidationError(f"'{raw}' is not a valid ISBN-10 or ISBN-13")
