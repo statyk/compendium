@@ -15,6 +15,7 @@ from compendium.repositories.sql.item_repository import SqlItemRepository
 from compendium.repositories.sql.loan_policy_repository import SqlLoanPolicyRepository
 from compendium.repositories.sql.loan_repository import SqlLoanRepository
 from compendium.repositories.sql.patron_repository import SqlPatronRepository
+from compendium.repositories.sql.work_repository import SqlWorkRepository
 from compendium.services.audit import AuditService
 from compendium.services.circulation import CirculationService
 from compendium.services.fines import FineService
@@ -50,6 +51,7 @@ def _circulation(session) -> CirculationService:
         actor_label=f"cli:{getpass.getuser()}",
         source="cli",
         item_note_repo=SqlItemNoteRepository(session),
+        work_repo=SqlWorkRepository(session),
     )
 
 

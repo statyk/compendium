@@ -148,6 +148,7 @@ def _circ(
         actor=actor,
         source="scan",
         item_note_repo=SqlItemNoteRepository(session),
+        work_repo=SqlWorkRepository(session),
     )
 
 

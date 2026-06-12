@@ -1884,3 +1884,28 @@ def test_facet_drawer_summary_present(web_client, work):
     resp = web_client.get("/ui/catalog?q=the")
     assert resp.status_code == 200
     assert b"<summary>Filter</summary>" in resp.content
+
+
+# ── ISBN/UPC circulation fallback ─────────────────────────────────────────────
+
+
+def test_desk_checkout_by_isbn(web_client, web_session, work):
+    _, item = work
+    role = SqlRoleRepository(web_session).get_by_name("Administrator")
+    lib = AppUser(
+        username="lib_isbn01", password_hash=hash_password("secret"), role_id=role.id
+    )
+    SqlUserRepository(web_session).add(lib)
+    p = Patron(library_card_number="ISBNWEB01", full_name="Isbn Patron")
+    SqlPatronRepository(web_session).add(p)
+    web_session.flush()
+    cookies = _login(web_client, "lib_isbn01")
+    raw, signed = _make_csrf_pair()
+    resp = web_client.post(
+        "/ui/circ/checkout",
+        data={"barcode": _ISBN, "card_number": "ISBNWEB01", "csrf_token": raw},
+        cookies={**cookies, CSRF_COOKIE: signed},
+    )
+    assert resp.status_code == 200
+    assert b"Checked out" in resp.content
+    assert item.status == "checked_out"
