@@ -399,6 +399,7 @@ class TestSettingsWeb:
         assert r.status_code == 200
         assert b"currency_symbol" in r.content
         assert b"overdue_tiers" in r.content
+        assert b"circulation_scan_isbn_enabled" in r.content
 
     def test_kiosk_page_renders(self, client, s_session):
         _make_user(s_session, role_name="Librarian", username="lib_web_k")
