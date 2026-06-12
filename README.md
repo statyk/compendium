@@ -21,6 +21,7 @@ A library card catalog system for physical items — books, vinyl records, DVDs,
 - **Audit log** — synchronous trail of administrative mutations (Librarian + system tier); queryable via web UI, CLI, or REST
 - **DB-editable settings** — most configuration knobs (library name, fines, kiosk timeout, SMTP, retention, configurable nav shortcuts, etc.) editable from the UI / CLI / API; env vars still win as a break-glass
 - **Remote phone scanner** — pair a phone to the circulation desk via QR code; the phone camera dispatches scans to the desk in real time without installing an app. Supports checkout, checkin, and catalog-lookup modes. Pairing is ephemeral: a short-TTL claim secret lives in the QR; after the phone claims it, the secret rotates to a session cookie; the librarian can unpair from the desk at any time. Requires HTTPS on both the server and the phone browser (secure context for camera). Settings: `public_base_url` (DB-editable, env `COMPENDIUM_PUBLIC_BASE_URL`) and `scan_session_minutes` (DB-editable, env `COMPENDIUM_SCAN_SESSION_MINUTES`, default 60).
+- **Circulate by ISBN/UPC** — checkout, checkin, and renew accept a book's printed ISBN barcode (or a disc's UPC) in place of a Compendium item label, so home and classroom libraries don't need to print labels. With several copies of the same title on loan, checkin asks the desk which copy came back rather than guessing. Toggle with the `circulation_scan_isbn_enabled` setting (env `COMPENDIUM_CIRCULATION_SCAN_ISBN_ENABLED`, default on) at Admin → Settings → Circulation.
 - **Web UI** — HTMX + Jinja2 browser interface with catalog search, circulation desk (camera-based barcode scanning), patron self-service, light/dark/auto theme; per-user nav shortcut overrides via browser localStorage
 - **REST API** — FastAPI; consumed by the web UI and available for integrations
 - **CLI** — full librarian + sysadmin workflow without running a server, including stdin/stdout (`-`) for backup, import/export, and labels
@@ -204,6 +205,8 @@ Start the server with `compendium serve` and open your browser to `http://localh
 | `/ui/admin/system/retention` | SystemAdmin | Notification + audit retention, batch sizes |
 
 Guest catalog search is enabled by default (toggle via `/ui/admin/settings/general` or `COMPENDIUM_GUEST_SEARCH_ENABLED=false`).
+
+ISBN/UPC circulation fallback is enabled by default (toggle via `/ui/admin/settings/circulation` or `COMPENDIUM_CIRCULATION_SCAN_ISBN_ENABLED=false`).
 
 ## REST API endpoints
 
