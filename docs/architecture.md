@@ -815,7 +815,7 @@ runContinuous(videoElement, backend, { onCode, onMiss })
 
 ## ISBN/UPC circulation fallback
 
-Checkout, checkin, and renew accept a book's printed ISBN barcode or a disc's UPC when the scanned code is not a Compendium item barcode. This means home and classroom libraries can circulate items without printing labels first.
+Checkout, checkin, and renew — at the desk, the self-checkout kiosk, the phone scanner, the CLI, and the API's checkout endpoint — accept a book's printed ISBN barcode or a disc's UPC when the scanned code is not a Compendium item barcode. This means home and classroom libraries can circulate items without printing labels first.
 
 ### Resolution order
 
@@ -827,7 +827,7 @@ Checkout, checkin, and renew accept a book's printed ISBN barcode or a disc's UP
 
 Scanned barcodes are EAN-8 (8 digits), UPC-A (12 digits), or EAN-13 (13 digits). Compendium barcodes — item barcodes and patron cards alike — are 10 or 14 digits (`barcode_format` setting; type prefix digit 2 = patron, 3 = item; Luhn check digit). The digit-length ranges don't overlap, so a barcode physically printed on a book or disc can never be mistaken for a Compendium-format code.
 
-**Typed ISBN-10 caveat.** A hand-typed all-digit ISBN-10 (10 digits) *does* overlap with the 10-digit Compendium format. Roughly 10% of ISBN-10s pass the Luhn check, and two ISBN registration groups collide with the type prefixes: group 3 (German) parses as an *item* barcode — harmless, because the exact-barcode lookup misses and the code falls through to ISBN resolution anyway; group 2 (French) parses as a *patron card*, so in the phone scanner's checkout mode it stops at "Card not recognized" rather than resolving as an ISBN. Practical exposure is negligible because book barcodes are always printed as EAN-13; this only surfaces if someone manually types a bare ISBN-10.
+**Typed ISBN-10 caveat.** A hand-typed all-digit ISBN-10 (10 digits) *does* overlap with the 10-digit Compendium format. Roughly 10% of ISBN-10s pass the Luhn check, and two ISBN registration groups collide with the type prefixes: group 3 (German) parses as an *item* barcode — harmless, because the exact-barcode lookup misses and the code falls through to ISBN resolution anyway; group 2 (French) parses as a *patron card*, so the phone scanner's checkout mode stops at "Card not recognized" (and checkin mode rejects it as a non-item code) rather than resolving it as an ISBN. Practical exposure is negligible because book barcodes are always printed as EAN-13; this only surfaces if someone manually types a bare ISBN-10.
 
 ### Per-operation copy selection
 
@@ -839,7 +839,7 @@ Scanned barcodes are EAN-8 (8 digits), UPC-A (12 digits), or EAN-13 (13 digits).
   - **Phone scanner** — shows the error message on the phone screen; the librarian must scan the individual item barcode.
   - **REST API** — unaffected: the API's checkin and renew endpoints are loan-ID-based (`/loans/{id}/checkin`, `/loans/{id}/renew`), so ISBN ambiguity cannot reach them.
 
-Per-copy operations — `declare_lost`, `mark_damaged`, `clear_lost`, `clear_damage`, `withdraw`, condition changes — still require the real item barcode or accession number; ISBN/UPC resolution is only enabled for the three circulation operations above.
+Per-copy operations — `declare_lost`, `mark_damaged`, `clear_lost`, `clear_damage`, `withdraw`, condition changes — still require the copy's own barcode; ISBN/UPC resolution is only enabled for the three circulation operations above.
 
 ### Phone scanner dedup nuance
 
