@@ -90,6 +90,7 @@ def circ_desk(
             "user": user,
             "scan_modes": scan_modes,
             "scan_modes_checked": scan_modes_checked,
+            "scan_isbn_enabled": get_site_setting("circulation_scan_isbn_enabled"),
         },
     )
 

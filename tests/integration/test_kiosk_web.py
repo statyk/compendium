@@ -345,3 +345,14 @@ def test_kiosk_session_has_scan_button(kiosk_client, kiosk_session):
     )
     assert resp.status_code == 200
     assert b'data-scan-target="barcode-input"' in resp.content
+
+
+def test_kiosk_session_mentions_isbn_when_enabled(kiosk_client, kiosk_session):
+    """Kiosk session page label includes ISBN when circulation_scan_isbn_enabled is true."""
+    cookies = _login_kiosk(kiosk_client, kiosk_session, "kl_isbn_session")
+    patron = _patron(kiosk_session)
+    resp = kiosk_client.get(
+        f"/ui/kiosk/session/{patron.library_card_number}", cookies=cookies
+    )
+    assert resp.status_code == 200
+    assert b"ISBN" in resp.content

@@ -1968,3 +1968,14 @@ def test_desk_checkin_ambiguous_isbn_shows_picker(web_client, web_session, work)
     )
     assert resp.status_code == 200
     assert b"Checked in" in resp.content
+
+
+def test_circ_desk_mentions_isbn_when_enabled(web_client, web_session):
+    role = SqlRoleRepository(web_session).get_by_name("Administrator")
+    u = AppUser(username="lib_isbn03", password_hash=hash_password("secret"), role_id=role.id)
+    SqlUserRepository(web_session).add(u)
+    web_session.flush()
+    cookies = _login(web_client, "lib_isbn03")
+    resp = web_client.get("/ui/circ", cookies=cookies)
+    assert resp.status_code == 200
+    assert b"ISBN" in resp.content

@@ -10,7 +10,7 @@
       hx-swap="innerHTML"
       hx-on::after-request="this.reset(); this.querySelector('input[name=barcode]').focus();">
   <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
-  <label for="barcode-input">Item barcode</label>
+  <label for="barcode-input">Item barcode{% if scan_isbn_enabled %} / ISBN{% endif %}</label>
   <fieldset role="group">
     <input type="text" id="barcode-input" name="barcode" class="kiosk-scanner-input"
            placeholder="Scan or type" autocomplete="off" autofocus required>

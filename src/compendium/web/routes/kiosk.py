@@ -206,6 +206,7 @@ def kiosk_session(
             "user": user,
             "patron": patron,
             "idle_timeout_seconds": get_site_setting("kiosk_idle_timeout_seconds"),
+            "scan_isbn_enabled": get_site_setting("circulation_scan_isbn_enabled"),
         },
     )
 
@@ -263,6 +264,8 @@ def kiosk_checkout(
             friendly = "This item is reserved for another patron. Please see the desk."
         elif "not available" in msg:
             friendly = "This item is currently checked out."
+        elif "no available copy" in msg:
+            friendly = "All copies of this title are currently checked out."
         else:
             friendly = "Sorry, this item couldn't be checked out. Please see the desk."
         return HTMLResponse(_kiosk_error(friendly))
