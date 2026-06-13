@@ -534,14 +534,14 @@ def _register_builtins() -> None:
             type=bool,
             default=True,
             scope="librarian",
-            short_help="Let checkout / checkin / renew accept a printed ISBN or UPC.",
+            short_help=(
+                "Allows use of an ISBN or UPC instead of library barcode "
+                "for circulation lookups."
+            ),
             help_text=(
-                "When a scanned circulation code is not a Compendium item "
-                "barcode, try to resolve it as an ISBN or UPC and pick a copy "
-                "automatically. Checkout picks any available copy; checkin "
-                "requires exactly one copy on loan (otherwise the desk shows "
-                "a copy picker). Lets home and classroom libraries circulate "
-                "books by their printed barcode without printing labels."
+                "Allows you to enter or scan an ISBN or UPC instead of the "
+                "item's barcode number. For works with multiple copies, "
+                "choose one automatically where possible."
             ),
         )
     )
