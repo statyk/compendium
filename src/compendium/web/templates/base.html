@@ -8,11 +8,18 @@
   <title>{% block title %}{{ library_name() }}{% endblock %}</title>
   <link rel="icon" type="image/svg+xml" href="/ui/static/favicon.svg">
   <script nonce="{{ csp_nonce(request) }}">
-    // Apply per-browser theme override before first paint to avoid FOUC.
+    // Resolve the effective theme before first paint to avoid FOUC.
+    // "auto"/system resolves to a concrete light|dark so Pico and our
+    // custom --cmp-* tokens always agree (both are keyed on data-theme).
     try {
       var t = localStorage.getItem('compendium_theme');
-      if (t === 'light' || t === 'dark') document.documentElement.setAttribute('data-theme', t);
-      else if (t === 'auto') document.documentElement.removeAttribute('data-theme');
+      var root = document.documentElement;
+      var sysTheme = function () {
+        return (window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches) ? 'dark' : 'light';
+      };
+      if (t === 'light' || t === 'dark') root.setAttribute('data-theme', t);
+      else if (t === 'auto') root.setAttribute('data-theme', sysTheme());
+      else if (!root.hasAttribute('data-theme')) root.setAttribute('data-theme', sysTheme());
     } catch (_) {}
   </script>
   <link rel="stylesheet" href="/ui/static/pico.min.css">
@@ -238,20 +245,35 @@
     (function () {
       var menu = document.getElementById('theme-menu');
       if (!menu) return;
+      var SERVER_DEFAULT_THEME = "{{ default_theme() }}";
+      var mq = window.matchMedia ? window.matchMedia('(prefers-color-scheme: dark)') : null;
+      function sysTheme() { return (mq && mq.matches) ? 'dark' : 'light'; }
+      function applyTheme(pref) {
+        // "auto" resolves to the live system theme; always set a concrete
+        // data-theme so Pico and our custom tokens stay in sync.
+        var v = (pref === 'light' || pref === 'dark') ? pref : sysTheme();
+        document.documentElement.setAttribute('data-theme', v);
+      }
+      function currentPref() {
+        try { var t = localStorage.getItem('compendium_theme'); if (t) return t; } catch (_) {}
+        return SERVER_DEFAULT_THEME;
+      }
       var items = menu.querySelectorAll('[data-set-theme]');
       items.forEach(function (a) {
         a.addEventListener('click', function (e) {
           e.preventDefault();
           var t = a.getAttribute('data-set-theme');
           try { localStorage.setItem('compendium_theme', t); } catch (_) {}
-          if (t === 'light' || t === 'dark') {
-            document.documentElement.setAttribute('data-theme', t);
-          } else {
-            document.documentElement.removeAttribute('data-theme');
-          }
+          applyTheme(t);
           menu.open = false;
         });
       });
+      // While in system/auto mode, follow live OS theme changes.
+      if (mq) {
+        var syncWithOS = function () { if (currentPref() === 'auto') applyTheme('auto'); };
+        if (mq.addEventListener) mq.addEventListener('change', syncWithOS);
+        else if (mq.addListener) mq.addListener(syncWithOS);
+      }
     })();
     (function () {
       var strip = document.getElementById('nav-shortcuts');

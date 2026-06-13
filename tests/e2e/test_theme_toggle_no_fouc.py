@@ -7,6 +7,9 @@ Verifies:
 1. When localStorage is pre-set to 'dark', the data-theme attribute is 'dark'
    immediately after page load (no FOUC — the pre-paint script ran correctly).
 2. Switching via the theme dropdown updates data-theme and localStorage.
+3. The 'auto'/System preference resolves to a concrete data-theme matching the
+   OS color scheme, so Pico and our custom tokens never disagree (the hybrid
+   light/dark bug), and follows live OS theme changes.
 """
 from __future__ import annotations
 
@@ -49,3 +52,28 @@ def test_theme_switch_to_light_updates_dom_and_storage(page, e2e_server, e2e_see
 
     assert theme == "light", f"data-theme should be 'light' after clicking Light, got {theme!r}"
     assert stored == "light", f"localStorage['compendium_theme'] should be 'light', got {stored!r}"
+
+
+def test_auto_resolves_to_system_color_scheme(page, e2e_server):
+    """'auto' must resolve to a concrete data-theme matching the OS scheme.
+
+    Regression: previously 'auto' removed data-theme entirely, so Pico followed
+    prefers-color-scheme while our --cmp-* tokens stayed light — a broken hybrid.
+    """
+    page.add_init_script("localStorage.setItem('compendium_theme', 'auto')")
+
+    page.emulate_media(color_scheme="dark")
+    page.goto(f"{e2e_server}/ui/login")
+    page.wait_for_load_state("domcontentloaded")
+    theme = page.evaluate("document.documentElement.getAttribute('data-theme')")
+    assert theme == "dark", f"auto + dark OS should resolve to data-theme='dark', got {theme!r}"
+
+    page.emulate_media(color_scheme="light")
+    page.goto(f"{e2e_server}/ui/login")
+    page.wait_for_load_state("domcontentloaded")
+    theme = page.evaluate("document.documentElement.getAttribute('data-theme')")
+    assert theme == "light", f"auto + light OS should resolve to data-theme='light', got {theme!r}"
+    # (Live OS-theme-change follow while in 'auto' is also implemented via a
+    # matchMedia 'change' listener; it can't be exercised here because
+    # chrome-headless-shell doesn't auto-dispatch that event. Verified manually
+    # in full Chromium.)
