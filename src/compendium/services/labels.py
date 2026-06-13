@@ -34,10 +34,11 @@ SPINE_BARCODE_MAX_LENGTH_INCHES: float = 0.75
 
 # Maximum barcode width on a "full" patron card. Without a cap the barcode
 # stretches to the full inner width — on a 3.5"-wide business-card template
-# (avery-5871) that produces uncomfortably wide, stretched-out bars. Capping
-# (and centering) keeps the barcode a sane size; the cap only binds on wide
+# (avery-5871) that produces uncomfortably wide, stretched-out bars. Capped at
+# half the business-card width and centered so the bars stay a sane,
+# un-stretched size with balanced margins; the cap only binds on wide
 # templates, so smaller card stock is unaffected.
-PATRON_CARD_BARCODE_MAX_WIDTH_INCHES: float = 2.5
+PATRON_CARD_BARCODE_MAX_WIDTH_INCHES: float = 1.75
 
 
 class LabelCanvas(Protocol):

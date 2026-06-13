@@ -1303,16 +1303,17 @@ class TestPatronFullCardBarcodeCap:
             f"{PATRON_CARD_BARCODE_MAX_WIDTH_INCHES}\" cap"
         )
 
-    def test_business_card_barcode_narrower_than_inner_width(self):
-        # The whole point: on the 3.5" card the bars must NOT fill the inner area.
+    def test_business_card_barcode_within_half_card_width(self):
+        # The bars must not span more than half the card — anything wider reads
+        # as a stretched-out barcode.
         tmpl = TEMPLATES["avery-5871"]
-        inner_w = tmpl.label_width * inch - 2 * 8  # pad = 8
+        half_card = tmpl.label_width * inch / 2
         rec = self._render_full_rects("avery-5871")
         bar_span = (max(x + w for (x, _, w, _) in rec.rects)
                     - min(x for (x, _, _, _) in rec.rects))
-        assert bar_span < inner_w - 10, (
-            f"Barcode span {bar_span:.1f}pt should be well under inner width "
-            f"{inner_w:.1f}pt on the business-card template"
+        assert bar_span <= half_card + 1, (
+            f"Barcode span {bar_span:.1f}pt exceeds half the card width "
+            f"{half_card:.1f}pt"
         )
 
     def test_business_card_barcode_centered(self):
