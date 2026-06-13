@@ -99,7 +99,7 @@
                    {% if row.env_overridden %}disabled{% endif %}>
             <div id="sc-admin-rows-{{ row.key }}"></div>
             <button type="button" id="sc-admin-add-{{ row.key }}"
-                    class="outline" style="width:auto; margin-top:0.25rem"
+                    class="outline" style="margin-top:0.25rem"
                     {% if row.env_overridden %}disabled{% endif %}>+ Add row</button>
             {% if not row.env_overridden %}
             <script nonce="{{ csp_nonce(request) }}">
@@ -139,7 +139,7 @@
                 div.style.cssText = 'display:flex; gap:0.5rem; align-items:center; margin-bottom:0.5rem';
                 div.innerHTML =
                   '<select data-page-select style="flex:1; margin:0">' + makeOptions(url) + '</select>' +
-                  '<button type="button" data-remove class="outline contrast" style="width:auto; padding:0.2rem 0.5rem; flex-shrink:0">✕</button>';
+                  '<button type="button" data-remove class="outline contrast" style="padding:0.2rem 0.5rem; flex-shrink:0">✕</button>';
                 div.querySelector('[data-page-select]').addEventListener('change', syncHidden);
                 return div;
               }

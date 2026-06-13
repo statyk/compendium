@@ -76,13 +76,13 @@
 {% if item.status == "damaged" %}
 <form method="post" action="/ui/items/{{ item.barcode }}/clear-damage" style="display:inline">
   <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
-  <button type="submit" class="outline" style="width:auto">Clear damage</button>
+  <button type="submit" class="outline">Clear damage</button>
 </form>
 {% endif %}
 {% if item.status == "lost" %}
 <form method="post" action="/ui/items/{{ item.barcode }}/clear-lost" style="display:inline">
   <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
-  <button type="submit" class="outline" style="width:auto">Recover (clear lost)</button>
+  <button type="submit" class="outline">Recover (clear lost)</button>
 </form>
 {% endif %}
 {% endif %}
@@ -128,7 +128,7 @@
               hx-swap="outerHTML"
               style="display:inline">
           <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
-          <button type="submit" class="outline contrast" style="width:auto">Delete</button>
+          <button type="submit" class="outline contrast">Delete</button>
         </form>
         {% endif %}
       </td>
@@ -163,7 +163,7 @@
     </div>
     <label for="note_text">Note</label>
     <textarea id="note_text" name="note" rows="2" required placeholder="Enter note text..."></textarea>
-    <button type="submit" style="width:auto">Add Note</button>
+    <button type="submit">Add Note</button>
   </form>
 </details>
 {% endif %}

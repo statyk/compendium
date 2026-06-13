@@ -297,6 +297,21 @@ table, dl, .pill, .responsive-table { font-variant-numeric: tabular-nums; }
   font-size: 0.92em;
 }
 
+/* ── Button width default ────────────────────────────────────── */
+/* Pico stretches [type=submit] buttons to 100% width; Compendium
+   buttons size to their content instead. Opt back in with .btn-block
+   where a deliberately full-width button is wanted (login card,
+   circulation desk, kiosk). Kept early in this file so later
+   component rules of equal specificity still win by cascade order. */
+button[type="submit"],
+input[type="submit"] {
+  width: auto;
+}
+button[type="submit"].btn-block,
+input[type="submit"].btn-block {
+  width: 100%;
+}
+
 /* ── Brand & nav ─────────────────────────────────────────────── */
 header {
   background: var(--cmp-nav-bg);
@@ -845,7 +860,9 @@ body.kiosk-page { max-width: none; }
 .kiosk-sub { color: var(--pico-muted-color); margin-bottom: 2rem; }
 .kiosk-card-input { font-size: 1.5rem; padding: 1rem; text-align: center; }
 .kiosk-scanner-input { font-size: 1.25rem; padding: 0.75rem; }
-.kiosk-big-button { font-size: 1.15rem; padding: 0.75rem 1.5rem; width: 100%; }
+/* button.kiosk-big-button matches the global button[type=submit] width:auto
+   specificity so the kiosk submit buttons stay full-width. */
+.kiosk-big-button, button.kiosk-big-button { font-size: 1.15rem; padding: 0.75rem 1.5rem; width: 100%; }
 .checkout-list { list-style: none; padding: 0; margin: 1.5rem 0; }
 .checkout-list li {
   padding: 0.75rem 1rem;

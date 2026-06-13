@@ -4,7 +4,7 @@
 </p>
 <form method="post" action="/ui/admin/import/jobs/{{ job_id }}/apply" style="margin:0 0 1rem">
   <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
-  <button type="submit" style="width:auto">Apply import</button>
+  <button type="submit">Apply import</button>
   <small style="color:var(--pico-muted-color); margin-left:.75rem">
     Re-runs this exact import, writing the changes.
   </small>

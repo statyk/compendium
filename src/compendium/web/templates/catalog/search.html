@@ -54,7 +54,7 @@
   <input type="hidden" name="decade" value="{{ decade if decade is not none else '' }}">
   <input type="hidden" name="avail" value="{% if avail %}1{% else %}{% endif %}">
   <input type="hidden" name="include_withdrawn" value="{% if include_withdrawn %}1{% else %}{% endif %}">
-  <button type="submit" style="margin-bottom:0;width:auto">Search</button>
+  <button type="submit" style="margin-bottom:0">Search</button>
   <span id="search-ind" class="htmx-indicator" aria-label="Loading…"></span>
 </form>
 

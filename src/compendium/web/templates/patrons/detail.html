@@ -37,7 +37,7 @@
       <em>Inactive</em>
       <form method="post" action="/ui/patrons/{{ patron.library_card_number }}/reactivate" style="display:inline">
         <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
-        <button type="submit" class="outline" style="padding:0.2rem 0.6rem; margin-left:1rem; width:auto">Reactivate</button>
+        <button type="submit" class="outline" style="padding:0.2rem 0.6rem; margin-left:1rem">Reactivate</button>
       </form>
     {% endif %}
   </dd>
@@ -57,7 +57,7 @@
       </select>
       <input type="date" name="expires_at" style="margin:0; width:auto"
              value="{{ patron.expires_at.isoformat() if patron.expires_at else '' }}">
-      <button type="submit" style="padding:0.2rem 0.6rem; margin:0; width:auto">Save</button>
+      <button type="submit" style="padding:0.2rem 0.6rem; margin:0">Save</button>
       {% if patron.expires_at %}
         {% if patron.expires_at.isoformat() < today_iso() %}
         <small class="error-banner">Expired {{ patron.expires_at.isoformat() }}</small>
@@ -82,7 +82,7 @@
         style="display:inline"
       >
         <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
-        <button type="submit" class="outline contrast" style="padding:0.2rem 0.6rem; margin-left:1rem; width:auto">Unlink</button>
+        <button type="submit" class="outline contrast" style="padding:0.2rem 0.6rem; margin-left:1rem">Unlink</button>
       </form>
       {% endif %}
     {% elif patron.is_active and unlinked_users %}
@@ -93,7 +93,7 @@
           <option value="{{ u.id }}">{{ u.username }}{% if u.email %} ({{ u.email }}){% endif %} — {{ u.role.name }}</option>
           {% endfor %}
         </select>
-        <button type="submit" style="padding:0.2rem 0.6rem; margin:0; width:auto">Link</button>
+        <button type="submit" style="padding:0.2rem 0.6rem; margin:0">Link</button>
       </form>
       {% if has_permission(user, 'patron.account.manage') %}
       <details style="margin-top:0.5rem">
@@ -109,7 +109,7 @@
           <label for="new_login_confirm">Confirm password
             <input type="password" id="new_login_confirm" name="password_confirm" autocomplete="new-password" required>
           </label>
-          <button type="submit" style="width:auto">Create login</button>
+          <button type="submit">Create login</button>
         </form>
       </details>
       {% endif %}
@@ -127,7 +127,7 @@
           <label for="solo_login_confirm">Confirm password
             <input type="password" id="solo_login_confirm" name="password_confirm" autocomplete="new-password" required>
           </label>
-          <button type="submit" style="width:auto">Create login</button>
+          <button type="submit">Create login</button>
         </form>
       </details>
     {% elif patron.is_active %}

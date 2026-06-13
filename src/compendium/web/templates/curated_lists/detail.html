@@ -50,7 +50,7 @@
       </div>
     </div>
     <div style="display:flex;gap:1rem;align-items:center;margin-top:1rem">
-      <button type="submit" style="width:auto">Save Changes</button>
+      <button type="submit">Save Changes</button>
     </div>
   </form>
 </details>
@@ -77,7 +77,7 @@
       <td>
         <form method="post" action="/ui/curated-lists/{{ cl.slug }}/works/{{ entry.work_id }}/remove" style="display:inline">
           <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
-          <button type="submit" style="width:auto" class="outline contrast">Remove</button>
+          <button type="submit" class="outline contrast">Remove</button>
         </form>
       </td>
     </tr>
@@ -102,7 +102,7 @@
         <label for="add_annotation">Annotation</label>
         <input type="text" id="add_annotation" name="annotation" style="width:20rem" placeholder="Optional note for this entry">
       </div>
-      <button type="submit" style="width:auto">Add Work</button>
+      <button type="submit">Add Work</button>
     </div>
   </form>
 </details>
@@ -116,7 +116,7 @@
     <label for="work_order">Work order (comma-separated IDs)</label>
     <input type="text" id="work_order" name="work_order" value="{{ entries | map(attribute='work_id') | join(', ') }}" style="width:100%;max-width:32rem" placeholder="e.g. 5, 3, 12, 1">
     <div style="margin-top:0.5rem">
-      <button type="submit" style="width:auto">Save Order</button>
+      <button type="submit">Save Order</button>
     </div>
   </form>
 </details>
@@ -126,7 +126,7 @@
 <form method="post" action="/ui/curated-lists/{{ cl.slug }}/delete">
   <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
   <p style="color:#888;font-size:0.9em">Deleting this list is permanent and cannot be undone. Works are not affected.</p>
-  <button type="submit" class="outline contrast" style="width:auto"
+  <button type="submit" class="outline contrast"
     hx-confirm="Delete the list '{{ cl.name }}'? This cannot be undone.">Delete List</button>
 </form>
 {% endblock %}

@@ -18,7 +18,7 @@
       <label for="notes">Notes</label>
       <input type="text" id="notes" name="notes" value="{{ household.notes or '' }}" style="width:20rem">
     </div>
-    <button type="submit" style="width:auto">Save</button>
+    <button type="submit">Save</button>
   </div>
 </form>
 
@@ -38,7 +38,7 @@
       <td>
         <form method="post" action="/ui/households/{{ household.id }}/members/{{ m.patron.library_card_number }}/remove" style="display:inline">
           <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
-          <button type="submit" style="width:auto" class="outline contrast">Remove</button>
+          <button type="submit" class="outline contrast">Remove</button>
         </form>
       </td>
     </tr>
@@ -58,7 +58,7 @@
         <label for="card_number">Library card number</label>
         <input type="text" id="card_number" name="card_number" required>
       </div>
-      <button type="submit" style="width:auto">Add</button>
+      <button type="submit">Add</button>
     </div>
   </form>
 </details>
@@ -66,6 +66,6 @@
 <hr>
 <form method="post" action="/ui/households/{{ household.id }}/delete">
   <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
-  <button type="submit" class="outline contrast" style="width:auto">Delete Household</button>
+  <button type="submit" class="outline contrast">Delete Household</button>
 </form>
 {% endblock %}

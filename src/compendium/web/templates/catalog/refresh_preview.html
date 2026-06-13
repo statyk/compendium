@@ -70,7 +70,7 @@
 
   <form method="post" style="display:inline">
     <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
-    <button type="submit" style="width:auto">
+    <button type="submit">
       {% if report.planned %}Apply changes{% else %}Re-download cover image{% endif %}
     </button>
   </form>

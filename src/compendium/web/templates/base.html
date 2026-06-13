@@ -191,12 +191,12 @@
       <p style="font-size:0.9em">Up to 5 quick-access links shown in the nav. Your changes are stored in this browser only.</p>
       <div id="shortcuts-rows"></div>
       <p style="margin-top:0.5rem">
-        <button type="button" id="shortcuts-add" class="outline" style="width:auto">+ Add row</button>
+        <button type="button" id="shortcuts-add" class="outline">+ Add row</button>
       </p>
       <footer style="display:flex; gap:0.5rem; flex-wrap:wrap; align-items:center">
-        <button type="button" id="shortcuts-save" style="width:auto">Save</button>
-        <button type="button" id="shortcuts-cancel" class="secondary outline" style="width:auto">Cancel</button>
-        <button type="button" id="shortcuts-reset" class="outline contrast" style="width:auto; margin-left:auto">Reset to site defaults</button>
+        <button type="button" id="shortcuts-save">Save</button>
+        <button type="button" id="shortcuts-cancel" class="secondary outline">Cancel</button>
+        <button type="button" id="shortcuts-reset" class="outline contrast" style="margin-left:auto">Reset to site defaults</button>
       </footer>
       <p id="shortcuts-error" class="error-banner" style="display:none; margin-top:0.5rem"></p>
     </article>
@@ -311,7 +311,7 @@
         div.style.cssText = 'display:flex; gap:0.5rem; align-items:center; margin-bottom:0.5rem';
         div.innerHTML =
           '<select data-page-select style="flex:1; margin:0">' + makePageOptions(url) + '</select>' +
-          '<button type="button" class="outline contrast" style="width:auto; padding:0.2rem 0.5rem; flex-shrink:0" data-remove>✕</button>';
+          '<button type="button" class="outline contrast" style="padding:0.2rem 0.5rem; flex-shrink:0" data-remove>✕</button>';
         return div;
       }
 

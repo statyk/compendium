@@ -42,7 +42,7 @@
 {# Librarians navigate to the list admin to add this work. A full inline
    list-picker widget would require a new route; this is the pragmatic v1 choice. #}
 <p>
-  <a href="/ui/curated-lists" class="outline secondary" role="button" style="width:auto">Manage curated lists</a>
+  <a href="/ui/curated-lists" class="outline secondary" role="button">Manage curated lists</a>
 </p>
 {% endif %}
 
@@ -142,7 +142,7 @@
         hx-indicator="#hold-ind"
       >
         <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
-        <button type="submit" style="width:auto">Place Hold</button>
+        <button type="submit">Place Hold</button>
         <span id="hold-ind" class="htmx-indicator" aria-label="Placing hold…"></span>
       </form>
     </div>

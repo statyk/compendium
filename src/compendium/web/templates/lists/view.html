@@ -49,7 +49,7 @@
 
 {% if user and has_permission(user, 'curatedlist.manage') %}
 <p style="margin-top:1.5rem">
-  <a href="/ui/curated-lists/{{ cl.slug }}" class="outline secondary" role="button" style="width:auto">Edit this list</a>
+  <a href="/ui/curated-lists/{{ cl.slug }}" class="outline secondary" role="button">Edit this list</a>
 </p>
 {% endif %}
 {% endblock %}

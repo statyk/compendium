@@ -29,20 +29,19 @@
       <div class="scan-review-btns">
         <button type="button" class="secondary"
                 hx-get="/ui/scan/pairings/{{ pairing.id }}/pending/{{ p.id }}/edit"
-                hx-target="#scan-modal" hx-swap="innerHTML"
-                style="width:auto">Edit</button>
+                hx-target="#scan-modal" hx-swap="innerHTML">Edit</button>
         <form hx-post="/ui/scan/pairings/{{ pairing.id }}/pending/{{ p.id }}/approve"
               hx-target="#scan-activity-{{ pairing.id }}" hx-swap="innerHTML"
               style="display:inline">
           <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
-          <button type="submit" style="width:auto">Approve</button>
+          <button type="submit">Approve</button>
         </form>
         <form hx-post="/ui/scan/pairings/{{ pairing.id }}/pending/{{ p.id }}/discard"
               hx-target="#scan-activity-{{ pairing.id }}" hx-swap="innerHTML"
               hx-confirm="Discard this scan without cataloging it?"
               style="display:inline">
           <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
-          <button type="submit" class="secondary outline" style="width:auto">Discard</button>
+          <button type="submit" class="secondary outline">Discard</button>
         </form>
       </div>
     </div>

@@ -47,7 +47,7 @@
       <option>Poor</option>
     </select>
     <div style="margin-top:1rem; display:flex; gap:1rem; align-items:center">
-      <button type="submit" style="width:auto">Add Copy</button>
+      <button type="submit">Add Copy</button>
       <a href="/ui/catalog/{{ copy_work.id }}">Cancel</a>
     </div>
   </form>
@@ -79,7 +79,7 @@
       <input type="text" id="identifier" name="identifier" placeholder="Scan or type ISBN / UPC / title" autocomplete="off" autofocus>
       <button type="button" class="outline secondary" data-scan-target="identifier">Scan</button>
     </fieldset>
-    <button type="submit" style="width:auto">Look Up</button>
+    <button type="submit">Look Up</button>
   </form>
   {% if has_permission(user, 'system.manage') %}
   <p class="field-hint" style="margin-top:.75rem">

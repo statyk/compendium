@@ -32,7 +32,7 @@
         <option value="{{ target.role.name }}" selected disabled>{{ target.role.name }} (current, not changeable)</option>
         {% endif %}
       </select>
-      <button type="submit" style="padding:0.2rem 0.6rem; margin:0; width:auto">Change</button>
+      <button type="submit" style="padding:0.2rem 0.6rem; margin:0">Change</button>
     </form>
     {% else %}
       {{ target.role.name }}
@@ -51,13 +51,13 @@
         hx-confirm="Deactivate this user? They will not be able to log in."
       >
         <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
-        <button type="submit" class="outline contrast" style="padding:0.2rem 0.6rem; margin-left:1rem; width:auto">Deactivate</button>
+        <button type="submit" class="outline contrast" style="padding:0.2rem 0.6rem; margin-left:1rem">Deactivate</button>
       </form>
     {% else %}
       <em>Inactive</em>
       <form method="post" action="/ui/users/{{ target.username }}/reactivate" style="display:inline">
         <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
-        <button type="submit" class="outline" style="padding:0.2rem 0.6rem; margin-left:1rem; width:auto">Reactivate</button>
+        <button type="submit" class="outline" style="padding:0.2rem 0.6rem; margin-left:1rem">Reactivate</button>
       </form>
     {% endif %}
   </dd>
@@ -76,7 +76,7 @@
         style="display:inline"
       >
         <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
-        <button type="submit" class="outline contrast" style="padding:0.2rem 0.6rem; margin-left:1rem; width:auto">Unlink</button>
+        <button type="submit" class="outline contrast" style="padding:0.2rem 0.6rem; margin-left:1rem">Unlink</button>
       </form>
       {% endif %}
     {% elif target.is_active and unlinked_patrons %}
@@ -88,7 +88,7 @@
             <option value="{{ p.library_card_number }}">{{ p.full_name }} ({{ p.library_card_number }})</option>
             {% endfor %}
           </select>
-          <button type="submit" style="padding:0.2rem 0.6rem; margin:0; width:auto">Link</button>
+          <button type="submit" style="padding:0.2rem 0.6rem; margin:0">Link</button>
         </form>
         <details style="margin-top:0.5rem">
           <summary class="outline secondary" role="button">Create a new patron record</summary>
@@ -106,7 +106,7 @@
             <label for="new_patron_expires">Card expires
               <input type="date" id="new_patron_expires" name="expires_at">
             </label>
-            <button type="submit" style="width:auto">Create patron</button>
+            <button type="submit">Create patron</button>
           </form>
         </details>
       </div>
@@ -127,7 +127,7 @@
           <label for="solo_patron_expires">Card expires
             <input type="date" id="solo_patron_expires" name="expires_at">
           </label>
-          <button type="submit" style="width:auto">Create patron</button>
+          <button type="submit">Create patron</button>
         </form>
       </details>
     {% else %}
