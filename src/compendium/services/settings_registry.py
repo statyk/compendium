@@ -541,7 +541,7 @@ def _register_builtins() -> None:
             help_text=(
                 "Allows you to enter or scan an ISBN or UPC instead of the "
                 "item's barcode number. For works with multiple copies, "
-                "choose one automatically where possible."
+                "chooses one automatically where possible."
             ),
         )
     )
