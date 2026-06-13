@@ -171,8 +171,9 @@
 
 /* ── Dark-mode token overrides ───────────────────────────────── */
 [data-theme="dark"] {
-  /* Nav — same walnut as light mode so it reads clearly against dark body */
-  --cmp-nav-bg: #7a5230;
+  /* Nav — deep walnut, a step or two lighter than the body/cards so it reads
+     as a raised bar without the light-mode walnut (#7a5230) clashing on dark. */
+  --cmp-nav-bg: #4a301c;
   --cmp-nav-fg: #f5e8d5;
 
   /* Pico primary → lighter for contrast on dark bg */
