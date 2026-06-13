@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from types import SimpleNamespace
 
+from compendium.domain.errors import AmbiguousItemError, BusinessRuleError
 from compendium.domain.identifiers import format_item_barcode, format_patron_card
 from compendium.web.routes.scan import IdempotencyGuard, run_state_machine
 
@@ -221,3 +222,89 @@ def test_idempotency_guard_different_code_not_duplicate():
     assert guard.is_duplicate(1, "checkout", ITEM_BC) is False
     clock["t"] = 100.5
     assert guard.is_duplicate(1, "checkout", PATRON_BC) is False
+
+
+# ── ISBN / UPC passthrough in circulation modes ───────────────────────────────
+
+ISBN = "9780441013593"
+UPC = "043396077478"
+
+
+def test_checkout_isbn_with_borrower_passes_code_to_service():
+    p = _patron()
+    row = _row("checkout", borrower=p)
+    called = {}
+
+    def _checkout(bc, card):
+        called["bc"], called["card"] = bc, card
+        return _loan()
+
+    reply = _call(row, ISBN, checkout=_checkout)
+    assert reply["kind"] == "checkout"
+    assert called["bc"] == ISBN
+    assert called["card"] == p.library_card_number
+    assert row.count == 1
+
+
+def test_checkout_isbn_without_borrower_errors():
+    row = _row("checkout")
+    reply = _call(row, ISBN)
+    assert reply["kind"] == "error"
+    assert "patron card first" in reply["message"].lower()
+
+
+def test_checkout_upc_with_borrower_checks_out():
+    row = _row("checkout", borrower=_patron())
+    reply = _call(row, UPC)
+    assert reply["kind"] == "checkout"
+
+
+def test_checkout_garbage_code_still_rejected():
+    row = _row("checkout", borrower=_patron())
+    reply = _call(row, "HELLO-123")
+    assert reply["kind"] == "error"
+
+
+def test_checkin_isbn_passes_code_to_service():
+    row = _row("checkin")
+    called = {}
+
+    def _checkin(bc):
+        called["bc"] = bc
+        return _loan()
+
+    reply = _call(row, ISBN, checkin=_checkin)
+    assert reply["kind"] == "checkin"
+    assert called["bc"] == ISBN
+
+
+def test_checkin_garbage_code_still_rejected():
+    row = _row("checkin")
+    reply = _call(row, "HELLO-123")
+    assert reply["kind"] == "error"
+
+
+def test_checkin_isbn_ambiguous_translates_to_error():
+    # AmbiguousItemError must reach the phone as a friendly error reply, not
+    # re-raise out of _circ_error (it relies on the BusinessRuleError subclass).
+    row = _row("checkin")
+
+    def _checkin(bc):
+        raise AmbiguousItemError(bc, "Dune", [])
+
+    reply = _call(row, ISBN, checkin=_checkin)
+    assert reply["kind"] == "error"
+    assert "Multiple copies" in reply["message"]
+    assert row.count == 0
+
+
+def test_checkin_isbn_no_copies_translates_to_error():
+    row = _row("checkin")
+
+    def _checkin(bc):
+        raise BusinessRuleError("No copies of 'Dune' are checked out")
+
+    reply = _call(row, ISBN, checkin=_checkin)
+    assert reply["kind"] == "error"
+    assert "are checked out" in reply["message"]
+    assert row.count == 0

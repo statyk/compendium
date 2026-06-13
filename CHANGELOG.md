@@ -7,6 +7,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- **Circulate by ISBN/UPC:** checkout, checkin, and renew now accept a book's
+  printed ISBN barcode or a disc's UPC when the scanned code is not a
+  Compendium item barcode — no printed labels needed for home/classroom use.
+  Checkout picks an available copy automatically; an ambiguous checkin
+  (several copies of the title on loan) shows a copy picker at the desk.
+  New site setting `circulation_scan_isbn_enabled`
+  (env `COMPENDIUM_CIRCULATION_SCAN_ISBN_ENABLED`, default on) at
+  Admin → Settings → Circulation.
+
 ## [1.2.1] - 2026-06-11
 
 ### Changed

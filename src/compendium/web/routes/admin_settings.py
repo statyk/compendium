@@ -64,6 +64,7 @@ _PAGES: dict[str, dict[str, Any]] = {
             "Per-policy overrides win."
         ),
         "keys": [
+            "circulation_scan_isbn_enabled",
             "default_loan_period_days",
             "currency_symbol",
             "currency_symbol_position",

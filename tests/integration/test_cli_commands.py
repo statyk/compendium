@@ -962,6 +962,45 @@ class TestLoanCli:
         assert r.exit_code == 0
         assert "recovered" in r.output
 
+    def test_checkin_by_isbn_ambiguous_lists_candidates(self, session):
+        from compendium.domain.models import Item, MediaType, Work
+        from compendium.repositories.sql.branch_repository import SqlBranchRepository
+        from compendium.repositories.sql.item_repository import SqlItemRepository
+        from compendium.repositories.sql.work_repository import SqlWorkRepository
+
+        book = session.query(MediaType).filter_by(code="book").one()
+        w = Work(title="Dune CLI", media_type_id=book.id, isbn="9780553382563")
+        SqlWorkRepository(session).add(w)
+        session.flush()
+        branch = SqlBranchRepository(session).get_default()
+        for n, card in ((1, "CLIAMB01"), (2, "CLIAMB02")):
+            item = Item(
+                work_id=w.id,
+                branch_id=branch.id,
+                barcode=f"CLIAMB-{n}",
+                accession_number=f"CLIAMB-A{n}",
+            )
+            SqlItemRepository(session).add(item)
+            p = Patron(library_card_number=card, full_name=f"Cli Patron {n}")
+            SqlPatronRepository(session).add(p)
+            session.flush()
+            r = _invoke(
+                session,
+                ["loan", "checkout", "--barcode", f"CLIAMB-{n}", "--card", card],
+                "compendium.cli.commands.loan",
+            )
+            assert r.exit_code == 0, r.output
+        r = _invoke(
+            session,
+            ["loan", "checkin", "--barcode", "9780553382563"],
+            "compendium.cli.commands.loan",
+        )
+        assert r.exit_code == 1
+        assert "CLIAMB-1" in r.output
+        assert "CLIAMB-2" in r.output
+        assert "CLIAMB01" in r.output
+        assert "Re-run with the copy's --barcode." in r.output
+
     def test_mark_damaged_then_clear(self, session):
         _, item = _seed_work(session)
         patron = Patron(library_card_number="CLIL005", full_name="DamagePatron")

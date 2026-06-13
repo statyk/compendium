@@ -41,6 +41,7 @@ from compendium.repositories.sql.item_repository import SqlItemRepository
 from compendium.repositories.sql.loan_policy_repository import SqlLoanPolicyRepository
 from compendium.repositories.sql.loan_repository import SqlLoanRepository
 from compendium.repositories.sql.patron_repository import SqlPatronRepository
+from compendium.repositories.sql.work_repository import SqlWorkRepository
 from compendium.services.audit import AuditService
 from compendium.services.calendar import CalendarService
 from compendium.services.circulation import CirculationService
@@ -92,6 +93,7 @@ def _circ(
         actor=actor,
         source="kiosk",
         item_note_repo=SqlItemNoteRepository(session),
+        work_repo=SqlWorkRepository(session),
     )
 
 
@@ -204,6 +206,7 @@ def kiosk_session(
             "user": user,
             "patron": patron,
             "idle_timeout_seconds": get_site_setting("kiosk_idle_timeout_seconds"),
+            "scan_isbn_enabled": get_site_setting("circulation_scan_isbn_enabled"),
         },
     )
 
@@ -261,6 +264,8 @@ def kiosk_checkout(
             friendly = "This item is reserved for another patron. Please see the desk."
         elif "not available" in msg:
             friendly = "This item is currently checked out."
+        elif "no available copy" in msg:
+            friendly = "All copies of this title are currently checked out."
         else:
             friendly = "Sorry, this item couldn't be checked out. Please see the desk."
         return HTMLResponse(_kiosk_error(friendly))

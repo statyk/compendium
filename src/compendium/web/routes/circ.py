@@ -7,7 +7,12 @@ from sqlalchemy.orm import Session
 
 from compendium.db.engine import get_settings
 from compendium.db.session import get_session
-from compendium.domain.errors import BusinessRuleError, HoldQueueBlockError, NotFoundError
+from compendium.domain.errors import (
+    AmbiguousItemError,
+    BusinessRuleError,
+    HoldQueueBlockError,
+    NotFoundError,
+)
 from compendium.domain.models import AppUser
 from compendium.repositories.sql.audit_log_repository import SqlAuditLogRepository
 from compendium.repositories.sql.branch_repository import SqlBranchRepository
@@ -17,6 +22,7 @@ from compendium.repositories.sql.item_repository import SqlItemRepository
 from compendium.repositories.sql.loan_policy_repository import SqlLoanPolicyRepository
 from compendium.repositories.sql.loan_repository import SqlLoanRepository
 from compendium.repositories.sql.patron_repository import SqlPatronRepository
+from compendium.repositories.sql.work_repository import SqlWorkRepository
 from compendium.services.audit import AuditService
 from compendium.services.calendar import CalendarService
 from compendium.services.circulation import CirculationService
@@ -50,6 +56,7 @@ def _circ(
         actor=actor,
         source="web",
         item_note_repo=SqlItemNoteRepository(session),
+        work_repo=SqlWorkRepository(session),
     )
 
 
@@ -83,6 +90,7 @@ def circ_desk(
             "user": user,
             "scan_modes": scan_modes,
             "scan_modes_checked": scan_modes_checked,
+            "scan_isbn_enabled": get_site_setting("circulation_scan_isbn_enabled"),
         },
     )
 
@@ -140,6 +148,23 @@ def checkin(
         _circ(session, calendar_svc=calendar_svc).checkin(barcode)
         return HTMLResponse(
             f"<p class='success-banner'>Checked in <strong>{escape(barcode)}</strong>.</p>"
+        )
+    except AmbiguousItemError as exc:
+        rows = "".join(
+            "<form method='post' action='/ui/circ/checkin' hx-post='/ui/circ/checkin' "
+            "hx-target='#circ-result' hx-swap='innerHTML'>"
+            f"<input type='hidden' name='barcode' value='{escape(loan.item.barcode)}'>"
+            f"<input type='hidden' name='csrf_token' value='{escape(csrf_token)}'>"
+            "<button type='submit' class='outline' style='width:auto'>"
+            f"{escape(loan.patron.full_name or loan.patron.library_card_number)} "
+            f"({escape(loan.patron.library_card_number)}) "
+            f"— due {loan.due_at.strftime('%Y-%m-%d')} — copy {escape(loan.item.accession_number)}"
+            "</button></form>"
+            for loan in exc.loans
+        )
+        return HTMLResponse(
+            f"<div class='warning-banner'><p>{escape(str(exc))}</p>"
+            f"<p>Which copy came back?</p>{rows}</div>"
         )
     except (BusinessRuleError, NotFoundError) as exc:
         return HTMLResponse(f"<p class='error-banner'>{escape(str(exc))}</p>")

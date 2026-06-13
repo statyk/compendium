@@ -10,7 +10,7 @@
           hx-on::before-request="document.getElementById('circ-result').innerHTML=''"
           hx-on::after-request="document.getElementById('co-barcode').focus()">
       <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
-      <label for="co-barcode">Item barcode</label>
+      <label for="co-barcode">Item barcode{% if scan_isbn_enabled %} / ISBN / UPC{% endif %}</label>
       <fieldset role="group">
         <input type="text" id="co-barcode" name="barcode" placeholder="Scan or type" autocomplete="off" autofocus>
         <button type="button" class="outline secondary" data-scan-target="co-barcode">Scan</button>
@@ -30,7 +30,7 @@
           hx-on::before-request="document.getElementById('circ-result').innerHTML=''"
           hx-on::after-request="document.getElementById('ci-barcode').focus()">
       <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
-      <label for="ci-barcode">Item barcode</label>
+      <label for="ci-barcode">Item barcode{% if scan_isbn_enabled %} / ISBN / UPC{% endif %}</label>
       <fieldset role="group">
         <input type="text" id="ci-barcode" name="barcode" placeholder="Scan or type" autocomplete="off">
         <button type="button" class="outline secondary" data-scan-target="ci-barcode">Scan</button>
@@ -45,7 +45,7 @@
           hx-on::before-request="document.getElementById('circ-result').innerHTML=''"
           hx-on::after-request="document.getElementById('rn-barcode').focus()">
       <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
-      <label for="rn-barcode">Item barcode</label>
+      <label for="rn-barcode">Item barcode{% if scan_isbn_enabled %} / ISBN / UPC{% endif %}</label>
       <fieldset role="group">
         <input type="text" id="rn-barcode" name="barcode" placeholder="Scan or type" autocomplete="off">
         <button type="button" class="outline secondary" data-scan-target="rn-barcode">Scan</button>

@@ -527,6 +527,24 @@ def _register_builtins() -> None:
             validator=_positive_int,
         )
     )
+    register(
+        SettingDescriptor(
+            key="circulation_scan_isbn_enabled",
+            display_name="Circulate by ISBN / UPC",
+            type=bool,
+            default=True,
+            scope="librarian",
+            short_help=(
+                "Allows use of an ISBN or UPC instead of library barcode "
+                "for circulation lookups."
+            ),
+            help_text=(
+                "Allows you to enter or scan an ISBN or UPC instead of the "
+                "item's barcode number. For works with multiple copies, "
+                "chooses one automatically where possible."
+            ),
+        )
+    )
 
     # ── Identifiers & barcodes ─────────────────────────────────────────────
     register(

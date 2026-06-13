@@ -5,7 +5,7 @@ import typer
 from compendium.services.site_settings import get_site_setting
 from compendium.db.engine import get_settings
 from compendium.db.session import session_scope
-from compendium.domain.errors import DomainError
+from compendium.domain.errors import AmbiguousItemError, DomainError
 from compendium.repositories.sql.audit_log_repository import SqlAuditLogRepository
 from compendium.repositories.sql.branch_repository import SqlBranchRepository
 from compendium.repositories.sql.fine_repository import SqlFineRepository
@@ -15,6 +15,7 @@ from compendium.repositories.sql.item_repository import SqlItemRepository
 from compendium.repositories.sql.loan_policy_repository import SqlLoanPolicyRepository
 from compendium.repositories.sql.loan_repository import SqlLoanRepository
 from compendium.repositories.sql.patron_repository import SqlPatronRepository
+from compendium.repositories.sql.work_repository import SqlWorkRepository
 from compendium.services.audit import AuditService
 from compendium.services.circulation import CirculationService
 from compendium.services.fines import FineService
@@ -50,6 +51,7 @@ def _circulation(session) -> CirculationService:
         actor_label=f"cli:{getpass.getuser()}",
         source="cli",
         item_note_repo=SqlItemNoteRepository(session),
+        work_repo=SqlWorkRepository(session),
     )
 
 
@@ -86,11 +88,27 @@ def checkin(
     """Check an item back in."""
     try:
         with session_scope() as session:
-            loan = _circulation(session).checkin(barcode)
-            typer.echo(f"\nChecked in: {loan.item.work.title}")
-            typer.echo(f"  Barcode : {loan.item.barcode}")
-            card_num = loan.patron.library_card_number
-            typer.echo(f"  Was on loan to: {loan.patron.full_name} ({card_num})")
+            try:
+                loan = _circulation(session).checkin(barcode)
+                typer.echo(f"\nChecked in: {loan.item.work.title}")
+                typer.echo(f"  Barcode : {loan.item.barcode}")
+                card_num = loan.patron.library_card_number
+                typer.echo(f"  Was on loan to: {loan.patron.full_name} ({card_num})")
+            except AmbiguousItemError as exc:
+                # Read all loan attributes while the session is still open —
+                # rollback()/close() on scope exit expire and detach the ORM
+                # objects, so they can't be rendered after the with-block.
+                typer.echo(f"Error: {exc}", err=True)
+                typer.echo("Copies currently on loan:", err=True)
+                for candidate in exc.loans:
+                    due = candidate.due_at.strftime("%Y-%m-%d")
+                    typer.echo(
+                        f"  barcode={candidate.item.barcode}  accession={candidate.item.accession_number}  "
+                        f"patron={candidate.patron.library_card_number}  due={due}",
+                        err=True,
+                    )
+                typer.echo("Re-run with the copy's --barcode.", err=True)
+                raise typer.Exit(1) from exc
     except DomainError as exc:
         typer.echo(f"Error: {exc}", err=True)
         raise typer.Exit(1) from exc

@@ -413,3 +413,11 @@ class TestShortcutPageGlobals:
         from compendium.web.jinja import _jinja_shortcut_pages_for_user
 
         assert _jinja_shortcut_pages_for_user(None) == []
+
+
+def test_circulation_scan_isbn_enabled_descriptor():
+    d = get_descriptor("circulation_scan_isbn_enabled")
+    assert d.type is bool
+    assert d.default is True
+    assert d.scope == "librarian"
+    assert d.resolved_env_var() == "COMPENDIUM_CIRCULATION_SCAN_ISBN_ENABLED"

@@ -148,6 +148,7 @@ def _circ(
         actor=actor,
         source="scan",
         item_note_repo=SqlItemNoteRepository(session),
+        work_repo=SqlWorkRepository(session),
     )
 
 
@@ -216,6 +217,18 @@ def _looks_like_isbn(code: str) -> bool:
     return digits.isdigit() and len(digits) in (10, 13)
 
 
+_EXTERNAL_CODE_RE = re.compile(r"\d{8}|\d{9}[Xx]|\d{10}|\d{12}|\d{13}")
+
+
+def _looks_like_external_code(code: str) -> bool:
+    """ISBN-10/13 or UPC-A/EAN-8/EAN-13 shape (after stripping spaces/hyphens).
+
+    Used by checkout/checkin modes to forward non-Compendium codes to the
+    circulation service, which owns the actual resolution (and the
+    `circulation_scan_isbn_enabled` gate)."""
+    return _EXTERNAL_CODE_RE.fullmatch(_DIGITS_RE.sub("", code)) is not None
+
+
 def run_state_machine(
     row: ScanPairing,
     code: str,
@@ -235,6 +248,11 @@ def run_state_machine(
     item/patron). ``kind`` is one of ``borrower_set``, ``checkout``, ``checkin``,
     ``ignored``, ``error``, ``catalog_added``, or ``catalog_queued`` (the last
     when catalog review is on and the scan is parked for later approval).
+
+    In checkout/checkin modes an ISBN/UPC-shaped code (EAN-8/13, UPC-A, ISBN-10)
+    is forwarded to the injected service callable, which resolves it against
+    physical items (or rejects it when the ``circulation_scan_isbn_enabled``
+    site setting is off). The state machine itself does not gate on that setting.
 
     Service interactions are injected as callables so this is unit-testable with
     mocks:
@@ -262,7 +280,9 @@ def run_state_machine(
             return _reply(
                 row, True, "borrower_set", f"Borrower: {name}", patron_id=patron.id
             )
-        if parsed is not None and parsed.type == ITEM_TYPE:
+        if (parsed is not None and parsed.type == ITEM_TYPE) or (
+            parsed is None and _looks_like_external_code(code)
+        ):
             if row.borrower_patron_id is None:
                 return _reply(row, False, "error", "Scan a patron card first")
             card = row.borrower.library_card_number
@@ -283,7 +303,9 @@ def run_state_machine(
         return _reply(row, False, "error", "Scan a patron card or item barcode")
 
     if mode == "checkin":
-        if parsed is not None and parsed.type == ITEM_TYPE:
+        if (parsed is not None and parsed.type == ITEM_TYPE) or (
+            parsed is None and _looks_like_external_code(code)
+        ):
             try:
                 loan = checkin(code)
             except Exception as exc:  # noqa: BLE001 — translated below

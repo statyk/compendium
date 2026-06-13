@@ -813,6 +813,44 @@ runContinuous(videoElement, backend, { onCode, onMiss })
 
 ---
 
+## ISBN/UPC circulation fallback
+
+Checkout, checkin, and renew — at the desk, the self-checkout kiosk, the phone scanner, the CLI, and the API's checkout endpoint — accept a book's printed ISBN barcode or a disc's UPC when the scanned code is not a Compendium item barcode. This means home and classroom libraries can circulate items without printing labels first.
+
+### Resolution order
+
+1. **Exact Compendium barcode** — always wins; no ISBN lookup attempted.
+2. **ISBN** — ISBN-10 is normalized to ISBN-13 before the lookup.
+3. **UPC/EAN** — the leading-zero variant is tried both ways (a stored 12-digit UPC-A matches a scanned 13-digit `0`-prefixed EAN-13, and vice versa).
+
+### Why scanned codes can't collide
+
+Scanned barcodes are EAN-8 (8 digits), UPC-A (12 digits), or EAN-13 (13 digits). Compendium barcodes — item barcodes and patron cards alike — are 10 or 14 digits (`barcode_format` setting; type prefix digit 2 = patron, 3 = item; Luhn check digit). The digit-length ranges don't overlap, so a barcode physically printed on a book or disc can never be mistaken for a Compendium-format code.
+
+**Typed ISBN-10 caveat.** A hand-typed all-digit ISBN-10 (10 digits) *does* overlap with the 10-digit Compendium format. Roughly 10% of ISBN-10s pass the Luhn check, and two ISBN registration groups collide with the type prefixes: group 3 (German) parses as an *item* barcode — harmless, because the exact-barcode lookup misses and the code falls through to ISBN resolution anyway; group 2 (French) parses as a *patron card*, so the phone scanner's checkout mode stops at "Card not recognized" (and checkin mode rejects it as a non-item code) rather than resolving it as an ISBN. Practical exposure is negligible because book barcodes are always printed as EAN-13; this only surfaces if someone manually types a bare ISBN-10.
+
+### Per-operation copy selection
+
+- **Checkout** — picks a copy automatically: the copy on the pickup shelf for the patron's active hold on that work is preferred; otherwise the lexicographically-first-accession available copy is chosen.
+- **Renew** — scopes to the renewing patron's own active loans on the work. If the patron has several copies on loan, the earliest-due loan is renewed.
+- **Checkin** — requires exactly one copy of the work to be on loan. If there is more than one copy out, `AmbiguousItemError` is raised and the caller must ask which copy came back:
+  - **Web desk** — renders an inline copy picker (borrower name, due date, accession number); clicking a row re-posts the copy's real item barcode to the normal checkin flow.
+  - **CLI** — prints a candidate table and exits with status 1 so scripts don't silently pick the wrong copy.
+  - **Phone scanner** — shows the error message on the phone screen; the librarian must scan the individual item barcode.
+  - **REST API** — unaffected: the API's checkin and renew endpoints are loan-ID-based (`/loans/{id}/checkin`, `/loans/{id}/renew`), so ISBN ambiguity cannot reach them.
+
+Per-copy operations — `declare_lost`, `mark_damaged`, `clear_lost`, `clear_damage`, `withdraw`, condition changes — still require the copy's own barcode; ISBN/UPC resolution is only enabled for the three circulation operations above.
+
+### Phone scanner dedup nuance
+
+The phone scanner's duplicate-scan guard keys on the raw scanned code, so if the desk scans the same ISBN barcode twice within the ~2-second dedup window (two copies of the same title), the second scan is collapsed to a "Duplicate scan ignored." message. With item barcodes this never arose because each copy has a unique barcode; with ISBN barcodes two copies share the same printed code. The workaround is to wait for the first scan's result before scanning the second copy, or to scan the individual item barcodes for the second copy.
+
+### Setting
+
+`circulation_scan_isbn_enabled` (bool, default `true`). DB-editable at **Admin → Settings → Circulation**; env var `COMPENDIUM_CIRCULATION_SCAN_ISBN_ENABLED` wins on read. Set to `false` to require real item barcodes for all circulation operations (e.g. in a deployment that has labelled every item and wants strict one-scan-one-copy semantics).
+
+---
+
 ## Site settings
 
 Most runtime configuration is DB-editable via the `site_setting` table, with environment variables as a break-glass override.
