@@ -1275,6 +1275,59 @@ class TestSpineBarcodeCap:
 
 
 # ──────────────────────────────────────────────────────────────────────
+# Patron full-card barcode width capped (business-card template)
+# ──────────────────────────────────────────────────────────────────────
+
+
+class TestPatronFullCardBarcodeCap:
+    def _render_full_rects(self, template_key: str) -> _FullRecorder:
+        from compendium.services.labels import _draw_patron_full
+
+        tmpl = TEMPLATES[template_key]
+        row = PatronCardRow(card_number="00000001", full_name="Jane Q. Patron")
+        rec = _FullRecorder()
+        _draw_patron_full(
+            rec, row, 0.0, 0.0, tmpl, "Sample Library", "code128",
+            frozenset({"barcode", "card_number", "library_name", "patron_name"}),
+        )
+        return rec
+
+    def test_business_card_barcode_width_capped(self):
+        from compendium.services.labels import PATRON_CARD_BARCODE_MAX_WIDTH_INCHES
+
+        rec = self._render_full_rects("avery-5871")
+        bar_span = (max(x + w for (x, _, w, _) in rec.rects)
+                    - min(x for (x, _, _, _) in rec.rects))
+        assert bar_span <= PATRON_CARD_BARCODE_MAX_WIDTH_INCHES * inch + 1, (
+            f"Full-card barcode x-span {bar_span:.1f}pt exceeds "
+            f"{PATRON_CARD_BARCODE_MAX_WIDTH_INCHES}\" cap"
+        )
+
+    def test_business_card_barcode_narrower_than_inner_width(self):
+        # The whole point: on the 3.5" card the bars must NOT fill the inner area.
+        tmpl = TEMPLATES["avery-5871"]
+        inner_w = tmpl.label_width * inch - 2 * 8  # pad = 8
+        rec = self._render_full_rects("avery-5871")
+        bar_span = (max(x + w for (x, _, w, _) in rec.rects)
+                    - min(x for (x, _, _, _) in rec.rects))
+        assert bar_span < inner_w - 10, (
+            f"Barcode span {bar_span:.1f}pt should be well under inner width "
+            f"{inner_w:.1f}pt on the business-card template"
+        )
+
+    def test_business_card_barcode_centered(self):
+        tmpl = TEMPLATES["avery-5871"]
+        rec = self._render_full_rects("avery-5871")
+        bar_x_min = min(x for (x, _, _, _) in rec.rects)
+        bar_x_max = max(x + w for (x, _, w, _) in rec.rects)
+        bar_mid = (bar_x_min + bar_x_max) / 2
+        cell_mid = tmpl.label_width * inch / 2
+        assert abs(bar_mid - cell_mid) < 5, (
+            f"Barcode center {bar_mid:.1f} not near cell center {cell_mid:.1f}"
+        )
+
+
+# ──────────────────────────────────────────────────────────────────────
 # Fix 4: HR text drawn inside the cell
 # ──────────────────────────────────────────────────────────────────────
 

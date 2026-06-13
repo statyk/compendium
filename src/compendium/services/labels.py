@@ -32,6 +32,13 @@ BarcodeSymbology = Literal["codabar", "code39", "code128"]
 # 0.5"–1.5" wide; capping here keeps the barcode proportional to the spine face.
 SPINE_BARCODE_MAX_LENGTH_INCHES: float = 0.75
 
+# Maximum barcode width on a "full" patron card. Without a cap the barcode
+# stretches to the full inner width — on a 3.5"-wide business-card template
+# (avery-5871) that produces uncomfortably wide, stretched-out bars. Capping
+# (and centering) keeps the barcode a sane size; the cap only binds on wide
+# templates, so smaller card stock is unaffected.
+PATRON_CARD_BARCODE_MAX_WIDTH_INCHES: float = 2.5
+
 
 class LabelCanvas(Protocol):
     """Structural protocol satisfied by both reportlab's Canvas (PDF) and
@@ -1011,9 +1018,12 @@ def _draw_patron_full(
     if "barcode" in fields:
         bc_h = 28
         bc_y = y + pad + 12
-        bc_w = inner_w
+        # Cap the width so the bars don't stretch across the full card, then
+        # center the (possibly narrower) barcode within the inner area.
+        bc_w = min(inner_w, PATRON_CARD_BARCODE_MAX_WIDTH_INCHES * inch)
+        bc_x = x + pad + (inner_w - bc_w) / 2
         _draw_barcode(
-            c, x + pad, bc_y, row.card_number, bc_w, bc_h,
+            c, bc_x, bc_y, row.card_number, bc_w, bc_h,
             symbology=symbology, human_readable=("card_number" in fields),
         )
 
