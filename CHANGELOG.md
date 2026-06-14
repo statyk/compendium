@@ -18,6 +18,28 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   (env `COMPENDIUM_CIRCULATION_SCAN_ISBN_ENABLED`, default on) at
   Admin → Settings → Circulation.
 
+### Changed
+
+- **Timezone setting is now a picker.** Admin → Settings → General → Library
+  Timezone is a country → city dropdown pair instead of a free-form text
+  field, sourced from the canonical IANA zone tables. UTC and the common
+  English-speaking locales (US, Canada, UK, Ireland, Australia, New Zealand)
+  are pinned to the top; the rest follow alphabetically.
+- **Fresh installs no longer preload nav shortcuts.** The `custom_shortcuts`
+  default is now empty; each library opts in via Admin → Settings → General.
+  Existing deployments keep their configured shortcuts.
+
+### Fixed
+
+- **Menus only show links the user can use.** The site-wide nav shortcuts are
+  now filtered by the signed-in user's permissions (a patron no longer sees —
+  and 403s on — staff shortcuts like Circ Desk), and the catalog detail page
+  only links a copy's barcode to the staff item page for users with
+  `item.view` (anonymous visitors no longer get bounced to a login screen).
+- **Patron-card barcode no longer stretches.** On the business-card patron
+  card the barcode is capped to half the card width and centered, instead of
+  spanning the full width.
+
 ## [1.2.1] - 2026-06-11
 
 ### Changed
