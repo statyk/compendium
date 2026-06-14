@@ -44,7 +44,7 @@
         <li><a href="/ui/catalog">Catalog</a></li>
         {% if user %}
           {% if has_permission(user, 'loan.checkout') %}<li><a href="/ui/circ">Circ Desk</a></li>{% endif %}
-          {% set _shortcuts = custom_shortcuts() %}
+          {% set _shortcuts = custom_shortcuts(user) %}
           <li id="nav-shortcuts" data-defaults='{{ _shortcuts | map(attribute="url") | list | tojson }}'>
             {% for s in _shortcuts %}<a href="{{ s.url }}" data-shortcut>{{ s.label }}</a> {% endfor %}<a href="#" id="nav-shortcuts-edit" aria-label="Customize shortcuts" data-tooltip="Customize nav shortcuts">✎<span class="nav-shortcuts-edit-label">Edit</span></a>
           </li>

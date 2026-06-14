@@ -33,14 +33,26 @@ def _jinja_library_name() -> str:
     return get_site_setting("library_name")
 
 
-def _jinja_custom_shortcuts() -> list[dict[str, str]]:
+def _jinja_custom_shortcuts(user=None) -> list[dict[str, str]]:
+    """Site-wide nav shortcuts, filtered to those the current user may access.
+
+    ``custom_shortcuts`` is a single site-wide setting, so without per-user
+    filtering a patron would see (and 403 on) shortcuts pointing at staff-only
+    pages. Drop any shortcut whose destination page requires a permission the
+    user lacks.
+    """
     raw: list[str] = get_site_setting("custom_shortcuts") or []
-    by_url = {p["url"]: p["label"] for p in NAV_PAGES}
-    return [
-        {"label": by_url[u.strip()], "url": u.strip()}
-        for u in raw
-        if u.strip() in by_url
-    ]
+    by_url = {p["url"]: p for p in NAV_PAGES}
+    perms = user.role.permissions if user is not None else []
+    result: list[dict[str, str]] = []
+    for u in raw:
+        page = by_url.get(u.strip())
+        if page is None:
+            continue
+        if page["permission"] is not None and not _has_permission(perms, page["permission"]):
+            continue
+        result.append({"label": page["label"], "url": page["url"]})
+    return result
 
 
 def _jinja_shortcut_pages() -> list[dict]:

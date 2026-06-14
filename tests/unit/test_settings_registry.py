@@ -3,6 +3,7 @@ descriptor lookup. No DB involved.
 """
 from __future__ import annotations
 
+from types import SimpleNamespace
 from typing import Literal
 
 import pytest
@@ -309,6 +310,12 @@ class TestShortcutValidator:
 
 class TestCustomShortcutsJinjaGlobal:
     # jinja.py binds get_site_setting at import time — patch there, not at origin.
+    # These cover label-resolution / trimming / unknown-url skipping; an admin
+    # (wildcard) user is passed so permission-filtering doesn't drop the staff
+    # pages under test. Permission-filtering itself is covered in
+    # tests/unit/test_nav_shortcuts.py.
+
+    _ADMIN = SimpleNamespace(role=SimpleNamespace(permissions=["*"]))
 
     def test_resolves_labels_from_nav_pages(self, monkeypatch):
         import compendium.web.jinja as jinja_mod
@@ -316,7 +323,7 @@ class TestCustomShortcutsJinjaGlobal:
         monkeypatch.setattr(
             jinja_mod, "get_site_setting", lambda key: ["/ui/admin/holds", "/ui/items/new"]
         )
-        result = jinja_mod._jinja_custom_shortcuts()
+        result = jinja_mod._jinja_custom_shortcuts(self._ADMIN)
         assert result == [
             {"label": "Holds Queue", "url": "/ui/admin/holds"},
             {"label": "Add Item", "url": "/ui/items/new"},
@@ -326,13 +333,13 @@ class TestCustomShortcutsJinjaGlobal:
         import compendium.web.jinja as jinja_mod
 
         monkeypatch.setattr(jinja_mod, "get_site_setting", lambda key: [])
-        assert jinja_mod._jinja_custom_shortcuts() == []
+        assert jinja_mod._jinja_custom_shortcuts(self._ADMIN) == []
 
     def test_trims_whitespace(self, monkeypatch):
         import compendium.web.jinja as jinja_mod
 
         monkeypatch.setattr(jinja_mod, "get_site_setting", lambda key: ["  /ui/admin/holds  "])
-        result = jinja_mod._jinja_custom_shortcuts()
+        result = jinja_mod._jinja_custom_shortcuts(self._ADMIN)
         assert result == [{"label": "Holds Queue", "url": "/ui/admin/holds"}]
 
     def test_skips_unknown_urls(self, monkeypatch):
@@ -341,7 +348,7 @@ class TestCustomShortcutsJinjaGlobal:
         monkeypatch.setattr(
             jinja_mod, "get_site_setting", lambda key: ["/ui/admin/holds", "/ui/no-longer-exists"]
         )
-        result = jinja_mod._jinja_custom_shortcuts()
+        result = jinja_mod._jinja_custom_shortcuts(self._ADMIN)
         assert result == [{"label": "Holds Queue", "url": "/ui/admin/holds"}]
 
 

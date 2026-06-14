@@ -108,7 +108,7 @@
     <tbody>
       {% for item in work.items %}
       <tr>
-        <td data-label="Barcode"><a href="/ui/items/{{ item.barcode }}"><code>{{ item.barcode }}</code></a></td>
+        <td data-label="Barcode">{% if has_permission(user, 'item.view') %}<a href="/ui/items/{{ item.barcode }}"><code>{{ item.barcode }}</code></a>{% else %}<code>{{ item.barcode }}</code>{% endif %}</td>
         <td data-label="Branch">{{ item.branch.name }}</td>
         <td data-label="Status">
           {{ status_pill(item.status) }}

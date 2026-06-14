@@ -258,6 +258,26 @@ def test_catalog_detail_404(web_client):
     assert resp.status_code == 404
 
 
+def test_catalog_detail_guest_barcode_not_linked(web_client, work):
+    # Guests lack item.view; the copies-table barcode must render as plain text
+    # (not a link to the staff /ui/items page that would bounce them to login).
+    w, item = work
+    resp = web_client.get(f"/ui/catalog/{w.id}")
+    assert resp.status_code == 200
+    body = resp.content.decode()
+    assert item.barcode in body                       # still shown
+    assert f'href="/ui/items/{item.barcode}"' not in body  # but not linked
+
+
+def test_catalog_detail_staff_barcode_is_linked(web_client, work, librarian):
+    # A user with item.view gets the working link to the per-copy page.
+    w, item = work
+    cookies = _login(web_client, "lib01")
+    resp = web_client.get(f"/ui/catalog/{w.id}", cookies=cookies)
+    assert resp.status_code == 200
+    assert f'href="/ui/items/{item.barcode}"' in resp.content.decode()
+
+
 # ── Catalog suggest endpoint ──────────────────────────────────────────────────
 
 _OPEN_LIB_FOUNDATION_SUGGEST = {
