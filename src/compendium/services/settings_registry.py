@@ -311,6 +311,7 @@ def _register_builtins() -> None:
                 "the DB value."
             ),
             validator=_validate_timezone,
+            widget="timezone_picker",
         )
     )
     register(

@@ -1,4 +1,5 @@
 from datetime import date, datetime, timezone
+from functools import lru_cache
 from pathlib import Path
 
 from fastapi.templating import Jinja2Templates
@@ -71,6 +72,29 @@ def _jinja_shortcut_pages_for_user(user) -> list[dict]:
     ]
 
 
+@lru_cache(maxsize=1)
+def _jinja_iana_timezone_groups() -> list[tuple[str, list[tuple[str, str]]]]:
+    """IANA timezones grouped by region for the settings timezone picker.
+
+    Returns ``[(region, [(value, label), ...]), ...]`` sorted by region then
+    label. Zones without a ``/`` (e.g. ``UTC``) are collected under ``General``.
+    Cached — the zone database is static for the process lifetime.
+    """
+    from zoneinfo import available_timezones
+
+    groups: dict[str, list[tuple[str, str]]] = {}
+    for tz in available_timezones():
+        region, sep, rest = tz.partition("/")
+        if sep:
+            groups.setdefault(region, []).append((tz, rest.replace("_", " ")))
+        else:
+            groups.setdefault("General", []).append((tz, tz))
+    return [
+        (region, sorted(groups[region], key=lambda t: t[1]))
+        for region in sorted(groups)
+    ]
+
+
 def _jinja_guest_search_enabled() -> bool:
     return bool(get_site_setting("guest_search_enabled"))
 
@@ -95,4 +119,5 @@ templates.env.globals["custom_shortcuts"] = _jinja_custom_shortcuts
 templates.env.globals["shortcut_pages"] = _jinja_shortcut_pages
 templates.env.globals["shortcut_pages_for_user"] = _jinja_shortcut_pages_for_user
 templates.env.globals["guest_search_enabled"] = _jinja_guest_search_enabled
+templates.env.globals["iana_timezone_groups"] = _jinja_iana_timezone_groups
 templates.env.filters["currency"] = _format_currency

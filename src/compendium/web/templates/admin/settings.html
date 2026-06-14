@@ -162,6 +162,17 @@
             })();
             </script>
             {% endif %}
+          {% elif row.desc.widget == 'timezone_picker' %}
+            <select name="{{ row.key }}" {% if row.env_overridden %}disabled{% endif %}>
+              {% for region, zones in iana_timezone_groups() %}
+              <optgroup label="{{ region }}">
+                {% for value, label in zones %}
+                <option value="{{ value }}" {% if row.value == value %}selected{% endif %}>{{ label }}</option>
+                {% endfor %}
+              </optgroup>
+              {% endfor %}
+            </select>
+            <small>IANA timezone. Default: <code>{{ row.desc.default }}</code></small>
           {% elif row.is_bool %}
             <label>
               <input type="checkbox" name="{{ row.key }}" value="true"

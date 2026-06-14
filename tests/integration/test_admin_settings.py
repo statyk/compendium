@@ -381,6 +381,40 @@ class TestSettingsWeb:
         assert b"library_name" in r.content
         assert b"default_theme" in r.content
 
+    def test_general_page_renders_timezone_picker(self, client, s_session):
+        # library_timezone is a <select> (picker), not a free-form text input.
+        set_site_setting("library_timezone", "America/New_York", session=s_session)
+        s_session.commit()
+        ss.invalidate_cache()
+        _make_user(s_session, role_name="Librarian", username="lib_web_tz")
+        cookies = _login_cookies(client, "lib_web_tz")
+        r = client.get("/ui/admin/settings/general", cookies=cookies)
+        assert r.status_code == 200
+        body = r.text
+        # Rendered as a grouped select with the stored zone pre-selected.
+        assert '<select name="library_timezone"' in body
+        assert '<optgroup label="America">' in body
+        assert '<option value="America/New_York" selected>' in body
+
+    def test_post_writes_timezone_from_picker(self, client, s_session):
+        _make_user(s_session, role_name="Librarian", username="lib_tz_post")
+        cookies = _login_cookies(client, "lib_tz_post")
+        raw, signed = _make_csrf_pair()
+        r = client.post(
+            "/ui/admin/settings/general",
+            data={
+                "csrf_token": raw,
+                "library_name": "TZ Library",
+                "default_theme": "auto",
+                "guest_search_enabled": "true",
+                "library_timezone": "America/Chicago",
+            },
+            cookies={**cookies, CSRF_COOKIE: signed},
+        )
+        assert r.status_code == 303
+        ss.invalidate_cache()
+        assert get_site_setting("library_timezone") == "America/Chicago"
+
     def test_setting_with_short_help_renders_tooltip(self, client, s_session):
         _make_user(s_session, role_name="Administrator", username="admin_short_help")
         cookies = _login_cookies(client, "admin_short_help")
