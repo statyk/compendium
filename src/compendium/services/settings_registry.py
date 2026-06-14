@@ -411,7 +411,10 @@ def _register_builtins() -> None:
             key="custom_shortcuts",
             display_name="Nav Shortcuts",
             type=list[str],
-            default=["/ui/circ", "/ui/items/new", "/ui/patrons", "/ui/admin/holds", "/ui/admin/loans"],
+            # Empty by default — a fresh install shouldn't preload staff-only
+            # quick links. Each library opts in via the settings picker, and
+            # users can override locally via the nav pencil icon.
+            default=[],
             scope="librarian",
             short_help="Up to 5 quick-access nav links for logged-in users.",
             help_text=(
