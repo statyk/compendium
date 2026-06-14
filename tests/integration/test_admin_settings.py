@@ -392,9 +392,9 @@ class TestSettingsWeb:
         r = client.get("/ui/admin/settings/general", cookies=cookies)
         assert r.status_code == 200
         body = r.text
-        # Region select with the stored zone's region preselected.
+        # Country (region) select with the stored zone's country preselected.
         assert 'id="tz-region-library_timezone"' in body
-        assert '<option value="America" selected>America</option>' in body
+        assert 'selected>United States</option>' in body
         # City select carries the submitted name and the stored zone selected.
         assert 'id="tz-city-library_timezone" name="library_timezone"' in body
         assert '<option value="America/New_York" selected>New York</option>' in body

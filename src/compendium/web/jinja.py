@@ -1,5 +1,4 @@
 from datetime import date, datetime, timezone
-from functools import lru_cache
 from pathlib import Path
 
 from fastapi.templating import Jinja2Templates
@@ -72,27 +71,31 @@ def _jinja_shortcut_pages_for_user(user) -> list[dict]:
     ]
 
 
-@lru_cache(maxsize=1)
-def _jinja_iana_timezone_groups() -> list[tuple[str, list[tuple[str, str]]]]:
-    """IANA timezones grouped by region for the settings timezone picker.
+def _jinja_timezone_picker_data(current: str | None = None) -> dict:
+    """Data for the settings timezone picker (Region=country, City=zone).
 
-    Returns ``[(region, [(value, label), ...]), ...]`` sorted by region then
-    label. Zones without a ``/`` (e.g. ``UTC``) are collected under ``General``.
-    Cached — the zone database is static for the process lifetime.
+    Returns ``{"groups": [(region, [(zone, label), ...]), ...],
+    "selected_region": <label>}`` using the committed by-country grouping in
+    ``tz_regions`` (UTC + anglophone locales pinned first). If ``current`` isn't
+    one of the canonical picker zones (a legacy alias, or a value set via env or
+    the old free-form field), it's surfaced in a one-off ``Current`` group so it
+    stays selectable and is never silently rewritten on save.
     """
-    from zoneinfo import available_timezones
+    from compendium.web.tz_regions import TZ_REGIONS
 
-    groups: dict[str, list[tuple[str, str]]] = {}
-    for tz in available_timezones():
-        region, sep, rest = tz.partition("/")
-        if sep:
-            groups.setdefault(region, []).append((tz, rest.replace("_", " ")))
-        else:
-            groups.setdefault("General", []).append((tz, tz))
-    return [
-        (region, sorted(groups[region], key=lambda t: t[1]))
-        for region in sorted(groups)
-    ]
+    groups: list[tuple[str, list[tuple[str, str]]]] = TZ_REGIONS
+    selected_region: str | None = None
+    if current:
+        for label, zones in groups:
+            if any(zone == current for zone, _ in zones):
+                selected_region = label
+                break
+        if selected_region is None:
+            groups = [("Current", [(current, current)]), *groups]
+            selected_region = "Current"
+    if selected_region is None:
+        selected_region = groups[0][0]
+    return {"groups": groups, "selected_region": selected_region}
 
 
 def _jinja_guest_search_enabled() -> bool:
@@ -119,5 +122,5 @@ templates.env.globals["custom_shortcuts"] = _jinja_custom_shortcuts
 templates.env.globals["shortcut_pages"] = _jinja_shortcut_pages
 templates.env.globals["shortcut_pages_for_user"] = _jinja_shortcut_pages_for_user
 templates.env.globals["guest_search_enabled"] = _jinja_guest_search_enabled
-templates.env.globals["iana_timezone_groups"] = _jinja_iana_timezone_groups
+templates.env.globals["timezone_picker_data"] = _jinja_timezone_picker_data
 templates.env.filters["currency"] = _format_currency

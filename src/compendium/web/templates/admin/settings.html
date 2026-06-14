@@ -163,22 +163,23 @@
             </script>
             {% endif %}
           {% elif row.desc.widget == 'timezone_picker' %}
-            {% set tz_current = row.value %}
-            {% set tz_region = tz_current.split('/')[0] if '/' in tz_current else 'General' %}
+            {% set tzp = timezone_picker_data(row.value) %}
             <div class="tz-picker" style="display:flex; gap:0.5rem; flex-wrap:wrap; align-items:center">
-              <select id="tz-region-{{ row.key }}" aria-label="Timezone region"
+              <select id="tz-region-{{ row.key }}" aria-label="Timezone country/region"
                       style="flex:0 0 auto; margin:0"
                       {% if row.env_overridden %}disabled{% endif %}>
-                {% for region, zones in iana_timezone_groups() %}
-                <option value="{{ region }}" {% if region == tz_region %}selected{% endif %}>{{ region }}</option>
+                {% for region, zones in tzp.groups %}
+                <option value="{{ region }}"
+                        {% if not zones %}disabled{% endif %}
+                        {% if region == tzp.selected_region %}selected{% endif %}>{{ region }}</option>
                 {% endfor %}
               </select>
               <select id="tz-city-{{ row.key }}" name="{{ row.key }}" aria-label="Timezone city"
                       style="flex:1 1 12rem; margin:0"
                       {% if row.env_overridden %}disabled{% endif %}>
-                {% for region, zones in iana_timezone_groups() if region == tz_region %}
+                {% for region, zones in tzp.groups if region == tzp.selected_region %}
                   {% for value, label in zones %}
-                  <option value="{{ value }}" {% if value == tz_current %}selected{% endif %}>{{ label }}</option>
+                  <option value="{{ value }}" {% if value == row.value %}selected{% endif %}>{{ label }}</option>
                   {% endfor %}
                 {% endfor %}
               </select>
@@ -188,7 +189,7 @@
             <script nonce="{{ csp_nonce(request) }}">
             (function () {
               var byRegion = {};
-              {{ iana_timezone_groups() | tojson }}.forEach(function (g) { byRegion[g[0]] = g[1]; });
+              {{ tzp.groups | tojson }}.forEach(function (g) { byRegion[g[0]] = g[1]; });
               var region = document.getElementById('tz-region-{{ row.key }}');
               var city = document.getElementById('tz-city-{{ row.key }}');
               region.addEventListener('change', function () {
