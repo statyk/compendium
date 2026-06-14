@@ -163,16 +163,46 @@
             </script>
             {% endif %}
           {% elif row.desc.widget == 'timezone_picker' %}
-            <select name="{{ row.key }}" {% if row.env_overridden %}disabled{% endif %}>
-              {% for region, zones in iana_timezone_groups() %}
-              <optgroup label="{{ region }}">
-                {% for value, label in zones %}
-                <option value="{{ value }}" {% if row.value == value %}selected{% endif %}>{{ label }}</option>
+            {% set tz_current = row.value %}
+            {% set tz_region = tz_current.split('/')[0] if '/' in tz_current else 'General' %}
+            <div class="tz-picker" style="display:flex; gap:0.5rem; flex-wrap:wrap; align-items:center">
+              <select id="tz-region-{{ row.key }}" aria-label="Timezone region"
+                      style="flex:0 0 auto; margin:0"
+                      {% if row.env_overridden %}disabled{% endif %}>
+                {% for region, zones in iana_timezone_groups() %}
+                <option value="{{ region }}" {% if region == tz_region %}selected{% endif %}>{{ region }}</option>
                 {% endfor %}
-              </optgroup>
-              {% endfor %}
-            </select>
+              </select>
+              <select id="tz-city-{{ row.key }}" name="{{ row.key }}" aria-label="Timezone city"
+                      style="flex:1 1 12rem; margin:0"
+                      {% if row.env_overridden %}disabled{% endif %}>
+                {% for region, zones in iana_timezone_groups() if region == tz_region %}
+                  {% for value, label in zones %}
+                  <option value="{{ value }}" {% if value == tz_current %}selected{% endif %}>{{ label }}</option>
+                  {% endfor %}
+                {% endfor %}
+              </select>
+            </div>
             <small>IANA timezone. Default: <code>{{ row.desc.default }}</code></small>
+            {% if not row.env_overridden %}
+            <script nonce="{{ csp_nonce(request) }}">
+            (function () {
+              var byRegion = {};
+              {{ iana_timezone_groups() | tojson }}.forEach(function (g) { byRegion[g[0]] = g[1]; });
+              var region = document.getElementById('tz-region-{{ row.key }}');
+              var city = document.getElementById('tz-city-{{ row.key }}');
+              region.addEventListener('change', function () {
+                city.innerHTML = '';
+                (byRegion[region.value] || []).forEach(function (z) {
+                  var o = document.createElement('option');
+                  o.value = z[0];
+                  o.textContent = z[1];
+                  city.appendChild(o);
+                });
+              });
+            })();
+            </script>
+            {% endif %}
           {% elif row.is_bool %}
             <label>
               <input type="checkbox" name="{{ row.key }}" value="true"
