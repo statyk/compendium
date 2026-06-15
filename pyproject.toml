@@ -74,6 +74,9 @@ path = "src/compendium/__init__.py"
 [tool.hatch.build.targets.wheel]
 packages = ["src/compendium"]
 
+[tool.hatch.build.targets.wheel.force-include]
+"docker" = "compendium/_scaffold"
+
 [tool.ruff]
 line-length = 100
 target-version = "py311"

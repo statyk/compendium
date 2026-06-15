@@ -19,7 +19,7 @@ WORKDIR /app
 COPY pyproject.toml uv.lock README.md LICENSE alembic.ini ./
 COPY src ./src
 
-RUN uv sync --frozen --no-dev --extra postgres
+RUN uv sync --frozen --no-dev --extra postgres --no-editable
 
 
 FROM python:3.11-slim AS runtime
