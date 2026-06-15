@@ -7,6 +7,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- **One-command Docker install:** `compendium init [DIR]` scaffolds a ready-to-run
+  deployment (compose file, nginx config, cron helpers, and a `.env` with freshly
+  generated secrets) without cloning the repo, and a `curl … | sh` bootstrap
+  (`install.sh`) does it end-to-end via the published image. The deploy bundle now
+  ships inside the package/image, so the same files back both the repo and the CLI.
+
 ## [1.3.0] - 2026-06-14
 
 ### Added

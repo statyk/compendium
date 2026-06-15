@@ -32,6 +32,85 @@ Run the daemon for the web UI and use CLI commands for admin tasks or scripts �
 
 ---
 
+## Scaffolding a deployment (`compendium init`)
+
+The fastest way to get a Docker deployment running is the one-liner installer:
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/statyk/compendium/master/install.sh | sh
+```
+
+This checks for Docker and the compose plugin, pulls the published image, runs
+`compendium init` inside it to scaffold the deployment directory, and starts the
+stack with `docker compose up -d`. No cloning the repo required.
+
+If you already have the `compendium` package installed, run the scaffold step
+directly and then start the stack yourself:
+
+```bash
+compendium init ./compendium
+cd compendium
+docker compose up -d
+```
+
+The default output directory is `./compendium` (relative to where you run the
+command). Pass a different path as the argument to change it.
+
+### What `compendium init` writes
+
+```
+<dir>/
+├── docker-compose.yml      # app + Postgres + nginx stack
+├── nginx/
+│   ├── nginx.conf          # TLS reverse proxy config
+│   └── entrypoint.sh       # self-signs a cert on first start if none present
+├── crontab.sample          # scheduled maintenance lines
+├── install-cron.sh         # one-shot crontab installer
+├── .env                    # generated secrets (JWT key, encryption key, admin + DB passwords)
+├── certs/                  # TLS material (drop fullchain.pem + privkey.pem here for a CA cert)
+├── backups/                # nightly backups land here
+└── logs/                   # maintenance.log destination
+```
+
+The generated `.env` contains freshly generated values for
+`COMPENDIUM_JWT_SECRET_KEY`, `COMPENDIUM_SECRET_KEY`, `POSTGRES_PASSWORD`, and
+(when `--admin-password` is not supplied) `COMPENDIUM_ADMIN_PASSWORD`. **The
+admin password is printed to the terminal once and not stored in plain text
+elsewhere — note it down before clearing your terminal.**
+
+### Flags
+
+| Flag | Default | Description |
+|---|---|---|
+| `DIR` (positional) | `./compendium` | Directory to scaffold into |
+| `--force` | off | Overwrite an existing directory without prompting |
+| `--admin-username` | `admin` | Initial Administrator account username |
+| `--admin-password` | generated | Initial Administrator password; printed to terminal if omitted |
+| `--db-password` | generated | PostgreSQL password written into `.env` |
+| `--cert-cn` | `compendium.local` | Common Name for the self-signed certificate; pass a real hostname to also set `COMPENDIUM_ALLOWED_HOSTS` and `COMPENDIUM_PUBLIC_BASE_URL` in `.env` |
+| `--image` | `ghcr.io/statyk/compendium:latest` | Docker image written into `.env` |
+| `--no-secret-key` | off | Skip generating `COMPENDIUM_SECRET_KEY` (disables the encrypted-secrets UI) |
+| `--tls-cert` | — | Path to a CA-signed certificate file; copied to `certs/fullchain.pem` |
+| `--tls-key` | — | Path to the corresponding private key; copied to `certs/privkey.pem` |
+
+### Using a CA-signed certificate
+
+Supply `--tls-cert` and `--tls-key` at scaffold time to have `compendium init`
+copy a CA-signed certificate pair into `certs/` for you:
+
+```bash
+compendium init ./compendium \
+    --cert-cn library.example.org \
+    --tls-cert /etc/letsencrypt/live/library.example.org/fullchain.pem \
+    --tls-key  /etc/letsencrypt/live/library.example.org/privkey.pem
+```
+
+Alternatively, drop `fullchain.pem` and `privkey.pem` directly into
+`<dir>/certs/` before running `docker compose up`. The nginx entrypoint checks
+for both files and skips self-signing when they are present.
+
+---
+
 ## First-run checklist
 
 ```bash

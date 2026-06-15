@@ -26,6 +26,7 @@ the same bucket, while each interface keeps its own native idiom.
 | Operation | Interface | Justification |
 |---|---|---|
 | `db init/upgrade/history` | CLI-only | Deployment-time migrations; OS-level trust required |
+| `init` | CLI-only | Deployment scaffold; runs in a shell with OS trust (often inside the image) |
 | `maintenance *` | CLI-only | Cron-invoked; must run without the daemon |
 | `backup` / `restore` | CLI-only | Admin/ops territory; needs OS-level trust |
 | `POST /me/loans/{id}/claim-returned` | API/Web-only | Patron self-service uses loan_id (patron sees their own loan list); the librarian path uses barcode via `POST /claims/{barcode}/returned` |

@@ -42,6 +42,18 @@ The installed command is **`compendium`**.
 
 ## Quick start
 
+### Quick start (Docker)
+
+One command — needs only Docker with the compose plugin:
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/statyk/compendium/master/install.sh | sh
+```
+
+This scaffolds a `./compendium/` deployment (compose file, nginx, generated
+secrets) and starts it. Already have the package installed? `compendium init
+./compendium` does the scaffold step alone. See `docs/deployment.md` for details.
+
 ### Prerequisites
 
 Python 3.11.4 or newer. (Backup restore uses the tarfile `data` filter from

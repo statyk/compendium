@@ -26,6 +26,21 @@ docker/
 
 ## Quick start
 
+Easiest — scaffold the bundle with generated secrets, then start it:
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/statyk/compendium/master/install.sh | sh
+# or, if you already have the package installed:
+compendium init ./compendium && cd compendium && docker compose up -d
+```
+
+`compendium init` writes this same `docker-compose.yml`, the nginx config, the
+cron helpers, and a `.env` with a freshly generated JWT key, encryption key, and
+admin/DB passwords (the admin password is printed once). Use `--cert-cn`,
+`--image`, or `--tls-cert/--tls-key` to customise; `--help` lists all flags.
+
+To assemble it by hand instead, copy `.env.example` to `.env` and edit it:
+
 ```bash
 cd docker
 cp .env.example .env
