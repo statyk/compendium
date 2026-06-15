@@ -14,7 +14,7 @@ ASSUME_YES=""
 
 while [ $# -gt 0 ]; do
     case "$1" in
-        --image) IMAGE="$2"; shift 2 ;;
+        --image) [ $# -ge 2 ] || { echo "--image needs a value" >&2; exit 2; }; IMAGE="$2"; shift 2 ;;
         --force) FORCE="--force"; shift ;;
         --yes|-y) ASSUME_YES=1; shift ;;
         -*) echo "Unknown option: $1" >&2; exit 2 ;;
@@ -47,12 +47,16 @@ echo "Pulling $IMAGE ..."
 docker pull "$IMAGE"
 
 # 4. Scaffold inside the image, writing to the host dir as the current user.
+# --entrypoint overrides the image's default entrypoint (which migrates + serves);
+# without it, `compendium init …` would be passed as args to that entrypoint and
+# never run.
 mkdir -p "$TARGET"
 ABS_TARGET=$(cd "$TARGET" && pwd)
 set -- init . --admin-username "$ADMIN_USER" --cert-cn "$CERT_CN"
 [ -n "$FORCE" ] && set -- "$@" "$FORCE"
 [ -n "$ADMIN_PASS" ] && set -- "$@" --admin-password "$ADMIN_PASS"
-docker run --rm --user "$(id -u):$(id -g)" -v "$ABS_TARGET":/out -w /out "$IMAGE" compendium "$@"
+docker run --rm --user "$(id -u):$(id -g)" -v "$ABS_TARGET":/out -w /out \
+    --entrypoint compendium "$IMAGE" "$@"
 
 # 5. Up
 echo "Starting the stack ..."
