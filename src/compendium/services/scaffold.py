@@ -94,6 +94,11 @@ def bundle_base() -> Path:
 
 _LOCAL_CNS = frozenset({"compendium.local", "localhost"})
 
+# A hostname/CN written into .env and an nginx `-subj`/`-addext`; restrict to
+# hostname characters so a stray newline/quote can't inject extra .env lines or
+# corrupt the cert DN.
+_HOSTNAME_RE = re.compile(r"[A-Za-z0-9.-]+")
+
 
 @dataclass
 class ScaffoldResult:
@@ -111,6 +116,18 @@ def _make_executable(path: Path) -> None:
     path.chmod(mode | stat.S_IXUSR | stat.S_IXGRP | stat.S_IXOTH)
 
 
+def _write_private(path: Path, data: bytes) -> None:
+    """Create/overwrite ``path`` with 0o600 perms and no world-readable window.
+
+    Creating via ``os.open`` with mode 0o600 avoids the brief default-umask
+    window that a ``write_text``-then-``chmod`` sequence would leave open.
+    """
+    if path.exists():
+        path.chmod(0o600)  # narrow a pre-existing wider file before truncating
+    with open(path, "wb", opener=lambda p, flags: os.open(p, flags, 0o600)) as f:
+        f.write(data)
+
+
 def scaffold(
     directory: Path,
     *,
@@ -126,6 +143,12 @@ def scaffold(
 ) -> ScaffoldResult:
     """Write a ready-to-run Docker deployment bundle into ``directory``."""
     directory = Path(directory)
+
+    if not _HOSTNAME_RE.fullmatch(cert_cn):
+        raise ScaffoldError(
+            f"invalid --cert-cn {cert_cn!r}: use a hostname "
+            "(letters, digits, '.', '-')"
+        )
 
     if bool(tls_cert) != bool(tls_key):
         raise ScaffoldError("provide both --tls-cert and --tls-key, or neither")
@@ -182,16 +205,13 @@ def scaffold(
 
     example_text = (base / ENV_EXAMPLE).read_text()
     env_path = directory / ".env"
-    env_path.write_text(render_env(example_text, values))
-    env_path.chmod(0o600)
+    _write_private(env_path, render_env(example_text, values).encode())
 
     using_supplied_cert = tls_cert is not None
     if using_supplied_cert:
         certs_dir = directory / "certs"
         shutil.copyfile(tls_cert, certs_dir / "fullchain.pem")
-        key_dest = certs_dir / "privkey.pem"
-        shutil.copyfile(tls_key, key_dest)
-        key_dest.chmod(0o600)
+        _write_private(certs_dir / "privkey.pem", Path(tls_key).read_bytes())
 
     return ScaffoldResult(
         directory=directory,

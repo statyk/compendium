@@ -80,7 +80,30 @@ def test_scaffold_writes_files_and_dirs(tmp_path):
     assert (target / ".env").is_file()
     mode = (target / "install-cron.sh").stat().st_mode
     assert mode & stat.S_IXUSR
+    # the executable in a subdirectory gets the bit too
+    assert (target / "nginx" / "entrypoint.sh").stat().st_mode & stat.S_IXUSR
     assert result.directory == target
+
+
+def test_scaffold_env_is_private(tmp_path):
+    target = tmp_path / "a"
+    scaffold.scaffold(target, admin_password="pw")
+    assert stat.S_IMODE((target / ".env").stat().st_mode) == 0o600
+
+
+def test_scaffold_tls_key_is_private(tmp_path):
+    cert = tmp_path / "c.pem"
+    cert.write_text("CERT")
+    key = tmp_path / "k.pem"
+    key.write_text("KEY")
+    target = tmp_path / "a"
+    scaffold.scaffold(target, admin_password="pw", tls_cert=cert, tls_key=key)
+    assert stat.S_IMODE((target / "certs" / "privkey.pem").stat().st_mode) == 0o600
+
+
+def test_scaffold_rejects_invalid_cert_cn(tmp_path):
+    with pytest.raises(scaffold.ScaffoldError):
+        scaffold.scaffold(tmp_path / "a", admin_password="pw", cert_cn="bad\nhost")
 
 
 def test_scaffold_generates_real_secrets(tmp_path):
