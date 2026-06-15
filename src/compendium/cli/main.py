@@ -16,6 +16,7 @@ from compendium.cli.commands import (
     fine,
     hold,
     household,
+    init as init_cmd,
     item,
     keygen,
     labels,
@@ -84,6 +85,7 @@ app.add_typer(keygen.app, name="keygen")
 app.add_typer(secrets_cmd.app, name="secrets")
 app.add_typer(metadata_cmd.app, name="metadata")
 app.command("backup")(backup.backup_command)
+app.command("init")(init_cmd.init_command)
 app.command("restore")(backup.restore_command)
 
 
