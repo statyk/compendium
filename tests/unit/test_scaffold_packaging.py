@@ -23,3 +23,11 @@ def test_manifest_paths_exist_in_repo_docker():
     base = _REPO / "docker"
     for rel in scaffold.SCAFFOLD_FILES + [scaffold.ENV_EXAMPLE]:
         assert (base / rel).is_file(), rel
+
+
+def test_compose_passes_through_allowed_hosts():
+    # `compendium init --cert-cn <host>` writes COMPENDIUM_ALLOWED_HOSTS into .env;
+    # the compose service must forward it into the container or the hardening is
+    # silently dead (.env only feeds ${...} interpolation, not container env).
+    compose = (_REPO / "docker" / "docker-compose.yml").read_text()
+    assert "COMPENDIUM_ALLOWED_HOSTS: ${COMPENDIUM_ALLOWED_HOSTS" in compose

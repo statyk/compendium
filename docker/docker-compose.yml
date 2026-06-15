@@ -58,6 +58,9 @@ services:
       COMPENDIUM_METADATA_CACHE_TTL_DAYS: ${COMPENDIUM_METADATA_CACHE_TTL_DAYS:-}
       COMPENDIUM_LIBRARY_TIMEZONE: ${COMPENDIUM_LIBRARY_TIMEZONE:-}
       COMPENDIUM_MAX_UPLOAD_BYTES: ${COMPENDIUM_MAX_UPLOAD_BYTES:-}
+      # Host-header allowlist (TrustedHostMiddleware). `compendium init --cert-cn
+      # <hostname>` populates this in .env; unset = accept any Host.
+      COMPENDIUM_ALLOWED_HOSTS: ${COMPENDIUM_ALLOWED_HOSTS:-}
       # Remote phone-scanner base URL. The bundled nginx sets X-Forwarded-Proto https,
       # so QR codes work out-of-the-box. Set this when using a proxy that does NOT
       # set that header, or to pin a specific public hostname (e.g. https://library.example.org).
