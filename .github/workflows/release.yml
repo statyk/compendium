@@ -71,6 +71,32 @@ jobs:
             type=semver,pattern={{major}}.{{minor}}
             type=raw,value=latest,enable={{is_default_branch}}
 
+      - name: Build amd64 image for smoke test
+        uses: docker/build-push-action@v7
+        with:
+          context: .
+          file: docker/Dockerfile
+          platforms: linux/amd64
+          load: true
+          tags: compendium:smoke
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
+      - name: Smoke test `compendium init` in the built image
+        run: |
+          docker run --rm --entrypoint sh compendium:smoke -ec '
+            compendium init /tmp/out --admin-password smoketest --cert-cn smoke.local
+            test -f /tmp/out/docker-compose.yml
+            test -f /tmp/out/nginx/nginx.conf
+            test -f /tmp/out/nginx/entrypoint.sh
+            test -f /tmp/out/crontab.sample
+            test -f /tmp/out/install-cron.sh
+            test -d /tmp/out/certs
+            grep -Eq "^COMPENDIUM_JWT_SECRET_KEY=.+" /tmp/out/.env
+            grep -Eq "^COMPENDIUM_SECRET_KEY=.+" /tmp/out/.env
+            ! grep -q change-me /tmp/out/.env
+          '
+
       - name: Build and push
         uses: docker/build-push-action@v7
         with:
