@@ -9,6 +9,10 @@ from __future__ import annotations
 
 import os
 import re
+import secrets
+import shutil
+import stat
+from dataclasses import dataclass
 from pathlib import Path
 
 # Files copied verbatim into the target (relative to the bundle base).
@@ -85,4 +89,116 @@ def bundle_base() -> Path:
     raise ScaffoldError(
         "could not locate the deployment bundle "
         "(neither a packaged _scaffold nor a source docker/ directory)"
+    )
+
+
+_LOCAL_CNS = frozenset({"compendium.local", "localhost"})
+
+
+@dataclass
+class ScaffoldResult:
+    directory: Path
+    admin_username: str
+    admin_password: str
+    admin_password_generated: bool
+    cert_cn: str
+    using_supplied_cert: bool
+    secret_key_enabled: bool
+
+
+def _make_executable(path: Path) -> None:
+    mode = path.stat().st_mode
+    path.chmod(mode | stat.S_IXUSR | stat.S_IXGRP | stat.S_IXOTH)
+
+
+def scaffold(
+    directory: Path,
+    *,
+    force: bool = False,
+    admin_username: str = "admin",
+    admin_password: str | None = None,
+    db_password: str | None = None,
+    cert_cn: str = "compendium.local",
+    image: str | None = None,
+    with_secret_key: bool = True,
+    tls_cert: Path | None = None,
+    tls_key: Path | None = None,
+) -> ScaffoldResult:
+    """Write a ready-to-run Docker deployment bundle into ``directory``."""
+    directory = Path(directory)
+
+    if bool(tls_cert) != bool(tls_key):
+        raise ScaffoldError("provide both --tls-cert and --tls-key, or neither")
+    if tls_cert is not None:
+        for label, p in (("--tls-cert", tls_cert), ("--tls-key", tls_key)):
+            if not Path(p).is_file():
+                raise ScaffoldError(f"{label} path does not exist: {p}")
+
+    base = bundle_base()
+
+    targets = [directory / rel for rel in SCAFFOLD_FILES] + [directory / ".env"]
+    if not force:
+        existing = [t for t in targets if t.exists()]
+        if existing:
+            names = ", ".join(str(t.relative_to(directory)) for t in existing)
+            raise ScaffoldError(
+                f"{directory} already contains bundle files ({names}). "
+                f"Use --force to overwrite."
+            )
+
+    directory.mkdir(parents=True, exist_ok=True)
+    for d in SCAFFOLD_DIRS:
+        (directory / d).mkdir(parents=True, exist_ok=True)
+
+    for rel in SCAFFOLD_FILES:
+        dest = directory / rel
+        dest.parent.mkdir(parents=True, exist_ok=True)
+        shutil.copyfile(base / rel, dest)
+        if rel in EXECUTABLE_FILES:
+            _make_executable(dest)
+
+    from cryptography.fernet import Fernet
+
+    admin_password_generated = admin_password is None
+    if admin_password is None:
+        admin_password = secrets.token_urlsafe(12)
+    if db_password is None:
+        db_password = secrets.token_urlsafe(24)
+
+    values: dict[str, str] = {
+        "POSTGRES_PASSWORD": db_password,
+        "COMPENDIUM_JWT_SECRET_KEY": secrets.token_urlsafe(48),
+        "COMPENDIUM_ADMIN_USERNAME": admin_username,
+        "COMPENDIUM_ADMIN_PASSWORD": admin_password,
+        "COMPENDIUM_CERT_CN": cert_cn,
+    }
+    if with_secret_key:
+        values["COMPENDIUM_SECRET_KEY"] = Fernet.generate_key().decode()
+    if image:
+        values["COMPENDIUM_IMAGE"] = image
+    if cert_cn not in _LOCAL_CNS:
+        values["COMPENDIUM_ALLOWED_HOSTS"] = cert_cn
+        values["COMPENDIUM_PUBLIC_BASE_URL"] = f"https://{cert_cn}"
+
+    example_text = (base / ENV_EXAMPLE).read_text()
+    env_path = directory / ".env"
+    env_path.write_text(render_env(example_text, values))
+    env_path.chmod(0o600)
+
+    using_supplied_cert = tls_cert is not None
+    if using_supplied_cert:
+        certs_dir = directory / "certs"
+        shutil.copyfile(tls_cert, certs_dir / "fullchain.pem")
+        key_dest = certs_dir / "privkey.pem"
+        shutil.copyfile(tls_key, key_dest)
+        key_dest.chmod(0o600)
+
+    return ScaffoldResult(
+        directory=directory,
+        admin_username=admin_username,
+        admin_password=admin_password,
+        admin_password_generated=admin_password_generated,
+        cert_cn=cert_cn,
+        using_supplied_cert=using_supplied_cert,
+        secret_key_enabled=with_secret_key,
     )
