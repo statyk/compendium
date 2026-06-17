@@ -7,6 +7,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.4.1] - 2026-06-16
+
+### Fixed
+
+- **Docker image build:** the builder stage now copies the `docker/` bundle into
+  its context so the wheel's `compendium/_scaffold` force-include resolves. The
+  1.4.0 container image failed to build for this reason; the 1.4.0 PyPI package is
+  unaffected.
+
 ## [1.4.0] - 2026-06-16
 
 ### Added

@@ -18,6 +18,9 @@ WORKDIR /app
 
 COPY pyproject.toml uv.lock README.md LICENSE alembic.ini ./
 COPY src ./src
+# The wheel force-includes the docker/ bundle as compendium/_scaffold (see
+# pyproject.toml), so it must be present in the builder context at build time.
+COPY docker ./docker
 
 RUN uv sync --frozen --no-dev --extra postgres --no-editable
 
