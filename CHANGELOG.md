@@ -7,6 +7,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.4.0] - 2026-06-16
+
 ### Added
 
 - **One-command Docker install:** `compendium init [DIR]` scaffolds a ready-to-run
