@@ -28,8 +28,11 @@ def _svc(session) -> ReportsService:
     )
 
 
-def _parse_date(s: str) -> datetime:
-    return datetime.strptime(s, "%Y-%m-%d").replace(tzinfo=timezone.utc)
+def _parse_date(s: str, opt: str) -> datetime:
+    try:
+        return datetime.strptime(s, "%Y-%m-%d").replace(tzinfo=timezone.utc)
+    except ValueError as exc:
+        raise typer.BadParameter(f"{opt} must be YYYY-MM-DD, got '{s}'") from exc
 
 
 def _emit_csv(rows: list[dict], fieldnames: list[str]) -> None:
@@ -75,8 +78,8 @@ def popular(
     format: str = typer.Option("table", "--format"),
 ) -> None:
     """Most-checked-out works in a date window."""
-    since_dt = _parse_date(since)
-    until_dt = _parse_date(until) if until else None
+    since_dt = _parse_date(since, "--from")
+    until_dt = _parse_date(until, "--to") if until else None
     with session_scope() as session:
         rows = _svc(session).popular_works(
             since=since_dt, until=until_dt, limit=limit, branch_code=branch
@@ -113,7 +116,7 @@ def dormant(
     format: str = typer.Option("table", "--format"),
 ) -> None:
     """Items not checked out since a cutoff date — weeding list."""
-    cutoff = _parse_date(not_since)
+    cutoff = _parse_date(not_since, "--not-since")
     with session_scope() as session:
         rows = _svc(session).dormant_items(
             not_since=cutoff, limit=limit, branch_code=branch

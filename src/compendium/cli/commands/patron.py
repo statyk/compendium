@@ -23,7 +23,10 @@ app = typer.Typer(help="Patron management commands.")
 
 
 def _parse_date(s: str) -> date:
-    return datetime.strptime(s, "%Y-%m-%d").date()
+    try:
+        return datetime.strptime(s, "%Y-%m-%d").date()
+    except ValueError as exc:
+        raise typer.BadParameter(f"--expires must be YYYY-MM-DD, got '{s}'") from exc
 
 
 def _resolve_category_id(session, code: str | None) -> int | None:

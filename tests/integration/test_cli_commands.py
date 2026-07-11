@@ -1802,3 +1802,63 @@ class TestBackupCli:
         finally:
             _engine.get_settings.cache_clear()
             _engine._server_engine.cache_clear()
+
+
+# ──────────────────────────────────────────────────────────────────────────────
+# malformed date usage errors
+# ──────────────────────────────────────────────────────────────────────────────
+
+
+def test_patron_add_bad_expires_is_clean_usage_error(session):
+    r = _invoke(
+        session,
+        ["patron", "add", "--name", "Bad Date", "--expires", "2026-13-40"],
+        "compendium.cli.commands.patron",
+    )
+    assert r.exit_code == 2, r.output
+    assert "YYYY-MM-DD" in r.output
+    assert "Traceback" not in r.output
+
+
+def test_patron_set_bad_expires_is_clean_usage_error(session):
+    add = _invoke(
+        session,
+        ["patron", "add", "--name", "Date Setter"],
+        "compendium.cli.commands.patron",
+    )
+    assert add.exit_code == 0, add.output
+    card = next(
+        line.split(":", 1)[1].strip()
+        for line in add.output.splitlines()
+        if "Card number" in line
+    )
+    r = _invoke(
+        session,
+        ["patron", "set", "--card", card, "--expires", "not-a-date"],
+        "compendium.cli.commands.patron",
+    )
+    assert r.exit_code == 2, r.output
+    assert "YYYY-MM-DD" in r.output
+    assert "Traceback" not in r.output
+
+
+def test_reports_popular_bad_from_is_clean_usage_error(session):
+    r = _invoke(
+        session,
+        ["reports", "popular", "--from", "2026-99-99"],
+        "compendium.cli.commands.reports",
+    )
+    assert r.exit_code == 2, r.output
+    assert "--from" in r.output and "YYYY-MM-DD" in r.output
+    assert "Traceback" not in r.output
+
+
+def test_reports_dormant_bad_not_since_is_clean_usage_error(session):
+    r = _invoke(
+        session,
+        ["reports", "dormant", "--not-since", "yesterday"],
+        "compendium.cli.commands.reports",
+    )
+    assert r.exit_code == 2, r.output
+    assert "--not-since" in r.output and "YYYY-MM-DD" in r.output
+    assert "Traceback" not in r.output
