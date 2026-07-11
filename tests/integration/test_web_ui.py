@@ -371,6 +371,18 @@ def test_circ_desk_renders_for_librarian(web_client, librarian):
     assert b"Circulation Desk" in resp.content
 
 
+def test_circ_desk_barcode_inputs_select_on_refocus(web_client, librarian):
+    """After each scan the barcode field is selected, so the next scan replaces it."""
+    cookies = _login(web_client, "lib01")
+    resp = web_client.get("/ui/circ", cookies=cookies)
+    assert resp.status_code == 200
+    for input_id in ("co-barcode", "ci-barcode", "rn-barcode"):
+        assert (
+            f"const b=document.getElementById('{input_id}'); b.focus(); b.select()"
+            in resp.text
+        ), f"{input_id} form does not select-on-refocus"
+
+
 def test_patrons_list_renders_for_librarian(web_client, librarian):
     cookies = _login(web_client, "lib01")
     resp = web_client.get("/ui/patrons", cookies=cookies)
