@@ -251,7 +251,7 @@ def catalog_search_results(
         order_by = "title"
     if not (get_site_setting("guest_search_enabled") or user is not None):
         return templates.TemplateResponse(
-            request, "_partials/work_list.html", {"page": None, "q": q}
+            request, "_partials/work_list.html", {"page": None, "q": q, "field": field, "user": user}
         )
     media_codes = _parse_csv(media)
     decade_int = _parse_int(decade)
@@ -276,7 +276,7 @@ def catalog_search_results(
     return templates.TemplateResponse(
         request,
         "_partials/work_list.html",
-        {"page": page_obj, "q": q, "filters_qs": qs},
+        {"page": page_obj, "q": q, "field": field, "filters_qs": qs, "user": user},
     )
 
 

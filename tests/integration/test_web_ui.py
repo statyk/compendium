@@ -1940,6 +1940,19 @@ def test_user_deactivate_returns_success_fragment_with_reactivate(
     assert "/ui/users/deact01/reactivate" in resp.text
 
 
+def test_zero_results_all_fields_hints_at_field_search(web_client, work):
+    resp = web_client.get("/ui/catalog/search-results", params={"q": "zzzznope", "field": "all"})
+    assert resp.status_code == 200
+    assert "whole words" in resp.text
+    assert "Title or Author" in resp.text
+
+
+def test_zero_results_field_scoped_keeps_generic_hint(web_client, work):
+    resp = web_client.get("/ui/catalog/search-results", params={"q": "zzzznope", "field": "title"})
+    assert resp.status_code == 200
+    assert "whole words" not in resp.text
+
+
 def test_inactive_user_cookie_denied(web_client, web_session, librarian):
     """An inactive user's still-valid auth cookie must not grant access."""
     cookies = _login(web_client, "lib01")

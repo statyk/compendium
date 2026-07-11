@@ -4,9 +4,15 @@
 {% set avail = page.availability if page else {} %}
 {% if not works %}
   {% if q %}
-    {{ empty_state('No results for "' ~ q ~ '"', "Try a broader search or a different field.") }}
-  {% else %}
+    {% if field | default('all') == 'all' %}
+      {{ empty_state('No results for "' ~ q ~ '"', 'The all-fields search matches whole words only. For partial words, try a specific field like Title or Author.') }}
+    {% else %}
+      {{ empty_state('No results for "' ~ q ~ '"', "Try a broader search or a different field.") }}
+    {% endif %}
+  {% elif user | default(none) and has_permission(user, 'item.create') %}
     {{ empty_state("No works in catalog yet", "Add items to start building your collection.", cta_href="/ui/items/new", cta_label="Add a work") }}
+  {% else %}
+    {{ empty_state("No works in catalog yet", "Check back soon — the collection is still growing.") }}
   {% endif %}
 {% else %}
   {% if page %}
