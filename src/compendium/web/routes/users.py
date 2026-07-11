@@ -433,9 +433,14 @@ def user_deactivate(
         )
     try:
         _auth_svc(session, user).deactivate_user(username)
-        return HTMLResponse("<span class='error-banner'>User deactivated.</span>")
     except (BusinessRuleError, NotFoundError) as exc:
         return HTMLResponse(f"<span class='error-banner'>{escape(str(exc))}</span>")
+    target = SqlUserRepository(session).get_by_username(username)
+    return _render(
+        "users/_status.html",
+        request,
+        {"request": request, "target": target, "status_message": "User deactivated."},
+    )
 
 
 @router.post("/users/{username}/reactivate")

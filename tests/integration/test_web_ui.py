@@ -1883,6 +1883,44 @@ def test_patron_cannot_reset_other_user_password(web_client, patron_user, librar
     assert resp.status_code == 403
 
 
+def test_patron_deactivate_returns_success_fragment_with_reactivate(
+    web_client, librarian, patron_user
+):
+    _, patron = patron_user
+    auth_cookies = _login(web_client, "lib01")
+    raw, signed = _make_csrf_pair()
+    resp = web_client.post(
+        f"/ui/patrons/{patron.library_card_number}/deactivate",
+        data={"csrf_token": raw},
+        cookies={**auth_cookies, CSRF_COOKIE: signed},
+    )
+    assert resp.status_code == 200
+    assert "success-banner" in resp.text
+    assert "error-banner" not in resp.text
+    assert f"/ui/patrons/{patron.library_card_number}/reactivate" in resp.text
+
+
+def test_user_deactivate_returns_success_fragment_with_reactivate(
+    web_client, librarian, web_session
+):
+    role = SqlRoleRepository(web_session).get_by_name("ReadOnly")
+    u = AppUser(username="deact01", password_hash=hash_password("pw"), role_id=role.id)
+    SqlUserRepository(web_session).add(u)
+    web_session.flush()
+
+    auth_cookies = _login(web_client, "lib01")
+    raw, signed = _make_csrf_pair()
+    resp = web_client.post(
+        "/ui/users/deact01/deactivate",
+        data={"csrf_token": raw},
+        cookies={**auth_cookies, CSRF_COOKIE: signed},
+    )
+    assert resp.status_code == 200
+    assert "success-banner" in resp.text
+    assert "error-banner" not in resp.text
+    assert "/ui/users/deact01/reactivate" in resp.text
+
+
 def test_inactive_user_cookie_denied(web_client, web_session, librarian):
     """An inactive user's still-valid auth cookie must not grant access."""
     cookies = _login(web_client, "lib01")

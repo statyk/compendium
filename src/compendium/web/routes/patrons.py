@@ -447,9 +447,14 @@ def deactivate_patron(
     check_csrf_form(request, csrf_token)
     try:
         _patron_svc(session, user).deactivate(card_number)
-        return HTMLResponse("<span class='error-banner'>Patron deactivated.</span>")
     except (BusinessRuleError, NotFoundError) as exc:
         return HTMLResponse(f"<span class='error-banner'>{escape(str(exc))}</span>")
+    patron = SqlPatronRepository(session).get_by_card_number(card_number)
+    return _render(
+        "patrons/_status.html",
+        request,
+        {"request": request, "patron": patron, "status_message": "Patron deactivated."},
+    )
 
 
 @router.post("/patrons/{card_number}/reactivate")

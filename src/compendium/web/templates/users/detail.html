@@ -40,26 +40,7 @@
   </dd>
   <dt>Status</dt>
   <dd id="user-status">
-    {% if target.is_active %}
-      Active
-      <form
-        style="display:inline"
-        hx-post="/ui/users/{{ target.username }}/deactivate"
-        hx-target="#user-status"
-        hx-swap="innerHTML"
-        hx-include="[name='csrf_token']"
-        hx-confirm="Deactivate this user? They will not be able to log in."
-      >
-        <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
-        <button type="submit" class="outline contrast" style="padding:0.2rem 0.6rem; margin-left:1rem">Deactivate</button>
-      </form>
-    {% else %}
-      <em>Inactive</em>
-      <form method="post" action="/ui/users/{{ target.username }}/reactivate" style="display:inline">
-        <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
-        <button type="submit" class="outline" style="padding:0.2rem 0.6rem; margin-left:1rem">Reactivate</button>
-      </form>
-    {% endif %}
+    {% include "users/_status.html" %}
   </dd>
   <dt>Patron record</dt>
   <dd>
