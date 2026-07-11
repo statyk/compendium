@@ -943,6 +943,25 @@ def test_item_new_requires_auth(web_client):
     assert resp.status_code == 303
 
 
+def test_create_only_cataloger_can_add_but_not_withdraw(web_client, web_session, work):
+    from compendium.domain.models import Role
+
+    role = Role(name="CreateOnly01", permissions=["item.view", "item.create"], is_system=False)
+    web_session.add(role)
+    web_session.flush()
+    u = AppUser(username="cataloger01", password_hash=hash_password("secret"), role_id=role.id)
+    SqlUserRepository(web_session).add(u)
+    web_session.flush()
+
+    cookies = _login(web_client, "cataloger01")
+    resp = web_client.get("/ui/items/new", cookies=cookies)
+    assert resp.status_code == 200  # was 403: add gated on item.delete
+
+    _, item = work
+    resp = web_client.get(f"/ui/items/{item.barcode}/withdraw-confirm", cookies=cookies)
+    assert resp.status_code == 403  # withdraw still requires item.delete
+
+
 def test_item_lookup_returns_preview(web_client, librarian):
     auth_cookies = _login(web_client, "lib01")
     raw, signed = _make_csrf_pair()

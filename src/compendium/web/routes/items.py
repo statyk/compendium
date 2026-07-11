@@ -48,7 +48,8 @@ from compendium.web.routes.scan import permitted_scan_modes
 router = APIRouter()
 
 _PERM_VIEW = "item.view"
-_PERM_MANAGE = "item.delete"
+_PERM_CREATE = "item.create"  # add-item flows (nav shows Add Item on this perm)
+_PERM_MANAGE = "item.delete"  # withdraw / destructive lifecycle
 _PERM_EDIT = "item.edit"
 
 _REASON_CHOICES = [
@@ -141,7 +142,7 @@ def item_new_form(
     work_id: int | None = Query(default=None),
     media_type: str | None = Query(default=None),
     added: str | None = Query(default=None),
-    user: AppUser = Depends(require_web_permission(_PERM_MANAGE)),
+    user: AppUser = Depends(require_web_permission(_PERM_CREATE)),
     session: Session = Depends(get_session),
 ):
     scan_modes = permitted_scan_modes(user.role.permissions)
@@ -176,7 +177,7 @@ def item_lookup(
     media_type: str = Form(default="book"),
     identifier: str = Form(default=""),
     csrf_token: str = Form(default=""),
-    user: AppUser = Depends(require_web_permission(_PERM_MANAGE)),
+    user: AppUser = Depends(require_web_permission(_PERM_CREATE)),
     session: Session = Depends(get_session),
 ):
     check_csrf_form(request, csrf_token)
@@ -270,7 +271,7 @@ def item_new_manual_form(
     request: Request,
     media_type: str | None = Query(default=None),
     added: str | None = Query(default=None),
-    user: AppUser = Depends(require_web_permission(_PERM_MANAGE)),
+    user: AppUser = Depends(require_web_permission(_PERM_CREATE)),
 ):
     return _render(
         "items/new_manual.html",
@@ -299,7 +300,7 @@ def item_create_manual(
     location: str = Form(default=""),
     call_number: str = Form(default=""),
     csrf_token: str = Form(default=""),
-    user: AppUser = Depends(require_web_permission(_PERM_MANAGE)),
+    user: AppUser = Depends(require_web_permission(_PERM_CREATE)),
     session: Session = Depends(get_session),
 ):
     check_csrf_form(request, csrf_token)
@@ -368,7 +369,7 @@ def item_create(
     condition: str = Form(default=""),
     copy_work_id: str = Form(default=""),
     csrf_token: str = Form(default=""),
-    user: AppUser = Depends(require_web_permission(_PERM_MANAGE)),
+    user: AppUser = Depends(require_web_permission(_PERM_CREATE)),
     session: Session = Depends(get_session),
 ):
     check_csrf_form(request, csrf_token)
