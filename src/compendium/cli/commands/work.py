@@ -7,11 +7,14 @@ from compendium.domain.errors import DomainError, NotFoundError
 from compendium.repositories.sql.audit_log_repository import SqlAuditLogRepository
 from compendium.repositories.sql.branch_repository import SqlBranchRepository
 from compendium.repositories.sql.creator_repository import SqlCreatorRepository
+from compendium.repositories.sql.hold_repository import SqlHoldRepository
 from compendium.repositories.sql.item_repository import SqlItemRepository
 from compendium.repositories.sql.media_type_repository import SqlMediaTypeRepository
+from compendium.repositories.sql.trash_repository import SqlTrashRepository
 from compendium.repositories.sql.work_repository import SqlWorkRepository
 from compendium.services.audit import AuditService
 from compendium.services.catalog import CatalogService
+from compendium.services.trash import TrashService
 
 app = typer.Typer(help="Work (catalog title) commands.")
 creator_app = typer.Typer(
@@ -21,6 +24,8 @@ creator_app = typer.Typer(
     )
 )
 app.add_typer(creator_app, name="creator")
+trash_app = typer.Typer(help="Recently deleted works: list, restore, purge.")
+app.add_typer(trash_app, name="trash")
 
 
 def _catalog(session, *, audit: bool = False):
@@ -453,3 +458,88 @@ def refresh_metadata_cmd(
             typer.echo("  Cover image cache invalidated.")
     else:
         typer.echo("\n  Dry run. Pass --apply to commit.")
+
+
+def _trash_svc(session) -> TrashService:
+    return TrashService(
+        trash_repo=SqlTrashRepository(session),
+        work_repo=SqlWorkRepository(session),
+        hold_repo=SqlHoldRepository(session),
+        audit_svc=AuditService(SqlAuditLogRepository(session)),
+        actor_label=f"cli:{getpass.getuser()}",
+        source="cli",
+    )
+
+
+@app.command("delete")
+def delete_work(
+    work_id: int = typer.Argument(..., help="Internal work id (shown by 'work search')."),
+    yes: bool = typer.Option(False, "--yes", "-y", help="Skip the confirmation prompt."),
+) -> None:
+    """Move a work and all its copies to the trash (recoverable)."""
+    with session_scope() as session:
+        work = SqlWorkRepository(session).get(work_id)
+        if work is None:
+            typer.echo(f"Error: no work with id={work_id}", err=True)
+            raise typer.Exit(1)
+        n_items = len(work.items)
+        if not yes:
+            typer.confirm(
+                f"Delete '{work.title}' and its {n_items} "
+                f"{'copy' if n_items == 1 else 'copies'} (loan history moves to "
+                "trash, waiting holds are cancelled)?",
+                abort=True,
+            )
+        try:
+            summary = _trash_svc(session).delete_work(work_id)
+        except DomainError as exc:
+            typer.echo(f"Error: {exc}", err=True)
+            raise typer.Exit(1) from exc
+        typer.echo(f"Moved to trash: {summary.label} (trash id {summary.trash_id}).")
+
+
+@trash_app.command("list")
+def trash_list(limit: int = typer.Option(50, "--limit")) -> None:
+    """List recently deleted works."""
+    with session_scope() as session:
+        rows = _trash_svc(session).list_deleted_works(limit=limit)
+        if not rows:
+            typer.echo("Trash is empty.")
+            return
+        for r in rows:
+            typer.echo(
+                f"  [{r.trash_id}] {r.label} — deleted "
+                f"{r.deleted_at:%Y-%m-%d %H:%M} UTC"
+            )
+
+
+@trash_app.command("restore")
+def trash_restore(trash_id: int = typer.Argument(...)) -> None:
+    """Restore a deleted work from the trash."""
+    with session_scope() as session:
+        try:
+            work = _trash_svc(session).restore_work(trash_id)
+        except DomainError as exc:
+            typer.echo(f"Error: {exc}", err=True)
+            raise typer.Exit(1) from exc
+        typer.echo(f"Restored '{work.title}' (work id {work.id}).")
+
+
+@trash_app.command("purge")
+def trash_purge(
+    trash_id: int | None = typer.Argument(None, help="Purge one entry permanently."),
+    older_than_days: int | None = typer.Option(
+        None, "--older-than-days", help="Purge all entries older than N days."
+    ),
+) -> None:
+    """Permanently delete trash entries. Pass an id OR --older-than-days."""
+    with session_scope() as session:
+        try:
+            purged = _trash_svc(session).purge(
+                older_than_days=older_than_days,
+                trash_id=trash_id,
+            )
+        except DomainError as exc:
+            typer.echo(f"Error: {exc}", err=True)
+            raise typer.Exit(1) from exc
+        typer.echo(f"Purged {purged} trash entr{'y' if purged == 1 else 'ies'}.")
