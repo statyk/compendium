@@ -197,12 +197,12 @@ Cadences taken from `docker/crontab.sample`:
 | daily 02:20          | `find ... -mtime +30 -delete`            | prunes backups older than 30 days |
 | daily 02:30          | `assess-overdue-fines`                   | materializes overdue fines for reports |
 | daily 08:00 / 08:15  | `queue-due-soon-notices` / `queue-overdue-notices` | enqueues reminder emails |
-| weekly Sun 04:15     | `purge-trash`                            | permanently deletes trashed works past `trash_retention_days` (default 90) |
 
 Optional (commented out in the sample): `prune-audit-log`,
 `prune-notifications`, `prune-cover-cache`, `prune-metadata-cache`,
-`prune-scan-pairings`. Uncomment and edit the retention windows to suit your
-deployment.
+`prune-scan-pairings`, `purge-trash` (weekly Sun 04:15; permanently deletes
+trashed works past `trash_retention_days`, default 90). Uncomment and edit
+the retention windows to suit your deployment.
 
 ### Caveats
 

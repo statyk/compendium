@@ -523,7 +523,7 @@ CREATE TABLE deleted_entity (
     label       VARCHAR(512) NOT NULL,  -- human-readable summary, e.g. "Dune — 2 copies"
     payload     JSON NOT NULL,          -- versioned snapshot; see PAYLOAD_VERSION
     deleted_at  TIMESTAMPTZ NOT NULL DEFAULT now(),
-    deleted_by  INTEGER REFERENCES app_user(id)  -- ON DELETE SET NULL
+    deleted_by  INTEGER REFERENCES app_user(id)
 );
 CREATE INDEX ix_deleted_entity_type_deleted_at ON deleted_entity(entity_type, deleted_at);
 ```

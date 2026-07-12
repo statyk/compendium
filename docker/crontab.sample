@@ -62,11 +62,11 @@
 # older than a day is already dead).
 # 35 3 * * * docker compose --project-directory COMPENDIUM_DIR exec -T compendium compendium maintenance prune-scan-pairings --older-than-days 7 LOG_REDIRECT
 
-# Purge trashed works past the retention window (weekly). Works deleted more
-# than trash_retention_days ago (default 90) are removed permanently; with no
-# flag the command reads the trash_retention_days setting (0 disables
-# time-based purging).
-15 4 * * 0 docker compose --project-directory COMPENDIUM_DIR exec -T compendium compendium maintenance purge-trash LOG_REDIRECT
+# Optional: purge trashed works past the retention window (weekly). Works
+# deleted more than trash_retention_days ago (default 90) are removed
+# permanently; with no flag the command reads the trash_retention_days
+# setting (0 disables time-based purging).
+# 15 4 * * 0 docker compose --project-directory COMPENDIUM_DIR exec -T compendium compendium maintenance purge-trash LOG_REDIRECT
 
 # Optional: fill missing metadata for newly-imported Works (description,
 # cover, publisher, language) from external sources. --limit caps the

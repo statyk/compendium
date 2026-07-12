@@ -400,7 +400,7 @@ Datetimes/dates are serialized to ISO strings on the way in and parsed back on t
 - Any copy has an **active loan** (`returned_at IS NULL`) — check in first.
 - Any copy has an **outstanding fine** (by `item_id` or via one of its loans) — collect or waive first.
 
-Otherwise it proceeds: every **waiting/available hold** on the work is cancelled (mirrors `CatalogService._cancel_work_holds`; cancelled hold ids are recorded in the audit details), the graph is snapshotted, then hard-deleted.
+Otherwise it proceeds: every **non-terminal hold** on the work — waiting, ready-for-pickup, or suspended — is cancelled (mirrors `CatalogService._cancel_work_holds`; cancelled hold ids are recorded in the audit details), the graph is snapshotted, then hard-deleted.
 
 ### SET NULL, not relinked
 
