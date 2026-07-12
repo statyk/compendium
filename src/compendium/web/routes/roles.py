@@ -23,7 +23,7 @@ router = APIRouter()
 _PERM = "role.manage"
 
 PERMISSION_GROUPS = [
-    ("Catalog", ["work.view", "work.edit", "item.view", "item.create", "item.edit", "item.delete", "catalog.import"]),
+    ("Catalog", ["work.view", "work.edit", "work.delete", "item.view", "item.create", "item.edit", "item.delete", "catalog.import"]),
     ("Loans", ["loan.checkout", "loan.checkin", "loan.renew.any", "loan.renew.self", "loan.view.self", "loan.view.any", "loan.claim.self"]),
     ("Holds", ["hold.place.self", "hold.place.any", "hold.view.self", "hold.view.any"]),
     ("Fines", ["fine.manage", "fine.view.self"]),
@@ -39,6 +39,7 @@ PERMISSION_DESCRIPTIONS: dict[str, str] = {
     # Catalog
     "work.view":      "View work titles, metadata, and cover images in the catalog.",
     "work.edit":      "Edit work metadata: title, publisher, description, cover URL, and more.",
+    "work.delete":    "Delete works (with all copies and history) to the recycle bin, restore or purge them.",
     "item.view":      "View item details: barcode, location, condition, and loan status.",
     "item.create":    "Add new items and works to the catalog.",
     "item.edit":      "Edit item fields: location, condition, call number, and loanable flag.",

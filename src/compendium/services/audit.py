@@ -21,6 +21,7 @@ class AuditEntityType:
     CLOSED_DATE = "closed_date"
     HOUSEHOLD = "household"
     CURATED_LIST = "curated_list"
+    TRASH = "trash"
 
 
 class AuditAction:
@@ -55,6 +56,8 @@ class AuditAction:
     NOTE_DELETE = "note_delete"
     LIST_ADD_WORK = "list_add_work"
     LIST_REMOVE_WORK = "list_remove_work"
+    RESTORE = "restore"
+    PURGE_TRASH = "purge_trash"
 
 
 class AuditService:

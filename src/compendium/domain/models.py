@@ -467,6 +467,28 @@ class AuditLog(Base):
     actor: Mapped[AppUser | None] = relationship()
 
 
+class DeletedEntity(Base):
+    """Trash row: a JSON snapshot of a hard-deleted entity and its children.
+
+    Live tables only ever contain live rows; recoverability lives here.
+    """
+
+    __tablename__ = "deleted_entity"
+    __table_args__ = (
+        Index("ix_deleted_entity_type_deleted_at", "entity_type", "deleted_at"),
+    )
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    entity_type: Mapped[str] = mapped_column(String(32))
+    entity_id: Mapped[int] = mapped_column(Integer)
+    label: Mapped[str] = mapped_column(String(512))
+    payload: Mapped[dict[str, Any]] = mapped_column(JSON, default=dict)
+    deleted_at: Mapped[datetime] = mapped_column(UtcDateTime, server_default=func.now())
+    deleted_by: Mapped[int | None] = mapped_column(ForeignKey("app_user.id"), nullable=True)
+
+    deleted_by_user: Mapped["AppUser | None"] = relationship()
+
+
 class SiteSetting(Base):
     __tablename__ = "site_setting"
 

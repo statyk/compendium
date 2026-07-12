@@ -26,7 +26,7 @@ _PATRON_CATEGORIES = [
 # user.manage, role.manage) intentionally omitted — those go on SystemAdmin.
 _LIBRARIAN_PERMISSIONS = [
     # Catalog
-    "work.view", "work.edit",
+    "work.view", "work.edit", "work.delete",
     "item.view", "item.create", "item.edit", "item.delete",
     "catalog.import",
     # Loans
