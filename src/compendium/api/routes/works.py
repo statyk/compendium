@@ -3,6 +3,7 @@ from sqlalchemy.orm import Session
 
 from compendium.api.deps import get_optional_user, require_permission
 from compendium.api.schemas import (
+    DeletedWorkSummaryOut,
     WorkCreatorsReplace,
     WorkDetail,
     WorkSummary,
@@ -18,14 +19,17 @@ from compendium.domain.models import AppUser
 from compendium.repositories.sql.audit_log_repository import SqlAuditLogRepository
 from compendium.repositories.sql.branch_repository import SqlBranchRepository
 from compendium.repositories.sql.creator_repository import SqlCreatorRepository
+from compendium.repositories.sql.hold_repository import SqlHoldRepository
 from compendium.repositories.sql.item_repository import SqlItemRepository
 from compendium.repositories.sql.media_type_repository import SqlMediaTypeRepository
+from compendium.repositories.sql.trash_repository import SqlTrashRepository
 from compendium.repositories.sql.work_repository import SqlWorkRepository
 from compendium.services.audit import AuditService
 from compendium.services.auth import has_permission
 from compendium.services.catalog import CatalogService
 from compendium.services.discovery import DiscoveryService
 from compendium.services.site_settings import get_site_setting
+from compendium.services.trash import TrashService
 
 router = APIRouter()
 
@@ -37,6 +41,17 @@ def _catalog(session: Session, actor: AppUser | None = None) -> CatalogService:
         creator_repo=SqlCreatorRepository(session),
         branch_repo=SqlBranchRepository(session),
         media_type_repo=SqlMediaTypeRepository(session),
+        audit_svc=AuditService(SqlAuditLogRepository(session)),
+        actor=actor,
+        source="api",
+    )
+
+
+def _trash(session: Session, actor: AppUser) -> TrashService:
+    return TrashService(
+        trash_repo=SqlTrashRepository(session),
+        work_repo=SqlWorkRepository(session),
+        hold_repo=SqlHoldRepository(session),
         audit_svc=AuditService(SqlAuditLogRepository(session)),
         actor=actor,
         source="api",
@@ -135,6 +150,21 @@ def update_work(
     except (BusinessRuleError, ValidationError) as exc:
         raise HTTPException(status_code=422, detail=str(exc)) from exc
     return WorkDetail.model_validate(work)
+
+
+@router.delete("/{work_id}", response_model=DeletedWorkSummaryOut)
+def delete_work(
+    work_id: int,
+    session: Session = Depends(get_session),
+    user: AppUser = Depends(require_permission("work.delete")),
+) -> DeletedWorkSummaryOut:
+    try:
+        summary = _trash(session, user).delete_work(work_id)
+    except NotFoundError as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
+    except BusinessRuleError as exc:
+        raise HTTPException(status_code=409, detail=str(exc)) from exc
+    return DeletedWorkSummaryOut.model_validate(summary)
 
 
 def _serialize_refresh_report(report) -> dict:

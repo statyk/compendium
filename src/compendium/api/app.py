@@ -31,6 +31,7 @@ from compendium.api.routes import (
     policies,
     reports,
     settings as settings_routes,
+    trash,
     users,
     works,
 )
@@ -179,6 +180,7 @@ def create_app() -> FastAPI:
     app.include_router(calendar_routes.router, tags=["calendar"])
     app.include_router(households.router, prefix="/households", tags=["households"])
     app.include_router(curated_lists.router, prefix="/curated-lists", tags=["curated-lists"])
+    app.include_router(trash.router, prefix="/trash", tags=["trash"])
 
     # Web UI routes (HTMX + Jinja2)
     app.mount("/ui/static", StaticFiles(directory=str(_WEB_STATIC)), name="web_static")

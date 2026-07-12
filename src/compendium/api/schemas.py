@@ -58,6 +58,16 @@ class WorkDetail(BaseModel):
     cover_image_url: str | None
 
 
+class DeletedWorkSummaryOut(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    trash_id: int
+    original_work_id: int
+    label: str
+    item_count: int
+    deleted_at: datetime
+
+
 class WorkUpdate(BaseModel):
     # None means "clear this field"; an omitted field means "leave it".
     # ISBN, UPC, media type, creators, and raw external metadata are not
