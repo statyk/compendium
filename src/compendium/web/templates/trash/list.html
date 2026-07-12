@@ -1,0 +1,34 @@
+{% extends "base.html" %}
+{% block title %}Recently Deleted — {{ library_name() }}{% endblock %}
+{% block content %}
+<hgroup>
+  <h2>Recently Deleted</h2>
+  <p>Deleted works are kept here until purged, then gone forever.</p>
+</hgroup>
+
+{% if message %}<p class="success-banner">{{ message }}</p>{% endif %}
+{% if error %}<p class="error-banner">{{ error }}</p>{% endif %}
+
+{% if not rows %}
+<p>Trash is empty.</p>
+{% else %}
+<table>
+  <thead><tr><th>Work</th><th>Deleted</th><th></th></tr></thead>
+  <tbody>
+  {% for r in rows %}
+    <tr>
+      <td>{{ r.label }}</td>
+      <td>{{ r.deleted_at.strftime('%Y-%m-%d %H:%M') }} UTC</td>
+      <td>
+        <form method="post" action="/ui/trash/{{ r.trash_id }}/restore" style="display:inline">
+          <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+          <button type="submit" class="outline">Restore</button>
+        </form>
+        <a href="/ui/trash/{{ r.trash_id }}/purge-confirm" role="button" class="outline secondary">Delete forever</a>
+      </td>
+    </tr>
+  {% endfor %}
+  </tbody>
+</table>
+{% endif %}
+{% endblock %}

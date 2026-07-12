@@ -1,0 +1,36 @@
+{% extends "base.html" %}
+{% block title %}Delete {{ work.title }} — {{ library_name() }}{% endblock %}
+{% block content %}
+<nav aria-label="breadcrumb">
+  <ul>
+    <li><a href="/ui/catalog/{{ work.id }}">{{ work.title }}</a></li>
+    <li>Delete</li>
+  </ul>
+</nav>
+
+<hgroup>
+  <h2>Delete work</h2>
+  <p>{{ work.title }} &middot; {{ item_count }} {{ 'copy' if item_count == 1 else 'copies' }}</p>
+</hgroup>
+
+<p>
+  This moves the work, all {{ item_count }} {{ 'copy' if item_count == 1 else 'copies' }},
+  and their loan history to the trash. It can be restored from
+  <a href="/ui/trash">Recently Deleted</a>, and cannot be undone until purged.
+  Waiting holds on this work will be cancelled.
+</p>
+
+{% if active_loans or outstanding_fines %}
+<p class="error-banner">
+  Deletion is blocked:
+  {% if active_loans %}{{ active_loans }} active loan(s).{% endif %}
+  {% if outstanding_fines %}{{ outstanding_fines }} outstanding fine(s).{% endif %}
+</p>
+{% endif %}
+
+<form method="post" action="/ui/catalog/{{ work.id }}/delete">
+  <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+  <button type="submit" class="outline contrast" {% if active_loans or outstanding_fines %}disabled{% endif %}>Move to trash</button>
+  <a href="/ui/catalog/{{ work.id }}" role="button" class="outline secondary">Cancel</a>
+</form>
+{% endblock %}

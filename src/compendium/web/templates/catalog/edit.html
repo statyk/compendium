@@ -105,4 +105,9 @@
   </a>
 {% endif %}
 {% endif %}
+
+{% if has_permission(user, 'work.delete') %}
+<hr>
+<a href="/ui/catalog/{{ work.id }}/delete-confirm" role="button" class="outline contrast">Delete work…</a>
+{% endif %}
 {% endblock %}

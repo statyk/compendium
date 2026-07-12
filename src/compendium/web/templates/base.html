@@ -50,7 +50,8 @@
           </li>
           {% set _show_catalog_admin = has_permission(user, 'catalog.import')
                                         or has_permission(user, 'item.view')
-                                        or has_permission(user, 'labels.generate') %}
+                                        or has_permission(user, 'labels.generate')
+                                        or has_permission(user, 'work.delete') %}
           {% set show_cataloging = _show_catalog_admin or has_permission(user, 'item.create') %}
           {% if show_cataloging %}
           <li>
@@ -62,6 +63,7 @@
                 {% if has_permission(user, 'catalog.import') %}<li><a href="/ui/admin/import">Import</a></li>{% endif %}
                 {% if has_permission(user, 'item.view') %}<li><a href="/ui/admin/export">Export</a></li>{% endif %}
                 {% if has_permission(user, 'labels.generate') %}<li><a href="/ui/labels">Labels</a></li>{% endif %}
+                {% if has_permission(user, 'work.delete') %}<li><a href="/ui/trash">Recently Deleted</a></li>{% endif %}
               </ul>
             </details>
           </li>

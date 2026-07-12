@@ -1,0 +1,23 @@
+{% extends "base.html" %}
+{% block title %}Purge {{ row.label }} — {{ library_name() }}{% endblock %}
+{% block content %}
+<nav aria-label="breadcrumb">
+  <ul><li><a href="/ui/trash">Recently Deleted</a></li><li>Purge</li></ul>
+</nav>
+
+<hgroup>
+  <h2>Delete forever</h2>
+  <p>{{ row.label }}</p>
+</hgroup>
+
+<p>
+  This permanently deletes the snapshot, including its loan history.
+  <strong>This cannot be undone.</strong>
+</p>
+
+<form method="post" action="/ui/trash/{{ row.id }}/purge">
+  <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+  <button type="submit" class="outline contrast">Delete forever</button>
+  <a href="/ui/trash" role="button" class="outline secondary">Cancel</a>
+</form>
+{% endblock %}

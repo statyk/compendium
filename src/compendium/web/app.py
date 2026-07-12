@@ -32,6 +32,7 @@ from compendium.web.routes import (
     reports,
     roles,
     scan,
+    trash,
     users,
 )
 
@@ -65,6 +66,7 @@ def create_web_router() -> APIRouter:
     router.include_router(library_hours.router)
     router.include_router(households.router)
     router.include_router(curated_lists.router)
+    router.include_router(trash.router)
     return router
 
 
