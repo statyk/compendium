@@ -1,0 +1,128 @@
+from __future__ import annotations
+
+from dataclasses import dataclass
+from datetime import datetime
+
+from compendium.domain.enums import HoldStatus
+from compendium.domain.errors import BusinessRuleError, NotFoundError
+from compendium.domain.models import AppUser, DeletedEntity
+from compendium.repositories.base import HoldRepository, TrashRepository, WorkRepository
+from compendium.services.audit import AuditAction, AuditEntityType, AuditService
+
+ENTITY_WORK = "work"
+
+
+@dataclass(frozen=True)
+class DeletedWorkSummary:
+    trash_id: int
+    original_work_id: int
+    label: str
+    item_count: int
+    deleted_at: datetime
+
+
+def _summary(row: DeletedEntity) -> DeletedWorkSummary:
+    return DeletedWorkSummary(
+        trash_id=row.id,
+        original_work_id=row.entity_id,
+        label=row.label,
+        item_count=len(row.payload.get("items", [])),
+        deleted_at=row.deleted_at,
+    )
+
+
+class TrashService:
+    """Recoverable deletion: snapshot a work graph to deleted_entity, then hard-delete."""
+
+    def __init__(
+        self,
+        trash_repo: TrashRepository,
+        work_repo: WorkRepository,
+        hold_repo: HoldRepository,
+        audit_svc: AuditService | None = None,
+        actor: AppUser | None = None,
+        actor_label: str | None = None,
+        source: str = "system",
+    ) -> None:
+        self._trash = trash_repo
+        self._works = work_repo
+        self._holds = hold_repo
+        self._audit = audit_svc
+        self._actor = actor
+        self._actor_label = actor_label
+        self._source = source
+
+    def delete_work(self, work_id: int) -> DeletedWorkSummary:
+        work = self._works.get(work_id)
+        if work is None:
+            raise NotFoundError(f"No work with id={work_id}")
+        active = self._trash.count_active_loans(work_id)
+        if active:
+            raise BusinessRuleError(
+                f"Cannot delete '{work.title}': {active} of its copies are on "
+                "active loan. Check in all copies first."
+            )
+        outstanding = self._trash.count_outstanding_fines(work_id)
+        if outstanding:
+            raise BusinessRuleError(
+                f"Cannot delete '{work.title}': {outstanding} outstanding fine(s) "
+                "reference its copies. Collect or waive them first."
+            )
+        cancelled = self._cancel_holds(work_id)
+        payload = self._trash.snapshot_work_graph(work)
+        item_count = len(payload["items"])
+        label = f"{work.title} — {item_count} {'copy' if item_count == 1 else 'copies'}"
+        row = self._trash.add(
+            DeletedEntity(
+                entity_type=ENTITY_WORK,
+                entity_id=work.id,
+                label=label,
+                payload=payload,
+                deleted_by=self._actor.id if self._actor else None,
+            )
+        )
+        self._trash.delete_work_graph(work)
+        self._record(
+            AuditEntityType.WORK,
+            row.entity_id,
+            AuditAction.DELETE,
+            {
+                "trash_id": row.id,
+                "label": label,
+                "item_count": item_count,
+                "loan_count": len(payload["loans"]),
+                "cancelled_hold_ids": cancelled,
+            },
+        )
+        return _summary(row)
+
+    def list_deleted_works(self, limit: int = 50) -> list[DeletedWorkSummary]:
+        return [_summary(r) for r in self._trash.list(entity_type=ENTITY_WORK, limit=limit)]
+
+    def _cancel_holds(self, work_id: int) -> list[int]:
+        """Cancel every non-terminal hold on the work; mirrors
+        CatalogService._cancel_work_holds. Returns the cancelled hold ids."""
+        cancelled: list[int] = []
+        for hold in self._holds.get_active_for_work(work_id):
+            hold.status = HoldStatus.CANCELLED.value
+            self._holds.update(hold)
+            cancelled.append(hold.id)
+        return cancelled
+
+    def _record(
+        self,
+        entity_type: str,
+        entity_id: int | None,
+        action: str,
+        details: dict | None = None,
+    ) -> None:
+        if self._audit is not None:
+            self._audit.record(
+                actor=self._actor,
+                actor_label=self._actor_label,
+                source=self._source,
+                entity_type=entity_type,
+                entity_id=entity_id,
+                action=action,
+                details=details,
+            )

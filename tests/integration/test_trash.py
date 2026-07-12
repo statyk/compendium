@@ -1,8 +1,12 @@
 """Integration tests for recoverable work deletion (trash)."""
 from datetime import datetime, timedelta, timezone
 
+import pytest
+
 from compendium.config.seed import _LIBRARIAN_PERMISSIONS
+from compendium.domain.errors import BusinessRuleError, NotFoundError
 from compendium.domain.models import (
+    AuditLog,
     Branch,
     Creator,
     CuratedList,
@@ -21,7 +25,21 @@ from compendium.domain.models import (
     Work,
     WorkCreator,
 )
+from compendium.repositories.sql.audit_log_repository import SqlAuditLogRepository
+from compendium.repositories.sql.hold_repository import SqlHoldRepository
 from compendium.repositories.sql.trash_repository import SqlTrashRepository
+from compendium.repositories.sql.work_repository import SqlWorkRepository
+from compendium.services.audit import AuditService
+from compendium.services.trash import TrashService
+
+
+def _svc(session) -> TrashService:
+    return TrashService(
+        trash_repo=SqlTrashRepository(session),
+        work_repo=SqlWorkRepository(session),
+        hold_repo=SqlHoldRepository(session),
+        audit_svc=AuditService(SqlAuditLogRepository(session)),
+    )
 
 
 def _mk_work(session, *, title="Dune", isbn="9780441013593", n_items=2):
@@ -114,3 +132,82 @@ def test_blocker_counts(session):
     fine.status = "paid"
     session.flush()
     assert repo.count_outstanding_fines(work.id) == 0
+
+
+def test_delete_work_snapshots_and_removes_graph(session):
+    work, items, patron, loan = _mk_work(session, title="Deletable", isbn="9780000000001")
+    branch = session.query(Branch).first()
+    hold = Hold(work_id=work.id, patron_id=patron.id, branch_id=branch.id, status="waiting")
+    fine = Fine(patron_id=patron.id, loan_id=loan.id, item_id=items[0].id,
+                kind="overdue", amount_cents=100, status="paid")
+    notif = Notification(template_key="overdue", subject="s", body="b",
+                         status="sent", loan_id=loan.id)
+    cl = CuratedList(slug="staff-picks", name="Staff Picks")
+    session.add_all([hold, fine, notif, cl])
+    session.flush()
+    session.add(CuratedListEntry(list_id=cl.id, work_id=work.id, display_order=1,
+                                 annotation="a classic"))
+    session.flush()
+    work_id, item_ids = work.id, [i.id for i in items]
+
+    summary = _svc(session).delete_work(work_id)
+
+    assert summary.label == "Deletable — 2 copies"
+    assert summary.original_work_id == work_id
+    assert summary.item_count == 2
+
+    # live rows gone
+    assert session.get(Work, work_id) is None
+    assert session.query(Item).filter(Item.work_id == work_id).count() == 0
+    assert session.query(Loan).filter(Loan.item_id.in_(item_ids)).count() == 0
+    assert session.query(Hold).filter(Hold.work_id == work_id).count() == 0
+    assert session.query(ItemNote).filter(ItemNote.item_id.in_(item_ids)).count() == 0
+    assert session.query(CuratedListEntry).filter_by(work_id=work_id).count() == 0
+
+    # survivors got SET NULL
+    session.refresh(fine)
+    assert fine.loan_id is None and fine.item_id is None
+    session.refresh(notif)
+    assert notif.loan_id is None
+
+    # snapshot payload complete; waiting hold captured as cancelled
+    row = session.get(DeletedEntity, summary.trash_id)
+    p = row.payload
+    assert p["version"] == 1
+    assert p["work"]["title"] == "Deletable"
+    assert len(p["items"]) == 2 and len(p["loans"]) == 1
+    assert p["holds"][0]["status"] == "cancelled"
+    assert p["item_notes"][0]["note"] == "scuffed cover"
+    assert p["creators"] == [{"display_name": "Frank Herbert",
+                              "sort_name": "Herbert, Frank",
+                              "role": "author", "display_order": 0}]
+    assert p["curated_lists"] == [{"slug": "staff-picks", "annotation": "a classic",
+                                   "display_order": 1}]
+
+    audit = session.query(AuditLog).filter_by(action="delete", entity_type="work").all()
+    assert audit and audit[-1].details["trash_id"] == summary.trash_id
+
+
+def test_delete_work_blocked_on_active_loan(session):
+    work, items, patron, _ = _mk_work(session, isbn="9780000000002")
+    branch = session.query(Branch).first()
+    session.add(Loan(item_id=items[0].id, patron_id=patron.id, branch_id=branch.id,
+                     due_at=datetime.now(timezone.utc) + timedelta(days=7)))
+    session.flush()
+    with pytest.raises(BusinessRuleError, match="active loan"):
+        _svc(session).delete_work(work.id)
+    assert session.get(Work, work.id) is not None
+
+
+def test_delete_work_blocked_on_outstanding_fine(session):
+    work, items, patron, loan = _mk_work(session, isbn="9780000000003")
+    session.add(Fine(patron_id=patron.id, loan_id=loan.id, kind="overdue",
+                     amount_cents=500, status="outstanding"))
+    session.flush()
+    with pytest.raises(BusinessRuleError, match="outstanding fine"):
+        _svc(session).delete_work(work.id)
+
+
+def test_delete_missing_work_raises(session):
+    with pytest.raises(NotFoundError):
+        _svc(session).delete_work(999_999)
