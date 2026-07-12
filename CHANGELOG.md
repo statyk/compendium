@@ -7,6 +7,21 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Fixed
+
+- **Circulation desk:** the barcode field is selected after each scan, so the
+  next scan replaces it instead of appending to it.
+- **Deactivate patron/user:** the confirmation is now styled as a success and
+  the Reactivate control appears immediately, without a page reload.
+- **Add Item permission:** the add-item pages now require `item.create`
+  (matching the menu that advertises them) instead of `item.delete`; withdraw
+  still requires `item.delete`.
+- **Catalog search:** a zero-result "All fields" search now explains that it
+  matches whole words and suggests the Title/Author fields for partial words;
+  the empty-catalog "Add a work" button is hidden from visitors who can't use it.
+- **CLI:** malformed dates passed to `patron add/set --expires` and
+  `reports popular/dormant` produce a clean usage error instead of a traceback.
+
 ## [1.4.1] - 2026-06-16
 
 ### Fixed

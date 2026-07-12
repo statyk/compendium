@@ -148,7 +148,9 @@ Regression test: `TestSecurityHeaders::test_baseline_headers_present`.
 
 - **Nav template uses `item.create` for the Add-Item link** but the route
   is gated on `item.delete` (the `_PERM_MANAGE` alias). Minor UX drift;
-  doesn't affect security.
+  doesn't affect security. **Resolved** — the add-item routes now require
+  `item.create` (2026-07 UX quick-wins pass); withdraw still requires
+  `item.delete`.
 
 ## Clean areas (reviewed, no action needed)
 
