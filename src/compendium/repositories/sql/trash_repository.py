@@ -47,10 +47,14 @@ def _build_kwargs(model_cls, data: dict) -> dict:
             continue
         value = data[key]
         if isinstance(value, str):
+            col_type = attr.columns[0].type
             try:
-                py = attr.columns[0].type.python_type
+                py = col_type.python_type
             except NotImplementedError:
-                py = None
+                # TypeDecorators (e.g. UtcDateTime) don't proxy python_type;
+                # fall back to the wrapped impl's type.
+                impl = getattr(col_type, "impl", None)
+                py = getattr(impl, "python_type", None) if impl is not None else None
             if py is datetime:
                 value = datetime.fromisoformat(value)
             elif py is date:
@@ -241,3 +245,91 @@ class SqlTrashRepository:
         if target is not None:
             s.delete(target)
         s.flush()
+
+    # -- restore --------------------------------------------------------
+
+    def find_restore_collisions(self, payload: dict) -> list[str]:
+        """Live-catalog uniqueness clashes that would block re-inserting the
+        snapshot. Checked before any write so restore is all-or-nothing."""
+        s = self._s
+        conflicts: list[str] = []
+        w = payload["work"]
+        if w.get("isbn") and s.query(Work.id).filter(Work.isbn == w["isbn"]).first():
+            conflicts.append(f"ISBN {w['isbn']}")
+        if w.get("upc") and s.query(Work.id).filter(Work.upc == w["upc"]).first():
+            conflicts.append(f"UPC {w['upc']}")
+        barcodes = [i["barcode"] for i in payload["items"]]
+        if barcodes:
+            for (bc,) in s.query(Item.barcode).filter(Item.barcode.in_(barcodes)):
+                conflicts.append(f"barcode {bc}")
+        accessions = [i["accession_number"] for i in payload["items"]]
+        if accessions:
+            for (acc,) in s.query(Item.accession_number).filter(
+                Item.accession_number.in_(accessions)
+            ):
+                conflicts.append(f"accession number {acc}")
+        return conflicts
+
+    def restore_work_graph(self, payload: dict) -> Work:
+        """Re-insert the snapshotted graph under fresh primary keys, remapping
+        every internal FK to the new ids. Caller guarantees no collisions."""
+        s = self._s
+        work = Work(**_build_kwargs(Work, payload["work"]))
+        s.add(work)
+        s.flush()
+
+        for c in payload["creators"]:
+            creator = s.query(Creator).filter_by(sort_name=c["sort_name"]).first()
+            if creator is None:
+                creator = Creator(
+                    display_name=c["display_name"], sort_name=c["sort_name"]
+                )
+                s.add(creator)
+                s.flush()
+            s.add(
+                WorkCreator(
+                    work_id=work.id,
+                    creator_id=creator.id,
+                    role=c["role"],
+                    display_order=c["display_order"],
+                )
+            )
+
+        item_id_map: dict[int, int] = {}
+        for row in payload["items"]:
+            item = Item(**_build_kwargs(Item, row))
+            item.work_id = work.id
+            s.add(item)
+            s.flush()
+            item_id_map[row["id"]] = item.id
+
+        for row in payload["loans"]:
+            loan = Loan(**_build_kwargs(Loan, row))
+            loan.item_id = item_id_map[row["item_id"]]
+            s.add(loan)
+
+        for row in payload["holds"]:
+            hold = Hold(**_build_kwargs(Hold, row))
+            hold.work_id = work.id
+            hold.held_item_id = item_id_map.get(row.get("held_item_id"))
+            s.add(hold)
+
+        for row in payload["item_notes"]:
+            note = ItemNote(**_build_kwargs(ItemNote, row))
+            note.item_id = item_id_map[row["item_id"]]
+            s.add(note)
+
+        for entry in payload["curated_lists"]:
+            cl = s.query(CuratedList).filter_by(slug=entry["slug"]).first()
+            if cl is not None:
+                s.add(
+                    CuratedListEntry(
+                        list_id=cl.id,
+                        work_id=work.id,
+                        display_order=entry["display_order"],
+                        annotation=entry["annotation"],
+                    )
+                )
+
+        s.flush()
+        return work

@@ -1,4 +1,5 @@
 """Integration tests for recoverable work deletion (trash)."""
+import itertools
 from datetime import datetime, timedelta, timezone
 
 import pytest
@@ -42,8 +43,15 @@ def _svc(session) -> TrashService:
     )
 
 
+# Monotonic sequence for unique barcodes/accessions/card numbers. SQLite reuses
+# a deleted row's rowid, so deriving these from work.id would collide across a
+# delete+recreate within one test; a standalone counter stays unique regardless.
+_mk_seq = itertools.count(1)
+
+
 def _mk_work(session, *, title="Dune", isbn="9780441013593", n_items=2):
     """Work with n items, one returned loan + one note on item 0."""
+    seq = next(_mk_seq)
     branch = session.query(Branch).first()
     media = session.query(MediaType).filter_by(code="book").first()
     creator = Creator(display_name="Frank Herbert", sort_name="Herbert, Frank")
@@ -55,12 +63,12 @@ def _mk_work(session, *, title="Dune", isbn="9780441013593", n_items=2):
     for i in range(n_items):
         item = Item(
             work_id=work.id, branch_id=branch.id,
-            barcode=f"BC-{work.id}-{i}", accession_number=f"ACC-{work.id}-{i}",
+            barcode=f"BC-{seq}-{i}", accession_number=f"ACC-{seq}-{i}",
         )
         session.add(item)
         items.append(item)
     session.flush()
-    patron = Patron(library_card_number=f"CARD-{work.id}", full_name="Pat Ron")
+    patron = Patron(library_card_number=f"CARD-{seq}", full_name="Pat Ron")
     session.add(patron)
     session.flush()
     loan = Loan(
@@ -211,3 +219,94 @@ def test_delete_work_blocked_on_outstanding_fine(session):
 def test_delete_missing_work_raises(session):
     with pytest.raises(NotFoundError):
         _svc(session).delete_work(999_999)
+
+
+def test_restore_round_trip(session):
+    work, items, patron, loan = _mk_work(session, title="Restorable", isbn="9780000000010")
+    # A live work created after the target keeps higher work/item rowids alive,
+    # so restore is forced onto genuinely fresh PKs (SQLite would otherwise reuse
+    # the just-deleted rowid); this also makes the FK remapping non-vacuous.
+    _mk_work(session, title="Bystander", isbn="9780000000019")
+    branch = session.query(Branch).first()
+    session.add(Hold(work_id=work.id, patron_id=patron.id, branch_id=branch.id,
+                     status="cancelled"))
+    cl = CuratedList(slug="beach-reads", name="Beach Reads")
+    session.add(cl)
+    session.flush()
+    session.add(CuratedListEntry(list_id=cl.id, work_id=work.id, display_order=3,
+                                 annotation="bring sunscreen"))
+    session.flush()
+    old_work_id = work.id
+    old_barcodes = sorted(i.barcode for i in items)
+    patron_id = patron.id
+
+    svc = _svc(session)
+    summary = svc.delete_work(old_work_id)
+    restored = svc.restore_work(summary.trash_id)
+
+    assert restored.id != old_work_id            # fresh PK
+    assert restored.title == "Restorable"
+    assert restored.isbn == "9780000000010"
+    new_items = session.query(Item).filter(Item.work_id == restored.id).order_by(Item.id).all()
+    assert sorted(i.barcode for i in new_items) == old_barcodes
+    loans = session.query(Loan).join(Item, Loan.item_id == Item.id).filter(
+        Item.work_id == restored.id).all()
+    assert len(loans) == 1 and loans[0].patron_id == patron_id
+    holds = session.query(Hold).filter(Hold.work_id == restored.id).all()
+    assert {h.status for h in holds} == {"cancelled"}
+    notes = session.query(ItemNote).join(Item, ItemNote.item_id == Item.id).filter(
+        Item.work_id == restored.id).all()
+    assert [n.note for n in notes] == ["scuffed cover"]
+    assert [wc.creator.display_name for wc in restored.creators] == ["Frank Herbert"]
+    entry = session.query(CuratedListEntry).filter_by(work_id=restored.id).one()
+    assert entry.annotation == "bring sunscreen" and entry.display_order == 3
+
+    # trash row consumed; audit written
+    assert session.get(DeletedEntity, summary.trash_id) is None
+    audit = session.query(AuditLog).filter_by(action="restore", entity_type="work").all()
+    assert audit and audit[-1].details["new_work_id"] == restored.id
+
+
+def test_restore_fts_searchable(session):
+    work, *_ = _mk_work(session, title="Xyzzy Searchable", isbn="9780000000011")
+    svc = _svc(session)
+    summary = svc.delete_work(work.id)
+    repo = SqlWorkRepository(session)
+    assert len(repo.search("Xyzzy", field="all")) == 0
+    svc.restore_work(summary.trash_id)
+    assert len(repo.search("Xyzzy", field="all")) == 1
+
+
+def test_restore_blocked_on_barcode_collision(session):
+    work, items, *_ = _mk_work(session, title="Collider", isbn="9780000000012")
+    reused_barcode = items[0].barcode
+    svc = _svc(session)
+    summary = svc.delete_work(work.id)
+
+    other, other_items, *_ = _mk_work(session, title="Squatter", isbn="9780000000013")
+    other_items[0].barcode = reused_barcode
+    session.flush()
+
+    with pytest.raises(BusinessRuleError, match=reused_barcode):
+        svc.restore_work(summary.trash_id)
+    assert session.get(DeletedEntity, summary.trash_id) is not None  # row untouched
+
+
+def test_restore_blocked_on_isbn_collision(session):
+    work, *_ = _mk_work(session, title="First Ed", isbn="9780000000014")
+    svc = _svc(session)
+    summary = svc.delete_work(work.id)
+    _mk_work(session, title="Second Ed", isbn="9780000000014")
+    with pytest.raises(BusinessRuleError, match="9780000000014"):
+        svc.restore_work(summary.trash_id)
+
+
+def test_restore_missing_or_bad_version(session):
+    svc = _svc(session)
+    with pytest.raises(NotFoundError):
+        svc.restore_work(999_999)
+    row = SqlTrashRepository(session).add(DeletedEntity(
+        entity_type="work", entity_id=1, label="future",
+        payload={"version": 99, "items": []}))
+    with pytest.raises(BusinessRuleError, match="version"):
+        svc.restore_work(row.id)

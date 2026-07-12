@@ -5,8 +5,9 @@ from datetime import datetime
 
 from compendium.domain.enums import HoldStatus
 from compendium.domain.errors import BusinessRuleError, NotFoundError
-from compendium.domain.models import AppUser, DeletedEntity
+from compendium.domain.models import AppUser, DeletedEntity, Work
 from compendium.repositories.base import HoldRepository, TrashRepository, WorkRepository
+from compendium.repositories.sql.trash_repository import PAYLOAD_VERSION
 from compendium.services.audit import AuditAction, AuditEntityType, AuditService
 
 ENTITY_WORK = "work"
@@ -95,6 +96,39 @@ class TrashService:
             },
         )
         return _summary(row)
+
+    def restore_work(self, trash_id: int) -> Work:
+        row = self._trash.get(trash_id)
+        if row is None or row.entity_type != ENTITY_WORK:
+            raise NotFoundError(f"No deleted work with trash id={trash_id}")
+        payload = row.payload
+        if payload.get("version") != PAYLOAD_VERSION:
+            raise BusinessRuleError(
+                f"Snapshot version {payload.get('version')!r} is not supported; "
+                "it was written by a newer Compendium."
+            )
+        conflicts = self._trash.find_restore_collisions(payload)
+        if conflicts:
+            raise BusinessRuleError(
+                "Cannot restore: "
+                + ", ".join(conflicts)
+                + " already in use in the live catalog. Resolve the conflicts "
+                "and try again."
+            )
+        work = self._trash.restore_work_graph(payload)
+        self._record(
+            AuditEntityType.WORK,
+            work.id,
+            AuditAction.RESTORE,
+            {
+                "trash_id": trash_id,
+                "original_work_id": row.entity_id,
+                "new_work_id": work.id,
+                "label": row.label,
+            },
+        )
+        self._trash.delete(row)
+        return work
 
     def list_deleted_works(self, limit: int = 50) -> list[DeletedWorkSummary]:
         return [_summary(r) for r in self._trash.list(entity_type=ENTITY_WORK, limit=limit)]
