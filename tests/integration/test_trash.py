@@ -1,11 +1,16 @@
 """Integration tests for recoverable work deletion (trash)."""
 import itertools
+from contextlib import contextmanager
 from datetime import datetime, timedelta, timezone
+from unittest.mock import patch
 
 import pytest
+from typer.testing import CliRunner
 
+from compendium.cli.commands.maintenance import app as maintenance_app
 from compendium.config.seed import _LIBRARIAN_PERMISSIONS
-from compendium.domain.errors import BusinessRuleError, NotFoundError
+from compendium.domain.errors import BusinessRuleError, NotFoundError, ValidationError
+from compendium.services.site_settings import get_site_setting
 from compendium.domain.models import (
     AuditLog,
     Branch,
@@ -310,3 +315,116 @@ def test_restore_missing_or_bad_version(session):
         payload={"version": 99, "items": []}))
     with pytest.raises(BusinessRuleError, match="version"):
         svc.restore_work(row.id)
+
+
+def test_purge_by_age_and_by_id(session):
+    repo = SqlTrashRepository(session)
+    old = repo.add(DeletedEntity(entity_type="work", entity_id=1, label="old", payload={}))
+    old.deleted_at = datetime.now(timezone.utc) - timedelta(days=91)
+    keep = repo.add(DeletedEntity(entity_type="work", entity_id=2, label="keep", payload={}))
+    session.flush()
+
+    svc = _svc(session)
+    assert svc.purge(older_than_days=90) == 1
+    assert repo.get(old.id) is None and repo.get(keep.id) is not None
+
+    assert svc.purge(trash_id=keep.id) == 1
+    assert repo.get(keep.id) is None
+
+    with pytest.raises(ValidationError):
+        svc.purge()
+    with pytest.raises(ValidationError):
+        svc.purge(older_than_days=1, trash_id=1)
+    with pytest.raises(NotFoundError):
+        svc.purge(trash_id=999_999)
+
+
+def test_trash_retention_setting_default():
+    assert get_site_setting("trash_retention_days") == 90
+
+
+def test_purge_audits_once_per_run_and_only_when_purged(session):
+    repo = SqlTrashRepository(session)
+    svc = _svc(session)
+
+    def _audit_count():
+        return session.query(AuditLog).filter_by(
+            action="purge_trash", entity_type="trash").count()
+
+    # Nothing old enough — no audit entry.
+    repo.add(DeletedEntity(entity_type="work", entity_id=1, label="fresh", payload={}))
+    session.flush()
+    assert svc.purge(older_than_days=90) == 0
+    assert _audit_count() == 0
+
+    # Two over-age rows purged in one run — exactly one audit entry.
+    for n in (2, 3):
+        row = repo.add(DeletedEntity(entity_type="work", entity_id=n, label=f"old{n}", payload={}))
+        row.deleted_at = datetime.now(timezone.utc) - timedelta(days=91)
+    session.flush()
+    assert svc.purge(older_than_days=90) == 2
+    assert _audit_count() == 1
+    entry = session.query(AuditLog).filter_by(action="purge_trash").one()
+    assert entry.details == {"purged": 2, "older_than_days": 90}
+
+
+# ── CLI: purge-trash ───────────────────────────────────────────────────────────
+
+def _run_maintenance_cli(session, args):
+    """Invoke the maintenance CLI with ``session`` bound to session_scope."""
+    @contextmanager
+    def _scope():
+        yield session
+
+    runner = CliRunner()
+    with patch("compendium.cli.commands.maintenance.session_scope", _scope):
+        return runner.invoke(maintenance_app, args)
+
+
+def test_cli_purge_trash_with_flag_deletes_old_rows(session):
+    repo = SqlTrashRepository(session)
+    old = repo.add(DeletedEntity(entity_type="work", entity_id=1, label="old", payload={}))
+    old.deleted_at = datetime.now(timezone.utc) - timedelta(days=91)
+    keep = repo.add(DeletedEntity(entity_type="work", entity_id=2, label="keep", payload={}))
+    session.flush()
+
+    result = _run_maintenance_cli(session, ["purge-trash", "--older-than-days", "90"])
+
+    assert result.exit_code == 0
+    assert "Purged 1 trash entry." in result.output
+    assert repo.get(old.id) is None
+    assert repo.get(keep.id) is not None
+
+
+def test_cli_purge_trash_uses_setting_default(session, monkeypatch):
+    monkeypatch.setenv("COMPENDIUM_TRASH_RETENTION_DAYS", "50")
+    from compendium.services import site_settings as _ss
+    _ss.invalidate_cache()
+
+    repo = SqlTrashRepository(session)
+    old = repo.add(DeletedEntity(entity_type="work", entity_id=1, label="old", payload={}))
+    old.deleted_at = datetime.now(timezone.utc) - timedelta(days=91)
+    session.flush()
+
+    result = _run_maintenance_cli(session, ["purge-trash"])
+
+    assert result.exit_code == 0
+    assert "Purged 1 trash entry." in result.output
+    assert repo.get(old.id) is None
+
+
+def test_cli_purge_trash_disabled_when_zero(session, monkeypatch):
+    monkeypatch.setenv("COMPENDIUM_TRASH_RETENTION_DAYS", "0")
+    from compendium.services import site_settings as _ss
+    _ss.invalidate_cache()
+
+    repo = SqlTrashRepository(session)
+    old = repo.add(DeletedEntity(entity_type="work", entity_id=1, label="old", payload={}))
+    old.deleted_at = datetime.now(timezone.utc) - timedelta(days=200)
+    session.flush()
+
+    result = _run_maintenance_cli(session, ["purge-trash"])
+
+    assert result.exit_code == 0
+    assert "disabled" in result.output
+    assert repo.get(old.id) is not None

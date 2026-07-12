@@ -581,6 +581,40 @@ def prune_metadata_cache() -> None:
         typer.echo(f"Metadata cache: pruned {deleted} expired row(s).")
 
 
+def _trash_svc(session):
+    from compendium.repositories.sql.trash_repository import SqlTrashRepository
+    from compendium.services.trash import TrashService
+
+    return TrashService(
+        trash_repo=SqlTrashRepository(session),
+        work_repo=SqlWorkRepository(session),
+        hold_repo=SqlHoldRepository(session),
+        audit_svc=AuditService(SqlAuditLogRepository(session)),
+        actor_label=f"cli:{getpass.getuser()}",
+        source="cli",
+    )
+
+
+@app.command("purge-trash")
+def purge_trash_cmd(
+    older_than_days: int | None = typer.Option(
+        None,
+        "--older-than-days",
+        help="Purge trash entries older than this (default: the trash_retention_days setting).",
+    ),
+) -> None:
+    """Permanently delete trashed works past the retention window."""
+    days = older_than_days
+    if days is None:
+        days = get_site_setting("trash_retention_days")
+    if not days:
+        typer.echo("Trash retention is disabled (trash_retention_days=0); nothing purged.")
+        raise typer.Exit(0)
+    with session_scope() as session:
+        purged = _trash_svc(session).purge(older_than_days=days)
+    typer.echo(f"Purged {purged} trash entr{'y' if purged == 1 else 'ies'}.")
+
+
 @app.command("prune-cover-cache")
 def prune_cover_cache(
     max_mb: int = typer.Option(

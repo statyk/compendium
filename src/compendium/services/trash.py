@@ -1,10 +1,10 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
-from datetime import datetime
+from datetime import datetime, timedelta, timezone
 
 from compendium.domain.enums import HoldStatus
-from compendium.domain.errors import BusinessRuleError, NotFoundError
+from compendium.domain.errors import BusinessRuleError, NotFoundError, ValidationError
 from compendium.domain.models import AppUser, DeletedEntity, Work
 from compendium.repositories.base import HoldRepository, TrashRepository, WorkRepository
 from compendium.repositories.sql.trash_repository import PAYLOAD_VERSION
@@ -132,6 +132,32 @@ class TrashService:
 
     def list_deleted_works(self, limit: int = 50) -> list[DeletedWorkSummary]:
         return [_summary(r) for r in self._trash.list(entity_type=ENTITY_WORK, limit=limit)]
+
+    def purge(
+        self,
+        *,
+        older_than_days: int | None = None,
+        trash_id: int | None = None,
+    ) -> int:
+        if (older_than_days is None) == (trash_id is None):
+            raise ValidationError("Pass exactly one of older_than_days or trash_id.")
+        if trash_id is not None:
+            row = self._trash.get(trash_id)
+            if row is None:
+                raise NotFoundError(f"No trash entry with id={trash_id}")
+            self._trash.delete(row)
+            purged = 1
+        else:
+            cutoff = datetime.now(timezone.utc) - timedelta(days=older_than_days)
+            purged = self._trash.delete_older_than(ENTITY_WORK, cutoff)
+        if purged:
+            self._record(
+                AuditEntityType.TRASH,
+                trash_id,
+                AuditAction.PURGE_TRASH,
+                {"purged": purged, "older_than_days": older_than_days},
+            )
+        return purged
 
     def _cancel_holds(self, work_id: int) -> list[int]:
         """Cancel every non-terminal hold on the work; mirrors

@@ -344,6 +344,22 @@ def _register_builtins() -> None:
     )
     register(
         SettingDescriptor(
+            key="trash_retention_days",
+            display_name="Trash Retention (days)",
+            type=int,
+            default=90,
+            scope="librarian",
+            short_help="Days a deleted work stays restorable before purge.",
+            help_text=(
+                "How long deleted works stay in the trash before "
+                "'compendium maintenance purge-trash' removes them permanently. "
+                "0 disables time-based purging (manual purge only). The env var "
+                "COMPENDIUM_TRASH_RETENTION_DAYS overrides the DB value."
+            ),
+        )
+    )
+    register(
+        SettingDescriptor(
             key="currency_symbol",
             display_name="Currency Symbol",
             type=str,
