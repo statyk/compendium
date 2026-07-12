@@ -7,6 +7,7 @@ A library card catalog system for physical items — books, vinyl records, DVDs,
 ## Features
 
 - **Catalog** — add items by ISBN / UPC / MusicBrainz ID / TMDb ID / title search (Google Books / Open Library, MusicBrainz, TMDb) or manually for obscure items; search and browse works and copies; faceted discovery (media type, decade, availability)
+- **Recoverable work deletion** — deleting a work moves it (copies, loan/hold history, notes, creator links, curated-list memberships) to a trash, restorable from **Recently Deleted**, `compendium work trash`, or the API; blocked while copies are on loan or carry outstanding fines; waiting holds are cancelled; trashed works auto-purge after a configurable retention window (`COMPENDIUM_TRASH_RETENTION_DAYS`, default 90 days)
 - **Circulation** — checkout, checkin, loan renewal with category-aware per-media-type loan policies; lost / damaged / claims-returned states; self-checkout kiosk mode; library hours and holiday calendar so due dates never land on closed days and overdue fines skip closed days
 - **Holds** — patron reservation queue; immediate promotion when a copy is available; suspend/resume; auto-expiry via maintenance command
 - **Fines** — configurable per-policy overdue rates with caps and grace periods; lost/damaged fees; threshold-based checkout/hold blocking; pay/waive workflow; per-patron and bulk overdue assessment
@@ -111,7 +112,7 @@ Run `compendium --help` for the full command tree, or `compendium <group> --help
 | Group | Common subcommands |
 |---|---|
 | `item` | `add` (--isbn / --upc / --mbid / --tmdb-id / --title), `add-manual`, `show`, `list`, `withdraw`, `set-loanable`; `note add/list/delete`; `declare-lost`, `mark-damaged`, `clear-lost`, `clear-damage` |
-| `work` | `search`, `show`, `new-arrivals`, `recently-returned` |
+| `work` | `search`, `show`, `new-arrivals`, `recently-returned`, `delete`; `trash list/restore/purge` |
 | `creator` | `list`, `show`, `merge` |
 | `curated-list` | `create`, `list`, `show`, `edit`, `delete`, `add-work`, `remove-work`, `reorder` |
 | `branch` | `list`, `set` |
@@ -150,7 +151,7 @@ Run `compendium --help` for the full command tree, or `compendium <group> --help
 | `compendium backup --output <path-or->` | Write a portable JSONL tarball backup |
 | `compendium restore <path-or->` | Restore from a backup tarball (lenient — auto-migrates) |
 | `compendium settings list/get/set/reset` | Inspect & edit DB-backed site settings |
-| `compendium maintenance ...` | Cron-invoked tasks: `expire-holds`, `resume-expired-suspends`, `assess-overdue-fines`, `queue-due-soon-notices`, `queue-overdue-notices`, `send-queued-notifications`, `prune-notifications`, `prune-audit-log`, `deactivate-expired-patrons`, `prune-cover-cache`, `prune-metadata-cache`, `prune-scan-pairings`, `refresh-metadata` |
+| `compendium maintenance ...` | Cron-invoked tasks: `expire-holds`, `resume-expired-suspends`, `assess-overdue-fines`, `queue-due-soon-notices`, `queue-overdue-notices`, `send-queued-notifications`, `prune-notifications`, `prune-audit-log`, `deactivate-expired-patrons`, `prune-cover-cache`, `prune-metadata-cache`, `prune-scan-pairings`, `refresh-metadata`, `purge-trash` |
 | `compendium metadata cache stats` | Show metadata cache row counts by adapter and TTL status |
 | `compendium metadata cache clear` | Delete all metadata cache rows (audited) |
 
@@ -193,6 +194,7 @@ Start the server with `compendium serve` and open your browser to `http://localh
 | `/ui/admin/export` | Librarian | Bulk CSV/MARC export |
 | `/ui/admin/patron-categories` | Librarian | Manage patron categories |
 | `/ui/curated-lists` | Librarian | Curated list admin CRUD (`curatedlist.manage`) |
+| `/ui/trash` | Librarian | Recently Deleted — restore or permanently delete trashed works (`work.delete`) |
 | `/ui/admin/settings/general` | Librarian | Library name, default theme, guest search |
 | `/ui/admin/settings/circulation` | Librarian | Currency, fine thresholds, hold/overdue/due-soon defaults |
 | `/ui/admin/settings/kiosk` | Librarian | Kiosk idle timeout |
@@ -229,7 +231,8 @@ Below is a high-level inventory grouped by concern; the OpenAPI document is the 
 | Group | Common endpoints | Min permission |
 |---|---|---|
 | **Auth** | `POST /auth/login` | none |
-| **Catalog** | `GET /works/search`, `/works/new-arrivals`, `/works/recently-returned`; `GET /items/{barcode}`; `POST /items/{barcode}/{withdraw,loanable,lost,damaged,clear-lost,clear-damage}` | guest / `item.view` / `item.delete` / `fine.manage` |
+| **Catalog** | `GET /works/search`, `/works/new-arrivals`, `/works/recently-returned`; `GET /items/{barcode}`; `POST /items/{barcode}/{withdraw,loanable,lost,damaged,clear-lost,clear-damage}`; `DELETE /works/{id}` | guest / `item.view` / `item.delete` / `fine.manage` / `work.delete` |
+| **Trash** | `GET /trash`, `POST /trash/{id}/restore`, `DELETE /trash/{id}` | `work.delete` |
 | **Patrons** | `GET/POST /patrons`, `PATCH /patrons/{card}`, `POST /patrons/{card}/{deactivate,reactivate}`, `POST /patrons/{card}/account`, `GET/POST /patron-categories`, `PATCH/DELETE /patron-categories/{id}` | `patron.manage` / `patron.account.manage` for account endpoints |
 | **Loans** | `POST /loans/checkout`, `/loans/{id}/{checkin,renew}`; `GET /loans` (system-wide), `/loans/patron/{card}`, `/loans/item/{barcode}` | `loan.*` (see below) |
 | **Claims** | `GET /claims`; `POST /claims/{barcode}/{returned,verify,write-off}` | `loan.checkin` |
@@ -278,6 +281,7 @@ Most settings (library name, theme, fine thresholds, hold/overdue defaults, kios
 | `COMPENDIUM_LOGIN_FAILURE_WINDOW_SECONDS` | Sliding window for counting failures in seconds (default 300 = 5 min). DB-editable at **System → Security**. |
 | `COMPENDIUM_PUBLIC_BASE_URL` | External HTTPS origin used to build QR codes for phone pairing (e.g. `https://library.example.org`). The QR base URL is normally derived from the request, honoring `X-Forwarded-Proto` — the bundled nginx sets this header, so the shipped Docker stack works without this setting. Set it when your proxy does not set that header, or to pin a specific hostname. A non-HTTPS value is refused at QR-render time. DB-editable at **Admin → Settings → General**; env wins. |
 | `COMPENDIUM_SCAN_SESSION_MINUTES` | How long a paired phone session stays active in minutes (default 60). DB-editable at **Admin → Settings → General**; env wins. |
+| `COMPENDIUM_TRASH_RETENTION_DAYS` | Days a deleted work stays restorable in the trash before `compendium maintenance purge-trash` removes it permanently (default 90; `0` disables time-based purging — manual purge only). DB-editable via `compendium settings set trash_retention_days` / `PATCH /settings/trash_retention_days`; env wins. |
 
 For everything else, run `compendium settings list` to see the current value, source (env vs db/default), and per-key help text. The web admin UI shows the same with an "⚠ Overridden by env var" indicator on rows where an env var is currently masking the DB value.
 

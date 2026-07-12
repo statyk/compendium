@@ -365,6 +365,67 @@ Successful external lookups (and definitive not-found responses) are persisted i
 
 ---
 
+## Recoverable work deletion (trash)
+
+Deleting a Work (and its copies) is recoverable rather than a plain SQL `DELETE`. `TrashService` (`services/trash.py`) snapshots the whole work graph into a `deleted_entity` row, then hard-deletes the live rows. Restore re-inserts the snapshot under fresh primary keys.
+
+### Snapshot vs. `deleted_at` — why not a soft-delete flag
+
+The alternative design — a `deleted_at` column on `work` (and cascading soft-delete semantics onto `item`, `loan`, `hold`, …) — was rejected because it would touch **every** query path that reads those tables: catalog search, circulation, holds, fines, reports, audit, the FTS triggers. Each would need a `WHERE deleted_at IS NULL` clause (or a filtered view), and it's easy to miss one and leak a "deleted" row into a report or a barcode lookup.
+
+The snapshot approach keeps the live schema and every existing query untouched: a deleted Work's rows are genuinely gone from `work`/`item`/`loan`/`hold`/etc., and the entire graph lives instead as one JSON blob in a single new table (`deleted_entity`) that no existing query path reads from. Zero query-path changes was the deciding factor, at the cost of restore doing more work (re-inserting rows with new ids and remapping internal FKs) than a soft-delete's `UPDATE ... SET deleted_at = NULL` would have.
+
+### Payload shape and versioning
+
+`SqlTrashRepository.snapshot_work_graph(work)` builds a single JSON-safe dict, stored verbatim in `deleted_entity.payload`:
+
+```python
+{
+    "version": 1,                 # PAYLOAD_VERSION in repositories/sql/trash_repository.py
+    "work": {...},                 # full work row (scalar columns only)
+    "creators": [{"display_name", "sort_name", "role", "display_order"}, ...],
+    "items": [{...}, ...],         # full item rows
+    "loans": [{...}, ...],         # full loan rows for those items
+    "holds": [{...}, ...],         # full hold rows for the work
+    "item_notes": [{...}, ...],    # full item_note rows for those items
+    "curated_lists": [{"slug", "annotation", "display_order"}, ...],
+}
+```
+
+Datetimes/dates are serialized to ISO strings on the way in and parsed back on the way out (`_row_dict` / `_build_kwargs`), so the payload round-trips through the DB's native JSON column on both SQLite and Postgres. `restore_work` refuses (`BusinessRuleError`) if `payload["version"] != PAYLOAD_VERSION` — this guards against a downgrade reading a snapshot written by a newer Compendium with a payload shape it doesn't understand. There is no migration path between payload versions today; bumping `PAYLOAD_VERSION` is a breaking change for any trash rows written before the bump (they become permanently un-restorable, though still visible in `trash list` and still purgeable).
+
+### Deletability rules
+
+`delete_work(work_id)` refuses (`BusinessRuleError`, surfaced as `409` on the API) when:
+- Any copy has an **active loan** (`returned_at IS NULL`) — check in first.
+- Any copy has an **outstanding fine** (by `item_id` or via one of its loans) — collect or waive first.
+
+Otherwise it proceeds: every **waiting/available hold** on the work is cancelled (mirrors `CatalogService._cancel_work_holds`; cancelled hold ids are recorded in the audit details), the graph is snapshotted, then hard-deleted.
+
+### SET NULL, not relinked
+
+Rows that reference the deleted work's items/loans/holds but aren't part of the snapshot — because they're independently meaningful history, not part of the work's own graph — have their FK nulled rather than being deleted or snapshotted: `fine.loan_id`, `fine.item_id`, `notification.loan_id`, `notification.hold_id`, `scan_event.item_id`, `scan_pending_item.created_item_id`. A settled fine or a sent notification survives the deletion (so financial and audit history isn't destroyed), but it's a permanent orphan with respect to the deleted work — **restore does not relink these rows**, even though it mints fresh ids for everything in the snapshot. Restoring a work does not undo the `SET NULL`s that happened at delete time.
+
+### Restore semantics
+
+`restore_work(trash_id)`:
+1. Rejects an unknown trash id or a version mismatch (see above).
+2. Runs `find_restore_collisions(payload)` — checks the *live* catalog for the snapshot's ISBN, UPC, item barcodes, and accession numbers — **before any write**, so restore is all-or-nothing: either the whole graph comes back, or nothing does and the trash row is untouched.
+3. Re-inserts everything under **fresh primary keys** (`restore_work_graph`): a new `Work` row, creators matched-or-created by `sort_name` and re-linked via `WorkCreator`, items with a new id, loans/holds/item-notes remapped through an `item_id → new_item_id` map built during item re-insertion, and curated-list memberships re-attached to lists that still exist by `slug` (a list deleted in the meantime is silently skipped — the annotation is lost, but the payload doesn't error).
+4. On success, the trash row is deleted (a restored work no longer appears in `trash list`).
+
+### Retention and purge
+
+`trash_retention_days` site setting (int, default `90`, env `COMPENDIUM_TRASH_RETENTION_DAYS`, DB-editable via `compendium settings set` / `PATCH /settings/trash_retention_days`). `0` disables time-based purging — trash rows then only go away via an explicit `purge(trash_id=...)` call.
+
+`compendium maintenance purge-trash [--older-than-days N]` is the cron-invoked entry point (CLI-only by the existing maintenance parity exception): with no flag it reads `trash_retention_days`; a negative value (from either the flag or the setting) is rejected; `0` prints a "disabled" message and exits 0 without purging. Purging by id (`compendium work trash purge TRASH_ID`, `DELETE /trash/{id}`) works regardless of the retention setting — it's independent of the age-based sweep.
+
+### Permission
+
+`work.delete` gates delete, restore, list, and purge on all three interfaces. It was added to the Librarian preset by the same migration that creates `deleted_entity` (`0c0bf7eed591_work_trash.py`) so existing Librarian-role deployments pick it up on upgrade without a manual role edit; Administrator already covers it via the `*` wildcard.
+
+---
+
 ## Bulk import & export
 
 `services/import_export.py` provides bulk ingest and extract for CSV, MARC21 binary (`.mrc`), MARCXML, LibraryThing TSV, and GoodReads CSV exports. Surfaced on all three interfaces:

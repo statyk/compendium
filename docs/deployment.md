@@ -164,6 +164,10 @@ COMPENDIUM_SECURE_COOKIES=true            # default; set `false` for plain-HTTP 
 #   The phone camera requires HTTPS (secure context); a non-HTTPS value is refused at QR time.
 #   DB-editable at Admin → Settings → General; env wins.
 # COMPENDIUM_SCAN_SESSION_MINUTES=60  # Phone session TTL in minutes. DB-editable; env wins.
+
+# Recoverable work deletion (trash).
+# COMPENDIUM_TRASH_RETENTION_DAYS=90  # Days before purge-trash removes a deleted
+#   work permanently; 0 disables time-based purging. DB-editable; env wins.
 ```
 
 **`JWT_SECRET_KEY` must be set to a strong random value.** The built-in default is intentionally weak — the server refuses to start when it's detected. Generate one with `python -c "import secrets; print(secrets.token_urlsafe(48))"` (or `openssl rand -base64 48`). For first-run / dev work you may set `COMPENDIUM_ALLOW_INSECURE_JWT=1` to bypass the check, which downgrades it to a startup warning; do not use that in production.
@@ -291,6 +295,7 @@ Several maintenance commands should run periodically:
 - `maintenance prune-cover-cache --max-mb N` — bound the on-disk cover-image cache.
 - `maintenance prune-metadata-cache` — delete expired metadata cache rows (past positive or negative TTL).
 - `maintenance prune-scan-pairings --older-than-days N` — delete terminal (expired or revoked) phone-scanner pairing rows. Pairings are ephemeral (claim TTL ~2 min; session TTL = `scan_session_minutes`), so terminal rows can be pruned aggressively. Suggested cadence: daily.
+- `maintenance purge-trash [--older-than-days N]` — permanently delete trashed works past the retention window. With no flag, reads the `trash_retention_days` setting (default 90; `0` disables time-based purging — trash rows must then be purged individually). Suggested cadence: weekly.
 - `metadata cache clear` — delete all metadata cache rows (audited); useful if a metadata source's response shape changes.
 - `metadata cache stats` — print cache row counts by adapter and TTL status.
 

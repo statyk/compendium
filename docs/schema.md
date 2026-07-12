@@ -511,6 +511,25 @@ CREATE INDEX ix_scan_pending_item_pairing_id ON scan_pending_item(pairing_id);
 
 ---
 
+### `deleted_entity`
+
+Trash row for recoverable deletion. One row per deleted entity graph (currently only works); `payload` is a versioned JSON snapshot of the entity and everything it owns (see `docs/architecture.md` → "Recoverable work deletion (trash)"). Restoring re-inserts the payload under fresh PKs and removes this row.
+
+```sql
+CREATE TABLE deleted_entity (
+    id          INTEGER PRIMARY KEY,
+    entity_type VARCHAR(32) NOT NULL,   -- "work" (only value today)
+    entity_id   INTEGER NOT NULL,       -- original id at time of deletion
+    label       VARCHAR(512) NOT NULL,  -- human-readable summary, e.g. "Dune — 2 copies"
+    payload     JSON NOT NULL,          -- versioned snapshot; see PAYLOAD_VERSION
+    deleted_at  TIMESTAMPTZ NOT NULL DEFAULT now(),
+    deleted_by  INTEGER REFERENCES app_user(id)  -- ON DELETE SET NULL
+);
+CREATE INDEX ix_deleted_entity_type_deleted_at ON deleted_entity(entity_type, deleted_at);
+```
+
+---
+
 ## Migration history
 
 | Revision | Description |
@@ -545,3 +564,4 @@ CREATE INDEX ix_scan_pending_item_pairing_id ON scan_pending_item(pairing_id);
 | `b1c2d3e4f5a6` | Add curated_list + curated_list_entry; curatedlist.manage permission on Librarian |
 | `c2d3e4f5a6b7` | Add scan_pairing (remote phone-scanner sessions) |
 | `d3e4f5a6b7c8` | Add scan_event + scan_pending_item; scan_pairing.catalog_review (desk live feed + review queue) |
+| `0c0bf7eed591` | Add deleted_entity (recoverable work deletion / trash); work.delete permission on Librarian |

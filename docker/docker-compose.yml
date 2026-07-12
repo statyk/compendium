@@ -67,6 +67,10 @@ services:
       COMPENDIUM_PUBLIC_BASE_URL: ${COMPENDIUM_PUBLIC_BASE_URL:-}
       # Phone session TTL in minutes (default 60). Optional; omit to use DB setting.
       COMPENDIUM_SCAN_SESSION_MINUTES: ${COMPENDIUM_SCAN_SESSION_MINUTES:-}
+      # Days a deleted work stays restorable before purge-trash removes it
+      # permanently (default 90; 0 disables time-based purging). Optional;
+      # omit to use the DB setting.
+      COMPENDIUM_TRASH_RETENTION_DAYS: ${COMPENDIUM_TRASH_RETENTION_DAYS:-}
       # Dev-only escape hatch — leave unset in production.
       COMPENDIUM_ALLOW_INSECURE_JWT: ${COMPENDIUM_ALLOW_INSECURE_JWT:-}
       # First-run admin bootstrap (only used if the username doesn't exist yet).
