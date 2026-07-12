@@ -10,7 +10,6 @@ from typer.testing import CliRunner
 from compendium.cli.commands.maintenance import app as maintenance_app
 from compendium.config.seed import _LIBRARIAN_PERMISSIONS
 from compendium.domain.errors import BusinessRuleError, NotFoundError, ValidationError
-from compendium.services.site_settings import get_site_setting
 from compendium.domain.models import (
     AuditLog,
     Branch,
@@ -36,6 +35,7 @@ from compendium.repositories.sql.hold_repository import SqlHoldRepository
 from compendium.repositories.sql.trash_repository import SqlTrashRepository
 from compendium.repositories.sql.work_repository import SqlWorkRepository
 from compendium.services.audit import AuditService
+from compendium.services.site_settings import get_site_setting
 from compendium.services.trash import TrashService
 
 
@@ -339,6 +339,18 @@ def test_purge_by_age_and_by_id(session):
         svc.purge(trash_id=999_999)
 
 
+def test_purge_rejects_negative_older_than_days(session):
+    repo = SqlTrashRepository(session)
+    row = repo.add(DeletedEntity(entity_type="work", entity_id=1, label="old", payload={}))
+    row.deleted_at = datetime.now(timezone.utc) - timedelta(days=200)
+    session.flush()
+
+    with pytest.raises(ValidationError, match="cannot be negative"):
+        _svc(session).purge(older_than_days=-1)
+
+    assert repo.get(row.id) is not None
+
+
 def test_trash_retention_setting_default():
     assert get_site_setting("trash_retention_days") == 90
 
@@ -411,6 +423,19 @@ def test_cli_purge_trash_uses_setting_default(session, monkeypatch):
     assert result.exit_code == 0
     assert "Purged 1 trash entry." in result.output
     assert repo.get(old.id) is None
+
+
+def test_cli_purge_trash_rejects_negative_days(session):
+    repo = SqlTrashRepository(session)
+    old = repo.add(DeletedEntity(entity_type="work", entity_id=1, label="old", payload={}))
+    old.deleted_at = datetime.now(timezone.utc) - timedelta(days=200)
+    session.flush()
+
+    result = _run_maintenance_cli(session, ["purge-trash", "--older-than-days", "-5"])
+
+    assert result.exit_code != 0
+    assert "must be at least 1" in result.output
+    assert repo.get(old.id) is not None
 
 
 def test_cli_purge_trash_disabled_when_zero(session, monkeypatch):

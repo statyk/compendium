@@ -607,6 +607,12 @@ def purge_trash_cmd(
     days = older_than_days
     if days is None:
         days = get_site_setting("trash_retention_days")
+    if days is not None and days < 0:
+        typer.echo(
+            "Error: --older-than-days must be at least 1 (or 0 to disable via the setting).",
+            err=True,
+        )
+        raise typer.Exit(1)
     if not days:
         typer.echo("Trash retention is disabled (trash_retention_days=0); nothing purged.")
         raise typer.Exit(0)

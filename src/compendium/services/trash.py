@@ -141,6 +141,8 @@ class TrashService:
     ) -> int:
         if (older_than_days is None) == (trash_id is None):
             raise ValidationError("Pass exactly one of older_than_days or trash_id.")
+        if older_than_days is not None and older_than_days < 0:
+            raise ValidationError("older_than_days cannot be negative.")
         if trash_id is not None:
             row = self._trash.get(trash_id)
             if row is None:
