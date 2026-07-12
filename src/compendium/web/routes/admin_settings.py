@@ -54,7 +54,14 @@ _PAGES: dict[str, dict[str, Any]] = {
         "title": "General",
         "scope_perm": "patron.manage",
         "intro": "Library identity and visitor experience. No restart required.",
-        "keys": ["library_name", "library_timezone", "default_theme", "guest_search_enabled", "custom_shortcuts"],
+        "keys": [
+            "library_name",
+            "library_timezone",
+            "default_theme",
+            "guest_search_enabled",
+            "custom_shortcuts",
+            "trash_retention_days",
+        ],
     },
     "circulation": {
         "title": "Circulation defaults",

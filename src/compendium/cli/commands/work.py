@@ -487,7 +487,7 @@ def delete_work(
             typer.confirm(
                 f"Delete '{work.title}' and its {n_items} "
                 f"{'copy' if n_items == 1 else 'copies'} (loan history moves to "
-                "trash, waiting holds are cancelled)?",
+                "trash, holds are cancelled)?",
                 abort=True,
             )
         try:

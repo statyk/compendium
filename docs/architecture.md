@@ -416,7 +416,7 @@ Rows that reference the deleted work's items/loans/holds but aren't part of the 
 
 ### Retention and purge
 
-`trash_retention_days` site setting (int, default `90`, env `COMPENDIUM_TRASH_RETENTION_DAYS`, DB-editable via `compendium settings set` / `PATCH /settings/trash_retention_days`). `0` disables time-based purging — trash rows then only go away via an explicit `purge(trash_id=...)` call.
+`trash_retention_days` site setting (int, default `90`, env `COMPENDIUM_TRASH_RETENTION_DAYS`, DB-editable at Admin → Settings → General via `compendium settings set` / `PATCH /settings/trash_retention_days`). `0` disables time-based purging — trash rows then only go away via an explicit `purge(trash_id=...)` call.
 
 `compendium maintenance purge-trash [--older-than-days N]` is the cron-invoked entry point (CLI-only by the existing maintenance parity exception): with no flag it reads `trash_retention_days`; a negative value (from either the flag or the setting) is rejected; `0` prints a "disabled" message and exits 0 without purging. Purging by id (`compendium work trash purge TRASH_ID`, `DELETE /trash/{id}`) works regardless of the retention setting — it's independent of the age-based sweep.
 

@@ -13,7 +13,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   loan/hold history, notes, creator links, list memberships) and can be
   restored from **Cataloging → Recently Deleted**, `compendium work trash`, or
   the API. Deletion is blocked while copies are on loan or have outstanding
-  fines; waiting holds are cancelled. New `work.delete` permission (added to
+  fines; holds are cancelled. New `work.delete` permission (added to
   the Librarian preset), `trash_retention_days` setting (default 90), and
   `compendium maintenance purge-trash` cron command.
 
