@@ -350,6 +350,15 @@ def work_detail(
             active = loans.get_active_for_item(it.id)
             if active is not None:
                 item_due[it.id] = active.due_at
+    non_withdrawn = [
+        it for it in work.items if it.status != ItemStatus.WITHDRAWN.value
+    ]
+    copies_available = sum(
+        1 for it in non_withdrawn if it.status == ItemStatus.AVAILABLE.value
+    )
+    earliest_due = (
+        min(item_due.values()) if (copies_available == 0 and item_due) else None
+    )
     has_loanable = SqlWorkRepository(session).has_loanable_item(work.id)
     all_withdrawn = bool(work.items) and all(
         it.status == ItemStatus.WITHDRAWN.value for it in work.items
@@ -367,6 +376,9 @@ def work_detail(
             "work": work,
             "patron": patron,
             "item_due": item_due,
+            "copies_available": copies_available,
+            "copies_total": len(non_withdrawn),
+            "earliest_due": earliest_due,
             "has_loanable": has_loanable,
             "all_withdrawn": all_withdrawn,
             "queue": queue,

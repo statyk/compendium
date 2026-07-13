@@ -2291,6 +2291,32 @@ def test_catalog_results_show_copy_counts(web_client, web_session, work):
     assert "pill-checked_out" not in resp.text or "pill-checked-out" not in resp.text
 
 
+def test_work_detail_counts_and_shelf_location(web_client, web_session, work):
+    from datetime import datetime, timezone
+
+    from compendium.domain.enums import ItemStatus
+    from compendium.domain.models import Loan, Patron
+
+    w, item = work
+    item.status = ItemStatus.CHECKED_OUT.value
+    patron = Patron(library_card_number="SHELF001", full_name="Borrower")
+    web_session.add(patron)
+    web_session.flush()
+    due = datetime(2099, 6, 15, tzinfo=timezone.utc)
+    web_session.add(
+        Loan(item_id=item.id, patron_id=patron.id, branch_id=item.branch_id, due_at=due)
+    )
+    web_session.flush()
+
+    resp = web_client.get(f"/ui/catalog/{w.id}")
+
+    assert resp.status_code == 200
+    assert "0 of 1 copy available" in resp.text
+    assert "All copies on loan — earliest due 2099-06-15." in resp.text
+    assert "Shelf location" in resp.text
+    assert "Call #" not in resp.text
+
+
 def test_inactive_user_cookie_denied(web_client, web_session, librarian):
     """An inactive user's still-valid auth cookie must not grant access."""
     cookies = _login(web_client, "lib01")

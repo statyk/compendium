@@ -98,13 +98,17 @@
 <div class="copies-card">
   <div class="copies-card-head">
     <h3>Copies</h3>
+    {% if copies_total %}<small class="copies-count">{{ copies_available }} of {{ copies_total }} {{ 'copy' if copies_total == 1 else 'copies' }} available</small>{% endif %}
     {% if user and ("*" in user.role.permissions or "item.create" in user.role.permissions) %}
     <a href="/ui/items/new?work_id={{ work.id }}" role="button" class="outline secondary" style="padding:0.2rem 0.6rem;font-size:0.85rem">+ Add copy</a>
     {% endif %}
   </div>
+  {% if copies_total and copies_available == 0 and earliest_due %}
+  <p class="empty-inline">All copies on loan — earliest due {{ earliest_due.strftime("%Y-%m-%d") }}.</p>
+  {% endif %}
   {% if work.items %}
   <table class="responsive-table">
-    <thead><tr><th>Barcode</th><th>Branch</th><th>Status</th><th>Call #</th></tr></thead>
+    <thead><tr><th>Barcode</th><th>Branch</th><th>Status</th><th>Shelf location</th></tr></thead>
     <tbody>
       {% for item in work.items %}
       <tr>
@@ -117,7 +121,7 @@
           <br><small style="color:var(--pico-muted-color)">due {{ item_due[item.id].strftime("%Y-%m-%d") }}</small>
           {% endif %}
         </td>
-        <td data-label="Call #"><span class="call-number">{{ item.call_number or "—" }}</span></td>
+        <td data-label="Shelf location"><span class="call-number">{{ item.call_number or "—" }}</span></td>
       </tr>
       {% endfor %}
     </tbody>
