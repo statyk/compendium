@@ -136,6 +136,27 @@ class PolicyService:
         )
         return policy
 
+    def delete(self, policy_id: int) -> None:
+        policy = self._policies.get(policy_id)
+        if policy is None:
+            raise NotFoundError(f"No policy with id={policy_id}")
+        if policy.is_default:
+            raise BusinessRuleError(
+                "Cannot delete the default policy. "
+                "Set another policy as default first."
+            )
+        snapshot = {
+            "name": policy.name,
+            "media_type_id": policy.media_type_id,
+            "patron_category_id": policy.patron_category_id,
+            "loan_period_days": policy.loan_period_days,
+            "max_renewals": policy.max_renewals,
+        }
+        self._policies.delete(policy)
+        self._record(
+            AuditEntityType.POLICY, policy_id, AuditAction.DELETE, snapshot
+        )
+
     def _record(
         self,
         entity_type: str,

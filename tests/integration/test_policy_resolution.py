@@ -9,8 +9,12 @@ Covers the 4-case precedence (most specific first):
 
 from __future__ import annotations
 
+import pytest
+
+from compendium.domain.errors import BusinessRuleError, NotFoundError
 from compendium.domain.models import LoanPolicy, MediaType, PatronCategory
 from compendium.repositories.sql.loan_policy_repository import SqlLoanPolicyRepository
+from compendium.services.policies import PolicyService
 
 
 def _book_id(session) -> int:
@@ -112,3 +116,24 @@ class TestResolutionPrecedence:
         # Add a true media-only policy and verify it returns that one.
         _add_policy(session, name="Book general", days=14, media_type_id=_book_id(session))
         assert repo.get_for_media_type(_book_id(session)).name == "Book general"
+
+
+@pytest.fixture
+def policy_service(session) -> PolicyService:
+    return PolicyService(SqlLoanPolicyRepository(session))
+
+
+class TestPolicyServiceDelete:
+    def test_delete_policy_removes_row(self, policy_service, session):
+        p = policy_service.create(name="DVD short", loan_period_days=7)
+        policy_service.delete(p.id)
+        assert session.get(LoanPolicy, p.id) is None
+
+    def test_delete_default_policy_blocked(self, policy_service):
+        default = next(p for p in policy_service.list() if p.is_default)
+        with pytest.raises(BusinessRuleError, match="default"):
+            policy_service.delete(default.id)
+
+    def test_delete_missing_policy_raises(self, policy_service):
+        with pytest.raises(NotFoundError):
+            policy_service.delete(99999)

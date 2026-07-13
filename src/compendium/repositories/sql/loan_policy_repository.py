@@ -86,6 +86,10 @@ class SqlLoanPolicyRepository:
         self._s.flush()
         return policy
 
+    def delete(self, policy: LoanPolicy) -> None:
+        self._s.delete(policy)
+        self._s.flush()
+
     def clear_defaults(self) -> None:
         self._s.query(LoanPolicy).filter(LoanPolicy.is_default.is_(True)).update(
             {"is_default": False}, synchronize_session="evaluate"
