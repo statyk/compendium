@@ -1894,6 +1894,82 @@ def test_patron_set_bad_expires_is_clean_usage_error(session):
     assert "Traceback" not in r.output
 
 
+def _add_patron_get_card(session, name: str) -> str:
+    add = _invoke(
+        session,
+        ["patron", "add", "--name", name],
+        "compendium.cli.commands.patron",
+    )
+    assert add.exit_code == 0, add.output
+    return next(
+        line.split(":", 1)[1].strip()
+        for line in add.output.splitlines()
+        if "Card number" in line
+    )
+
+
+def test_patron_edit_name_persists(session):
+    card = _add_patron_get_card(session, "Old Name")
+    r = _invoke(
+        session,
+        ["patron", "edit", card, "--name", "New Name"],
+        "compendium.cli.commands.patron",
+    )
+    assert r.exit_code == 0, r.output
+    patron = SqlPatronRepository(session).get_by_card_number(card)
+    assert patron.full_name == "New Name"
+
+
+def test_patron_edit_email_and_phone_persist(session):
+    card = _add_patron_get_card(session, "Contact Patron")
+    r = _invoke(
+        session,
+        [
+            "patron",
+            "edit",
+            card,
+            "--email",
+            "new@example.com",
+            "--phone",
+            "555-1234",
+        ],
+        "compendium.cli.commands.patron",
+    )
+    assert r.exit_code == 0, r.output
+    patron = SqlPatronRepository(session).get_by_card_number(card)
+    assert patron.contact_email == "new@example.com"
+    assert patron.contact_phone == "555-1234"
+
+
+def test_patron_edit_clear_email(session):
+    card = _add_patron_get_card(session, "Clear Email Patron")
+    set_r = _invoke(
+        session,
+        ["patron", "edit", card, "--email", "temp@example.com"],
+        "compendium.cli.commands.patron",
+    )
+    assert set_r.exit_code == 0, set_r.output
+    r = _invoke(
+        session,
+        ["patron", "edit", card, "--clear-email"],
+        "compendium.cli.commands.patron",
+    )
+    assert r.exit_code == 0, r.output
+    patron = SqlPatronRepository(session).get_by_card_number(card)
+    assert patron.contact_email is None
+
+
+def test_patron_edit_email_and_clear_email_conflict(session):
+    card = _add_patron_get_card(session, "Conflict Patron")
+    r = _invoke(
+        session,
+        ["patron", "edit", card, "--email", "x@example.com", "--clear-email"],
+        "compendium.cli.commands.patron",
+    )
+    assert r.exit_code != 0, r.output
+    assert "Traceback" not in r.output
+
+
 def test_reports_popular_bad_from_is_clean_usage_error(session):
     r = _invoke(
         session,

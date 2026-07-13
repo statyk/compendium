@@ -23,7 +23,7 @@ from compendium.repositories.sql.role_repository import SqlRoleRepository
 from compendium.repositories.sql.user_repository import SqlUserRepository
 from compendium.services.audit import AuditService
 from compendium.services.auth import AuthService, has_permission
-from compendium.services.patrons import PatronService, _MISSING
+from compendium.services.patrons import PatronService
 
 router = APIRouter()
 
@@ -150,22 +150,27 @@ def update_patron(
     user: AppUser = Depends(require_permission("patron.manage")),
 ) -> PatronResponse:
     fields = body.model_fields_set
-    cat_arg: object = _MISSING
+    update_kwargs: dict[str, object] = {}
     if "category_code" in fields:
-        cat_arg = (
+        update_kwargs["category_id"] = (
             _resolve_category_id(session, body.category_code)
             if body.category_code is not None
             else None
         )
-    exp_arg: object = _MISSING
     if "expires_at" in fields:
-        exp_arg = body.expires_at
-    if cat_arg is _MISSING and exp_arg is _MISSING:
+        update_kwargs["expires_at"] = body.expires_at
+    if "full_name" in fields:
+        if body.full_name is None:
+            raise HTTPException(status_code=422, detail="full_name cannot be null")
+        update_kwargs["full_name"] = body.full_name
+    if "contact_email" in fields:
+        update_kwargs["contact_email"] = body.contact_email
+    if "contact_phone" in fields:
+        update_kwargs["contact_phone"] = body.contact_phone
+    if not update_kwargs:
         raise HTTPException(status_code=422, detail="No fields to update")
     try:
-        patron = _patron_service(session, user).update(
-            card_number, category_id=cat_arg, expires_at=exp_arg
-        )
+        patron = _patron_service(session, user).update(card_number, **update_kwargs)
     except NotFoundError as exc:
         raise HTTPException(status_code=404, detail=str(exc)) from exc
     except (BusinessRuleError, ValidationError) as exc:

@@ -377,3 +377,64 @@ class TestListPatrons:
         tok = _token(db, "lib_list2", "Librarian")
         resp = client.get("/patrons", params={"status": "bogus"}, headers=_auth(tok))
         assert resp.status_code == 422
+
+
+class TestPatchPatronContactFields:
+    def test_update_full_name(self, client, db):
+        tok = _token(db, "lib_edit1", "Librarian")
+        patron = _make_patron(db, "PAT-E001", "Old Name")
+        resp = client.patch(
+            f"/patrons/{patron.library_card_number}",
+            json={"full_name": "New Name"},
+            headers=_auth(tok),
+        )
+        assert resp.status_code == 200, resp.text
+        assert resp.json()["full_name"] == "New Name"
+
+    def test_update_email_and_phone(self, client, db):
+        tok = _token(db, "lib_edit2", "Librarian")
+        patron = _make_patron(db, "PAT-E002", "Contact Person")
+        resp = client.patch(
+            f"/patrons/{patron.library_card_number}",
+            json={"contact_email": "new@example.com", "contact_phone": "555-9999"},
+            headers=_auth(tok),
+        )
+        assert resp.status_code == 200, resp.text
+        body = resp.json()
+        assert body["contact_email"] == "new@example.com"
+        assert body["contact_phone"] == "555-9999"
+
+    def test_null_clears_email(self, client, db):
+        tok = _token(db, "lib_edit3", "Librarian")
+        patron = _make_patron(db, "PAT-E003", "Clearable")
+        patron.contact_email = "temp@example.com"
+        db.flush()
+        resp = client.patch(
+            f"/patrons/{patron.library_card_number}",
+            json={"contact_email": None},
+            headers=_auth(tok),
+        )
+        assert resp.status_code == 200, resp.text
+        assert resp.json()["contact_email"] is None
+
+    def test_null_full_name_rejected(self, client, db):
+        tok = _token(db, "lib_edit4", "Librarian")
+        patron = _make_patron(db, "PAT-E004", "Keep Name")
+        resp = client.patch(
+            f"/patrons/{patron.library_card_number}",
+            json={"full_name": None},
+            headers=_auth(tok),
+        )
+        assert resp.status_code == 422
+        assert "full_name cannot be null" in resp.text
+
+    def test_empty_body_still_422(self, client, db):
+        tok = _token(db, "lib_edit5", "Librarian")
+        patron = _make_patron(db, "PAT-E005", "No Change")
+        resp = client.patch(
+            f"/patrons/{patron.library_card_number}",
+            json={},
+            headers=_auth(tok),
+        )
+        assert resp.status_code == 422
+        assert "No fields to update" in resp.text

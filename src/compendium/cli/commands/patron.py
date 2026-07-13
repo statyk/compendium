@@ -145,23 +145,42 @@ def add_patron(
 def set_patron(
     card_arg: str | None = typer.Argument(None, metavar="CARD"),
     card_opt: str | None = typer.Option(None, "--card", hidden=True),
+    name: str | None = typer.Option(None, "--name", help="New full name"),
+    email: str | None = typer.Option(None, "--email", help="New contact email"),
+    clear_email: bool = typer.Option(False, "--clear-email", help="Remove the contact email"),
+    phone: str | None = typer.Option(None, "--phone", help="New contact phone"),
+    clear_phone: bool = typer.Option(False, "--clear-phone", help="Remove the contact phone"),
     category: str | None = typer.Option(None, "--category", help="Patron category code"),
     clear_category: bool = typer.Option(False, "--clear-category", help="Remove the category"),
     expires: str | None = typer.Option(None, "--expires", help="Card expiry date (YYYY-MM-DD)"),
     clear_expires: bool = typer.Option(False, "--clear-expires", help="Remove the expiry date"),
 ) -> None:
-    """Edit category and/or expiry on an existing patron."""
+    """Edit name, contact info, category, and/or expiry on an existing patron."""
     from compendium.cli.io import resolve_identifier
 
     card = resolve_identifier(card_arg, card_opt, label="card number")
+    if email is not None and clear_email:
+        raise typer.BadParameter("--email and --clear-email are mutually exclusive")
+    if phone is not None and clear_phone:
+        raise typer.BadParameter("--phone and --clear-phone are mutually exclusive")
     if category and clear_category:
         error("--category and --clear-category are mutually exclusive")
         raise typer.Exit(1)
     if expires and clear_expires:
         error("--expires and --clear-expires are mutually exclusive")
         raise typer.Exit(1)
-    if not any([category, clear_category, expires, clear_expires]):
-        error("nothing to update (pass --category/--expires/--clear-*)")
+    if not any([
+        name is not None,
+        email is not None,
+        clear_email,
+        phone is not None,
+        clear_phone,
+        category,
+        clear_category,
+        expires,
+        clear_expires,
+    ]):
+        error("nothing to update (pass --name/--email/--phone/--category/--expires/--clear-*)")
         raise typer.Exit(1)
 
     from compendium.services.patrons import _MISSING
@@ -178,9 +197,25 @@ def set_patron(
                 exp_arg = _parse_date(expires)
             elif clear_expires:
                 exp_arg = None
-            patron = _patron_svc(session).update(
-                card, category_id=cat_arg, expires_at=exp_arg
-            )
+            email_arg: object = _MISSING
+            if email is not None:
+                email_arg = email
+            elif clear_email:
+                email_arg = None
+            phone_arg: object = _MISSING
+            if phone is not None:
+                phone_arg = phone
+            elif clear_phone:
+                phone_arg = None
+            update_kwargs: dict[str, object] = {
+                "category_id": cat_arg,
+                "expires_at": exp_arg,
+                "contact_email": email_arg,
+                "contact_phone": phone_arg,
+            }
+            if name is not None:
+                update_kwargs["full_name"] = name
+            patron = _patron_svc(session).update(card, **update_kwargs)
             typer.echo(f"\nUpdated patron {patron.full_name} ({patron.library_card_number})")
             if patron.category_id is not None:
                 typer.echo(f"  Category    : {patron.category.code if patron.category else patron.category_id}")

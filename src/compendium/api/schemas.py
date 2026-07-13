@@ -137,6 +137,10 @@ class CreatePatronRequest(BaseModel):
 
 class UpdatePatronRequest(BaseModel):
     # None means "clear"; omitted means "leave it" (handled by model_fields_set).
+    # full_name is not clearable — an explicit null is rejected by the route.
+    full_name: str | None = None
+    contact_email: str | None = None
+    contact_phone: str | None = None
     category_code: str | None = None
     expires_at: date | None = None
 
