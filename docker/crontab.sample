@@ -16,23 +16,23 @@
 
 # Drain the email outbox every 5 minutes. Without this, queued notifications
 # (hold-ready, due-soon, overdue) sit in the DB forever.
-*/5 * * * * docker compose --project-directory COMPENDIUM_DIR exec -T compendium compendium maintenance send-queued-notifications LOG_REDIRECT
+*/5 * * * * docker compose --project-directory COMPENDIUM_DIR exec -T compendium compendium maintenance send-queued-notifications --quiet LOG_REDIRECT
 
 # Expire holds whose pickup window has passed.
-0 2 * * * docker compose --project-directory COMPENDIUM_DIR exec -T compendium compendium maintenance expire-holds LOG_REDIRECT
+0 2 * * * docker compose --project-directory COMPENDIUM_DIR exec -T compendium compendium maintenance expire-holds --quiet LOG_REDIRECT
 
 # Auto-resume patron-suspended holds whose suspended_until has passed.
-5 2 * * * docker compose --project-directory COMPENDIUM_DIR exec -T compendium compendium maintenance resume-expired-suspends LOG_REDIRECT
+5 2 * * * docker compose --project-directory COMPENDIUM_DIR exec -T compendium compendium maintenance resume-expired-suspends --quiet LOG_REDIRECT
 
 # Deactivate patrons whose card has expired.
-10 2 * * * docker compose --project-directory COMPENDIUM_DIR exec -T compendium compendium maintenance deactivate-expired-patrons LOG_REDIRECT
+10 2 * * * docker compose --project-directory COMPENDIUM_DIR exec -T compendium compendium maintenance deactivate-expired-patrons --quiet LOG_REDIRECT
 
 # Materialize overdue fines so reports see current state.
-30 2 * * * docker compose --project-directory COMPENDIUM_DIR exec -T compendium compendium maintenance assess-overdue-fines LOG_REDIRECT
+30 2 * * * docker compose --project-directory COMPENDIUM_DIR exec -T compendium compendium maintenance assess-overdue-fines --quiet LOG_REDIRECT
 
 # Queue notification reminders (daily). The 5-minute drain above ships them.
-0 8 * * * docker compose --project-directory COMPENDIUM_DIR exec -T compendium compendium maintenance queue-due-soon-notices LOG_REDIRECT
-15 8 * * * docker compose --project-directory COMPENDIUM_DIR exec -T compendium compendium maintenance queue-overdue-notices LOG_REDIRECT
+0 8 * * * docker compose --project-directory COMPENDIUM_DIR exec -T compendium compendium maintenance queue-due-soon-notices --quiet LOG_REDIRECT
+15 8 * * * docker compose --project-directory COMPENDIUM_DIR exec -T compendium compendium maintenance queue-overdue-notices --quiet LOG_REDIRECT
 
 # Nightly backup. Lands at ./backups/<date>.tar.gz on the host (mounted into
 # the container at /var/backups/compendium). Rotate / sync off-machine separately.
@@ -43,32 +43,32 @@
 20 2 * * * docker compose --project-directory COMPENDIUM_DIR exec -T compendium find /var/backups/compendium -name '*.tar.gz' -mtime +30 -delete LOG_REDIRECT
 
 # Optional: monthly retention prune for old audit rows + sent notifications.
-# 0 3 1 * * docker compose --project-directory COMPENDIUM_DIR exec -T compendium compendium maintenance prune-audit-log --older-than-days 365 LOG_REDIRECT
-# 30 3 1 * * docker compose --project-directory COMPENDIUM_DIR exec -T compendium compendium maintenance prune-notifications --older-than-days 180 LOG_REDIRECT
+# 0 3 1 * * docker compose --project-directory COMPENDIUM_DIR exec -T compendium compendium maintenance prune-audit-log --older-than-days 365 --quiet LOG_REDIRECT
+# 30 3 1 * * docker compose --project-directory COMPENDIUM_DIR exec -T compendium compendium maintenance prune-notifications --older-than-days 180 --quiet LOG_REDIRECT
 
 # Optional: bound the on-disk cover-image cache (weekly).
-# 45 3 * * 0 docker compose --project-directory COMPENDIUM_DIR exec -T compendium compendium maintenance prune-cover-cache --max-mb 500 LOG_REDIRECT
+# 45 3 * * 0 docker compose --project-directory COMPENDIUM_DIR exec -T compendium compendium maintenance prune-cover-cache --max-mb 500 --quiet LOG_REDIRECT
 
 # Optional: prune expired metadata-cache rows (weekly). The default TTL is 30 days
 # for positive entries and 24h for negative (not-found) entries.
-# 50 3 * * 0 docker compose --project-directory COMPENDIUM_DIR exec -T compendium compendium maintenance prune-metadata-cache LOG_REDIRECT
+# 50 3 * * 0 docker compose --project-directory COMPENDIUM_DIR exec -T compendium compendium maintenance prune-metadata-cache --quiet LOG_REDIRECT
 
 # Optional: prune old failed-login rows (weekly — any row older than 1 day is
 # already outside the 5-minute throttle window, so this is just housekeeping).
-# 30 3 * * 0 docker compose --project-directory COMPENDIUM_DIR exec -T compendium compendium maintenance prune-failed-logins --older-than-days 7 LOG_REDIRECT
+# 30 3 * * 0 docker compose --project-directory COMPENDIUM_DIR exec -T compendium compendium maintenance prune-failed-logins --older-than-days 7 --quiet LOG_REDIRECT
 
 # Optional: prune terminal scan-pairing rows (daily — pairings are ephemeral;
 # claim TTL is ~2 min and session TTL is scan_session_minutes, so anything
 # older than a day is already dead).
-# 35 3 * * * docker compose --project-directory COMPENDIUM_DIR exec -T compendium compendium maintenance prune-scan-pairings --older-than-days 7 LOG_REDIRECT
+# 35 3 * * * docker compose --project-directory COMPENDIUM_DIR exec -T compendium compendium maintenance prune-scan-pairings --older-than-days 7 --quiet LOG_REDIRECT
 
 # Optional: purge trashed works past the retention window (weekly). Works
 # deleted more than trash_retention_days ago (default 90) are removed
 # permanently; with no flag the command reads the trash_retention_days
 # setting (0 disables time-based purging).
-# 15 4 * * 0 docker compose --project-directory COMPENDIUM_DIR exec -T compendium compendium maintenance purge-trash LOG_REDIRECT
+# 15 4 * * 0 docker compose --project-directory COMPENDIUM_DIR exec -T compendium compendium maintenance purge-trash --quiet LOG_REDIRECT
 
 # Optional: fill missing metadata for newly-imported Works (description,
 # cover, publisher, language) from external sources. --limit caps the
 # nightly batch; the eligible-set drains to 0 once the catalog is clean.
-# 45 3 * * * docker compose --project-directory COMPENDIUM_DIR exec -T compendium compendium maintenance refresh-metadata --limit 200 LOG_REDIRECT
+# 45 3 * * * docker compose --project-directory COMPENDIUM_DIR exec -T compendium compendium maintenance refresh-metadata --limit 200 --quiet LOG_REDIRECT

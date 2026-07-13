@@ -93,6 +93,67 @@ JSON contract (applies to every command's `--format json` output):
 - No truncation — JSON output always contains full field values (e.g. note text, permission lists, audit details), even where the table view abbreviates for readability.
 - Exit codes are unchanged by `--format`; only the rendering differs.
 
+### CLI conventions
+
+The 1.6.0 CLI-consistency slice standardized verbs, identifiers, confirmations, and
+output plumbing across every command group. These conventions apply uniformly;
+new commands must follow them.
+
+- **`add` / `edit` are the canonical verbs.** Commands that used to read
+  `create`, `update`, `set`, or `rename` were respelled: `household add`,
+  `role add`/`role edit`, `patron-category add`/`patron-category edit`,
+  `policy add`/`policy edit`, `patron edit`, `curated-list add`, `branch edit`,
+  `creator edit`, `user edit` (role and/or password in one command), `item edit`
+  (location/call-number/condition/notes, plus the loanable toggle). `work list`
+  replaces the old `item list` — listing works is a catalog operation, not an
+  item one.
+- **`withdraw` / `deactivate` / `delete` keep distinct semantics** and are
+  never folded into `edit`: `withdraw` retires a physical copy without
+  deleting its history, `deactivate` suspends a patron/user account
+  (reversible via `reactivate`), and `delete` removes a record outright
+  (`work delete` snapshots to trash first — see "Recoverable work deletion"
+  above).
+- **Natural keys are positional, with a legacy `--option` fallback.** Where a
+  command's primary lookup key is a natural, human-facing identifier
+  (barcode, card number, username, category code, branch code, ...), it is
+  now a positional argument (e.g. `compendium item edit B-0001 --location
+  ...`) rather than a required `--flag`. The old `--barcode`/`--username`/...
+  option still works and is merged with the positional via
+  `cli/io.py:resolve_identifier()`, which errors if both are given and
+  disagree.
+- **Hidden aliases are permanent.** Every old command spelling
+  (`household create`, `role create`/`role update`, `patron-category create`/
+  `update`, `policy create`/`policy set`, `patron set`, `curated-list create`,
+  `branch set`, `creator rename`, `user set-role`/`set-password`,
+  `item set-loanable`, `item list`, ...) keeps working indefinitely as a
+  `hidden=True` Typer command registered via `cli/io.py:register_alias()`. No
+  script that pins an old spelling ever breaks; `--help` just teaches the new
+  one.
+- **`--yes` skips the confirmation prompt on destructive commands**
+  (`patron-category delete`, `closed-date delete`, `secrets clear`,
+  `settings reset`, `backup` overwrite, `household delete`, `curated-list
+  delete`, `item declare-lost`/`mark-damaged`-style irreversible actions,
+  etc.). Without it, the command prompts interactively; `--yes` is required
+  for any non-interactive/cron use.
+- **`--quiet` / `--dry-run` on maintenance commands.** Every
+  `compendium maintenance ...` cron task accepts `--quiet` (suppress the
+  per-run summary line so cron logs stay silent on success) and, where the
+  action is consequential, `--dry-run` (report what would change without
+  writing anything) — see `expire-holds`, `prune-metadata-cache`,
+  `prune-cover-cache`, `purge-trash`, `deactivate-expired-patrons`, and
+  `resume-expired-suspends`. Bulk `import` commands additionally accept
+  `--fail-on-error` to abort on the first row error instead of collecting and
+  reporting all errors at the end.
+- **`Error: ...` is the uniform failure convention.** All command-level
+  failures print `Error: <message>` in red to stderr via
+  `cli/io.py:error()`, then exit non-zero — never a bare traceback or an
+  unprefixed message.
+- **Truncation notices on `--limit` lists.** Any list command capped by
+  `--limit` prints a stderr-only notice when the result count equals the
+  limit (`cli/io.py:truncation_notice()`), e.g. "Showing first 50 row(s);
+  more may exist. Raise --limit to see more." The notice never touches
+  stdout, so `--format json | jq` pipelines stay clean.
+
 ### config/
 
 Pydantic `Settings` (reads from env vars with `COMPENDIUM_` prefix and `.env` file) and seed data applied at startup.
@@ -729,7 +790,7 @@ Routine circulation (checkout / checkin / renew / hold-fill) is **deliberately e
 - **Web admin** — CRUD at `/ui/curated-lists` (requires `curatedlist.manage`); "Manage curated lists" link on work detail pages for users with that permission.
 - **Public OPAC** — `/ui/lists` (index of public lists) and `/ui/lists/{slug}` (list detail with annotated works). Guest access follows the `guest_search_enabled` site setting — same dependency used by catalog search.
 - **REST API** — `GET/POST /curated-lists`, `PATCH/DELETE /curated-lists/{slug}`, `POST/DELETE /curated-lists/{slug}/works`.
-- **CLI** — `compendium curated-list create/list/show/edit/delete/add-work/remove-work/reorder`.
+- **CLI** — `compendium curated-list add/list/show/edit/delete/add-work/remove-work/reorder`.
 
 ### Permission model
 

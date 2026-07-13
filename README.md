@@ -111,11 +111,11 @@ Run `compendium --help` for the full command tree, or `compendium <group> --help
 **Catalog & cataloging**
 | Group | Common subcommands |
 |---|---|
-| `item` | `add` (--isbn / --upc / --mbid / --tmdb-id / --title), `add-manual`, `show`, `list`, `withdraw`, `set-loanable`; `note add/list/delete`; `declare-lost`, `mark-damaged`, `clear-lost`, `clear-damage` |
-| `work` | `search`, `show`, `new-arrivals`, `recently-returned`, `delete`; `trash list/restore/purge` |
-| `creator` | `list`, `show`, `merge` |
-| `curated-list` | `create`, `list`, `show`, `edit`, `delete`, `add-work`, `remove-work`, `reorder` |
-| `branch` | `list`, `set` |
+| `item` | `add` (--isbn / --upc / --mbid / --tmdb-id / --title), `add-manual`, `show`, `edit` (location/call-number/condition/notes/loanable), `withdraw`; `note add/list/delete`; `declare-lost`, `mark-damaged`, `clear-lost`, `clear-damage` |
+| `work` | `list`, `search`, `show`, `new-arrivals`, `recently-returned`, `delete`; `trash list/restore/purge` |
+| `creator` | `edit` |
+| `curated-list` | `add`, `list`, `show`, `edit`, `delete`, `add-work`, `remove-work`, `reorder` |
+| `branch` | `list`, `edit` |
 | `import` | `csv`, `marc` (use `-` for stdin) |
 | `export` | `csv`, `marc` (use `-` for stdout) |
 
@@ -130,11 +130,11 @@ Run `compendium --help` for the full command tree, or `compendium <group> --help
 **Patrons & accounts**
 | Group | Common subcommands |
 |---|---|
-| `patron` | `add`, `list` (`--include-inactive`), `set`, `link-user`, `unlink-user`, `deactivate`, `reactivate` |
-| `patron-category` | `list`, `create`, `update`, `delete` |
-| `user` | `add` (default --role Administrator), `list` (`--include-inactive`), `set-role`, `set-password`, `deactivate`, `reactivate` |
-| `role` | `list`, `create`, `update`, `clone` |
-| `policy` | `list`, `create`, `set` (configures fines, category-aware) |
+| `patron` | `add`, `list` (`--include-inactive`), `edit`, `link-user`, `unlink-user`, `add-user`, `deactivate`, `reactivate` |
+| `patron-category` | `list`, `add`, `edit`, `delete` |
+| `user` | `add` (default --role Administrator), `list` (`--include-inactive`), `edit` (role and/or password), `deactivate`, `reactivate` |
+| `role` | `list`, `add`, `edit`, `clone` |
+| `policy` | `list`, `add`, `edit` (configures fines, category-aware) |
 
 **Reporting & labels**
 | Group | Common subcommands |
@@ -185,7 +185,7 @@ Start the server with `compendium serve` and open your browser to `http://localh
 | `/ui/kiosk` | Librarian | Self-checkout kiosk landing/session (patron card-number-only auth) |
 | `/ui/items/new` | Librarian | Add item by ISBN / UPC / MBID / TMDb ID / title search (with barcode scanner) |
 | `/ui/items/new/manual` | Librarian | Manually add an item not found in external sources |
-| `/ui/items/{barcode}` | Librarian | Item detail, loan history, withdraw, set-loanable, lost/damaged/claims actions |
+| `/ui/items/{barcode}` | Librarian | Item detail, loan history, withdraw, edit (incl. loanable toggle), lost/damaged/claims actions |
 | `/ui/patrons` | Librarian | Patron list |
 | `/ui/patrons/new` | Librarian | Create patron (with category + expiry) |
 | `/ui/patrons/{card}` | Librarian | Patron detail with active loans, holds, link/unlink user, deactivate, reactivate |

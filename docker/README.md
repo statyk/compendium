@@ -101,7 +101,7 @@ and `COMPENDIUM_ADMIN_PASSWORD` from `.env`.
 user exists. Run:
 
 ```bash
-docker compose exec compendium compendium user set-password --username admin
+docker compose exec compendium compendium user edit --username admin --prompt-password
 ```
 
 (A password-change flow in the web UI is a planned follow-up.)

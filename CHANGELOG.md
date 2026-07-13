@@ -17,6 +17,18 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - All CLI list/show commands accept `--format table|json` (reports also keep
   `csv`); tables render via rich with one consistent style, JSON is stable and
   script-friendly (stdout only, notices on stderr).
+- CLI: `--yes` confirmations on `patron-category delete`, `closed-date delete`,
+  `secrets clear`, `settings reset`; `--quiet` on all maintenance commands;
+  `--dry-run` on `expire-holds`, `prune-metadata-cache`, `prune-cover-cache`,
+  `purge-trash`; `import --fail-on-error`; truncation notices on `--limit`
+  lists.
+
+### Changed
+
+- CLI: canonical verbs are now `add`/`edit` (`household add`, `role edit`,
+  `patron edit`, ...); natural keys are positional (`item edit B-0001 ...`);
+  `work list` replaces `item list`. Every old spelling keeps working
+  indefinitely as a hidden alias — no scripts break.
 
 ## [1.5.1] - 2026-07-12
 

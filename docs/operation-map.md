@@ -5,12 +5,17 @@ operation belongs to. When adding a new operation, declare its bucket here
 **before** implementing it. Both CLI and REST API must place the operation in
 the same bucket, while each interface keeps its own native idiom.
 
+> **Note (1.6.0):** several CLI command spellings changed to the `add`/`edit`
+> convention (see `docs/architecture.md` → "CLI conventions"); old spellings
+> keep working as permanent hidden aliases. This was a spelling change only —
+> no operation moved buckets.
+
 ## Buckets
 
 | Bucket | Operations | CLI surface | API surface |
 |---|---|---|---|
 | **circulation** | checkout, checkin, renew, active, loan list, loan history, item-history | `compendium loan …` | `POST /loans/checkout`, `/loans/{id}/{checkin,renew}`, `GET /loans`, `/loans/patron/{card}`, `/loans/item/{barcode}` |
-| **item-lifecycle** | add, add-manual, edit, show, list, withdraw, set-loanable, notes; **declare-lost, mark-damaged, clear-lost, clear-damage** | `compendium item …` | `GET/PATCH /items/{barcode}`, `POST /items/{barcode}/{withdraw,loanable,lost,damaged,clear-lost,clear-damage}` |
+| **item-lifecycle** | add, add-manual, edit (incl. loanable toggle), show, list, withdraw, notes; **declare-lost, mark-damaged, clear-lost, clear-damage** | `compendium item …` | `GET/PATCH /items/{barcode}`, `POST /items/{barcode}/{withdraw,loanable,lost,damaged,clear-lost,clear-damage}` |
 | **claims** | patron disputes return, librarian verifies or writes off, open-claims list | `compendium claim …` | `GET /claims`, `POST /claims/{barcode}/{returned,verify,write-off}` |
 | **holds** | place, cancel, suspend/resume, queue, list | `compendium hold …` | `GET/POST /holds`, `/holds/{id}`, `/holds/{id}/{suspend,resume}`, `/holds/queue/{work_id}` |
 | **fines** | list, pay, waive, assess manual, assess overdue per patron | `compendium fine …` | `GET /fines`, `POST /fines/{id}/{pay,waive}`, `GET/POST /patrons/{card}/fines/…` |
@@ -39,7 +44,7 @@ the same bucket, while each interface keeps its own native idiom.
 
 - **CLI**: noun-group then imperative verb (`item declare-lost`, `claim verify`).
   Multi-word names are hyphenated (`patron-category`, `curated-list`). Verb-noun
-  compounds also hyphenated (`set-loanable`, `link-user`, `write-off`).
+  compounds also hyphenated (`declare-lost`, `link-user`, `write-off`).
 - **API**: pluralized kebab-case resource nouns as prefixes (`/items`, `/claims`,
   `/curated-lists`). CRUD uses HTTP-method semantics; state transitions use
   `POST` sub-resources (`/loans/{id}/checkin`, `/claims/{barcode}/verify`).
