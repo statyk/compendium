@@ -3,6 +3,7 @@ from datetime import date, datetime
 
 import typer
 
+from compendium.cli.output import Column, emit_list, format_option
 from compendium.db.session import session_scope
 from compendium.domain.errors import DomainError
 from compendium.db.engine import get_settings
@@ -277,6 +278,7 @@ def list_patrons(
     search: str = typer.Option(
         None, "--search", "-s", help="Filter by name, card number, or email (substring)"
     ),
+    format: str = format_option(),
 ) -> None:
     """List registered patrons (active only by default)."""
     with session_scope() as session:
@@ -285,9 +287,18 @@ def list_patrons(
             status="all" if include_inactive else "active",
             query=search,
         )
-        if not patrons:
-            typer.echo("No patrons match." if search else "No patrons registered.")
-            return
-        for p in patrons:
-            status = "" if p.is_active else " [inactive]"
-            typer.echo(f"  {p.library_card_number}  {p.full_name}{status}")
+        emit_list(
+            [{
+                "library_card_number": p.library_card_number,
+                "full_name": p.full_name,
+                "contact_email": p.contact_email,
+                "contact_phone": p.contact_phone,
+                "is_active": p.is_active,
+            } for p in patrons],
+            [Column("library_card_number", "Card"),
+             Column("full_name", "Name"),
+             Column("contact_email", "Email", formatter=lambda v: v or ""),
+             Column("is_active", "Active", formatter=lambda v: "" if v else "inactive")],
+            format,
+            empty="No patrons match." if search else "No patrons registered.",
+        )

@@ -6,6 +6,7 @@ import getpass
 
 import typer
 
+from compendium.cli.output import Column, emit_list, format_option
 from compendium.db.session import session_scope
 from compendium.domain.errors import DomainError
 from compendium.repositories.sql.audit_log_repository import SqlAuditLogRepository
@@ -28,16 +29,22 @@ def _svc(session) -> PatronCategoryService:
 
 
 @app.command("list")
-def list_categories() -> None:
+def list_categories(format: str = format_option()) -> None:
     """List patron categories."""
     with session_scope() as session:
         cats = _svc(session).list()
-        if not cats:
-            typer.echo("No patron categories defined.")
-            return
-        for c in cats:
-            mark = " (default)" if c.is_default else ""
-            typer.echo(f"  {c.code:12s}  {c.display_name}{mark}")
+        emit_list(
+            [{
+                "code": c.code,
+                "display_name": c.display_name,
+                "is_default": c.is_default,
+            } for c in cats],
+            [Column("code", "Code"),
+             Column("display_name", "Name"),
+             Column("is_default", "Default", formatter=lambda v: "default" if v else "")],
+            format,
+            empty="No patron categories defined.",
+        )
 
 
 @app.command("create")

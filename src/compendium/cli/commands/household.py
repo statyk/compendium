@@ -5,6 +5,7 @@ import getpass
 
 import typer
 
+from compendium.cli.output import Column, emit_detail, emit_list, format_option
 from compendium.db.session import session_scope
 from compendium.domain.errors import DomainError
 from compendium.repositories.sql.audit_log_repository import SqlAuditLogRepository
@@ -47,23 +48,31 @@ def create_household(
 @app.command("list")
 def list_households(
     limit: int = typer.Option(20, "--limit", "-l", help="Max results"),
+    format: str = format_option(),
 ) -> None:
     """List all households."""
     with session_scope() as session:
         svc = _svc(session)
         households = svc.list(limit=limit)
         patron_repo = SqlPatronRepository(session)
-        if not households:
-            typer.echo("No households found.")
-            return
+        rows = []
         for hh in households:
             count = len(patron_repo.list_by_household(hh.id))
-            typer.echo(f"  [{hh.id}] {hh.name}  ({count} member{'s' if count != 1 else ''})")
+            rows.append({"id": hh.id, "name": hh.name, "member_count": count})
+        emit_list(
+            rows,
+            [Column("id", "ID", justify="right"),
+             Column("name", "Name"),
+             Column("member_count", "Members", justify="right")],
+            format,
+            empty="No households found.",
+        )
 
 
 @app.command("show")
 def show_household(
     id: int = typer.Option(..., "--id", help="Household ID"),
+    format: str = format_option(),
 ) -> None:
     """Show household details and member list."""
     try:
@@ -73,6 +82,24 @@ def show_household(
             members = svc.get_members(id)
             loan_repo = SqlLoanRepository(session)
             hold_repo = SqlHoldRepository(session)
+            if format == "json":
+                obj = {
+                    "id": hh.id,
+                    "name": hh.name,
+                    "notes": hh.notes,
+                    "members": [
+                        {
+                            "library_card_number": m.library_card_number,
+                            "full_name": m.full_name,
+                            "is_active": m.is_active,
+                            "loans": loan_repo.count_for_patron(m.id),
+                            "holds": hold_repo.count_active(patron_id=m.id),
+                        }
+                        for m in members
+                    ],
+                }
+                emit_detail(obj, format)
+                return
             typer.echo(f"Household [{hh.id}]: {hh.name}")
             if hh.notes:
                 typer.echo(f"  Notes: {hh.notes}")

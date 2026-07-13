@@ -3,6 +3,7 @@ import os
 
 import typer
 
+from compendium.cli.output import Column, emit_list, format_option
 from compendium.db.session import session_scope
 from compendium.domain.errors import DomainError
 from compendium.repositories.sql.audit_log_repository import SqlAuditLogRepository
@@ -39,19 +40,25 @@ def _role_svc(session) -> RoleService:
 
 
 @app.command("list")
-def list_roles() -> None:
+def list_roles(format: str = format_option()) -> None:
     """List all roles."""
     with session_scope() as session:
         roles = _role_svc(session).list()
-        if not roles:
-            typer.echo("No roles found.")
-            return
-        typer.echo("\nRoles:")
-        for r in roles:
-            system_flag = "  [PRESET]" if r.is_system else ""
-            perm_summary = "*" if "*" in r.permissions else ", ".join(r.permissions) or "(none)"
-            typer.echo(f"  #{r.id}  {r.name}{system_flag}")
-            typer.echo(f"       permissions: {perm_summary}")
+        emit_list(
+            [{
+                "id": r.id,
+                "name": r.name,
+                "is_system": r.is_system,
+                "permissions": r.permissions,
+            } for r in roles],
+            [Column("id", "#", justify="right"),
+             Column("name", "Name"),
+             Column("is_system", "Preset", formatter=lambda v: "PRESET" if v else ""),
+             Column("permissions", "Permissions",
+                    formatter=lambda v: "*" if "*" in v else (", ".join(v) or "(none)"))],
+            format,
+            empty="No roles found.",
+        )
 
 
 @app.command("create")

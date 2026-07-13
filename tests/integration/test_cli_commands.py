@@ -288,11 +288,13 @@ class TestRoleCli:
         assert r.exit_code == 0, r.output
         r = _invoke(session, ["role", "list"], "compendium.cli.commands.role")
         assert "Curator" in r.output
-        # extract role id — format "  #<id>  Curator"
-        curator_id = next(
-            line.strip().split()[0].lstrip("#")
-            for line in r.output.splitlines()
-            if "Curator" in line and line.strip().startswith("#")
+        # Table rendering doesn't expose a scrapeable "#<id>" prefix anymore;
+        # use --format json to reliably extract the new role's id.
+        r = _invoke(
+            session, ["role", "list", "--format", "json"], "compendium.cli.commands.role"
+        )
+        curator_id = str(
+            next(row["id"] for row in json.loads(r.stdout) if row["name"] == "Curator")
         )
         r = _invoke(
             session,
@@ -317,12 +319,14 @@ class TestRoleCli:
         assert r.exit_code == 1
 
     def test_update_preset_rejected(self, session):
-        # Librarian is a preset role (seeded), id 1 typically.
-        r = _invoke(session, ["role", "list"], "compendium.cli.commands.role")
-        librarian_id = next(
-            line.strip().split()[0].lstrip("#")
-            for line in r.output.splitlines()
-            if "Librarian" in line and line.strip().startswith("#")
+        # Librarian is a preset role (seeded), id 1 typically. Table rendering
+        # doesn't expose a scrapeable "#<id>" prefix anymore; use --format
+        # json to reliably extract the id.
+        r = _invoke(
+            session, ["role", "list", "--format", "json"], "compendium.cli.commands.role"
+        )
+        librarian_id = str(
+            next(row["id"] for row in json.loads(r.stdout) if row["name"] == "Librarian")
         )
         r = _invoke(
             session,

@@ -5,6 +5,7 @@ import os
 
 import typer
 
+from compendium.cli.output import Column, emit_list, format_option
 from compendium.db.engine import get_settings
 from compendium.db.session import session_scope
 from compendium.domain.errors import DomainError
@@ -197,16 +198,23 @@ def set_user_password(
 def list_users(
     limit: int = typer.Option(50, "--limit"),
     include_inactive: bool = typer.Option(False, "--include-inactive", help="Include inactive accounts"),
+    format: str = format_option(),
 ) -> None:
     """List user accounts (active only by default)."""
     with session_scope() as session:
         users = SqlUserRepository(session).list(limit=limit, include_inactive=include_inactive)
-        if not users:
-            typer.echo("No users found.")
-            return
-        for u in users:
-            status = "" if u.is_active else " [inactive]"
-            typer.echo(f"  {u.username}  ({u.role.name}){status}")
+        emit_list(
+            [{
+                "username": u.username,
+                "role": u.role.name,
+                "is_active": u.is_active,
+            } for u in users],
+            [Column("username", "Username"),
+             Column("role", "Role"),
+             Column("is_active", "Active", formatter=lambda v: "" if v else "inactive")],
+            format,
+            empty="No users found.",
+        )
 
 
 @app.command("deactivate")
