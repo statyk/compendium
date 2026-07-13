@@ -10,7 +10,9 @@ from __future__ import annotations
 import contextlib
 import sys
 from pathlib import Path
-from typing import IO, Iterator
+from typing import IO, Any, Callable, Iterator
+
+import typer
 
 STDIO = "-"
 
@@ -47,3 +49,34 @@ def open_output(path: str | Path, *, binary: bool = True) -> Iterator[IO]:
         yield f
     finally:
         f.close()
+
+
+def error(msg: object) -> None:
+    """Uniform CLI error line: 'Error: <msg>' in red on stderr."""
+    typer.secho(f"Error: {msg}", fg=typer.colors.RED, err=True)
+
+
+def register_alias(app: typer.Typer, name: str, fn: Callable[..., Any]) -> None:
+    """Register an old command spelling as a hidden, permanent alias."""
+    app.command(name, hidden=True)(fn)
+
+
+def resolve_identifier(positional: str | None, option: str | None, *, label: str) -> str:
+    """Merge a new positional identifier with its legacy --option fallback."""
+    if positional is not None and option is not None and positional != option:
+        error(f"pass the {label} either as an argument or via the option, not both")
+        raise typer.Exit(2)
+    value = positional if positional is not None else option
+    if value is None:
+        error(f"missing {label}")
+        raise typer.Exit(2)
+    return value
+
+
+def truncation_notice(shown: int, limit: int) -> None:
+    """Stderr hint when a list result hit --limit (never pollutes stdout)."""
+    if shown == limit:
+        typer.secho(
+            f"Showing first {limit} row(s); more may exist. Raise --limit to see more.",
+            err=True,
+        )
