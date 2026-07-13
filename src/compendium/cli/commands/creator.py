@@ -30,12 +30,12 @@ def _catalog(session):
     )
 
 
-@app.command("rename")
+@app.command("edit")
 def rename_creator(
     creator_id: int = typer.Option(..., "--id", help="Creator ID."),
     display_name: str = typer.Option(..., "--name", help="New display name."),
 ) -> None:
-    """Rename a Creator row. Affects every work this creator appears on."""
+    """Edit a Creator row's display name. Affects every work this creator appears on."""
     try:
         with session_scope() as session:
             creator = _catalog(session).update_creator(
@@ -48,3 +48,8 @@ def rename_creator(
     except DomainError as exc:
         typer.echo(f"Error: {exc}", err=True)
         raise typer.Exit(1) from exc
+
+
+from compendium.cli.io import register_alias  # noqa: E402
+
+register_alias(app, "rename", rename_creator)

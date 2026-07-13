@@ -30,7 +30,7 @@ def _svc(session) -> HouseholdService:
     )
 
 
-@app.command("create")
+@app.command("add")
 def create_household(
     name: str = typer.Option(..., "--name", "-n", help="Household display name"),
     notes: str | None = typer.Option(None, "--notes", help="Optional notes"),
@@ -118,7 +118,7 @@ def show_household(
         raise typer.Exit(1)
 
 
-@app.command("rename")
+@app.command("edit")
 def rename_household(
     id: int = typer.Option(..., "--id", help="Household ID"),
     name: str | None = typer.Option(None, "--name", "-n", help="New display name"),
@@ -200,3 +200,9 @@ def remove_member(
     except DomainError as e:
         typer.echo(f"Error: {e}", err=True)
         raise typer.Exit(1)
+
+
+from compendium.cli.io import register_alias  # noqa: E402
+
+register_alias(app, "create", create_household)
+register_alias(app, "rename", rename_household)

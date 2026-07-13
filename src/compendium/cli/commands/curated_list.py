@@ -50,7 +50,7 @@ def _resolve_actor(session: Session) -> AppUser | None:
     return actor
 
 
-@app.command("create")
+@app.command("add")
 def create_list(
     name: str = typer.Option(..., "--name", "-n", help="List display name"),
     description: str | None = typer.Option(None, "--description", "-d", help="Optional description"),
@@ -314,3 +314,8 @@ def reorder_works(
     except DomainError as e:
         typer.echo(f"Error: {e}", err=True)
         raise typer.Exit(1)
+
+
+from compendium.cli.io import register_alias  # noqa: E402
+
+register_alias(app, "create", create_list)

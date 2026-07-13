@@ -140,7 +140,7 @@ def add_patron(
         typer.echo(f"  Expires     : {expires}")
 
 
-@app.command("set")
+@app.command("edit")
 def set_patron(
     card: str = typer.Option(..., "--card", help="Patron library card number"),
     category: str | None = typer.Option(None, "--category", help="Patron category code"),
@@ -247,7 +247,7 @@ def unlink_user_cmd(
         raise typer.Exit(1) from exc
 
 
-@app.command("create-user")
+@app.command("add-user")
 def create_user_for_patron(
     card: str = typer.Option(..., "--card", help="Patron library card number"),
     username: str = typer.Option(..., "--username", help="Username for the new login"),
@@ -302,3 +302,9 @@ def list_patrons(
             format,
             empty="No patrons match." if search else "No patrons registered.",
         )
+
+
+from compendium.cli.io import register_alias  # noqa: E402
+
+register_alias(app, "set", set_patron)
+register_alias(app, "create-user", create_user_for_patron)

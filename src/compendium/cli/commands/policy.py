@@ -60,7 +60,7 @@ def list_policies(format: str = format_option()) -> None:
         )
 
 
-@app.command("create")
+@app.command("add")
 def create_policy(
     name: str = typer.Option(..., "--name", help="Policy name"),
     loan_days: int = typer.Option(..., "--loan-days", help="Loan period in days"),
@@ -105,7 +105,7 @@ def create_policy(
         raise typer.Exit(1) from exc
 
 
-@app.command("set")
+@app.command("edit")
 def set_policy(
     policy_id: int = typer.Option(..., "--id", help="Policy ID to update"),
     loan_days: int = typer.Option(None, "--loan-days", help="Loan period in days"),
@@ -204,3 +204,9 @@ def set_policy(
     except (DomainError, NotFoundError) as exc:
         typer.echo(f"Error: {exc}", err=True)
         raise typer.Exit(1) from exc
+
+
+from compendium.cli.io import register_alias  # noqa: E402
+
+register_alias(app, "create", create_policy)
+register_alias(app, "set", set_policy)

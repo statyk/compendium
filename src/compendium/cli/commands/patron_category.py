@@ -47,7 +47,7 @@ def list_categories(format: str = format_option()) -> None:
         )
 
 
-@app.command("create")
+@app.command("add")
 def create_category(
     code: str = typer.Option(..., "--code", help="Short identifier (e.g. 'adult')"),
     name: str = typer.Option(..., "--name", help="Display name"),
@@ -63,7 +63,7 @@ def create_category(
         raise typer.Exit(1) from exc
 
 
-@app.command("update")
+@app.command("edit")
 def update_category(
     code: str = typer.Option(..., "--code"),
     name: str | None = typer.Option(None, "--name", help="New display name"),
@@ -103,3 +103,9 @@ def delete_category(
     except DomainError as exc:
         typer.echo(f"Error: {exc}", err=True)
         raise typer.Exit(1) from exc
+
+
+from compendium.cli.io import register_alias  # noqa: E402
+
+register_alias(app, "create", create_category)
+register_alias(app, "update", update_category)

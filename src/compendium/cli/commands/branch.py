@@ -41,14 +41,14 @@ def branch_list(format: str = format_option()) -> None:
         )
 
 
-@app.command("set")
+@app.command("edit")
 def branch_set(
     code: str = typer.Option(..., "--code", help="Branch code"),
     classification: str = typer.Option(
         ..., "--classification", help="Classification scheme: lcc, ddc, or none"
     ),
 ) -> None:
-    """Set the auto-population classification scheme for a branch."""
+    """Edit a branch's classification scheme."""
     scheme = classification.strip().lower()
     if scheme not in _VALID_SCHEMES:
         typer.echo(
@@ -70,3 +70,8 @@ def branch_set(
     except DomainError as exc:
         typer.echo(f"Error: {exc}", err=True)
         raise typer.Exit(1) from exc
+
+
+from compendium.cli.io import register_alias  # noqa: E402
+
+register_alias(app, "set", branch_set)

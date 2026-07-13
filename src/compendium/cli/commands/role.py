@@ -61,7 +61,7 @@ def list_roles(format: str = format_option()) -> None:
         )
 
 
-@app.command("create")
+@app.command("add")
 def create_role(
     name: str = typer.Option(..., "--name", help="Role name"),
     permissions: str = typer.Option("", "--permissions", help="Comma-separated permission strings"),
@@ -78,7 +78,7 @@ def create_role(
         raise typer.Exit(1) from exc
 
 
-@app.command("update")
+@app.command("edit")
 def update_role(
     role_id: int = typer.Option(..., "--id", help="Role ID to update"),
     name: str = typer.Option(None, "--name", help="New role name"),
@@ -119,3 +119,9 @@ def clone_role(
     except DomainError as exc:
         typer.echo(f"Error: {exc}", err=True)
         raise typer.Exit(1) from exc
+
+
+from compendium.cli.io import register_alias  # noqa: E402
+
+register_alias(app, "create", create_role)
+register_alias(app, "update", update_role)
