@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from datetime import datetime
+from urllib.parse import urlencode
 
 from fastapi import APIRouter, Depends, Form, Query, Request
 from fastapi.responses import HTMLResponse, RedirectResponse
@@ -35,6 +36,7 @@ from compendium.web.jinja import templates
 router = APIRouter()
 
 _PERM = "patron.manage"
+_PAGE_SIZE = 50
 
 
 def _patron_svc(session: Session, actor: AppUser) -> PatronService:
@@ -87,17 +89,29 @@ def _unlinked_users(session: Session) -> list[AppUser]:
     return [u for u in SqlUserRepository(session).list(limit=500) if u.id not in linked_ids]
 
 
+def _filters_qs(params: dict) -> str:
+    return urlencode({k: v for k, v in params.items() if v not in (None, "")})
+
+
 @router.get("/patrons")
 def patron_list(
     request: Request,
+    q: str | None = Query(default=None),
+    status: str = Query(default=""),
     include_inactive: int = Query(default=0),
+    page: int = Query(default=1, ge=1),
     user: AppUser = Depends(require_web_permission(_PERM)),
     session: Session = Depends(get_session),
 ):
-    show_inactive = include_inactive == 1
-    patrons = SqlPatronRepository(session).list(
-        limit=500, status="all" if show_inactive else "active"
-    )
+    query_clean = (q or "").strip() or None
+    if status not in ("active", "inactive", "all"):
+        status = "all" if include_inactive == 1 else "active"
+
+    repo = SqlPatronRepository(session)
+    offset = (page - 1) * _PAGE_SIZE
+    patrons = repo.list(limit=_PAGE_SIZE, offset=offset, status=status, query=query_clean)
+    total = repo.count(status=status, query=query_clean)
+
     return _render(
         "patrons/list.html",
         request,
@@ -105,7 +119,13 @@ def patron_list(
             "request": request,
             "user": user,
             "patrons": patrons,
-            "include_inactive": show_inactive,
+            "total": total,
+            "page": page,
+            "has_prev": page > 1,
+            "has_next": offset + len(patrons) < total,
+            "filters_qs": _filters_qs({"q": query_clean, "status": status}),
+            "q": query_clean or "",
+            "status": status,
         },
     )
 

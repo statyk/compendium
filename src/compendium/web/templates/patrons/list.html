@@ -6,23 +6,30 @@
   <h2 style="margin:0">Patrons</h2>
   <a href="/ui/patrons/new" role="button" class="outline" style="padding:0.25rem 0.75rem">+ New Patron</a>
 </div>
-<form method="get" action="/ui/patrons" id="patron-filter-form" style="margin-bottom:0.75rem; display:flex; align-items:center; gap:0.5rem">
-  <label style="display:inline-flex; align-items:center; gap:0.4rem; font-size:0.9rem; cursor:pointer; margin:0">
-    <input type="checkbox" id="patron-include-inactive" name="include_inactive" value="1"
-           {% if include_inactive %}checked{% endif %} style="margin:0">
-    Include inactive patrons
-  </label>
+<form method="get" action="/ui/patrons" id="patron-filter-form" style="margin-bottom:0.75rem; display:flex; align-items:center; gap:0.5rem; flex-wrap:wrap">
+  <input type="search" name="q" value="{{ q }}" placeholder="Name, card # or email"
+         aria-label="Search patrons" style="margin:0; max-width:16rem">
+  <select name="status" id="patron-status" aria-label="Status filter" style="margin:0; width:auto">
+    <option value="active" {% if status == 'active' %}selected{% endif %}>Active</option>
+    <option value="inactive" {% if status == 'inactive' %}selected{% endif %}>Inactive</option>
+    <option value="all" {% if status == 'all' %}selected{% endif %}>All</option>
+  </select>
   <button type="submit" class="outline" style="padding:0.2rem 0.6rem; font-size:0.85rem">Apply</button>
 </form>
 <script nonce="{{ csp_nonce(request) }}">
 (function() {
-  var cb = document.getElementById('patron-include-inactive');
-  if (cb) cb.addEventListener('change', function() { document.getElementById('patron-filter-form').submit(); });
+  var sel = document.getElementById('patron-status');
+  if (sel) sel.addEventListener('change', function() { document.getElementById('patron-filter-form').submit(); });
 })();
 </script>
 {% if not patrons %}
-  {{ empty_state("No patrons on record", "Add patrons to start tracking checkouts and holds.", cta_href="/ui/patrons/new", cta_label="Add patron") }}
+  {% if q or status != 'active' %}
+    <p class="empty-inline">No patrons match these filters.</p>
+  {% else %}
+    {{ empty_state("No patrons on record", "Add patrons to start tracking checkouts and holds.", cta_href="/ui/patrons/new", cta_label="Add patron") }}
+  {% endif %}
 {% else %}
+<p style="margin-bottom:0.5rem"><small>{{ total }} patron{{ '' if total == 1 else 's' }}</small></p>
 <table class="responsive-table">
   <thead>
     <tr><th>Name</th><th>Card #</th><th>Status</th></tr>
@@ -37,5 +44,16 @@
     {% endfor %}
   </tbody>
 </table>
+{% if has_prev or has_next %}
+<nav style="display:flex; justify-content:space-between; align-items:center; margin-top:1rem">
+  {% if has_prev %}
+    <a href="/ui/patrons?{{ filters_qs + ('&' if filters_qs else '') }}page={{ page - 1 }}" role="button" class="secondary outline">← Previous</a>
+  {% else %}<span></span>{% endif %}
+  <small>Page {{ page }}</small>
+  {% if has_next %}
+    <a href="/ui/patrons?{{ filters_qs + ('&' if filters_qs else '') }}page={{ page + 1 }}" role="button" class="secondary outline">Next →</a>
+  {% else %}<span></span>{% endif %}
+</nav>
+{% endif %}
 {% endif %}
 {% endblock %}

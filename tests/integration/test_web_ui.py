@@ -390,6 +390,65 @@ def test_patrons_list_renders_for_librarian(web_client, librarian):
     assert b"Patrons" in resp.content
 
 
+def test_patron_list_search_and_status_filter(web_client, web_session, librarian):
+    web_session.add(Patron(library_card_number="PLS0001", full_name="Zelda Searchmatch"))
+    web_session.add(
+        Patron(library_card_number="PLS0002", full_name="Yorick Searchmatch", is_active=False)
+    )
+    web_session.flush()
+    cookies = _login(web_client, "lib01")
+
+    # default: active only
+    resp = web_client.get("/ui/patrons", params={"q": "searchmatch"}, cookies=cookies)
+    assert resp.status_code == 200
+    assert b"Zelda Searchmatch" in resp.content
+    assert b"Yorick Searchmatch" not in resp.content
+
+    # explicit inactive
+    resp = web_client.get(
+        "/ui/patrons", params={"q": "searchmatch", "status": "inactive"}, cookies=cookies
+    )
+    assert b"Yorick Searchmatch" in resp.content
+    assert b"Zelda Searchmatch" not in resp.content
+
+    # search matches card number too
+    resp = web_client.get("/ui/patrons", params={"q": "PLS0001"}, cookies=cookies)
+    assert b"Zelda Searchmatch" in resp.content
+
+    # back-compat: include_inactive=1 still means "all"
+    resp = web_client.get(
+        "/ui/patrons", params={"q": "searchmatch", "include_inactive": "1"}, cookies=cookies
+    )
+    assert b"Zelda Searchmatch" in resp.content
+    assert b"Yorick Searchmatch" in resp.content
+
+
+def test_patron_list_paginates_at_50(web_client, web_session, librarian):
+    for i in range(55):
+        web_session.add(
+            Patron(library_card_number=f"PGN{i:04d}", full_name=f"Pagey Patron {i:03d}")
+        )
+    web_session.flush()
+    cookies = _login(web_client, "lib01")
+
+    resp = web_client.get("/ui/patrons", params={"q": "Pagey Patron"}, cookies=cookies)
+    assert resp.status_code == 200
+    assert b"55 patrons" in resp.content
+    assert b"Pagey Patron 049" in resp.content
+    assert b"Pagey Patron 050" not in resp.content  # page 2
+    assert "Next →".encode() in resp.content
+    assert "← Previous".encode() not in resp.content
+
+    resp = web_client.get(
+        "/ui/patrons", params={"q": "Pagey Patron", "page": "2"}, cookies=cookies
+    )
+    assert b"Pagey Patron 050" in resp.content
+    assert b"Pagey Patron 054" in resp.content
+    assert b"Pagey Patron 049" not in resp.content
+    assert "← Previous".encode() in resp.content
+    assert "Next →".encode() not in resp.content
+
+
 # ── Patron self-service ───────────────────────────────────────────────────────
 
 
