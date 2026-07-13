@@ -1,0 +1,15 @@
+<article id="first-run-card" class="first-run-card">
+  <header><strong>Getting started</strong></header>
+  <ul class="first-run-steps">
+    {% for step in first_run.steps %}
+    <li data-done="{{ 'true' if step.done else 'false' }}">
+      <span class="first-run-mark" aria-hidden="true">{{ '✓' if step.done else '○' }}</span>
+      <a href="{{ step.url }}">{{ step.label }}</a>
+    </li>
+    {% endfor %}
+  </ul>
+  <form hx-post="/ui/first-run/dismiss" hx-target="#first-run-card" hx-swap="outerHTML">
+    <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+    <button type="submit" class="secondary">Dismiss</button>
+  </form>
+</article>

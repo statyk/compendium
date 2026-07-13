@@ -1495,3 +1495,10 @@ article > footer {
 .scan-modal-isbn { font-size: .8rem; color: #64748b; }
 .scan-modal label { display: block; margin-bottom: .5rem; font-size: .9rem; }
 .scan-modal-actions { display: flex; gap: .6rem; margin-top: .4rem; }
+
+/* ── First-run "Getting started" card ────────────────────────────────── */
+.first-run-card { max-width: 34rem; margin: 0 auto 1.5rem; }
+.first-run-steps { list-style: none; padding-left: 0; }
+.first-run-steps li { margin: 0.25rem 0; }
+.first-run-steps li[data-done="true"] a { text-decoration: line-through; opacity: 0.7; }
+.first-run-mark { display: inline-block; width: 1.25rem; }

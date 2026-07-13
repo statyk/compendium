@@ -4,6 +4,8 @@
 {% block title %}Catalog — {{ library_name() }}{% endblock %}
 {% block content %}
 
+{% if first_run %}{% include "_partials/first_run_card.html" %}{% endif %}
+
 {% if show_landing %}
 <div class="catalog-hero">
   {{ brand_glyph('4.5rem', label=library_name() ~ ' logo') }}

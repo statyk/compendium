@@ -32,8 +32,9 @@ from compendium.services.audit import AuditService
 from compendium.services.auth import has_permission
 from compendium.services.catalog import CatalogService
 from compendium.services.discovery import DiscoveryService
+from compendium.services.first_run import first_run_status
 from compendium.services.holds import HoldService
-from compendium.services.site_settings import get_site_setting
+from compendium.services.site_settings import get_site_setting, set_site_setting
 from compendium.web.csrf import check_csrf_form, ensure_csrf, set_csrf_cookie
 from compendium.services.calendar import CalendarService
 from compendium.web.deps import get_calendar_svc, get_web_user, require_web_permission, require_web_user
@@ -173,6 +174,7 @@ def catalog_search(
                 "recently_returned": [],
                 "featured_lists": [],
                 "show_landing": False,
+                "first_run": None,
             },
         )
 
@@ -209,6 +211,16 @@ def catalog_search(
         q=q, field=field, media=media_codes, decade=decade_int, avail=available_only,
         include_withdrawn=include_withdrawn_flag, order_by=order_by,
     )
+    first_run = None
+    if (
+        user is not None
+        and not has_filters
+        and has_permission(user.role.permissions, "system.manage")
+        and not get_site_setting("first_run_dismissed")
+    ):
+        status = first_run_status(session)
+        if not status.all_done:
+            first_run = status
     return _render(
         "catalog/search.html",
         request,
@@ -229,8 +241,24 @@ def catalog_search(
             "recently_returned": recently_returned,
             "featured_lists": featured_lists,
             "show_landing": not has_filters,
+            "first_run": first_run,
         },
     )
+
+
+@router.post("/first-run/dismiss")
+def first_run_dismiss(
+    request: Request,
+    csrf_token: str = Form(...),
+    user: AppUser = Depends(require_web_permission("system.manage")),
+    session: Session = Depends(get_session),
+):
+    check_csrf_form(request, csrf_token)
+    set_site_setting(
+        "first_run_dismissed", True, session=session,
+        updated_by_id=user.id, source="web",
+    )
+    return HTMLResponse("")
 
 
 @router.get("/catalog/search-results", response_class=HTMLResponse)

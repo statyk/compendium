@@ -166,3 +166,75 @@ def test_email_step_done_via_smtp_env(web_session, monkeypatch):
         assert {s.key: s.done for s in first_run_status(web_session).steps}["email"] is True
     finally:
         ss.invalidate_cache()
+
+
+# ── Card rendering ────────────────────────────────────────────────────────
+
+
+def test_card_shown_to_admin_on_fresh_landing(web_client, web_session, admin_user):
+    cookies = _login(web_client, "fradmin")
+    resp = web_client.get("/ui/catalog", cookies=cookies)
+    assert resp.status_code == 200
+    assert b"Getting started" in resp.content
+    assert b"Add your first item" in resp.content
+
+
+def test_card_hidden_from_librarian(web_client, web_session, librarian_user):
+    cookies = _login(web_client, "frlib")
+    resp = web_client.get("/ui/catalog", cookies=cookies)
+    assert b"Getting started" not in resp.content
+
+
+def test_card_hidden_from_guest(web_client, web_session):
+    resp = web_client.get("/ui/catalog")
+    assert b"Getting started" not in resp.content
+
+
+def test_card_hidden_when_searching(web_client, web_session, admin_user):
+    cookies = _login(web_client, "fradmin")
+    resp = web_client.get("/ui/catalog?q=dune", cookies=cookies)
+    assert b"Getting started" not in resp.content
+
+
+def test_card_marks_done_steps(web_client, web_session, admin_user):
+    _add_item(web_session)
+    cookies = _login(web_client, "fradmin")
+    resp = web_client.get("/ui/catalog", cookies=cookies)
+    assert b'data-done="true"' in resp.content
+
+
+def test_card_hidden_when_dismissed_via_env(web_client, web_session, admin_user, monkeypatch):
+    monkeypatch.setenv("COMPENDIUM_FIRST_RUN_DISMISSED", "true")
+    ss.invalidate_cache()
+    try:
+        cookies = _login(web_client, "fradmin")
+        resp = web_client.get("/ui/catalog", cookies=cookies)
+        assert b"Getting started" not in resp.content
+    finally:
+        ss.invalidate_cache()
+
+
+# ── Dismiss route ─────────────────────────────────────────────────────────
+
+
+def test_dismiss_writes_setting(web_client, web_session, admin_user):
+    cookies = _login(web_client, "fradmin")
+    raw, signed = _make_csrf_pair()
+    cookies[CSRF_COOKIE] = signed
+    resp = web_client.post(
+        "/ui/first-run/dismiss", data={"csrf_token": raw}, cookies=cookies
+    )
+    assert resp.status_code == 200
+    assert resp.content == b""
+    row = web_session.query(SiteSetting).filter_by(key="first_run_dismissed").one()
+    assert row.value == "true"
+
+
+def test_dismiss_forbidden_without_system_manage(web_client, web_session, librarian_user):
+    cookies = _login(web_client, "frlib")
+    raw, signed = _make_csrf_pair()
+    cookies[CSRF_COOKIE] = signed
+    resp = web_client.post(
+        "/ui/first-run/dismiss", data={"csrf_token": raw}, cookies=cookies
+    )
+    assert resp.status_code == 403
