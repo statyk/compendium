@@ -157,6 +157,12 @@ Run `compendium --help` for the full command tree, or `compendium <group> --help
 
 File-argument commands (`backup`, `restore`, `import`, `export`, `labels spine/pocket/barcode/patron-card/patron-sticker`) accept `-` for stdin/stdout. Status messages are routed to stderr in stdio mode so they don't corrupt binary output.
 
+Every list/show command accepts `--format table|json` (`table` is the default; the `reports` group also keeps `--format csv`). `table` renders a readable rich table; `json` prints stable, script-friendly JSON to stdout — snake_case keys, ISO-8601 UTC datetimes, integer cents — with any notices sent to stderr instead, so output stays pipeable. For example:
+
+```bash
+compendium loan list --format json | jq '.[].due_at'
+```
+
 ## Web UI
 
 Start the server with `compendium serve` and open your browser to `http://localhost:8000/ui/catalog`.

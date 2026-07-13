@@ -74,6 +74,25 @@ HTMX + Jinja2 templates. Routes mount at `/ui/*`. Uses the same FastAPI app inst
 
 Typer-based CLI. Always uses services directly (no remote-daemon mode in v1). Entry point: `compendium`.
 
+### CLI output conventions
+
+Every list/show command accepts `--format table|json` (the `reports` group additionally keeps `--format csv`, its long-standing option). All rendering — table and JSON alike — goes through a single shared helper module, `cli/output.py`; it is the **only** place in the codebase that renders a table or serializes CLI output to JSON. No command hand-rolls its own table or `json.dumps` call.
+
+`cli/output.py` provides:
+- `emit_list()` / `emit_detail()` — render a list of rows or a single record, dispatching on the validated `--format` value.
+- Tables render via `rich`, using one consistent style across every command: `box.SIMPLE` with a bold header row.
+- `format_option()` — the shared Typer option definition/validator for `--format`, so every command gets identical help text and rejects invalid values the same way.
+- `notice()` — writes operator-facing notices/warnings to stderr, never stdout.
+
+JSON contract (applies to every command's `--format json` output):
+- Written to stdout only; notices, warnings, and errors go to stderr, so `--format json` output is always safe to pipe (e.g. into `jq`) without interleaved text.
+- Keys are snake_case, matching the names in `api/schemas.py` where the same data is exposed over the API.
+- Datetimes are ISO-8601, normalized to UTC.
+- Monetary values are integer cents (matching the domain/DB representation), not floats.
+- Enum values are emitted as their plain string value.
+- No truncation — JSON output always contains full field values (e.g. note text, permission lists, audit details), even where the table view abbreviates for readability.
+- Exit codes are unchanged by `--format`; only the rendering differs.
+
 ### config/
 
 Pydantic `Settings` (reads from env vars with `COMPENDIUM_` prefix and `.env` file) and seed data applied at startup.

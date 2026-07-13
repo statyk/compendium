@@ -14,6 +14,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   pages of 50 (the previous 500-row cap is gone). `compendium patron list`
   gains `--search`, and the API gains `GET /patrons` with `q`/`status`/
   `limit`/`offset`.
+- All CLI list/show commands accept `--format table|json` (reports also keep
+  `csv`); tables render via rich with one consistent style, JSON is stable and
+  script-friendly (stdout only, notices on stderr).
 
 ## [1.5.1] - 2026-07-12
 
