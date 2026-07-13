@@ -3,7 +3,7 @@ from __future__ import annotations
 
 import typer
 
-from compendium.cli.io import is_stdio, open_input, open_output
+from compendium.cli.io import error, is_stdio, open_input, open_output
 from compendium.db.engine import get_settings
 from compendium.db.session import session_scope
 from compendium.services.backup import BackupError, BackupService
@@ -60,7 +60,7 @@ def backup_command(
                         include_secret_key=include_secret_key,
                     )
         except BackupError as exc:
-            typer.secho(f"Backup failed: {exc}", fg=typer.colors.RED, err=True)
+            error(f"Backup failed: {exc}")
             raise typer.Exit(1)
 
     total = sum(manifest["tables"].values())
@@ -111,7 +111,7 @@ def restore_command(
                         archive, force=force, include_covers=not no_covers
                     )
         except BackupError as exc:
-            typer.secho(f"Restore failed: {exc}", fg=typer.colors.RED, err=True)
+            error(f"Restore failed: {exc}")
             raise typer.Exit(1)
 
     total = sum(manifest["tables"].values())

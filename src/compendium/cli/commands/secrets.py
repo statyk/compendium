@@ -5,6 +5,7 @@ import getpass
 
 import typer
 
+from compendium.cli.io import error
 from compendium.cli.output import Column, emit_list, format_option
 from compendium.db.session import session_scope
 from compendium.repositories.sql.audit_log_repository import SqlAuditLogRepository
@@ -110,11 +111,11 @@ def set_secret(
     try:
         desc = get_descriptor(key)
     except Exception:
-        typer.echo(f"Error: unknown setting '{key}'.", err=True)
+        error(f"unknown setting '{key}'.")
         raise typer.Exit(1)
 
     if not desc.secret:
-        typer.echo(f"Error: '{key}' is not a secret setting. Use 'compendium settings set' instead.", err=True)
+        error(f"'{key}' is not a secret setting. Use 'compendium settings set' instead.")
         raise typer.Exit(1)
 
     if value is None:
@@ -148,7 +149,7 @@ def set_secret(
                 source="cli",
             )
     except (SecretKeyMissingError, SecretKeyMismatchError) as exc:
-        typer.echo(f"Error: {exc}", err=True)
+        error(exc)
         raise typer.Exit(1)
 
     if desc.env_overridden():
@@ -169,11 +170,11 @@ def clear_secret(
     try:
         desc = get_descriptor(key)
     except Exception:
-        typer.echo(f"Error: unknown setting '{key}'.", err=True)
+        error(f"unknown setting '{key}'.")
         raise typer.Exit(1)
 
     if not desc.secret:
-        typer.echo(f"Error: '{key}' is not a secret setting. Use 'compendium settings reset' instead.", err=True)
+        error(f"'{key}' is not a secret setting. Use 'compendium settings reset' instead.")
         raise typer.Exit(1)
 
     if not yes:

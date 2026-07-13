@@ -14,7 +14,7 @@ from pathlib import Path
 
 import typer
 
-from compendium.cli.io import is_stdio, open_input, open_output
+from compendium.cli.io import error, is_stdio, open_input, open_output
 from compendium.db.session import session_scope
 from compendium.domain.errors import DomainError
 from compendium.repositories.sql.audit_log_repository import SqlAuditLogRepository
@@ -186,6 +186,11 @@ def import_csv_cmd(
             "Summary block (counts, file, dry-run note) still prints."
         ),
     ),
+    fail_on_error: bool = typer.Option(
+        False,
+        "--fail-on-error",
+        help="Exit 1 if any row fails (default: exit 1 only when nothing was imported).",
+    ),
 ) -> None:
     """Import catalog rows from a CSV file."""
     options = _common_import_options(
@@ -206,7 +211,7 @@ def import_csv_cmd(
                     file, strict_encoding=strict_encoding
                 )
             except UnicodeDecodeError as exc:
-                typer.echo(f"Error: file is not valid UTF-8: {exc}", err=True)
+                error(f"file is not valid UTF-8: {exc}")
                 raise typer.Exit(1) from exc
             report = importer.import_csv(stream, options, filename=label)
             if replaced:
@@ -218,9 +223,11 @@ def import_csv_cmd(
             _print_report(report, quiet=quiet)
         importer.flush_metadata_cache()
     except DomainError as exc:
-        typer.echo(f"Error: {exc}", err=True)
+        error(exc)
         raise typer.Exit(1) from exc
     if report.errors and not dry_run:
+        if fail_on_error:
+            raise typer.Exit(1)
         raise typer.Exit(1 if report.created_works + report.added_copies == 0 else 0)
 
 
@@ -281,6 +288,11 @@ def import_librarything_cmd(
             "Summary block (counts, file, dry-run note) still prints."
         ),
     ),
+    fail_on_error: bool = typer.Option(
+        False,
+        "--fail-on-error",
+        help="Exit 1 if any row fails (default: exit 1 only when nothing was imported).",
+    ),
 ) -> None:
     """Import catalog rows from a LibraryThing TSV export."""
     options = _common_import_options(
@@ -301,7 +313,7 @@ def import_librarything_cmd(
                     file, strict_encoding=strict_encoding
                 )
             except UnicodeDecodeError as exc:
-                typer.echo(f"Error: file is not valid UTF-8: {exc}", err=True)
+                error(f"file is not valid UTF-8: {exc}")
                 raise typer.Exit(1) from exc
             report = importer.import_librarything(stream, options, filename=label)
             if replaced:
@@ -313,9 +325,11 @@ def import_librarything_cmd(
             _print_report(report, quiet=quiet)
         importer.flush_metadata_cache()
     except DomainError as exc:
-        typer.echo(f"Error: {exc}", err=True)
+        error(exc)
         raise typer.Exit(1) from exc
     if report.errors and not dry_run:
+        if fail_on_error:
+            raise typer.Exit(1)
         raise typer.Exit(1 if report.created_works + report.added_copies == 0 else 0)
 
 
@@ -376,6 +390,11 @@ def import_goodreads_cmd(
             "Summary block (counts, file, dry-run note) still prints."
         ),
     ),
+    fail_on_error: bool = typer.Option(
+        False,
+        "--fail-on-error",
+        help="Exit 1 if any row fails (default: exit 1 only when nothing was imported).",
+    ),
 ) -> None:
     """Import catalog rows from a GoodReads library export CSV."""
     options = _common_import_options(
@@ -396,7 +415,7 @@ def import_goodreads_cmd(
                     file, strict_encoding=strict_encoding
                 )
             except UnicodeDecodeError as exc:
-                typer.echo(f"Error: file is not valid UTF-8: {exc}", err=True)
+                error(f"file is not valid UTF-8: {exc}")
                 raise typer.Exit(1) from exc
             report = importer.import_goodreads(stream, options, filename=label)
             if replaced:
@@ -408,9 +427,11 @@ def import_goodreads_cmd(
             _print_report(report, quiet=quiet)
         importer.flush_metadata_cache()
     except DomainError as exc:
-        typer.echo(f"Error: {exc}", err=True)
+        error(exc)
         raise typer.Exit(1) from exc
     if report.errors and not dry_run:
+        if fail_on_error:
+            raise typer.Exit(1)
         raise typer.Exit(1 if report.created_works + report.added_copies == 0 else 0)
 
 
@@ -446,6 +467,11 @@ def import_marc_cmd(
             "Summary block (counts, file, dry-run note) still prints."
         ),
     ),
+    fail_on_error: bool = typer.Option(
+        False,
+        "--fail-on-error",
+        help="Exit 1 if any row fails (default: exit 1 only when nothing was imported).",
+    ),
 ) -> None:
     """Import catalog records from a MARC21 binary (.mrc) or MARCXML (.xml) file."""
     options = _common_import_options(
@@ -468,9 +494,11 @@ def import_marc_cmd(
             _print_report(report, quiet=quiet)
         importer.flush_metadata_cache()
     except DomainError as exc:
-        typer.echo(f"Error: {exc}", err=True)
+        error(exc)
         raise typer.Exit(1) from exc
     if report.errors and not dry_run:
+        if fail_on_error:
+            raise typer.Exit(1)
         raise typer.Exit(1 if report.created_works + report.added_copies == 0 else 0)
 
 

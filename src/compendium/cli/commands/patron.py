@@ -3,6 +3,7 @@ from datetime import date, datetime
 
 import typer
 
+from compendium.cli.io import error, truncation_notice
 from compendium.cli.output import Column, emit_list, format_option
 from compendium.db.session import session_scope
 from compendium.domain.errors import DomainError
@@ -84,7 +85,7 @@ def add_patron(
 ) -> None:
     """Register a new patron."""
     if link_user and create_user:
-        typer.echo("Error: --link-user and --create-user are mutually exclusive", err=True)
+        error("--link-user and --create-user are mutually exclusive")
         raise typer.Exit(1)
     try:
         with session_scope() as session:
@@ -109,7 +110,7 @@ def add_patron(
                 if link_user:
                     u = SqlUserRepository(session).get_by_username(link_user)
                     if u is None:
-                        typer.echo(f"Error: No user with username '{link_user}'", err=True)
+                        error(f"No user with username '{link_user}'")
                         raise typer.Exit(1)
                     user_id = u.id
                 patron = _patron_svc(session).create(
@@ -121,7 +122,7 @@ def add_patron(
                     expires_at=expires_at,
                 )
     except DomainError as exc:
-        typer.echo(f"Error: {exc}", err=True)
+        error(exc)
         raise typer.Exit(1) from exc
 
     typer.echo(f"\nPatron registered: {patron.full_name}")
@@ -154,13 +155,13 @@ def set_patron(
 
     card = resolve_identifier(card_arg, card_opt, label="card number")
     if category and clear_category:
-        typer.echo("Error: --category and --clear-category are mutually exclusive", err=True)
+        error("--category and --clear-category are mutually exclusive")
         raise typer.Exit(1)
     if expires and clear_expires:
-        typer.echo("Error: --expires and --clear-expires are mutually exclusive", err=True)
+        error("--expires and --clear-expires are mutually exclusive")
         raise typer.Exit(1)
     if not any([category, clear_category, expires, clear_expires]):
-        typer.echo("Error: nothing to update (pass --category/--expires/--clear-*)", err=True)
+        error("nothing to update (pass --category/--expires/--clear-*)")
         raise typer.Exit(1)
 
     from compendium.services.patrons import _MISSING
@@ -186,7 +187,7 @@ def set_patron(
             if patron.expires_at is not None:
                 typer.echo(f"  Expires     : {patron.expires_at.isoformat()}")
     except DomainError as exc:
-        typer.echo(f"Error: {exc}", err=True)
+        error(exc)
         raise typer.Exit(1) from exc
 
 
@@ -204,7 +205,7 @@ def deactivate_patron(
             patron = _patron_svc(session).deactivate(card)
             typer.echo(f"\nDeactivated: {patron.full_name} ({patron.library_card_number})")
     except DomainError as exc:
-        typer.echo(f"Error: {exc}", err=True)
+        error(exc)
         raise typer.Exit(1) from exc
 
 
@@ -222,7 +223,7 @@ def reactivate_patron(
             patron = _patron_svc(session).reactivate(card)
             typer.echo(f"\nReactivated: {patron.full_name} ({patron.library_card_number})")
     except DomainError as exc:
-        typer.echo(f"Error: {exc}", err=True)
+        error(exc)
         raise typer.Exit(1) from exc
 
 
@@ -240,12 +241,12 @@ def link_user_cmd(
         with session_scope() as session:
             u = SqlUserRepository(session).get_by_username(username)
             if u is None:
-                typer.echo(f"Error: No user with username '{username}'", err=True)
+                error(f"No user with username '{username}'")
                 raise typer.Exit(1)
             patron = _patron_svc(session).link_user(card, u.id)
             typer.echo(f"\nLinked user '{username}' to patron {patron.full_name} ({card})")
     except DomainError as exc:
-        typer.echo(f"Error: {exc}", err=True)
+        error(exc)
         raise typer.Exit(1) from exc
 
 
@@ -263,7 +264,7 @@ def unlink_user_cmd(
             patron = _patron_svc(session).unlink_user(card)
             typer.echo(f"\nUnlinked user from patron {patron.full_name} ({card})")
     except DomainError as exc:
-        typer.echo(f"Error: {exc}", err=True)
+        error(exc)
         raise typer.Exit(1) from exc
 
 
@@ -289,13 +290,16 @@ def create_user_for_patron(
             )
             typer.echo(f"\nCreated login '{username}' and linked to patron {patron.full_name} ({card})")
     except DomainError as exc:
-        typer.echo(f"Error: {exc}", err=True)
+        error(exc)
         raise typer.Exit(1) from exc
 
 
 @app.command("list")
 def list_patrons(
     limit: int = typer.Option(20, "--limit"),
+    offset: int = typer.Option(
+        0, "--offset", help="Skip this many rows (use with --limit to page)."
+    ),
     include_inactive: bool = typer.Option(
         False, "--include-inactive", help="Include inactive patrons"
     ),
@@ -308,6 +312,7 @@ def list_patrons(
     with session_scope() as session:
         patrons = SqlPatronRepository(session).list(
             limit=limit,
+            offset=offset,
             status="all" if include_inactive else "active",
             query=search,
         )
@@ -326,6 +331,7 @@ def list_patrons(
             format,
             empty="No patrons match." if search else "No patrons registered.",
         )
+        truncation_notice(len(patrons), limit)
 
 
 from compendium.cli.io import register_alias  # noqa: E402

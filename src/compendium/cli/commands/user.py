@@ -5,6 +5,7 @@ import os
 
 import typer
 
+from compendium.cli.io import error, truncation_notice
 from compendium.cli.output import Column, emit_list, format_option
 from compendium.db.engine import get_settings
 from compendium.db.session import session_scope
@@ -89,10 +90,10 @@ def add_user(
 ) -> None:
     """Create a new user account."""
     if create_patron and link_patron:
-        typer.echo("Error: --create-patron and --link-patron are mutually exclusive", err=True)
+        error("--create-patron and --link-patron are mutually exclusive")
         raise typer.Exit(1)
     if (create_patron or link_patron) and role != "Patron":
-        typer.echo("Error: --create-patron and --link-patron require --role Patron", err=True)
+        error("--create-patron and --link-patron require --role Patron")
         raise typer.Exit(1)
     try:
         with session_scope() as session:
@@ -100,21 +101,20 @@ def add_user(
             if actor_username:
                 actor = SqlUserRepository(session).get_by_username(actor_username)
                 if actor is None:
-                    typer.echo(f"Error: COMPENDIUM_ACTOR_USERNAME '{actor_username}' not found", err=True)
+                    error(f"COMPENDIUM_ACTOR_USERNAME '{actor_username}' not found")
                     raise typer.Exit(1)
                 all_roles = SqlRoleRepository(session).list()
                 allowed_names = {r.name for r in assignable_roles(actor.role.permissions, all_roles)}
                 if role not in allowed_names:
-                    typer.echo(f"Error: Your account cannot assign the '{role}' role.", err=True)
+                    error(f"Your account cannot assign the '{role}' role.")
                     raise typer.Exit(1)
             elif _administrator_exists(session):
                 if not allow_bootstrap:
-                    typer.echo(
-                        "Error: An Administrator already exists. Set COMPENDIUM_ACTOR_USERNAME "
+                    error(
+                        "An Administrator already exists. Set COMPENDIUM_ACTOR_USERNAME "
                         "to an existing user whose permissions cover the requested role, or pass "
                         "--allow-bootstrap if you genuinely need to re-bootstrap "
-                        "(this will be audit-logged).",
-                        err=True,
+                        "(this will be audit-logged)."
                     )
                     raise typer.Exit(1)
                 _log_bootstrap_override(session, username, role)
@@ -136,27 +136,26 @@ def add_user(
             elif link_patron:
                 typer.echo(f"  Linked to patron card: {link_patron}")
     except DomainError as exc:
-        typer.echo(f"Error: {exc}", err=True)
+        error(exc)
         raise typer.Exit(1) from exc
 
 
 def _change_role(session, username: str, role: str) -> None:
     actor_username = os.environ.get("COMPENDIUM_ACTOR_USERNAME")
     if not actor_username:
-        typer.echo(
-            "Error: Set COMPENDIUM_ACTOR_USERNAME to an existing user whose "
-            "permissions cover the requested role assignment.",
-            err=True,
+        error(
+            "Set COMPENDIUM_ACTOR_USERNAME to an existing user whose "
+            "permissions cover the requested role assignment."
         )
         raise typer.Exit(1)
     actor = SqlUserRepository(session).get_by_username(actor_username)
     if actor is None:
-        typer.echo(f"Error: COMPENDIUM_ACTOR_USERNAME '{actor_username}' not found", err=True)
+        error(f"COMPENDIUM_ACTOR_USERNAME '{actor_username}' not found")
         raise typer.Exit(1)
     all_roles = SqlRoleRepository(session).list()
     allowed_names = {r.name for r in assignable_roles(actor.role.permissions, all_roles)}
     if role not in allowed_names:
-        typer.echo(f"Error: Your account cannot assign the '{role}' role.", err=True)
+        error(f"Your account cannot assign the '{role}' role.")
         raise typer.Exit(1)
     user = _auth_svc(session).update_role(username, role)
     typer.echo(f"\nUser '{user.username}' role set to '{user.role.name}'.")
@@ -183,7 +182,7 @@ def edit_user(
     ),
 ) -> None:
     """Edit a user account's role and/or password."""
-    from compendium.cli.io import error, resolve_identifier
+    from compendium.cli.io import resolve_identifier
 
     username = resolve_identifier(username_arg, username_opt, label="username")
     if role is None and password is None and not prompt_password:
@@ -212,7 +211,7 @@ def set_user_role(
         with session_scope() as session:
             _change_role(session, username, role)
     except DomainError as exc:
-        typer.echo(f"Error: {exc}", err=True)
+        error(exc)
         raise typer.Exit(1) from exc
 
 
@@ -233,7 +232,7 @@ def set_user_password(
         with session_scope() as session:
             _change_password(session, username, password)
     except DomainError as exc:
-        typer.echo(f"Error: {exc}", err=True)
+        error(exc)
         raise typer.Exit(1) from exc
 
 
@@ -258,6 +257,7 @@ def list_users(
             format,
             empty="No users found.",
         )
+        truncation_notice(len(users), limit)
 
 
 @app.command("deactivate")
@@ -274,7 +274,7 @@ def deactivate_user(
             user = _auth_svc(session).deactivate_user(username)
             typer.echo(f"\nDeactivated user '{user.username}'.")
     except DomainError as exc:
-        typer.echo(f"Error: {exc}", err=True)
+        error(exc)
         raise typer.Exit(1) from exc
 
 
@@ -292,7 +292,7 @@ def reactivate_user(
             user = _auth_svc(session).reactivate_user(username)
             typer.echo(f"\nReactivated user '{user.username}'.")
     except DomainError as exc:
-        typer.echo(f"Error: {exc}", err=True)
+        error(exc)
         raise typer.Exit(1) from exc
 
 
@@ -310,12 +310,12 @@ def link_patron_cmd(
         with session_scope() as session:
             target = SqlUserRepository(session).get_by_username(username)
             if target is None:
-                typer.echo(f"Error: No user with username '{username}'", err=True)
+                error(f"No user with username '{username}'")
                 raise typer.Exit(1)
             patron = _patron_svc(session).link_user(card, target.id)
             typer.echo(f"\nLinked patron {patron.full_name} ({card}) to user '{username}'.")
     except DomainError as exc:
-        typer.echo(f"Error: {exc}", err=True)
+        error(exc)
         raise typer.Exit(1) from exc
 
 
@@ -332,15 +332,15 @@ def unlink_patron_cmd(
         with session_scope() as session:
             target = SqlUserRepository(session).get_by_username(username)
             if target is None:
-                typer.echo(f"Error: No user with username '{username}'", err=True)
+                error(f"No user with username '{username}'")
                 raise typer.Exit(1)
             from compendium.repositories.sql.patron_repository import SqlPatronRepository as _PR
             patron = _PR(session).get_by_user_id(target.id)
             if patron is None:
-                typer.echo(f"Error: User '{username}' has no linked patron record.", err=True)
+                error(f"User '{username}' has no linked patron record.")
                 raise typer.Exit(1)
             _patron_svc(session).unlink_user(patron.library_card_number)
             typer.echo(f"\nUnlinked patron from user '{username}'.")
     except DomainError as exc:
-        typer.echo(f"Error: {exc}", err=True)
+        error(exc)
         raise typer.Exit(1) from exc

@@ -4,6 +4,7 @@ from typing import Optional
 
 import typer
 
+from compendium.cli.io import error
 from compendium.cli.output import Column, emit_detail, emit_list, format_option
 from compendium.db.engine import get_settings
 from compendium.db.session import session_scope
@@ -69,9 +70,7 @@ def _pick_title_candidate(mt_code: str, query: str) -> str | None:
     network/config errors.
     """
     if mt_code not in _TITLE_SEARCH_SOURCES:
-        typer.echo(
-            f"Error: --title not supported for media type '{mt_code}'.", err=True
-        )
+        error(f"--title not supported for media type '{mt_code}'.")
         raise typer.Exit(1)
     source_label = _TITLE_SEARCH_SOURCES[mt_code][0]
 
@@ -79,7 +78,7 @@ def _pick_title_candidate(mt_code: str, query: str) -> str | None:
     try:
         candidates = _title_search(mt_code, query)
     except ExternalLookupError as exc:
-        typer.echo(f"Lookup failed: {exc}", err=True)
+        error(f"Lookup failed: {exc}")
         raise typer.Exit(1) from exc
 
     if not candidates:
@@ -179,10 +178,7 @@ def add_item(
 
     if title is not None:
         if not media_type:
-            typer.echo(
-                "Error: --media-type is required with --title (e.g. book, vinyl, cd, dvd, bluray, vhs).",
-                err=True,
-            )
+            error("--media-type is required with --title (e.g. book, vinyl, cd, dvd, bluray, vhs).")
             raise typer.Exit(1)
         mt_code = media_type.strip()
         picked = _pick_title_candidate(mt_code, title.strip())
@@ -198,10 +194,7 @@ def add_item(
         typer.echo(f"Looking up ISBN {isbn} on {_src}…")
     elif upc is not None:
         if not media_type:
-            typer.echo(
-                "Error: --media-type is required with --upc (e.g. vinyl, cd).",
-                err=True,
-            )
+            error("--media-type is required with --upc (e.g. vinyl, cd).")
             raise typer.Exit(1)
         kind, value, mt_code = "upc", upc.strip(), media_type.strip()
         typer.echo(f"Looking up UPC {upc} on MusicBrainz…")
@@ -211,17 +204,12 @@ def add_item(
         typer.echo(f"Looking up MusicBrainz release {mbid}…")
     elif tmdb_id is not None:
         if not media_type:
-            typer.echo(
-                "Error: --media-type is required with --tmdb-id (e.g. dvd, bluray, vhs).",
-                err=True,
-            )
+            error("--media-type is required with --tmdb-id (e.g. dvd, bluray, vhs).")
             raise typer.Exit(1)
         kind, value, mt_code = "tmdb_id", tmdb_id.strip(), media_type.strip()
         typer.echo(f"Looking up TMDb ID {tmdb_id}…")
     else:
-        typer.echo(
-            "Error: provide --isbn, --upc, --mbid, --tmdb-id, or --title.", err=True
-        )
+        error("provide --isbn, --upc, --mbid, --tmdb-id, or --title.")
         raise typer.Exit(1)
 
     try:
@@ -230,10 +218,10 @@ def add_item(
                 mt_code, kind, value, location=location
             )
     except ExternalLookupError as exc:
-        typer.echo(f"Lookup failed: {exc}", err=True)
+        error(f"Lookup failed: {exc}")
         raise typer.Exit(1) from exc
     except DomainError as exc:
-        typer.echo(f"Error: {exc}", err=True)
+        error(exc)
         raise typer.Exit(1) from exc
 
     creators = ", ".join(
@@ -291,7 +279,7 @@ def add_manual_item(
             if call_number and call_number.strip():
                 item.call_number = call_number.strip()
     except DomainError as exc:
-        typer.echo(f"Error: {exc}", err=True)
+        error(exc)
         raise typer.Exit(1) from exc
 
     creators = ", ".join(wc.creator.display_name for wc in work.creators)
@@ -355,9 +343,8 @@ def edit_item(
     if notes is not None:
         kwargs["notes"] = notes
     if not kwargs and loanable is None:
-        typer.echo(
-            "Nothing to update. Pass one of --location/--call-number/--condition/--notes/--loanable/--no-loanable.",
-            err=True,
+        error(
+            "Nothing to update. Pass one of --location/--call-number/--condition/--notes/--loanable/--no-loanable."
         )
         raise typer.Exit(1)
 
@@ -386,7 +373,7 @@ def edit_item(
                 if item.loan_restriction_note:
                     typer.echo(f"  Note      : {item.loan_restriction_note}")
     except DomainError as exc:
-        typer.echo(f"Error: {exc}", err=True)
+        error(exc)
         raise typer.Exit(1) from exc
 
 
@@ -401,7 +388,7 @@ def show_item(
             repo = SqlItemRepository(session)
             item = repo.get_by_barcode(barcode)
             if item is None:
-                typer.echo(f"No item with barcode '{barcode}'.", err=True)
+                error(f"No item with barcode '{barcode}'.")
                 raise typer.Exit(1)
 
             work = item.work
@@ -426,7 +413,7 @@ def show_item(
                 {k: v for k, v in obj.items() if v is not None}, format, title=title
             )
     except DomainError as exc:
-        typer.echo(f"Error: {exc}", err=True)
+        error(exc)
         raise typer.Exit(1) from exc
 
 
@@ -446,7 +433,7 @@ def withdraw_item(
             typer.echo(f"  Barcode : {item.barcode}")
             typer.echo(f"  Status  : {item.status}")
     except DomainError as exc:
-        typer.echo(f"Error: {exc}", err=True)
+        error(exc)
         raise typer.Exit(1) from exc
 
 
@@ -472,10 +459,10 @@ def set_loanable_cmd(
       compendium item set-loanable --barcode B123 --yes
     """
     if yes and no:
-        typer.echo("Error: pass only one of --yes/--no.", err=True)
+        error("pass only one of --yes/--no.")
         raise typer.Exit(1)
     if not yes and not no:
-        typer.echo("Error: pass --yes or --no.", err=True)
+        error("pass --yes or --no.")
         raise typer.Exit(1)
     is_loanable = bool(yes)
 
@@ -495,7 +482,7 @@ def set_loanable_cmd(
             if item.loan_restriction_note:
                 typer.echo(f"  Note     : {item.loan_restriction_note}")
     except DomainError as exc:
-        typer.echo(f"Error: {exc}", err=True)
+        error(exc)
         raise typer.Exit(1) from exc
 
 
@@ -525,7 +512,7 @@ def declare_lost(
                 f"(replacement cost {format_currency(replacement_cost_cents or 0)})."
             )
     except DomainError as exc:
-        typer.echo(f"Error: {exc}", err=True)
+        error(exc)
         raise typer.Exit(1) from exc
 
 
@@ -547,7 +534,7 @@ def mark_damaged(
             )
             typer.echo(f"Item {item.barcode} marked damaged ({format_currency(amount_cents)}).")
     except DomainError as exc:
-        typer.echo(f"Error: {exc}", err=True)
+        error(exc)
         raise typer.Exit(1) from exc
 
 
@@ -566,7 +553,7 @@ def clear_damage(
             item = _circulation(session).clear_damage(barcode)
             typer.echo(f"Item {item.barcode} cleared, now {item.status}.")
     except DomainError as exc:
-        typer.echo(f"Error: {exc}", err=True)
+        error(exc)
         raise typer.Exit(1) from exc
 
 
@@ -585,7 +572,7 @@ def clear_lost(
             item = _circulation(session).clear_lost(barcode)
             typer.echo(f"Item {item.barcode} recovered, now {item.status}.")
     except DomainError as exc:
-        typer.echo(f"Error: {exc}", err=True)
+        error(exc)
         raise typer.Exit(1) from exc
 
 
@@ -632,7 +619,7 @@ def note_add(
             _note_svc(session).add_note(barcode, kind=kind, note=note, event_date=event_date)
         typer.echo(f"Note added to item {barcode}.")
     except DomainError as e:
-        typer.echo(f"Error: {e}", err=True)
+        error(e)
         raise typer.Exit(1)
 
 
@@ -655,7 +642,7 @@ def note_list(
         with session_scope() as session:
             notes = _note_svc(session).list_for_item(barcode)
     except DomainError as e:
-        typer.echo(f"Error: {e}", err=True)
+        error(e)
         raise typer.Exit(1)
 
     rows = [
@@ -687,7 +674,7 @@ def note_delete(
             _note_svc(session).delete_note(barcode, note_id)
         typer.echo(f"Note {note_id} deleted.")
     except DomainError as e:
-        typer.echo(f"Error: {e}", err=True)
+        error(e)
         raise typer.Exit(1)
 
 

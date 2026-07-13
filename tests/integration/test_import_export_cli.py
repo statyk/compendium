@@ -378,3 +378,29 @@ def test_cli_export_marcxml(session, tmp_path):
     xml = fout.read_text(encoding="utf-8")
     assert xml.startswith('<?xml')
     assert "Dune" in xml
+
+
+# ── --fail-on-error on import commands ──────────────────────────────────────
+
+_PARTIAL_FAILURE_CSV = b"""media_type,title,authors,isbn
+book,Dune,Frank Herbert,9780441013593
+book,BadRow,Someone,bad-isbn-1
+"""
+
+
+def test_import_csv_partial_failure_still_exits_0_by_default(session, tmp_path):
+    """One good row + one bad row, no --fail-on-error: exit 0 (something imported)."""
+    f = tmp_path / "partial.csv"
+    f.write_bytes(_PARTIAL_FAILURE_CSV)
+    result = _run(session, import_app, ["csv", str(f)])
+    assert result.exit_code == 0, result.output
+    assert "errors      : 1" in result.output
+
+
+def test_import_csv_fail_on_error_exits_1(session, tmp_path):
+    """Same partial-failure CSV, with --fail-on-error: exit 1 even though some rows imported."""
+    f = tmp_path / "partial.csv"
+    f.write_bytes(_PARTIAL_FAILURE_CSV)
+    result = _run(session, import_app, ["csv", str(f), "--fail-on-error"])
+    assert result.exit_code == 1, result.output
+    assert "errors      : 1" in result.output

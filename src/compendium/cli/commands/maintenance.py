@@ -3,6 +3,7 @@ from datetime import datetime, timedelta, timezone
 
 import typer
 
+from compendium.cli.io import error
 from compendium.services.site_settings import get_site_setting
 from compendium.db.engine import get_settings
 from compendium.db.session import session_scope
@@ -160,13 +161,10 @@ def prune_audit_log(
     """
     days = older_than_days if older_than_days is not None else get_site_setting("audit_retention_days")
     if days is None:
-        typer.echo(
-            "Error: pass --older-than-days N or set COMPENDIUM_AUDIT_RETENTION_DAYS.",
-            err=True,
-        )
+        error("pass --older-than-days N or set COMPENDIUM_AUDIT_RETENTION_DAYS.")
         raise typer.Exit(1)
     if days < 1:
-        typer.echo("Error: retention window must be at least 1 day.", err=True)
+        error("retention window must be at least 1 day.")
         raise typer.Exit(1)
 
     cutoff = datetime.now(timezone.utc) - timedelta(days=days)
@@ -223,7 +221,7 @@ def prune_scan_pairings(
     )
 
     if older_than_days < 1:
-        typer.echo("Error: --older-than-days must be at least 1.", err=True)
+        error("--older-than-days must be at least 1.")
         raise typer.Exit(1)
 
     cutoff = datetime.now(timezone.utc) - timedelta(days=older_than_days)
@@ -278,7 +276,7 @@ def prune_failed_logins(
     Suggested cron cadence: weekly.
     """
     if older_than_days < 1:
-        typer.echo("Error: --older-than-days must be at least 1.", err=True)
+        error("--older-than-days must be at least 1.")
         raise typer.Exit(1)
 
     cutoff = datetime.now(timezone.utc) - timedelta(days=older_than_days)
@@ -428,12 +426,12 @@ def queue_overdue_notices_cmd(
                 {int(x.strip()) for x in tiers.split(",") if x.strip()}
             )
         except ValueError as exc:
-            typer.echo(f"Error: tiers must be integers: {exc}", err=True)
+            error(f"tiers must be integers: {exc}")
             raise typer.Exit(1) from exc
     else:
         tier_list = sorted(set(get_site_setting("overdue_tiers")))
     if not tier_list:
-        typer.echo("Error: at least one tier is required.", err=True)
+        error("at least one tier is required.")
         raise typer.Exit(1)
     with session_scope() as session:
         svc = _make_notification_svc(session)
@@ -470,14 +468,13 @@ def prune_notifications_cmd(
     if days is None:
         days = get_site_setting("notification_retention_days")
     if days is None and status is None:
-        typer.echo(
-            "Error: pass --older-than-days N, set COMPENDIUM_NOTIFICATION_RETENTION_DAYS, "
-            "or pass --status STATUS.",
-            err=True,
+        error(
+            "pass --older-than-days N, set COMPENDIUM_NOTIFICATION_RETENTION_DAYS, "
+            "or pass --status STATUS."
         )
         raise typer.Exit(1)
     if days is not None and days < 1:
-        typer.echo("Error: retention window must be at least 1 day.", err=True)
+        error("retention window must be at least 1 day.")
         raise typer.Exit(1)
     cutoff = (
         datetime.now(timezone.utc) - timedelta(days=days) if days is not None else None
@@ -493,7 +490,7 @@ def prune_notifications_cmd(
             svc = _make_notification_svc(session)
             count = svc.prune(older_than=cutoff, status=status, dry_run=dry_run)
     except Exception as exc:
-        typer.echo(f"Error: {exc}", err=True)
+        error(exc)
         raise typer.Exit(1) from exc
     if count == 0 and quiet:
         return
@@ -692,10 +689,7 @@ def purge_trash_cmd(
     if days is None:
         days = get_site_setting("trash_retention_days")
     if days is not None and days < 0:
-        typer.echo(
-            "Error: --older-than-days must be at least 1 (or 0 to disable via the setting).",
-            err=True,
-        )
+        error("--older-than-days must be at least 1 (or 0 to disable via the setting).")
         raise typer.Exit(1)
     if not days:
         if not quiet:
@@ -725,7 +719,7 @@ def prune_cover_cache(
 ) -> None:
     """Evict oldest cover-cache files until total size ≤ --max-mb."""
     if max_mb < 1:
-        typer.echo("Error: --max-mb must be at least 1.", err=True)
+        error("--max-mb must be at least 1.")
         raise typer.Exit(1)
     from compendium.services.covers import prune
 

@@ -6,6 +6,7 @@ from typing import Optional
 
 import typer
 
+from compendium.cli.io import error
 from compendium.services.scaffold import ScaffoldError, ScaffoldResult, scaffold
 
 
@@ -63,7 +64,7 @@ def init_command(
             tls_key=tls_key,
         )
     except ScaffoldError as exc:
-        typer.secho(f"Error: {exc}", fg=typer.colors.RED, err=True)
+        error(exc)
         raise typer.Exit(1)
 
     _print_summary(result)

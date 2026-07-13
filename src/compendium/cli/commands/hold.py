@@ -3,6 +3,7 @@ from datetime import datetime
 
 import typer
 
+from compendium.cli.io import error, truncation_notice
 from compendium.cli.output import Column, emit_list, format_option
 from compendium.services.site_settings import get_site_setting
 from compendium.db.engine import get_settings
@@ -83,7 +84,7 @@ def place(
             if hold.expires_at:
                 typer.echo(f"  Expires : {hold.expires_at.strftime('%Y-%m-%d')}")
     except DomainError as exc:
-        typer.echo(f"Error: {exc}", err=True)
+        error(exc)
         raise typer.Exit(1) from exc
 
 
@@ -97,12 +98,12 @@ def cancel(
         with session_scope() as session:
             patron = SqlPatronRepository(session).get_by_card_number(card)
             if patron is None:
-                typer.echo(f"No patron with card '{card}'.", err=True)
+                error(f"No patron with card '{card}'.")
                 raise typer.Exit(1)
             hold = _holds(session).cancel(hold_id, patron.id)
             typer.echo(f"Hold {hold.id} cancelled.")
     except DomainError as exc:
-        typer.echo(f"Error: {exc}", err=True)
+        error(exc)
         raise typer.Exit(1) from exc
 
 
@@ -125,7 +126,7 @@ def list_holds(
         if card is not None:
             patron = SqlPatronRepository(session).get_by_card_number(card)
             if patron is None:
-                typer.echo(f"No patron with card '{card}'.", err=True)
+                error(f"No patron with card '{card}'.")
                 raise typer.Exit(1)
             holds = SqlHoldRepository(session).get_active_for_patron(patron.id)
             empty = f"{patron.full_name} has no active holds."
@@ -134,7 +135,7 @@ def list_holds(
             if branch is not None:
                 b = SqlBranchRepository(session).get_by_code(branch)
                 if b is None:
-                    typer.echo(f"No branch with code '{branch}'.", err=True)
+                    error(f"No branch with code '{branch}'.")
                     raise typer.Exit(1)
                 branch_id = b.id
             holds = SqlHoldRepository(session).list_active(
@@ -146,6 +147,7 @@ def list_holds(
             )
             empty = "No matching holds."
         emit_list([_hold_row(h) for h in holds], _HOLD_COLUMNS, format, empty=empty)
+        truncation_notice(len(holds), limit)
 
 
 @app.command("queue")
@@ -171,14 +173,14 @@ def suspend_hold(
     try:
         parsed = datetime.strptime(until, "%Y-%m-%d").date()
     except ValueError:
-        typer.echo("Error: --until must be YYYY-MM-DD", err=True)
+        error("--until must be YYYY-MM-DD")
         raise typer.Exit(1)
     try:
         with session_scope() as session:
             hold = _holds(session).suspend(hold_id, until=parsed, reason=reason)
             typer.echo(f"Hold #{hold.id} suspended until {parsed.isoformat()}.")
     except DomainError as exc:
-        typer.echo(f"Error: {exc}", err=True)
+        error(exc)
         raise typer.Exit(1) from exc
 
 
@@ -197,7 +199,7 @@ def resume_hold(
             else:
                 typer.echo(f"Hold #{hold.id} resumed; back in the queue.")
     except DomainError as exc:
-        typer.echo(f"Error: {exc}", err=True)
+        error(exc)
         raise typer.Exit(1) from exc
 
 

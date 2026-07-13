@@ -8,7 +8,7 @@ from typing import Optional
 
 import typer
 
-from compendium.cli.io import is_stdio, open_output
+from compendium.cli.io import error, is_stdio, open_output
 from compendium.cli.output import Column, emit_list, format_option
 from compendium.db.session import session_scope
 from compendium.services.labels import (
@@ -175,7 +175,7 @@ def _run_item_kind(
     fmt = ITEM_KIND_TO_FORMAT[kind]
     template_key = template or KIND_DEFAULT_TEMPLATE.get(kind, "avery-5160")
     if template_key not in TEMPLATES:
-        typer.echo(f"Error: unknown template '{template_key}'. Run 'labels templates' to list.", err=True)
+        error(f"unknown template '{template_key}'. Run 'labels templates' to list.")
         raise typer.Exit(1)
 
     fields = _resolve_fields(fmt, show, hide, no_defaults)
@@ -190,7 +190,7 @@ def _run_item_kind(
             since=since,
         )
     if not rows:
-        typer.echo("No items matched the filter.", err=True)
+        error("No items matched the filter.")
         raise typer.Exit(1)
 
     pdf = generate_item_labels(
@@ -224,7 +224,7 @@ def _run_patron_kind(
     fmt = PATRON_KIND_TO_FORMAT[kind]
     template_key = template or KIND_DEFAULT_TEMPLATE.get(kind, "avery-5871")
     if template_key not in TEMPLATES:
-        typer.echo(f"Error: unknown template '{template_key}'. Run 'labels templates' to list.", err=True)
+        error(f"unknown template '{template_key}'. Run 'labels templates' to list.")
         raise typer.Exit(1)
 
     fields = _resolve_fields(fmt, show, hide, no_defaults)
@@ -238,7 +238,7 @@ def _run_patron_kind(
             active_only=active_only,
         )
     if not rows:
-        typer.echo("No patrons matched the filter.", err=True)
+        error("No patrons matched the filter.")
         raise typer.Exit(1)
 
     try:
@@ -251,7 +251,7 @@ def _run_patron_kind(
             fields=fields,
         )
     except ValueError as exc:
-        typer.echo(f"Error: {exc}", err=True)
+        error(exc)
         raise typer.Exit(1) from exc
 
     to_stdout = is_stdio(output)

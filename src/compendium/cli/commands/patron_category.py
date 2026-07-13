@@ -6,6 +6,7 @@ import getpass
 
 import typer
 
+from compendium.cli.io import error
 from compendium.cli.output import Column, emit_list, format_option
 from compendium.db.session import session_scope
 from compendium.domain.errors import DomainError
@@ -59,7 +60,7 @@ def create_category(
             cat = _svc(session).create(code, name, is_default=is_default)
             typer.echo(f"Created category '{cat.code}' ({cat.display_name})")
     except DomainError as exc:
-        typer.echo(f"Error: {exc}", err=True)
+        error(exc)
         raise typer.Exit(1) from exc
 
 
@@ -78,7 +79,7 @@ def update_category(
         with session_scope() as session:
             cat = SqlPatronCategoryRepository(session).get_by_code(code.lower())
             if cat is None:
-                typer.echo(f"Error: No patron category with code '{code}'", err=True)
+                error(f"No patron category with code '{code}'")
                 raise typer.Exit(1)
             _svc(session).update(
                 cat.id,
@@ -87,7 +88,7 @@ def update_category(
             )
             typer.echo(f"Updated category '{code}'")
     except DomainError as exc:
-        typer.echo(f"Error: {exc}", err=True)
+        error(exc)
         raise typer.Exit(1) from exc
 
 
@@ -107,12 +108,12 @@ def delete_category(
         with session_scope() as session:
             cat = SqlPatronCategoryRepository(session).get_by_code(code.lower())
             if cat is None:
-                typer.echo(f"Error: No patron category with code '{code}'", err=True)
+                error(f"No patron category with code '{code}'")
                 raise typer.Exit(1)
             _svc(session).delete(cat.id)
             typer.echo(f"Deleted category '{code}'")
     except DomainError as exc:
-        typer.echo(f"Error: {exc}", err=True)
+        error(exc)
         raise typer.Exit(1) from exc
 
 

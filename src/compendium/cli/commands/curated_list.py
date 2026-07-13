@@ -7,6 +7,7 @@ import os
 import typer
 from sqlalchemy.orm import Session
 
+from compendium.cli.io import error
 from compendium.cli.output import Column, emit_detail, emit_list, format_option
 from compendium.db.session import session_scope
 from compendium.domain.errors import DomainError
@@ -36,16 +37,15 @@ def _resolve_actor(session: Session) -> AppUser | None:
     username = os.environ.get("COMPENDIUM_ACTOR_USERNAME")
     if not username:
         if SqlUserRepository(session).list(limit=1):
-            typer.echo(
-                "Error: Users exist in this database. Set COMPENDIUM_ACTOR_USERNAME to "
-                "an active user whose permissions cover the curated list operations you want to perform.",
-                err=True,
+            error(
+                "Users exist in this database. Set COMPENDIUM_ACTOR_USERNAME to "
+                "an active user whose permissions cover the curated list operations you want to perform."
             )
             raise typer.Exit(1)
         return None
     actor = SqlUserRepository(session).get_by_username(username)
     if actor is None:
-        typer.echo(f"Error: COMPENDIUM_ACTOR_USERNAME '{username}' not found.", err=True)
+        error(f"COMPENDIUM_ACTOR_USERNAME '{username}' not found.")
         raise typer.Exit(1)
     return actor
 
@@ -71,7 +71,7 @@ def create_list(
             )
         typer.echo(f"Created curated list '{cl.name}' (slug: {cl.slug})")
     except DomainError as e:
-        typer.echo(f"Error: {e}", err=True)
+        error(e)
         raise typer.Exit(1)
 
 
@@ -162,7 +162,7 @@ def show_list(
                         f"  {entry.display_order}. {title} ({entry.work_id}){annotation_part}"
                     )
     except DomainError as e:
-        typer.echo(f"Error: {e}", err=True)
+        error(e)
         raise typer.Exit(1)
 
 
@@ -198,17 +198,16 @@ def edit_list(
                 kwargs["slug"] = new_slug
 
             if not kwargs:
-                typer.echo(
-                    "Error: provide at least one option to update "
-                    "(--name, --description, --public/--private, --featured/--not-featured, --order, --slug).",
-                    err=True,
+                error(
+                    "provide at least one option to update "
+                    "(--name, --description, --public/--private, --featured/--not-featured, --order, --slug)."
                 )
                 raise typer.Exit(1)
 
             svc.update(cl.id, **kwargs)
         typer.echo(f"Updated '{slug}'.")
     except DomainError as e:
-        typer.echo(f"Error: {e}", err=True)
+        error(e)
         raise typer.Exit(1)
 
 
@@ -228,7 +227,7 @@ def delete_list(
             svc.delete(cl.id)
         typer.echo(f"Deleted '{slug}'.")
     except DomainError as e:
-        typer.echo(f"Error: {e}", err=True)
+        error(e)
         raise typer.Exit(1)
 
 
@@ -242,7 +241,7 @@ def add_work(
 ) -> None:
     """Add a work to a curated list."""
     if work_id is None and isbn is None:
-        typer.echo("Error: provide at least one of --work-id or --isbn.", err=True)
+        error("provide at least one of --work-id or --isbn.")
         raise typer.Exit(1)
     try:
         with session_scope() as session:
@@ -257,7 +256,7 @@ def add_work(
                 assert isbn is not None
                 work = SqlWorkRepository(session).get_by_isbn(isbn)
                 if work is None:
-                    typer.echo(f"Error: no work found with ISBN '{isbn}'.", err=True)
+                    error(f"no work found with ISBN '{isbn}'.")
                     raise typer.Exit(1)
                 resolved_work_id = work.id
 
@@ -265,7 +264,7 @@ def add_work(
             svc.add_work(cl.id, resolved_work_id, annotation=annotation)
         typer.echo(f"Added work {resolved_work_id} to '{slug}'.")
     except DomainError as e:
-        typer.echo(f"Error: {e}", err=True)
+        error(e)
         raise typer.Exit(1)
 
 
@@ -286,7 +285,7 @@ def remove_work(
             svc.remove_work(cl.id, work_id)
         typer.echo(f"Removed work {work_id} from '{slug}'.")
     except DomainError as e:
-        typer.echo(f"Error: {e}", err=True)
+        error(e)
         raise typer.Exit(1)
 
 
@@ -299,10 +298,10 @@ def reorder_works(
     try:
         ordered_ids = [int(x.strip()) for x in work_ids.split(",") if x.strip()]
     except ValueError:
-        typer.echo("Error: --work-ids must be a comma-separated list of integers.", err=True)
+        error("--work-ids must be a comma-separated list of integers.")
         raise typer.Exit(1)
     if not ordered_ids:
-        typer.echo("Error: --work-ids cannot be empty.", err=True)
+        error("--work-ids cannot be empty.")
         raise typer.Exit(1)
     try:
         with session_scope() as session:
@@ -312,7 +311,7 @@ def reorder_works(
             svc.reorder(cl.id, ordered_ids)
         typer.echo(f"Reordered works in '{slug}'.")
     except DomainError as e:
-        typer.echo(f"Error: {e}", err=True)
+        error(e)
         raise typer.Exit(1)
 
 

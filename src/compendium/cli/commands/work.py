@@ -2,6 +2,7 @@ import getpass
 
 import typer
 
+from compendium.cli.io import error, truncation_notice
 from compendium.cli.output import Column, emit_detail, emit_list, format_option
 from compendium.db.session import session_scope
 from compendium.domain.errors import DomainError, NotFoundError
@@ -93,8 +94,6 @@ def list_works_cmd(
     format: str = format_option(),
 ) -> None:
     """List works in the catalog."""
-    from compendium.cli.io import truncation_notice
-
     with session_scope() as session:
         works = SqlWorkRepository(session).list(limit=limit)
         emit_list(
@@ -217,7 +216,7 @@ def edit_work(
     """
     supplied = sum(1 for v in (work_id, isbn, upc) if v is not None)
     if supplied != 1:
-        typer.echo("Error: provide exactly one of --work-id, --isbn, --upc.", err=True)
+        error("provide exactly one of --work-id, --isbn, --upc.")
         raise typer.Exit(1)
 
     try:
@@ -230,7 +229,7 @@ def edit_work(
             else:
                 work = repo.get_by_upc(upc.strip())  # type: ignore[union-attr]
             if work is None:
-                typer.echo("Error: work not found.", err=True)
+                error("work not found.")
                 raise typer.Exit(1)
 
             kwargs: dict = {}
@@ -256,7 +255,7 @@ def edit_work(
                 kwargs["cover_image_url"] = cover_image_url
 
             if not kwargs:
-                typer.echo("Nothing to update. Pass at least one field flag.", err=True)
+                error("Nothing to update. Pass at least one field flag.")
                 raise typer.Exit(1)
 
             updated = _catalog(session).update_work(work.id, **kwargs)
@@ -271,10 +270,10 @@ def edit_work(
                 scheme = updated.classification_scheme or "?"
                 typer.echo(f"  Class     : {scheme} {updated.classification_code}")
     except NotFoundError as exc:
-        typer.echo(f"Error: {exc}", err=True)
+        error(exc)
         raise typer.Exit(1) from exc
     except DomainError as exc:
-        typer.echo(f"Error: {exc}", err=True)
+        error(exc)
         raise typer.Exit(1) from exc
 
 
@@ -294,7 +293,7 @@ def _resolve_work(session, work_id, isbn, upc):
 def _require_one_id(work_id, isbn, upc) -> None:
     supplied = sum(1 for v in (work_id, isbn, upc) if v is not None)
     if supplied != 1:
-        typer.echo("Error: provide exactly one of --work-id, --isbn, --upc.", err=True)
+        error("provide exactly one of --work-id, --isbn, --upc.")
         raise typer.Exit(1)
 
 
@@ -313,7 +312,7 @@ def creator_add(
         with session_scope() as session:
             work = _resolve_work(session, work_id, isbn, upc)
             if work is None:
-                typer.echo("Error: work not found.", err=True)
+                error("work not found.")
                 raise typer.Exit(1)
             current = [(wc.creator.display_name, wc.role) for wc in work.creators]
             entry = (name, role)
@@ -328,10 +327,10 @@ def creator_add(
                 + ", ".join(f"{wc.creator.display_name} ({wc.role})" for wc in updated.creators)
             )
     except NotFoundError as exc:
-        typer.echo(f"Error: {exc}", err=True)
+        error(exc)
         raise typer.Exit(1) from exc
     except DomainError as exc:
-        typer.echo(f"Error: {exc}", err=True)
+        error(exc)
         raise typer.Exit(1) from exc
 
 
@@ -349,7 +348,7 @@ def creator_remove(
         with session_scope() as session:
             work = _resolve_work(session, work_id, isbn, upc)
             if work is None:
-                typer.echo("Error: work not found.", err=True)
+                error("work not found.")
                 raise typer.Exit(1)
             new_list = [
                 (wc.creator.display_name, wc.role)
@@ -357,15 +356,15 @@ def creator_remove(
                 if not (wc.creator.display_name == name and wc.role == role)
             ]
             if len(new_list) == len(work.creators):
-                typer.echo(f"Error: no creator '{name}' with role '{role}' on this work.", err=True)
+                error(f"no creator '{name}' with role '{role}' on this work.")
                 raise typer.Exit(1)
             _catalog(session).replace_creators(work.id, new_list)
             typer.echo(f"Removed {name} ({role}).")
     except NotFoundError as exc:
-        typer.echo(f"Error: {exc}", err=True)
+        error(exc)
         raise typer.Exit(1) from exc
     except DomainError as exc:
-        typer.echo(f"Error: {exc}", err=True)
+        error(exc)
         raise typer.Exit(1) from exc
 
 
@@ -384,7 +383,7 @@ def creator_move(
         with session_scope() as session:
             work = _resolve_work(session, work_id, isbn, upc)
             if work is None:
-                typer.echo("Error: work not found.", err=True)
+                error("work not found.")
                 raise typer.Exit(1)
             current = [(wc.creator.display_name, wc.role) for wc in work.creators]
             idx = next(
@@ -392,7 +391,7 @@ def creator_move(
                 None,
             )
             if idx is None:
-                typer.echo(f"Error: no creator '{name}' with role '{role}' on this work.", err=True)
+                error(f"no creator '{name}' with role '{role}' on this work.")
                 raise typer.Exit(1)
             entry = current.pop(idx)
             target = max(0, min(position, len(current)))
@@ -400,10 +399,10 @@ def creator_move(
             _catalog(session).replace_creators(work.id, current)
             typer.echo("Order updated.")
     except NotFoundError as exc:
-        typer.echo(f"Error: {exc}", err=True)
+        error(exc)
         raise typer.Exit(1) from exc
     except DomainError as exc:
-        typer.echo(f"Error: {exc}", err=True)
+        error(exc)
         raise typer.Exit(1) from exc
 
 
@@ -416,7 +415,7 @@ def show_work(
     with session_scope() as session:
         work = SqlWorkRepository(session).get(work_id)
         if work is None:
-            typer.echo(f"No work with id {work_id}.", err=True)
+            error(f"No work with id {work_id}.")
             raise typer.Exit(1)
 
         obj = {
@@ -482,14 +481,14 @@ def refresh_metadata_cmd(
                 work_id, dry_run=not apply, source=source if source else None,
             )
     except ValueError as exc:
-        typer.echo(f"Error: {exc}", err=True)
+        error(exc)
         raise typer.Exit(1) from exc
     except NotFoundError as exc:
-        typer.echo(f"Error: {exc}", err=True)
+        error(exc)
         raise typer.Exit(1) from exc
 
     if not report.found:
-        typer.echo(f"\nNo refresh applied: {report.error}", err=True)
+        error(f"No refresh applied: {report.error}")
         raise typer.Exit(1)
 
     typer.echo(f"\nWork #{report.work_id}")
@@ -533,7 +532,7 @@ def delete_work(
     with session_scope() as session:
         work = SqlWorkRepository(session).get(work_id)
         if work is None:
-            typer.echo(f"Error: no work with id={work_id}", err=True)
+            error(f"no work with id={work_id}")
             raise typer.Exit(1)
         n_items = len(work.items)
         if not yes:
@@ -546,7 +545,7 @@ def delete_work(
         try:
             summary = _trash_svc(session).delete_work(work_id)
         except DomainError as exc:
-            typer.echo(f"Error: {exc}", err=True)
+            error(exc)
             raise typer.Exit(1) from exc
         typer.echo(f"Moved to trash: {summary.label} (trash id {summary.trash_id}).")
 
@@ -574,6 +573,7 @@ def trash_list(limit: int = typer.Option(50, "--limit"), format: str = format_op
             for r in rows
         ]
         emit_list(row_dicts, _TRASH_COLUMNS, format, empty="Trash is empty.")
+        truncation_notice(len(rows), limit)
 
 
 @trash_app.command("restore")
@@ -583,7 +583,7 @@ def trash_restore(trash_id: int = typer.Argument(...)) -> None:
         try:
             work = _trash_svc(session).restore_work(trash_id)
         except DomainError as exc:
-            typer.echo(f"Error: {exc}", err=True)
+            error(exc)
             raise typer.Exit(1) from exc
         typer.echo(f"Restored '{work.title}' (work id {work.id}).")
 
@@ -607,7 +607,7 @@ def trash_purge(
                 dry_run=dry_run,
             )
         except DomainError as exc:
-            typer.echo(f"Error: {exc}", err=True)
+            error(exc)
             raise typer.Exit(1) from exc
         verb = "Would purge" if dry_run else "Purged"
         typer.echo(f"{verb} {purged} trash entr{'y' if purged == 1 else 'ies'}.")

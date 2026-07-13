@@ -3,6 +3,7 @@ import os
 
 import typer
 
+from compendium.cli.io import error
 from compendium.cli.output import Column, emit_list, format_option
 from compendium.db.session import session_scope
 from compendium.domain.errors import DomainError
@@ -21,13 +22,12 @@ def _role_svc(session) -> RoleService:
     if actor_username:
         actor = SqlUserRepository(session).get_by_username(actor_username)
         if actor is None:
-            typer.echo(f"Error: COMPENDIUM_ACTOR_USERNAME '{actor_username}' not found", err=True)
+            error(f"COMPENDIUM_ACTOR_USERNAME '{actor_username}' not found")
             raise typer.Exit(1)
     elif SqlUserRepository(session).list(limit=1):
-        typer.echo(
-            "Error: Users exist in this database. Set COMPENDIUM_ACTOR_USERNAME to "
-            "an active user whose permissions cover the role operations you want to perform.",
-            err=True,
+        error(
+            "Users exist in this database. Set COMPENDIUM_ACTOR_USERNAME to "
+            "an active user whose permissions cover the role operations you want to perform."
         )
         raise typer.Exit(1)
     return RoleService(
@@ -74,7 +74,7 @@ def create_role(
             role = _role_svc(session).create(name=name, permissions=perms)
             typer.echo(f"\nCreated role #{role.id} '{role.name}'.")
     except DomainError as exc:
-        typer.echo(f"Error: {exc}", err=True)
+        error(exc)
         raise typer.Exit(1) from exc
 
 
@@ -95,14 +95,14 @@ def update_role(
         new_perms = [p.strip() for p in permissions.split(",") if p.strip()]
 
     if name is None and new_perms is None:
-        typer.echo("Specify at least one of --name, --permissions, or --full-access/--no-full-access.", err=True)
+        error("Specify at least one of --name, --permissions, or --full-access/--no-full-access.")
         raise typer.Exit(1)
     try:
         with session_scope() as session:
             role = _role_svc(session).update(role_id, name=name, permissions=new_perms)
             typer.echo(f"\nUpdated role #{role.id} '{role.name}'.")
     except DomainError as exc:
-        typer.echo(f"Error: {exc}", err=True)
+        error(exc)
         raise typer.Exit(1) from exc
 
 
@@ -117,7 +117,7 @@ def clone_role(
             role = _role_svc(session).clone(role_id, new_name=name)
             typer.echo(f"\nCloned to new role #{role.id} '{role.name}'.")
     except DomainError as exc:
-        typer.echo(f"Error: {exc}", err=True)
+        error(exc)
         raise typer.Exit(1) from exc
 
 

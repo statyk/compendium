@@ -6,6 +6,7 @@ from datetime import date, time
 
 import typer
 
+from compendium.cli.io import error
 from compendium.cli.output import Column, emit_detail, emit_list, format_option
 from compendium.db.session import session_scope
 from compendium.domain.errors import DomainError
@@ -99,10 +100,10 @@ def hours_set(
             )
             typer.echo(f"Updated {_WEEKDAY_NAMES[weekday]} hours.")
     except DomainError as exc:
-        typer.echo(f"Error: {exc}", err=True)
+        error(exc)
         raise typer.Exit(1) from exc
     except ValueError as exc:
-        typer.echo(f"Error: {exc}", err=True)
+        error(exc)
         raise typer.Exit(1) from exc
 
 
@@ -156,10 +157,10 @@ def closed_date_add(
             )
             typer.echo(f"Added closed date id={cd.id}")
     except DomainError as exc:
-        typer.echo(f"Error: {exc}", err=True)
+        error(exc)
         raise typer.Exit(1) from exc
     except ValueError as exc:
-        typer.echo(f"Error: {exc}", err=True)
+        error(exc)
         raise typer.Exit(1) from exc
 
 
@@ -176,7 +177,7 @@ def closed_date_delete(
             _svc(session).delete_closed_date(id)
             typer.echo(f"Deleted closed date id={id}.")
     except DomainError as exc:
-        typer.echo(f"Error: {exc}", err=True)
+        error(exc)
         raise typer.Exit(1) from exc
 
 

@@ -2,6 +2,7 @@ import getpass
 
 import typer
 
+from compendium.cli.io import error, truncation_notice
 from compendium.cli.output import Column, emit_list, format_option
 from compendium.services.site_settings import get_site_setting
 from compendium.db.engine import get_settings
@@ -110,7 +111,7 @@ def checkout(
             typer.echo(f"  Patron  : {loan.patron.full_name} ({loan.patron.library_card_number})")
             typer.echo(f"  Due     : {loan.due_at.strftime('%Y-%m-%d')}")
     except DomainError as exc:
-        typer.echo(f"Error: {exc}", err=True)
+        error(exc)
         raise typer.Exit(1) from exc
 
 
@@ -131,7 +132,7 @@ def checkin(
                 # Read all loan attributes while the session is still open —
                 # rollback()/close() on scope exit expire and detach the ORM
                 # objects, so they can't be rendered after the with-block.
-                typer.echo(f"Error: {exc}", err=True)
+                error(exc)
                 typer.echo("Copies currently on loan:", err=True)
                 for candidate in exc.loans:
                     due = candidate.due_at.strftime("%Y-%m-%d")
@@ -143,7 +144,7 @@ def checkin(
                 typer.echo("Re-run with the copy's --barcode.", err=True)
                 raise typer.Exit(1) from exc
     except DomainError as exc:
-        typer.echo(f"Error: {exc}", err=True)
+        error(exc)
         raise typer.Exit(1) from exc
 
 
@@ -161,7 +162,7 @@ def renew(
             typer.echo(f"  New due  : {loan.due_at.strftime('%Y-%m-%d')}")
             typer.echo(f"  Renewals : {loan.renewal_count}")
     except DomainError as exc:
-        typer.echo(f"Error: {exc}", err=True)
+        error(exc)
         raise typer.Exit(1) from exc
 
 
@@ -174,7 +175,7 @@ def active_loans(
     with session_scope() as session:
         patron = SqlPatronRepository(session).get_by_card_number(card)
         if patron is None:
-            typer.echo(f"No patron with card '{card}'.", err=True)
+            error(f"No patron with card '{card}'.")
             raise typer.Exit(1)
         loans = SqlLoanRepository(session).get_active_for_patron(patron.id)
         emit_list(
@@ -197,7 +198,7 @@ def list_loans(
         if branch is not None:
             b = SqlBranchRepository(session).get_by_code(branch)
             if b is None:
-                typer.echo(f"No branch with code '{branch}'.", err=True)
+                error(f"No branch with code '{branch}'.")
                 raise typer.Exit(1)
             branch_id = b.id
         loans = SqlLoanRepository(session).list_active(
@@ -205,6 +206,7 @@ def list_loans(
         )
         emit_list([_loan_row(loan) for loan in loans], _LOAN_COLUMNS, format,
                   empty="No matching loans.")
+        truncation_notice(len(loans), limit)
 
 
 @app.command("history")
@@ -216,12 +218,12 @@ def patron_history(
 ) -> None:
     """Loan history for a patron (active, returned, or all)."""
     if status not in ("active", "returned", "all"):
-        typer.echo("--status must be active, returned, or all.", err=True)
+        error("--status must be active, returned, or all.")
         raise typer.Exit(1)
     with session_scope() as session:
         patron = SqlPatronRepository(session).get_by_card_number(card)
         if patron is None:
-            typer.echo(f"No patron with card '{card}'.", err=True)
+            error(f"No patron with card '{card}'.")
             raise typer.Exit(1)
         loans = SqlLoanRepository(session).list_for_patron(
             patron.id, status=status, limit=limit
@@ -230,6 +232,7 @@ def patron_history(
             [_loan_row(loan) for loan in loans], _LOAN_COLUMNS, format,
             empty=f"{patron.full_name} has no {status} loans.",
         )
+        truncation_notice(len(loans), limit)
 
 
 @app.command("item-history")
@@ -242,7 +245,7 @@ def item_history(
     with session_scope() as session:
         item = SqlItemRepository(session).get_by_barcode(barcode)
         if item is None:
-            typer.echo(f"No item with barcode '{barcode}'.", err=True)
+            error(f"No item with barcode '{barcode}'.")
             raise typer.Exit(1)
         loans = SqlLoanRepository(session).list_for_item(item.id, limit=limit)
         emit_list(

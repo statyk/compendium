@@ -1,5 +1,6 @@
 import typer
 
+from compendium.cli.io import error
 from compendium.cli.output import Column, emit_list, format_option
 from compendium.db.session import session_scope
 from compendium.domain.errors import DomainError
@@ -55,9 +56,7 @@ def branch_set(
     code = resolve_identifier(code_arg, code_opt, label="branch code")
     scheme = classification.strip().lower()
     if scheme not in _VALID_SCHEMES:
-        typer.echo(
-            f"Error: invalid scheme '{scheme}'. Must be one of: lcc, ddc, none.", err=True
-        )
+        error(f"invalid scheme '{scheme}'. Must be one of: lcc, ddc, none.")
         raise typer.Exit(1)
 
     try:
@@ -65,14 +64,14 @@ def branch_set(
             repo = SqlBranchRepository(session)
             branch = repo.get_by_code(code)
             if branch is None:
-                typer.echo(f"Error: no branch with code '{code}'.", err=True)
+                error(f"no branch with code '{code}'.")
                 raise typer.Exit(1)
             branch.default_classification_scheme = scheme
             repo.update(branch)
             label = scheme.upper() if scheme != "none" else "none (manual entry only)"
             typer.echo(f"Branch '{code}' classification scheme set to: {label}")
     except DomainError as exc:
-        typer.echo(f"Error: {exc}", err=True)
+        error(exc)
         raise typer.Exit(1) from exc
 
 

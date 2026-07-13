@@ -1,5 +1,6 @@
 import typer
 
+from compendium.cli.io import truncation_notice
 from compendium.cli.output import Column, emit_list, format_option
 from compendium.db.session import session_scope
 from compendium.repositories.sql.audit_log_repository import SqlAuditLogRepository
@@ -60,3 +61,4 @@ def list_audit(
             format,
             empty="No audit log entries found.",
         )
+        truncation_notice(len(rows), limit)

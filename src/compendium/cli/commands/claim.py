@@ -2,6 +2,7 @@ import getpass
 
 import typer
 
+from compendium.cli.io import error
 from compendium.cli.output import Column, emit_list, format_option
 from compendium.db.engine import get_settings
 from compendium.db.session import session_scope
@@ -67,7 +68,7 @@ def returned(
                 f"pending investigation."
             )
     except DomainError as exc:
-        typer.echo(f"Error: {exc}", err=True)
+        error(exc)
         raise typer.Exit(1) from exc
 
 
@@ -81,7 +82,7 @@ def verify_returned(
             loan = _circulation(session).verify_returned(barcode)
             typer.echo(f"Item {barcode} verified returned; loan {loan.id} closed.")
     except DomainError as exc:
-        typer.echo(f"Error: {exc}", err=True)
+        error(exc)
         raise typer.Exit(1) from exc
 
 
@@ -100,7 +101,7 @@ def write_off(
                 f"Existing fines (if any) remain — waive separately if desired."
             )
     except DomainError as exc:
-        typer.echo(f"Error: {exc}", err=True)
+        error(exc)
         raise typer.Exit(1) from exc
 
 

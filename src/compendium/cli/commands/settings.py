@@ -13,6 +13,7 @@ import os
 
 import typer
 
+from compendium.cli.io import error
 from compendium.cli.output import Column, emit_detail, emit_list, format_option
 from compendium.db.session import session_scope
 from compendium.repositories.sql.audit_log_repository import SqlAuditLogRepository
@@ -109,9 +110,7 @@ def list_settings(
     """
     valid_scopes = {"librarian", "system", "env-only"}
     if scope and scope not in valid_scopes:
-        typer.echo(
-            f"Error: --scope must be one of {sorted(valid_scopes)}.", err=True
-        )
+        error(f"--scope must be one of {sorted(valid_scopes)}.")
         raise typer.Exit(1)
 
     rows: list[dict] = []
@@ -214,12 +213,12 @@ def get_setting(
     try:
         get_descriptor(key)
     except UnknownSettingError:
-        typer.echo(f"Error: unknown setting {key!r}.", err=True)
+        error(f"unknown setting {key!r}.")
         raise typer.Exit(1)
     try:
         value = get_site_setting(key)
     except SettingValidationError as exc:
-        typer.echo(f"Error parsing {key}: {exc}", err=True)
+        error(f"parsing {key}: {exc}")
         raise typer.Exit(1)
     if format == "json":
         emit_detail({"key": key, "value": value}, format)
@@ -236,7 +235,7 @@ def set_setting(
     try:
         desc = get_descriptor(key)
     except UnknownSettingError:
-        typer.echo(f"Error: unknown setting {key!r}.", err=True)
+        error(f"unknown setting {key!r}.")
         raise typer.Exit(1)
     # Parse the input through the descriptor — same coercion rules as env.
     from compendium.services.settings_registry import parse
@@ -244,7 +243,7 @@ def set_setting(
     try:
         parsed = parse(desc, value)
     except SettingValidationError as exc:
-        typer.echo(f"Error: {exc}", err=True)
+        error(exc)
         raise typer.Exit(1)
     with session_scope() as session:
         try:
@@ -257,7 +256,7 @@ def set_setting(
                 source="cli",
             )
         except SettingValidationError as exc:
-            typer.echo(f"Error: {exc}", err=True)
+            error(exc)
             raise typer.Exit(1)
     if desc.env_overridden():
         typer.echo(
@@ -277,7 +276,7 @@ def reset_setting(
     try:
         get_descriptor(key)
     except UnknownSettingError:
-        typer.echo(f"Error: unknown setting {key!r}.", err=True)
+        error(f"unknown setting {key!r}.")
         raise typer.Exit(1)
     if not yes:
         typer.confirm(f"Reset '{key}' to its default?", abort=True)

@@ -1,0 +1,99 @@
+"""CLI-wide conventions verified by Slice 4 Task 9:
+
+- Every user-facing error goes to stderr, prefixed with ``Error: ``.
+- ``--limit`` list commands print a truncation notice on stderr when the
+  limit is hit.
+"""
+from __future__ import annotations
+
+import pytest
+from sqlalchemy import create_engine
+from sqlalchemy.orm import sessionmaker
+from sqlalchemy.pool import StaticPool
+from typer.testing import CliRunner
+
+from compendium.cli.main import app
+from compendium.config.seed import seed_defaults
+from compendium.domain.models import Base
+from compendium.repositories.sql.audit_log_repository import SqlAuditLogRepository
+from compendium.repositories.sql.hold_repository import SqlHoldRepository
+from compendium.repositories.sql.loan_repository import SqlLoanRepository
+from compendium.repositories.sql.patron_repository import SqlPatronRepository
+from compendium.services import site_settings as ss
+from compendium.services.audit import AuditService
+from compendium.services.patrons import PatronService
+
+runner = CliRunner()
+
+
+@pytest.fixture
+def cli_db(monkeypatch):
+    """Route every command's session_scope() at a shared in-memory DB.
+
+    Mirrors the fixture in test_cli_confirmations.py: each command's own
+    session_scope() call must resolve to the same engine, so StaticPool
+    keeps the single in-memory connection alive across separate sessions.
+    """
+    engine = create_engine(
+        "sqlite:///:memory:",
+        connect_args={"check_same_thread": False},
+        poolclass=StaticPool,
+    )
+    Base.metadata.create_all(engine)
+    factory = sessionmaker(bind=engine, autoflush=False, expire_on_commit=False)
+    seed_session = factory()
+    seed_defaults(seed_session)
+    seed_session.commit()
+    seed_session.close()
+
+    monkeypatch.setattr("compendium.db.engine.get_engine", lambda: engine)
+    monkeypatch.setattr("compendium.db.session.get_engine", lambda: engine)
+    ss.invalidate_cache()
+    yield engine
+    ss.invalidate_cache()
+
+
+@pytest.fixture
+def thirty_patrons(cli_db):
+    """Seed 30 patrons directly via PatronService so `patron list --limit 10` truncates."""
+    factory = sessionmaker(bind=cli_db, autoflush=False, expire_on_commit=False)
+    session = factory()
+    svc = PatronService(
+        patron_repo=SqlPatronRepository(session),
+        loan_repo=SqlLoanRepository(session),
+        hold_repo=SqlHoldRepository(session),
+        audit_svc=AuditService(SqlAuditLogRepository(session)),
+        actor_label="test",
+        source="cli",
+    )
+    for i in range(30):
+        svc.create(full_name=f"Test Patron {i:02d}")
+    session.commit()
+    session.close()
+
+
+def test_error_goes_to_stderr_with_prefix(cli_db):
+    result = runner.invoke(app, ["item", "show", "NO-SUCH-BARCODE"])
+    assert result.exit_code == 1
+    assert result.stdout == ""
+    assert result.stderr.startswith("Error: ")
+
+
+def test_role_edit_no_flags_uses_error_prefix(cli_db):
+    result = runner.invoke(app, ["role", "edit", "--id", "1"])
+    assert result.exit_code in (1, 2)
+    assert "Error: " in result.stderr
+
+
+def test_patron_list_truncation_notice(cli_db, thirty_patrons):
+    result = runner.invoke(app, ["patron", "list", "--limit", "10"])
+    assert result.exit_code == 0
+    assert "Showing first 10 row(s)" in result.stderr
+
+
+def test_patron_list_offset_pages_past_first_batch(cli_db, thirty_patrons):
+    first = runner.invoke(app, ["patron", "list", "--limit", "10"])
+    second = runner.invoke(app, ["patron", "list", "--limit", "10", "--offset", "10"])
+    assert first.exit_code == 0
+    assert second.exit_code == 0
+    assert first.stdout != second.stdout

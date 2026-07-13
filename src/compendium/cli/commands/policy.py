@@ -2,6 +2,7 @@ import getpass
 
 import typer
 
+from compendium.cli.io import error
 from compendium.cli.output import Column, emit_list, format_option
 from compendium.db.session import session_scope
 from compendium.domain.errors import DomainError, NotFoundError
@@ -82,9 +83,7 @@ def create_policy(
                     patron_category.lower()
                 )
                 if cat is None:
-                    typer.echo(
-                        f"Error: No patron category with code '{patron_category}'", err=True
-                    )
+                    error(f"No patron category with code '{patron_category}'")
                     raise typer.Exit(1)
                 cat_id = cat.id
             policy = _policy_svc(session).create(
@@ -101,7 +100,7 @@ def create_policy(
                 f"{policy.loan_period_days}d / {policy.max_renewals} renewals{default_note}."
             )
     except DomainError as exc:
-        typer.echo(f"Error: {exc}", err=True)
+        error(exc)
         raise typer.Exit(1) from exc
 
 
@@ -135,7 +134,7 @@ def set_policy(
 ) -> None:
     """Update loan period, renewal limit, default flag, patron category, or fine settings."""
     if patron_category and clear_patron_category:
-        typer.echo("Error: --patron-category and --clear-patron-category are mutually exclusive", err=True)
+        error("--patron-category and --clear-patron-category are mutually exclusive")
         raise typer.Exit(1)
     fine_flags = {
         overdue_per_day_cents,
@@ -152,11 +151,10 @@ def set_policy(
         and not clear_patron_category
         and all(v is None for v in fine_flags)
     ):
-        typer.echo(
+        error(
             "Specify at least one of --loan-days, --max-renewals, --default/--no-default, "
             "--patron-category, --clear-patron-category, --overdue-per-day-cents, "
-            "--overdue-cap-cents, --grace-days, --lost-default-cents, --lost-processing-cents.",
-            err=True,
+            "--overdue-cap-cents, --grace-days, --lost-default-cents, --lost-processing-cents."
         )
         raise typer.Exit(1)
     from compendium.services.policies import _MISSING  # sentinel
@@ -169,9 +167,7 @@ def set_policy(
                     patron_category.lower()
                 )
                 if cat is None:
-                    typer.echo(
-                        f"Error: No patron category with code '{patron_category}'", err=True
-                    )
+                    error(f"No patron category with code '{patron_category}'")
                     raise typer.Exit(1)
                 cat_arg = cat.id
             elif clear_patron_category:
@@ -202,7 +198,7 @@ def set_policy(
                 f"{policy.loan_period_days}d / {policy.max_renewals} renewals{default_note}."
             )
     except (DomainError, NotFoundError) as exc:
-        typer.echo(f"Error: {exc}", err=True)
+        error(exc)
         raise typer.Exit(1) from exc
 
 

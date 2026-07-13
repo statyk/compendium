@@ -1,5 +1,6 @@
 import typer
 
+from compendium.cli.io import error
 from compendium.db.session import session_scope
 from compendium.domain.errors import DomainError, NotFoundError
 from compendium.repositories.sql.branch_repository import SqlBranchRepository
@@ -43,10 +44,10 @@ def rename_creator(
             )
             typer.echo(f"Renamed to: {creator.display_name}  ({creator.sort_name})")
     except NotFoundError as exc:
-        typer.echo(f"Error: {exc}", err=True)
+        error(exc)
         raise typer.Exit(1) from exc
     except DomainError as exc:
-        typer.echo(f"Error: {exc}", err=True)
+        error(exc)
         raise typer.Exit(1) from exc
 
 

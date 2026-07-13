@@ -6,6 +6,7 @@ import getpass
 
 import typer
 
+from compendium.cli.io import error
 from compendium.cli.output import Column, emit_list, format_option
 from compendium.db.engine import get_settings
 from compendium.db.session import session_scope
@@ -93,7 +94,7 @@ def pay_fine(
                 f"({format_currency(fine.amount_cents)} {fine.kind})."
             )
     except DomainError as exc:
-        typer.echo(f"Error: {exc}", err=True)
+        error(exc)
         raise typer.Exit(1) from exc
 
 
@@ -111,7 +112,7 @@ def waive_fine(
                 f"({format_currency(fine.amount_cents)} {fine.kind})."
             )
     except DomainError as exc:
-        typer.echo(f"Error: {exc}", err=True)
+        error(exc)
         raise typer.Exit(1) from exc
 
 
@@ -135,7 +136,7 @@ def assess_fine(
                 f"{format_currency(fine.amount_cents)} ({fine.kind}) for {patron}."
             )
     except DomainError as exc:
-        typer.echo(f"Error: {exc}", err=True)
+        error(exc)
         raise typer.Exit(1) from exc
 
 
@@ -154,5 +155,5 @@ def assess_overdue_for_patron(
                 f"unchanged={counts['unchanged']}."
             )
     except DomainError as exc:
-        typer.echo(f"Error: {exc}", err=True)
+        error(exc)
         raise typer.Exit(1) from exc

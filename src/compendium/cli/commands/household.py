@@ -5,6 +5,7 @@ import getpass
 
 import typer
 
+from compendium.cli.io import error, truncation_notice
 from compendium.cli.output import Column, emit_detail, emit_list, format_option
 from compendium.db.session import session_scope
 from compendium.domain.errors import DomainError
@@ -41,7 +42,7 @@ def create_household(
             hh = _svc(session).create(name=name, notes=notes)
         typer.echo(f"Created household {hh.id}: {hh.name}")
     except DomainError as e:
-        typer.echo(f"Error: {e}", err=True)
+        error(e)
         raise typer.Exit(1)
 
 
@@ -67,6 +68,7 @@ def list_households(
             format,
             empty="No households found.",
         )
+        truncation_notice(len(rows), limit)
 
 
 @app.command("show")
@@ -114,7 +116,7 @@ def show_household(
                     f"{holds} hold{'s' if holds != 1 else ''})"
                 )
     except DomainError as e:
-        typer.echo(f"Error: {e}", err=True)
+        error(e)
         raise typer.Exit(1)
 
 
@@ -127,7 +129,7 @@ def rename_household(
 ) -> None:
     """Update household name and/or notes."""
     if name is None and notes is None and not clear_notes:
-        typer.echo("Error: provide at least one of --name, --notes, or --clear-notes", err=True)
+        error("provide at least one of --name, --notes, or --clear-notes")
         raise typer.Exit(1)
     try:
         with session_scope() as session:
@@ -147,7 +149,7 @@ def rename_household(
             parts.append(f"notes → {hh.notes!r}")
         typer.echo(f"Household {id} updated: {', '.join(parts)}")
     except DomainError as e:
-        typer.echo(f"Error: {e}", err=True)
+        error(e)
         raise typer.Exit(1)
 
 
@@ -168,7 +170,7 @@ def delete_household(
             _svc(session).delete(id)
         typer.echo(f"Household {id} deleted.")
     except DomainError as e:
-        typer.echo(f"Error: {e}", err=True)
+        error(e)
         raise typer.Exit(1)
 
 
@@ -183,7 +185,7 @@ def add_member(
             patron = _svc(session).add_member(id, card)
         typer.echo(f"Added {patron.full_name} ({card}) to household {id}.")
     except DomainError as e:
-        typer.echo(f"Error: {e}", err=True)
+        error(e)
         raise typer.Exit(1)
 
 
@@ -198,7 +200,7 @@ def remove_member(
             patron = _svc(session).remove_member(id, card)
         typer.echo(f"Removed {patron.full_name} ({card}) from household {id}.")
     except DomainError as e:
-        typer.echo(f"Error: {e}", err=True)
+        error(e)
         raise typer.Exit(1)
 
 
