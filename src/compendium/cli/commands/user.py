@@ -262,9 +262,13 @@ def list_users(
 
 @app.command("deactivate")
 def deactivate_user(
-    username: str = typer.Option(..., "--username", help="Username to deactivate"),
+    username_arg: str | None = typer.Argument(None, metavar="USERNAME"),
+    username_opt: str | None = typer.Option(None, "--username", hidden=True),
 ) -> None:
     """Deactivate a user account (prevents login; does not delete)."""
+    from compendium.cli.io import resolve_identifier
+
+    username = resolve_identifier(username_arg, username_opt, label="username")
     try:
         with session_scope() as session:
             user = _auth_svc(session).deactivate_user(username)
@@ -276,9 +280,13 @@ def deactivate_user(
 
 @app.command("reactivate")
 def reactivate_user(
-    username: str = typer.Option(..., "--username", help="Username to reactivate"),
+    username_arg: str | None = typer.Argument(None, metavar="USERNAME"),
+    username_opt: str | None = typer.Option(None, "--username", hidden=True),
 ) -> None:
     """Reactivate an inactive user account."""
+    from compendium.cli.io import resolve_identifier
+
+    username = resolve_identifier(username_arg, username_opt, label="username")
     try:
         with session_scope() as session:
             user = _auth_svc(session).reactivate_user(username)
@@ -290,10 +298,14 @@ def reactivate_user(
 
 @app.command("link-patron")
 def link_patron_cmd(
-    username: str = typer.Option(..., "--username", help="Username to update"),
+    username_arg: str | None = typer.Argument(None, metavar="USERNAME"),
+    username_opt: str | None = typer.Option(None, "--username", hidden=True),
     card: str = typer.Option(..., "--card", help="Patron library card number to link"),
 ) -> None:
     """Link an existing card-only patron to a user account."""
+    from compendium.cli.io import resolve_identifier
+
+    username = resolve_identifier(username_arg, username_opt, label="username")
     try:
         with session_scope() as session:
             target = SqlUserRepository(session).get_by_username(username)
@@ -309,9 +321,13 @@ def link_patron_cmd(
 
 @app.command("unlink-patron")
 def unlink_patron_cmd(
-    username: str = typer.Option(..., "--username", help="Username to update"),
+    username_arg: str | None = typer.Argument(None, metavar="USERNAME"),
+    username_opt: str | None = typer.Option(None, "--username", hidden=True),
 ) -> None:
     """Remove the linked patron record from a user account."""
+    from compendium.cli.io import resolve_identifier
+
+    username = resolve_identifier(username_arg, username_opt, label="username")
     try:
         with session_scope() as session:
             target = SqlUserRepository(session).get_by_username(username)

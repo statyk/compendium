@@ -65,11 +65,15 @@ def create_category(
 
 @app.command("edit")
 def update_category(
-    code: str = typer.Option(..., "--code"),
+    code_arg: str | None = typer.Argument(None, metavar="CODE"),
+    code_opt: str | None = typer.Option(None, "--code", hidden=True),
     name: str | None = typer.Option(None, "--name", help="New display name"),
     set_default: bool = typer.Option(False, "--default", help="Mark as the default"),
 ) -> None:
     """Edit a patron category's display name or default flag."""
+    from compendium.cli.io import resolve_identifier
+
+    code = resolve_identifier(code_arg, code_opt, label="category code")
     try:
         with session_scope() as session:
             cat = SqlPatronCategoryRepository(session).get_by_code(code.lower())
@@ -89,9 +93,13 @@ def update_category(
 
 @app.command("delete")
 def delete_category(
-    code: str = typer.Option(..., "--code"),
+    code_arg: str | None = typer.Argument(None, metavar="CODE"),
+    code_opt: str | None = typer.Option(None, "--code", hidden=True),
 ) -> None:
     """Delete a patron category. Refuses if patrons or policies reference it."""
+    from compendium.cli.io import resolve_identifier
+
+    code = resolve_identifier(code_arg, code_opt, label="category code")
     try:
         with session_scope() as session:
             cat = SqlPatronCategoryRepository(session).get_by_code(code.lower())

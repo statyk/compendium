@@ -43,12 +43,16 @@ def branch_list(format: str = format_option()) -> None:
 
 @app.command("edit")
 def branch_set(
-    code: str = typer.Option(..., "--code", help="Branch code"),
+    code_arg: str | None = typer.Argument(None, metavar="CODE"),
+    code_opt: str | None = typer.Option(None, "--code", hidden=True),
     classification: str = typer.Option(
         ..., "--classification", help="Classification scheme: lcc, ddc, or none"
     ),
 ) -> None:
     """Edit a branch's classification scheme."""
+    from compendium.cli.io import resolve_identifier
+
+    code = resolve_identifier(code_arg, code_opt, label="branch code")
     scheme = classification.strip().lower()
     if scheme not in _VALID_SCHEMES:
         typer.echo(

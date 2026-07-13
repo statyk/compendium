@@ -314,7 +314,8 @@ def add_manual_item(
 
 @app.command("edit")
 def edit_item(
-    barcode: str = typer.Option(..., "--barcode", help="Item barcode"),
+    barcode_arg: str | None = typer.Argument(None, metavar="BARCODE"),
+    barcode_opt: str | None = typer.Option(None, "--barcode", hidden=True),
     location: str | None = typer.Option(
         None, "--location", help="Shelf location. Pass empty string to clear."
     ),
@@ -327,13 +328,23 @@ def edit_item(
     notes: str | None = typer.Option(
         None, "--notes", help="Free-form notes. Pass empty string to clear."
     ),
+    loanable: bool | None = typer.Option(
+        None, "--loanable/--no-loanable", help="Set whether the copy can circulate."
+    ),
+    loan_note: str | None = typer.Option(
+        None, "--loan-note", help="Loan-restriction note (with --no-loanable)."
+    ),
 ) -> None:
-    """Edit editable fields on an item (location, call number, condition, notes).
+    """Edit editable fields on an item (location, call number, condition, notes, loanability).
 
     Only flags that are passed take effect — omitted flags leave the current
     value alone. Pass an empty string (e.g. ``--location ""``) to clear a
     field.
     """
+    from compendium.cli.io import resolve_identifier
+
+    barcode = resolve_identifier(barcode_arg, barcode_opt, label="barcode")
+
     kwargs: dict[str, str | None] = {}
     if location is not None:
         kwargs["location"] = location
@@ -343,13 +354,24 @@ def edit_item(
         kwargs["condition"] = condition
     if notes is not None:
         kwargs["notes"] = notes
-    if not kwargs:
-        typer.echo("Nothing to update. Pass one of --location/--call-number/--condition/--notes.", err=True)
+    if not kwargs and loanable is None:
+        typer.echo(
+            "Nothing to update. Pass one of --location/--call-number/--condition/--notes/--loanable/--no-loanable.",
+            err=True,
+        )
         raise typer.Exit(1)
 
     try:
         with session_scope() as session:
-            item = _catalog(session).update_item(barcode, **kwargs)
+            if kwargs:
+                item = _catalog(session).update_item(barcode, **kwargs)
+            if loanable is not None:
+                item = _catalog(session).set_loanable(
+                    barcode,
+                    is_loanable=loanable,
+                    reason=None if loanable else "other",
+                    note=loan_note,
+                )
             typer.echo(f"\nUpdated: {item.work.title}")
             typer.echo(f"  Barcode   : {item.barcode}")
             typer.echo(f"  Location  : {item.location or 'not set'}")
@@ -357,6 +379,12 @@ def edit_item(
             typer.echo(f"  Condition : {item.condition or 'not set'}")
             if item.notes:
                 typer.echo(f"  Notes     : {item.notes}")
+            if loanable is not None:
+                typer.echo(f"  Loanable  : {'yes' if item.is_loanable else 'no'}")
+                if item.loan_restriction_reason:
+                    typer.echo(f"  Reason    : {item.loan_restriction_reason}")
+                if item.loan_restriction_note:
+                    typer.echo(f"  Note      : {item.loan_restriction_note}")
     except DomainError as exc:
         typer.echo(f"Error: {exc}", err=True)
         raise typer.Exit(1) from exc
@@ -404,9 +432,13 @@ def show_item(
 
 @app.command("withdraw")
 def withdraw_item(
-    barcode: str = typer.Option(..., "--barcode", help="Item barcode"),
+    barcode_arg: str | None = typer.Argument(None, metavar="BARCODE"),
+    barcode_opt: str | None = typer.Option(None, "--barcode", hidden=True),
 ) -> None:
     """Withdraw an item from the collection (marks it as withdrawn, not deleted)."""
+    from compendium.cli.io import resolve_identifier
+
+    barcode = resolve_identifier(barcode_arg, barcode_opt, label="barcode")
     try:
         with session_scope() as session:
             item = _catalog(session).withdraw_item(barcode)
@@ -418,7 +450,7 @@ def withdraw_item(
         raise typer.Exit(1) from exc
 
 
-@app.command("set-loanable")
+@app.command("set-loanable", hidden=True)
 def set_loanable_cmd(
     barcode: str = typer.Option(..., "--barcode", help="Item barcode"),
     yes: bool = typer.Option(False, "--yes", help="Mark as loanable (default)"),
@@ -506,7 +538,8 @@ def list_items(
 
 @app.command("declare-lost")
 def declare_lost(
-    barcode: str = typer.Option(..., "--barcode", help="Item barcode"),
+    barcode_arg: str | None = typer.Argument(None, metavar="BARCODE"),
+    barcode_opt: str | None = typer.Option(None, "--barcode", hidden=True),
     replacement_cost_cents: int | None = typer.Option(
         None,
         "--replacement-cost-cents",
@@ -516,6 +549,9 @@ def declare_lost(
 ) -> None:
     """Declare an item lost. Closes any active loan, cancels pending holds,
     assesses lost + processing fees."""
+    from compendium.cli.io import resolve_identifier
+
+    barcode = resolve_identifier(barcode_arg, barcode_opt, label="barcode")
     try:
         with session_scope() as session:
             item = _circulation(session).declare_lost(
@@ -532,11 +568,15 @@ def declare_lost(
 
 @app.command("mark-damaged")
 def mark_damaged(
-    barcode: str = typer.Option(..., "--barcode", help="Item barcode"),
+    barcode_arg: str | None = typer.Argument(None, metavar="BARCODE"),
+    barcode_opt: str | None = typer.Option(None, "--barcode", hidden=True),
     amount_cents: int = typer.Option(..., "--amount-cents"),
     note: str = typer.Option(..., "--note"),
 ) -> None:
     """Mark an item damaged. Assesses a damaged fee."""
+    from compendium.cli.io import resolve_identifier
+
+    barcode = resolve_identifier(barcode_arg, barcode_opt, label="barcode")
     try:
         with session_scope() as session:
             item = _circulation(session).mark_damaged(
@@ -550,10 +590,14 @@ def mark_damaged(
 
 @app.command("clear-damage")
 def clear_damage(
-    barcode: str = typer.Option(..., "--barcode", help="Item barcode"),
+    barcode_arg: str | None = typer.Argument(None, metavar="BARCODE"),
+    barcode_opt: str | None = typer.Option(None, "--barcode", hidden=True),
 ) -> None:
     """Clear a damaged status and restore the item to AVAILABLE.
     (Any associated damaged-fee is not modified.)"""
+    from compendium.cli.io import resolve_identifier
+
+    barcode = resolve_identifier(barcode_arg, barcode_opt, label="barcode")
     try:
         with session_scope() as session:
             item = _circulation(session).clear_damage(barcode)
@@ -565,10 +609,14 @@ def clear_damage(
 
 @app.command("clear-lost")
 def clear_lost(
-    barcode: str = typer.Option(..., "--barcode", help="Item barcode"),
+    barcode_arg: str | None = typer.Argument(None, metavar="BARCODE"),
+    barcode_opt: str | None = typer.Option(None, "--barcode", hidden=True),
 ) -> None:
     """Clear a lost status and restore the item to AVAILABLE.
     (Any associated lost-fee is not modified.)"""
+    from compendium.cli.io import resolve_identifier
+
+    barcode = resolve_identifier(barcode_arg, barcode_opt, label="barcode")
     try:
         with session_scope() as session:
             item = _circulation(session).clear_lost(barcode)

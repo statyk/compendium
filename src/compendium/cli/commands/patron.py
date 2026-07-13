@@ -142,13 +142,17 @@ def add_patron(
 
 @app.command("edit")
 def set_patron(
-    card: str = typer.Option(..., "--card", help="Patron library card number"),
+    card_arg: str | None = typer.Argument(None, metavar="CARD"),
+    card_opt: str | None = typer.Option(None, "--card", hidden=True),
     category: str | None = typer.Option(None, "--category", help="Patron category code"),
     clear_category: bool = typer.Option(False, "--clear-category", help="Remove the category"),
     expires: str | None = typer.Option(None, "--expires", help="Card expiry date (YYYY-MM-DD)"),
     clear_expires: bool = typer.Option(False, "--clear-expires", help="Remove the expiry date"),
 ) -> None:
     """Edit category and/or expiry on an existing patron."""
+    from compendium.cli.io import resolve_identifier
+
+    card = resolve_identifier(card_arg, card_opt, label="card number")
     if category and clear_category:
         typer.echo("Error: --category and --clear-category are mutually exclusive", err=True)
         raise typer.Exit(1)
@@ -188,9 +192,13 @@ def set_patron(
 
 @app.command("deactivate")
 def deactivate_patron(
-    card: str = typer.Option(..., "--card", help="Patron library card number"),
+    card_arg: str | None = typer.Argument(None, metavar="CARD"),
+    card_opt: str | None = typer.Option(None, "--card", hidden=True),
 ) -> None:
     """Deactivate a patron account (cancels active holds; blocks if active loans exist)."""
+    from compendium.cli.io import resolve_identifier
+
+    card = resolve_identifier(card_arg, card_opt, label="card number")
     try:
         with session_scope() as session:
             patron = _patron_svc(session).deactivate(card)
@@ -202,9 +210,13 @@ def deactivate_patron(
 
 @app.command("reactivate")
 def reactivate_patron(
-    card: str = typer.Option(..., "--card", help="Patron library card number"),
+    card_arg: str | None = typer.Argument(None, metavar="CARD"),
+    card_opt: str | None = typer.Option(None, "--card", hidden=True),
 ) -> None:
     """Reactivate an inactive patron account."""
+    from compendium.cli.io import resolve_identifier
+
+    card = resolve_identifier(card_arg, card_opt, label="card number")
     try:
         with session_scope() as session:
             patron = _patron_svc(session).reactivate(card)
@@ -216,10 +228,14 @@ def reactivate_patron(
 
 @app.command("link-user")
 def link_user_cmd(
-    card: str = typer.Option(..., "--card", help="Patron library card number"),
+    card_arg: str | None = typer.Argument(None, metavar="CARD"),
+    card_opt: str | None = typer.Option(None, "--card", hidden=True),
     username: str = typer.Option(..., "--username", help="Username to link"),
 ) -> None:
     """Link a user account to a patron record."""
+    from compendium.cli.io import resolve_identifier
+
+    card = resolve_identifier(card_arg, card_opt, label="card number")
     try:
         with session_scope() as session:
             u = SqlUserRepository(session).get_by_username(username)
@@ -235,9 +251,13 @@ def link_user_cmd(
 
 @app.command("unlink-user")
 def unlink_user_cmd(
-    card: str = typer.Option(..., "--card", help="Patron library card number"),
+    card_arg: str | None = typer.Argument(None, metavar="CARD"),
+    card_opt: str | None = typer.Option(None, "--card", hidden=True),
 ) -> None:
     """Remove the linked user account from a patron record."""
+    from compendium.cli.io import resolve_identifier
+
+    card = resolve_identifier(card_arg, card_opt, label="card number")
     try:
         with session_scope() as session:
             patron = _patron_svc(session).unlink_user(card)
@@ -249,13 +269,17 @@ def unlink_user_cmd(
 
 @app.command("add-user")
 def create_user_for_patron(
-    card: str = typer.Option(..., "--card", help="Patron library card number"),
+    card_arg: str | None = typer.Argument(None, metavar="CARD"),
+    card_opt: str | None = typer.Option(None, "--card", hidden=True),
     username: str = typer.Option(..., "--username", help="Username for the new login"),
     password: str | None = typer.Option(
         None, "--password", hide_input=True, help="Password (prompted if omitted)"
     ),
 ) -> None:
     """Create a Patron-role login and link it to an existing card-only patron."""
+    from compendium.cli.io import resolve_identifier
+
+    card = resolve_identifier(card_arg, card_opt, label="card number")
     if not password:
         password = typer.prompt("Password", hide_input=True, confirmation_prompt=True)
     try:
