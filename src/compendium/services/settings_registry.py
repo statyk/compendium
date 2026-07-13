@@ -976,6 +976,21 @@ def _register_builtins() -> None:
     )
     register(
         SettingDescriptor(
+            key="first_run_dismissed",
+            display_name="First-Run Checklist Dismissed",
+            type=bool,
+            default=False,
+            scope="system",
+            short_help="Set when an admin dismisses the Getting Started card.",
+            help_text=(
+                "Written by the Getting Started card's Dismiss button. Not "
+                "shown on any settings page; reset to false manually via "
+                "'compendium settings' if you want the card back."
+            ),
+        )
+    )
+    register(
+        SettingDescriptor(
             key="tmdb_api_key",
             display_name="TMDb API Key",
             type=str,
