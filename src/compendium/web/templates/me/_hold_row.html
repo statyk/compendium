@@ -1,0 +1,53 @@
+{% from "_macros.html" import status_pill %}
+{# One "My Holds" table row. Context: hold, queue_position (int|None),
+   notice (opt), error (opt) — csrf_token/user via _render. #}
+<tr id="hold-{{ hold.id }}">
+  <td data-label="Title"><a href="/ui/catalog/{{ hold.work_id }}">{{ hold.work.title }}</a></td>
+  <td data-label="Status">
+    {{ status_pill(hold.status) }}
+    {% if hold.suspended_until %}
+      <br><small><em>Suspended until {{ hold.suspended_until.isoformat() }}</em></small>
+      {% if hold.suspended_reason %}<br><small>{{ hold.suspended_reason }}</small>{% endif %}
+    {% endif %}
+  </td>
+  <td data-label="Queue">
+    {% if queue_position %}#{{ queue_position }}{% else %}—{% endif %}
+  </td>
+  <td data-label="Expires">{{ hold.expires_at.strftime("%Y-%m-%d") if hold.expires_at else "—" }}</td>
+  <td data-label="" style="display:flex; gap:0.5rem; flex-wrap:wrap; align-items:center">
+    {% if hold.status == "waiting" and not hold.suspended_until %}
+    <form
+      action="/ui/me/holds/{{ hold.id }}/suspend"
+      method="post"
+      style="margin:0; display:flex; gap:0.25rem; align-items:center; flex-wrap:wrap"
+    >
+      <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+      <input type="date" name="until" required style="padding:0.2rem 0.4rem; margin:0">
+      <button type="submit" class="outline" style="padding:0.2rem 0.6rem">Suspend</button>
+    </form>
+    {% elif hold.status == "waiting" and hold.suspended_until %}
+    <form
+      hx-post="/ui/me/holds/{{ hold.id }}/resume"
+      hx-target="#hold-{{ hold.id }}"
+      hx-swap="outerHTML"
+      hx-include="[name='csrf_token']"
+      style="margin:0"
+    >
+      <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+      <button type="submit" class="outline" style="padding:0.2rem 0.6rem">Resume</button>
+    </form>
+    {% endif %}
+    <form
+      hx-post="/ui/me/holds/{{ hold.id }}/cancel"
+      hx-target="#hold-{{ hold.id }}"
+      hx-swap="outerHTML"
+      hx-include="[name='csrf_token']"
+      style="margin:0"
+    >
+      <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+      <button type="submit" class="outline contrast" style="padding:0.2rem 0.6rem">Cancel</button>
+    </form>
+    {% if notice %}<em>{{ notice }}</em>{% endif %}
+    {% if error %}<span class="error-banner" role="alert" style="padding:0.2rem 0.6rem">{{ error }}</span>{% endif %}
+  </td>
+</tr>

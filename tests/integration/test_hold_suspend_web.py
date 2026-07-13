@@ -93,7 +93,7 @@ def _next() -> int:
     return _n["i"]
 
 
-def _login_patron(client, session) -> tuple[dict, Patron, Hold]:
+def _login_patron(client, session, title: str = "Dune") -> tuple[dict, Patron, Hold]:
     n = _next()
     # Create user + linked patron + waiting hold
     p_role = SqlRoleRepository(session).get_by_name("Patron")
@@ -109,7 +109,8 @@ def _login_patron(client, session) -> tuple[dict, Patron, Hold]:
     session.flush()
     # Seed a book + another patron who checks it out, then our patron places a hold
     isbn = f"9780441{_next():06d}"
-    with patch("compendium.services.metadata.lookup_isbn", return_value=_DUNE):
+    work_meta = dict(_DUNE, title=title)
+    with patch("compendium.services.metadata.lookup_isbn", return_value=work_meta):
         catalog = CatalogService(
             work_repo=SqlWorkRepository(session),
             item_repo=SqlItemRepository(session),
@@ -210,3 +211,53 @@ class TestResumeRoute:
         hw_session.expire_all()
         fresh = SqlHoldRepository(hw_session).get(hold.id)
         assert fresh.suspended_until is None
+
+    def test_resume_rerenders_row_with_updated_state(self, hw_client, hw_session):
+        cookies, _, hold = _login_patron(hw_client, hw_session)
+        hold.suspended_until = date.today() + timedelta(days=7)
+        hw_session.flush()
+        hw_session.commit()
+        raw, signed = _csrf_pair()
+        cookies[CSRF_COOKIE] = signed
+        resp = hw_client.post(
+            f"/ui/me/holds/{hold.id}/resume",
+            data={"csrf_token": raw},
+            cookies=cookies,
+        )
+        assert resp.status_code == 200
+        body = resp.text
+        assert f'id="hold-{hold.id}"' in body
+        assert "Refresh to see updated state" not in body
+        assert "Suspended until" not in body
+        assert "/cancel" in body
+
+    def test_resume_failure_preserves_row(self, hw_client, hw_session):
+        _, _, _own_hold = _login_patron(hw_client, hw_session)
+        other_cookies, _, other_hold = _login_patron(
+            hw_client, hw_session, title="Foundation"
+        )
+        cookies, _, _ = _login_patron(hw_client, hw_session)
+        raw, signed = _csrf_pair()
+        cookies[CSRF_COOKIE] = signed
+        resp = hw_client.post(
+            f"/ui/me/holds/{other_hold.id}/resume",
+            data={"csrf_token": raw},
+            cookies=cookies,
+        )
+        assert resp.status_code == 200
+        assert "error-banner" in resp.text
+        assert "Foundation" not in resp.text
+
+
+class TestCancelRoute:
+    def test_cancel_failure_preserves_row(self, hw_client, hw_session):
+        cookies, _, _hold = _login_patron(hw_client, hw_session)
+        raw, signed = _csrf_pair()
+        cookies[CSRF_COOKIE] = signed
+        resp = hw_client.post(
+            "/ui/me/holds/999999/cancel",
+            data={"csrf_token": raw},
+            cookies=cookies,
+        )
+        assert resp.status_code == 200
+        assert "error-banner" in resp.text

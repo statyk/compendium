@@ -281,6 +281,37 @@ def password_change(
     return response
 
 
+def _render_hold_row(
+    request: Request,
+    user: AppUser,
+    session: Session,
+    hold_id: int,
+    *,
+    patron_id: int | None = None,
+    notice: str | None = None,
+    error: str | None = None,
+):
+    repo = SqlHoldRepository(session)
+    hold = repo.get(hold_id)
+    if hold is None or (patron_id is not None and hold.patron_id != patron_id):
+        msg = error or "Hold not found."
+        return HTMLResponse(
+            f"<tr><td colspan='5' class='error-banner'>{escape(msg)}</td></tr>"
+        )
+    return _render(
+        "me/_hold_row.html",
+        request,
+        {
+            "request": request,
+            "user": user,
+            "hold": hold,
+            "queue_position": repo.queue_position(hold.id),
+            "notice": notice,
+            "error": error,
+        },
+    )
+
+
 @router.post("/me/holds/{hold_id:int}/cancel", response_class=HTMLResponse)
 def cancel_hold(
     hold_id: int,
@@ -293,10 +324,10 @@ def cancel_hold(
     check_csrf_form(request, csrf_token)
     try:
         _holds_svc(session, actor=user).cancel(hold_id, patron_id=patron.id)
-        return HTMLResponse("<tr><td colspan='4'><em>Hold cancelled.</em></td></tr>")
+        return HTMLResponse("<tr><td colspan='5'><em>Hold cancelled.</em></td></tr>")
     except (BusinessRuleError, NotFoundError) as exc:
-        return HTMLResponse(
-            f"<tr><td colspan='4' class='error-banner'>{escape(str(exc))}</td></tr>"
+        return _render_hold_row(
+            request, user, session, hold_id, patron_id=patron.id, error=str(exc)
         )
 
 
@@ -345,8 +376,10 @@ def resume_hold(
     check_csrf_form(request, csrf_token)
     try:
         _holds_svc(session, actor=user).resume(hold_id, patron_id=patron.id)
-        return HTMLResponse("<tr><td colspan='4'><em>Hold resumed. Refresh to see updated state.</em></td></tr>")
+        return _render_hold_row(
+            request, user, session, hold_id, patron_id=patron.id, notice="Hold resumed."
+        )
     except (BusinessRuleError, NotFoundError) as exc:
-        return HTMLResponse(
-            f"<tr><td colspan='4' class='error-banner'>{escape(str(exc))}</td></tr>"
+        return _render_hold_row(
+            request, user, session, hold_id, patron_id=patron.id, error=str(exc)
         )
