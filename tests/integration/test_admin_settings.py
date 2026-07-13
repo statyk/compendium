@@ -219,17 +219,21 @@ class TestSettingsCli:
         assert "env-only" in scopes
 
     def test_list_all_masks_secrets_by_default(self, s_engine, monkeypatch):
+        # --format json for a fail-loud check: the rich box.SIMPLE table
+        # prepends 2 spaces to every data row, so `line.startswith("<key>")`
+        # never matched and the old table-scanning asserts were vacuous.
         monkeypatch.setattr("compendium.db.engine.get_engine", lambda: s_engine)
-        r = CliRunner().invoke(cli_app, ["settings", "list", "--all"])
+        r = CliRunner().invoke(
+            cli_app, ["settings", "list", "--all", "--format", "json"]
+        )
         assert r.exit_code == 0, r.output
-        # Sensitive defaults are masked
-        for line in r.output.splitlines():
-            if line.startswith("jwt_secret_key"):
-                assert "********" in line, line
-                assert "insecure-default" not in line, line
-            if line.startswith("database_url"):
-                assert "********" in line, line
-                assert "sqlite" not in line, line
+        by_key = {row["key"]: row["value"] for row in json.loads(r.stdout)}
+        # Sensitive defaults are masked (no --show-secrets) — same sentinel the
+        # sibling unmask test proves is absent once --show-secrets is passed.
+        assert by_key["jwt_secret_key"] == "********"
+        assert "insecure-default" not in by_key["jwt_secret_key"]
+        assert by_key["database_url"] == "********"
+        assert "sqlite" not in by_key["database_url"]
 
     def test_list_all_show_secrets_unmasks(self, s_engine, monkeypatch):
         # --format json to avoid rich's column-width ellipsis on the long
