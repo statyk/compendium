@@ -991,6 +991,31 @@ The phone scanner's duplicate-scan guard keys on the raw scanned code, so if the
 
 ---
 
+## First-run checklist
+
+A "Getting Started" card on the staff landing page (`web/routes/catalog.py`,
+`services/first_run.py`) gives a fresh install a short punch list instead of
+an empty dashboard. Five cheap, heuristic checks compare live data against
+the values `config/seed.py` writes at `db init`: library name/branch still
+the seed defaults ("Compendium" / "Main Collection"), library hours/closed
+dates untouched from the all-open seed, the loan policy table still just the
+single seeded `Default` policy, whether any `Item` row exists yet, and
+whether `smtp_host` is set. Each unmet check links to the relevant admin
+page (general settings, library hours, policies, add-item, SMTP settings).
+
+The checks only run for `system.manage` holders, and only pre-dismissal —
+`first_run_status()` is gated behind both conditions in the route, so
+non-admins and already-dismissed installs pay no query cost. Dismissing the
+card (`POST /ui/first-run/dismiss`, `system.manage`-gated, CSRF-protected)
+sets the `first_run_dismissed` site setting to `true`; the card also
+self-hides once every check reports done. `first_run_dismissed` is
+intentionally **not** exposed on any settings page — it's a one-way "seen
+it" flag, not something to toggle from the UI. To bring the card back
+(e.g. after a demo reset), an operator resets it directly:
+`compendium settings set first_run_dismissed false`.
+
+---
+
 ## Site settings
 
 Most runtime configuration is DB-editable via the `site_setting` table, with environment variables as a break-glass override.

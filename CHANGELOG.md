@@ -22,6 +22,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   `--dry-run` on `expire-holds`, `prune-metadata-cache`, `prune-cover-cache`,
   `purge-trash`; `import --fail-on-error`; truncation notices on `--limit`
   lists.
+- Getting Started checklist card on the staff landing page for administrators,
+  with live setup-state checks and one-click dismiss.
+- `compendium --help` now ends with a quickstart (keygen → db init → user add → serve).
 
 ### Changed
 

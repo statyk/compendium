@@ -40,6 +40,10 @@ the same bucket, while each interface keeps its own native idiom.
 | `/ui/kiosk/*` | Web-only | Physical self-checkout terminal; no CLI analog |
 | `/ui/scan/*` | Web-only | Phone-as-scanner pairing: QR generation, phone claim/dispatch, desk live feed (`scan_event` table, 1500 ms HTMX poll), per-pairing `catalog_review` toggle, and desk review queue (`scan_pending_item`): `POST /ui/scan/review`, `POST /ui/scan/pairings/{id}/pending/{pid}/approve`, `.../discard`, `GET`/`POST .../edit` (inline edit modal), and the phone liveness `GET /ui/scan/heartbeat` (unpair detection). All inherently interactive browser flows tied to a physical device; no meaningful CLI analog. |
 
+- `/ui/first-run/dismiss` + the Getting Started card — web-only by design: a
+  landing-page onboarding affordance, not a library operation; the CLI's
+  equivalent is the root `--help` quickstart epilog.
+
 ## Naming conventions
 
 - **CLI**: noun-group then imperative verb (`item declare-lost`, `claim verify`).
