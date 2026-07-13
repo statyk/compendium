@@ -90,11 +90,18 @@ def _holds_svc(session) -> HoldService:
 
 
 @app.command("expire-holds")
-def expire_holds() -> None:
+def expire_holds(
+    quiet: bool = typer.Option(
+        False, "--quiet", "-q",
+        help="Suppress output when there is nothing to do.",
+    ),
+) -> None:
     """Expire waiting holds whose expiry date has passed."""
     with session_scope() as session:
         count = _holds_svc(session).expire_holds()
-        typer.echo(f"Expired {count} hold(s).")
+    if count == 0 and quiet:
+        return
+    typer.echo(f"Expired {count} hold(s).")
 
 
 @app.command("resume-expired-suspends")
@@ -136,6 +143,10 @@ def prune_audit_log(
         False, "--dry-run",
         help="Report what would be deleted without touching the database.",
     ),
+    quiet: bool = typer.Option(
+        False, "--quiet", "-q",
+        help="Suppress output when there is nothing to do.",
+    ),
 ) -> None:
     """Delete old audit log rows.
 
@@ -159,10 +170,14 @@ def prune_audit_log(
         repo = SqlAuditLogRepository(session)
         if dry_run:
             count = repo.count_older_than(cutoff)
+            if count == 0 and quiet:
+                return
             typer.echo(f"Would prune {count} audit row(s) older than {days} day(s).")
             return
         count = repo.delete_older_than(cutoff)
-        typer.echo(f"Pruned {count} audit row(s) older than {days} day(s).")
+    if count == 0 and quiet:
+        return
+    typer.echo(f"Pruned {count} audit row(s) older than {days} day(s).")
 
 
 @app.command("prune-scan-pairings")
@@ -174,6 +189,10 @@ def prune_scan_pairings(
     dry_run: bool = typer.Option(
         False, "--dry-run",
         help="Report what would be deleted without touching the database.",
+    ),
+    quiet: bool = typer.Option(
+        False, "--quiet", "-q",
+        help="Suppress output when there is nothing to do.",
     ),
 ) -> None:
     """Delete old terminal scan-pairing rows.
@@ -208,6 +227,8 @@ def prune_scan_pairings(
         repo = SqlScanPairingRepository(session)
         ids = repo.terminal_deletable_ids(cutoff)
         if dry_run:
+            if len(ids) == 0 and quiet:
+                return
             typer.echo(
                 f"Would prune {len(ids)} scan-pairing row(s) older than "
                 f"{older_than_days} day(s)."
@@ -223,9 +244,11 @@ def prune_scan_pairings(
         # deleted this run.
         SqlScanPendingItemRepository(session).delete_resolved_older_than(cutoff)
         count = repo.delete_by_ids(ids)
-        typer.echo(
-            f"Pruned {count} scan-pairing row(s) older than {older_than_days} day(s)."
-        )
+    if count == 0 and quiet:
+        return
+    typer.echo(
+        f"Pruned {count} scan-pairing row(s) older than {older_than_days} day(s)."
+    )
 
 
 @app.command("prune-failed-logins")
@@ -237,6 +260,10 @@ def prune_failed_logins(
     dry_run: bool = typer.Option(
         False, "--dry-run",
         help="Report what would be deleted without touching the database.",
+    ),
+    quiet: bool = typer.Option(
+        False, "--quiet", "-q",
+        help="Suppress output when there is nothing to do.",
     ),
 ) -> None:
     """Delete old failed-login rows.
@@ -255,14 +282,23 @@ def prune_failed_logins(
         repo = SqlFailedLoginRepository(session)
         if dry_run:
             count = repo.count_older_than(cutoff)
+            if count == 0 and quiet:
+                return
             typer.echo(f"Would prune {count} failed-login row(s) older than {older_than_days} day(s).")
             return
         count = repo.delete_older_than(cutoff)
-        typer.echo(f"Pruned {count} failed-login row(s) older than {older_than_days} day(s).")
+    if count == 0 and quiet:
+        return
+    typer.echo(f"Pruned {count} failed-login row(s) older than {older_than_days} day(s).")
 
 
 @app.command("assess-overdue-fines")
-def assess_overdue_fines_cmd() -> None:
+def assess_overdue_fines_cmd(
+    quiet: bool = typer.Option(
+        False, "--quiet", "-q",
+        help="Suppress output when there is nothing to do.",
+    ),
+) -> None:
     """Materialize outstanding overdue fines for every currently-overdue loan.
 
     Idempotent: creates a Fine row per (loan, overdue) or updates the existing
@@ -292,6 +328,8 @@ def assess_overdue_fines_cmd() -> None:
             source="cli",
         )
         counts = fine_svc.assess_overdue_fines()
+    if counts["created"] == 0 and counts["updated"] == 0 and quiet:
+        return
     typer.echo(
         f"Overdue fines assessed: "
         f"created={counts['created']}, updated={counts['updated']}, "
@@ -331,11 +369,17 @@ def send_queued_notifications_cmd(
         None, "--batch-size", help="Overrides COMPENDIUM_NOTIFICATIONS_BATCH_SIZE."
     ),
     dry_run: bool = typer.Option(False, "--dry-run"),
+    quiet: bool = typer.Option(
+        False, "--quiet", "-q",
+        help="Suppress output when there is nothing to do.",
+    ),
 ) -> None:
     """Drain pending notifications via SMTP (cron-friendly, idempotent)."""
     with session_scope() as session:
         svc = _make_notification_svc(session)
         counts = svc.send_pending(batch_size=batch_size, dry_run=dry_run)
+    if counts.sent == 0 and counts.failed == 0 and counts.cancelled == 0 and counts.skipped == 0 and quiet:
+        return
     typer.echo(
         f"Notifications: sent={counts.sent}, failed={counts.failed}, "
         f"cancelled={counts.cancelled}, skipped={counts.skipped}"
@@ -348,12 +392,18 @@ def queue_due_soon_notices_cmd(
     days_before: int | None = typer.Option(
         None, "--days-before", help="Overrides COMPENDIUM_DUE_SOON_DAYS_BEFORE."
     ),
+    quiet: bool = typer.Option(
+        False, "--quiet", "-q",
+        help="Suppress output when there is nothing to do.",
+    ),
 ) -> None:
     """Queue a due-soon reminder for each active loan due within the window."""
     with session_scope() as session:
         svc = _make_notification_svc(session)
         effective = days_before if days_before is not None else get_site_setting("due_soon_days_before")
         counts = svc.queue_due_soon_batch(days_before=effective)
+    if counts.queued == 0 and quiet:
+        return
     typer.echo(f"Due-soon notices queued: {counts.queued}")
 
 
@@ -361,6 +411,10 @@ def queue_due_soon_notices_cmd(
 def queue_overdue_notices_cmd(
     tiers: str | None = typer.Option(
         None, "--tiers", help="Comma-separated day offsets. Overrides COMPENDIUM_OVERDUE_TIERS."
+    ),
+    quiet: bool = typer.Option(
+        False, "--quiet", "-q",
+        help="Suppress output when there is nothing to do.",
     ),
 ) -> None:
     """Queue an overdue notice per active overdue loan at the highest matching tier."""
@@ -380,6 +434,8 @@ def queue_overdue_notices_cmd(
     with session_scope() as session:
         svc = _make_notification_svc(session)
         counts = svc.queue_overdue_batch(tiers=tier_list)
+    if counts.queued == 0 and quiet:
+        return
     typer.echo(f"Overdue notices queued: {counts.queued}")
 
 
@@ -394,6 +450,10 @@ def prune_notifications_cmd(
         None, "--status", help="pending | sent | failed | cancelled"
     ),
     dry_run: bool = typer.Option(False, "--dry-run"),
+    quiet: bool = typer.Option(
+        False, "--quiet", "-q",
+        help="Suppress output when there is nothing to do.",
+    ),
 ) -> None:
     """Delete notifications. Specify --older-than-days, --status, or both.
 
@@ -431,6 +491,8 @@ def prune_notifications_cmd(
     except Exception as exc:
         typer.echo(f"Error: {exc}", err=True)
         raise typer.Exit(1) from exc
+    if count == 0 and quiet:
+        return
     verb = "Would delete" if dry_run else "Deleted"
     filter_desc = (
         f"older than {days} day(s)"
@@ -568,7 +630,12 @@ def refresh_metadata_cmd(
 
 
 @app.command("prune-metadata-cache")
-def prune_metadata_cache() -> None:
+def prune_metadata_cache(
+    quiet: bool = typer.Option(
+        False, "--quiet", "-q",
+        help="Suppress output when there is nothing to do.",
+    ),
+) -> None:
     """Delete expired metadata cache rows (past positive or negative TTL)."""
     from compendium.db.session import session_scope
     from compendium.services.metadata_cache import prune_expired
@@ -576,6 +643,8 @@ def prune_metadata_cache() -> None:
     with session_scope() as session:
         deleted = prune_expired(session)
     if deleted == 0:
+        if quiet:
+            return
         typer.echo("Metadata cache: no expired entries found.")
     else:
         typer.echo(f"Metadata cache: pruned {deleted} expired row(s).")
@@ -602,6 +671,10 @@ def purge_trash_cmd(
         "--older-than-days",
         help="Purge trash entries older than this (default: the trash_retention_days setting).",
     ),
+    quiet: bool = typer.Option(
+        False, "--quiet", "-q",
+        help="Suppress output when there is nothing to do.",
+    ),
 ) -> None:
     """Permanently delete trashed works past the retention window."""
     days = older_than_days
@@ -614,10 +687,13 @@ def purge_trash_cmd(
         )
         raise typer.Exit(1)
     if not days:
-        typer.echo("Trash retention is disabled (trash_retention_days=0); nothing purged.")
+        if not quiet:
+            typer.echo("Trash retention is disabled (trash_retention_days=0); nothing purged.")
         raise typer.Exit(0)
     with session_scope() as session:
         purged = _trash_svc(session).purge(older_than_days=days)
+    if purged == 0 and quiet:
+        return
     typer.echo(f"Purged {purged} trash entr{'y' if purged == 1 else 'ies'}.")
 
 
@@ -626,6 +702,10 @@ def prune_cover_cache(
     max_mb: int = typer.Option(
         500, "--max-mb",
         help="Cache size cap in MB. Oldest files (by mtime) are deleted until under cap.",
+    ),
+    quiet: bool = typer.Option(
+        False, "--quiet", "-q",
+        help="Suppress output when there is nothing to do.",
     ),
 ) -> None:
     """Evict oldest cover-cache files until total size ≤ --max-mb."""
@@ -636,6 +716,8 @@ def prune_cover_cache(
 
     removed, freed = prune(max_mb * 1024 * 1024)
     if removed == 0:
+        if quiet:
+            return
         typer.echo(f"Cover cache under {max_mb} MB cap; nothing to prune.")
     else:
         typer.echo(f"Pruned {removed} file(s), freed {freed // 1024} KB.")
