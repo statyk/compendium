@@ -1,0 +1,26 @@
+{% extends "base.html" %}
+{% block title %}Change default policy — {{ library_name() }}{% endblock %}
+{% block content %}
+<nav aria-label="breadcrumb">
+  <ul><li><a href="/ui/policies">Loan Policies</a></li><li>Change default</li></ul>
+</nav>
+
+<hgroup>
+  <h2>Change the default policy?</h2>
+  <p>"{{ policy.name }}" will replace "{{ old_default.name }}" as the default.</p>
+</hgroup>
+
+<p>The default policy applies whenever no media-type or patron-category
+specific policy matches. This change takes effect immediately for new
+checkouts and renewals.</p>
+
+<form method="post" action="/ui/policies/{{ policy.id }}/update">
+  <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+  <input type="hidden" name="confirm_default" value="1">
+  {% for k, v in fields.items() %}
+  <input type="hidden" name="{{ k }}" value="{{ v if v is not none else '' }}">
+  {% endfor %}
+  <button type="submit">Make "{{ policy.name }}" the default</button>
+  <a href="/ui/policies" role="button" class="outline secondary">Cancel</a>
+</form>
+{% endblock %}

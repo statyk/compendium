@@ -149,6 +149,7 @@ def policy_update(
     lost_item_default_cents: str = Form(default=""),
     lost_item_processing_fee_cents: str = Form(default=""),
     csrf_token: str = Form(default=""),
+    confirm_default: str = Form(default=""),
     user: AppUser = Depends(require_web_permission(_PERM)),
     session: Session = Depends(get_session),
 ):
@@ -159,6 +160,39 @@ def policy_update(
     cat_arg: object = (
         int(patron_category_id) if patron_category_id.strip().isdigit() else None
     )
+
+    if default_flag:
+        current = SqlLoanPolicyRepository(session).get(policy_id)
+        current_default = SqlLoanPolicyRepository(session).get_default()
+        needs_confirm = (
+            current is not None
+            and not current.is_default
+            and current_default is not None
+            and confirm_default != "1"
+        )
+        if needs_confirm:
+            resubmit = {
+                "loan_period_days": loan_period_days,
+                "max_renewals": max_renewals,
+                "is_default": "on",
+                "patron_category_id": patron_category_id,
+                "overdue_fine_per_day_cents": overdue_fine_per_day_cents,
+                "overdue_fine_cap_cents": overdue_fine_cap_cents,
+                "grace_period_days": grace_period_days,
+                "lost_item_default_cents": lost_item_default_cents,
+                "lost_item_processing_fee_cents": lost_item_processing_fee_cents,
+            }
+            return _render(
+                "policies/default_confirm.html",
+                request,
+                {
+                    "request": request,
+                    "user": user,
+                    "policy": current,
+                    "old_default": current_default,
+                    "fields": resubmit,
+                },
+            )
 
     def _int_or_missing(raw: str):
         s = raw.strip()

@@ -1630,6 +1630,59 @@ def test_policy_create_as_default_swaps(web_client, librarian, web_session):
     assert new_default.name == "New Default"
 
 
+def test_policy_page_states_renewal_behavior(web_client, librarian):
+    cookies = _login(web_client, "lib01")
+    resp = web_client.get("/ui/policies", cookies=cookies)
+    assert resp.status_code == 200
+    assert "renewals made after saving" in resp.text
+
+
+def test_default_swap_requires_confirm(web_client, librarian, web_session):
+    from compendium.repositories.sql.loan_policy_repository import SqlLoanPolicyRepository
+    from compendium.domain.models import LoanPolicy
+
+    repo = SqlLoanPolicyRepository(web_session)
+    old_default = repo.get_default()
+    assert old_default is not None
+
+    challenger = LoanPolicy(name="Challenger", loan_period_days=14, max_renewals=1, is_default=False)
+    repo.add(challenger)
+
+    auth_cookies = _login(web_client, "lib01")
+    form_data = {
+        "loan_period_days": "21",
+        "max_renewals": "4",
+        "is_default": "on",
+    }
+
+    raw, signed = _make_csrf_pair()
+    resp = web_client.post(
+        f"/ui/policies/{challenger.id}/update",
+        data={**form_data, "csrf_token": raw},
+        cookies={**auth_cookies, CSRF_COOKIE: signed},
+    )
+    assert resp.status_code == 200
+    assert "will replace" in resp.text
+
+    web_session.refresh(challenger)
+    web_session.refresh(old_default)
+    assert challenger.is_default is False
+    assert old_default.is_default is True
+
+    raw2, signed2 = _make_csrf_pair()
+    resp2 = web_client.post(
+        f"/ui/policies/{challenger.id}/update",
+        data={**form_data, "confirm_default": "1", "csrf_token": raw2},
+        cookies={**auth_cookies, CSRF_COOKIE: signed2},
+    )
+    assert resp2.status_code == 303
+
+    web_session.refresh(challenger)
+    web_session.refresh(old_default)
+    assert challenger.is_default is True
+    assert old_default.is_default is False
+
+
 def test_policy_delete_confirm_renders(web_client, librarian, web_session):
     from compendium.repositories.sql.loan_policy_repository import SqlLoanPolicyRepository
     from compendium.domain.models import LoanPolicy
