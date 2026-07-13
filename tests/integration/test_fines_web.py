@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from datetime import datetime, timedelta, timezone
 from unittest.mock import patch
+from uuid import uuid4
 
 import pytest
 from fastapi.testclient import TestClient
@@ -195,6 +196,35 @@ def _make_overdue_loan(s, patron, item, days_late=3):
     return loan
 
 
+def _login_as_librarian(client, s, username):
+    _make_user(s, "Librarian", username)
+    s.commit()
+    return _login(client, username)
+
+
+@pytest.fixture
+def seeded_fine(db_session):
+    """A $5.00 manual fine for a freshly-seeded patron. Returns (fine, card)."""
+    from compendium.services.audit import AuditService
+    from compendium.repositories.sql.audit_log_repository import SqlAuditLogRepository
+    from compendium.services.fines import FineService
+
+    card = f"WEB_PAY_{uuid4().hex[:8].upper()}"
+    p = _make_patron(db_session, card)
+    fs = FineService(
+        fine_repo=SqlFineRepository(db_session),
+        patron_repo=SqlPatronRepository(db_session),
+        loan_repo=SqlLoanRepository(db_session),
+        item_repo=SqlItemRepository(db_session),
+        policy_repo=SqlLoanPolicyRepository(db_session),
+        settings=Settings(database_url="sqlite:///:memory:"),
+        audit_svc=AuditService(SqlAuditLogRepository(db_session)),
+    )
+    fine = fs.assess_manual(p, kind=FineKind.OTHER.value, amount_cents=500, note="seed")
+    db_session.commit()
+    return fine, card
+
+
 # ── Librarian patron-fines page ──────────────────────────────────────────────
 
 
@@ -274,7 +304,7 @@ def test_web_pay_fine_flow(client, db_session):
     raw, signed = _make_csrf_pair()
     resp = client.post(
         f"/ui/fines/{fine.id}/pay",
-        data={"csrf_token": raw, "patron_card": "WEB_PF_0004"},
+        data={"csrf_token": raw, "patron_card": "WEB_PF_0004", "amount": "3.00", "note": ""},
         cookies={**cookies, CSRF_COOKIE: signed},
     )
     assert resp.status_code == 303
@@ -282,7 +312,7 @@ def test_web_pay_fine_flow(client, db_session):
     assert fine.status == FineStatus.PAID.value
 
 
-def test_web_waive_fine_requires_note(client, db_session):
+def test_web_waive_fine_note_optional(client, db_session):
     p = _make_patron(db_session, "WEB_PF_0005")
     _make_user(db_session, "Librarian", "web_pf_5")
     db_session.commit()
@@ -304,25 +334,68 @@ def test_web_waive_fine_requires_note(client, db_session):
     fine = fs.assess_manual(p, kind=FineKind.OTHER.value, amount_cents=300, note="x")
     db_session.commit()
 
+    # Waiving without a note now succeeds — note is optional at the service layer.
     raw, signed = _make_csrf_pair()
     resp = client.post(
         f"/ui/fines/{fine.id}/waive",
         data={"csrf_token": raw, "patron_card": "WEB_PF_0005", "note": ""},
         cookies={**cookies, CSRF_COOKIE: signed},
     )
-    assert resp.status_code == 303  # redirects to patron fines page with error
-    db_session.refresh(fine)
-    assert fine.status == FineStatus.OUTSTANDING.value
-
-    raw2, signed2 = _make_csrf_pair()
-    resp2 = client.post(
-        f"/ui/fines/{fine.id}/waive",
-        data={"csrf_token": raw2, "patron_card": "WEB_PF_0005", "note": "goodwill"},
-        cookies={**cookies, CSRF_COOKIE: signed2},
-    )
-    assert resp2.status_code == 303
+    assert resp.status_code == 303
+    assert "message=" in resp.headers["location"]
     db_session.refresh(fine)
     assert fine.status == FineStatus.WAIVED.value
+
+
+def test_pay_confirm_page_prefills_balance(client, db_session, seeded_fine):
+    fine, card = seeded_fine
+    cookies = _login_as_librarian(client, db_session, "web_pay_confirm")
+    resp = client.get(f"/ui/fines/{fine.id}/pay?patron_card={card}", cookies=cookies)
+    assert resp.status_code == 200, resp.text
+    assert 'name="amount"' in resp.text
+    assert 'value="5.00"' in resp.text  # seeded_fine.amount_cents == 500
+
+
+def test_pay_partial_via_web(client, db_session, seeded_fine):
+    fine, card = seeded_fine
+    cookies = _login_as_librarian(client, db_session, "web_pay_partial")
+    raw, signed = _make_csrf_pair()
+    resp = client.post(
+        f"/ui/fines/{fine.id}/pay",
+        data={"amount": "2.00", "note": "", "patron_card": card, "csrf_token": raw},
+        cookies={**cookies, CSRF_COOKIE: signed},
+    )
+    assert resp.status_code == 303, resp.text
+    db_session.refresh(fine)
+    assert fine.paid_cents == 200
+    assert fine.status == FineStatus.OUTSTANDING.value
+
+
+def test_pay_overpay_rerenders_confirm_with_error(client, db_session, seeded_fine):
+    fine, card = seeded_fine
+    cookies = _login_as_librarian(client, db_session, "web_pay_overpay")
+    raw, signed = _make_csrf_pair()
+    resp = client.post(
+        f"/ui/fines/{fine.id}/pay",
+        data={"amount": "9.99", "note": "", "patron_card": card, "csrf_token": raw},
+        cookies={**cookies, CSRF_COOKIE: signed},
+    )
+    assert resp.status_code == 200, resp.text
+    assert "error-banner" in resp.text
+    assert 'name="amount"' in resp.text
+
+
+def test_waive_without_note_succeeds(client, db_session, seeded_fine):
+    fine, card = seeded_fine
+    cookies = _login_as_librarian(client, db_session, "web_pay_waive")
+    raw, signed = _make_csrf_pair()
+    resp = client.post(
+        f"/ui/fines/{fine.id}/waive",
+        data={"note": "", "patron_card": card, "csrf_token": raw},
+        cookies={**cookies, CSRF_COOKIE: signed},
+    )
+    assert resp.status_code == 303
+    assert "message=" in resp.headers["location"]
 
 
 def test_web_patron_fines_forbidden_for_readonly(client, db_session):

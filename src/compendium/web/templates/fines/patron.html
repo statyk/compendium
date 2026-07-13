@@ -61,23 +61,25 @@
     <tr>
       <td>#{{ fine.id }}</td>
       <td>{{ fine.kind | replace("_", " ") }}</td>
-      <td>{{ fine.amount_cents | currency }}</td>
+      <td>
+        {{ fine.amount_cents | currency }}
+        {% if fine.paid_cents and fine.status == "outstanding" %}
+        <br><small>{{ fine.paid_cents | currency }} paid · {{ fine.balance_cents | currency }} remaining</small>
+        {% endif %}
+      </td>
       <td>{{ fine.status }}</td>
       <td>{{ fine.assessed_at.strftime("%Y-%m-%d") }}</td>
       <td>{{ fine.note or "—" }}</td>
       <td>
         {% if fine.status == "outstanding" %}
-        <form method="post" action="/ui/fines/{{ fine.id }}/pay" style="display:inline">
-          <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
-          <input type="hidden" name="patron_card" value="{{ patron.library_card_number }}">
-          <button type="submit" class="outline">Pay</button>
-        </form>
+        <a role="button" class="outline"
+           href="/ui/fines/{{ fine.id }}/pay?patron_card={{ patron.library_card_number }}">Pay</a>
         <details style="display:inline-block; margin-left:.5em">
           <summary class="outline secondary" role="button">Waive</summary>
           <form method="post" action="/ui/fines/{{ fine.id }}/waive" style="margin-top:.5em">
             <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
             <input type="hidden" name="patron_card" value="{{ patron.library_card_number }}">
-            <input type="text" name="note" placeholder="Waive reason (required)" required>
+            <input type="text" name="note" placeholder="Waive reason (optional)">
             <button type="submit" class="contrast">Confirm waive</button>
           </form>
         </details>

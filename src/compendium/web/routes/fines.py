@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from decimal import Decimal, InvalidOperation
 from urllib.parse import quote
 
 from fastapi import APIRouter, Depends, Form, Request
@@ -11,6 +12,7 @@ from sqlalchemy.orm import Session
 from compendium.services.site_settings import get_site_setting
 from compendium.db.engine import get_settings
 from compendium.db.session import get_session
+from compendium.domain.enums import FineStatus
 from compendium.domain.errors import (
     BlockedByFinesError,
     BusinessRuleError,
@@ -169,28 +171,81 @@ def patron_assess_overdue(
     )
 
 
+def _dollars_to_cents(raw: str) -> int:
+    try:
+        return int((Decimal(raw.strip()) * 100).to_integral_value())
+    except (InvalidOperation, ValueError) as exc:
+        raise ValidationError(f"Not a valid amount: '{raw}'") from exc
+
+
+def _pay_confirm_ctx(
+    session: Session, user: AppUser, fine_id: int, patron_card: str, error: str | None = None
+) -> dict:
+    fine = SqlFineRepository(session).get(fine_id)
+    if fine is None:
+        raise NotFoundError(f"No fine with id={fine_id}")
+    return {
+        "user": user,
+        "fine": fine,
+        "patron_card": patron_card,
+        "balance_dollars": f"{fine.balance_cents / 100:.2f}",
+        "error": error,
+    }
+
+
+@router.get("/fines/{fine_id}/pay")
+def pay_fine_confirm(
+    fine_id: int,
+    request: Request,
+    patron_card: str = "",
+    user: AppUser = Depends(require_web_permission("fine.manage")),
+    session: Session = Depends(get_session),
+):
+    try:
+        ctx = _pay_confirm_ctx(session, user, fine_id, patron_card)
+    except NotFoundError:
+        return _render(
+            "fines/not_found.html",
+            request,
+            {"request": request, "user": user, "card_number": patron_card},
+            status_code=404,
+        )
+    ctx["request"] = request
+    return _render("fines/pay_confirm.html", request, ctx)
+
+
 @router.post("/fines/{fine_id}/pay")
 def pay_fine(
     fine_id: int,
     request: Request,
     patron_card: str = Form(...),
+    amount: str = Form(...),
+    note: str = Form(""),
     csrf_token: str = Form(...),
     user: AppUser = Depends(require_web_permission("fine.manage")),
     session: Session = Depends(get_session),
 ):
     check_csrf_form(request, csrf_token)
     try:
-        _fine_svc(session, user).pay(fine_id)
-        msg = f"Fine #{fine_id} marked paid."
+        cents = _dollars_to_cents(amount)
+        fine = _fine_svc(session, user).pay(fine_id, amount_cents=cents, note=note or None)
+        if fine.status == FineStatus.PAID.value:
+            msg = f"Fine #{fine_id} paid in full."
+        else:
+            msg = f"Fine #{fine_id}: recorded {amount.strip()} — {fine.balance_cents / 100:.2f} remaining."
         return RedirectResponse(
             f"/ui/patrons/{patron_card}/fines?message={quote(msg)}",
             status_code=303,
         )
-    except (NotFoundError, ValidationError) as exc:
+    except NotFoundError as exc:
         return RedirectResponse(
             f"/ui/patrons/{patron_card}/fines?error={quote(str(exc))}",
             status_code=303,
         )
+    except ValidationError as exc:
+        ctx = _pay_confirm_ctx(session, user, fine_id, patron_card, error=str(exc))
+        ctx["request"] = request
+        return _render("fines/pay_confirm.html", request, ctx)
 
 
 @router.post("/fines/{fine_id}/waive")
@@ -205,7 +260,7 @@ def waive_fine(
 ):
     check_csrf_form(request, csrf_token)
     try:
-        _fine_svc(session, user).waive(fine_id, note)
+        _fine_svc(session, user).waive(fine_id, note or None)
         msg = f"Fine #{fine_id} waived."
         return RedirectResponse(
             f"/ui/patrons/{patron_card}/fines?message={quote(msg)}",
