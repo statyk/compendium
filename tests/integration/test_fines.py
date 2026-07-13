@@ -363,14 +363,16 @@ def test_pay_rejects_already_resolved(session):
         svc.pay(fine.id)
 
 
-def test_waive_requires_note(session):
+def test_waive_succeeds_with_empty_note(session):
+    # Waive note moved from required to optional; an explicit blank string
+    # is treated the same as omitting it entirely.
     patron = _make_patron(session)
     svc = _fine_svc(session)
     fine = svc.assess_manual(
         patron, kind=FineKind.OTHER.value, amount_cents=500, note="xx"
     )
-    with pytest.raises(ValidationError):
-        svc.waive(fine.id, note="")
+    waived = svc.waive(fine.id, note="")
+    assert waived.status == FineStatus.WAIVED.value
 
 
 def test_waive_transitions_to_waived_and_appends_note(session):
@@ -437,3 +439,51 @@ def test_outstanding_total_subtracts_partial_payments(session):
     session.flush()
     repo = SqlFineRepository(session)
     assert repo.outstanding_total(patron.id) == 300
+
+
+def test_pay_partial_keeps_outstanding(session):
+    patron = _make_patron(session)
+    svc = _fine_svc(session)
+    fine = svc.assess_manual(
+        patron, kind=FineKind.OTHER.value, amount_cents=500, note="xx"
+    )
+    result = svc.pay(fine.id, amount_cents=200, note="cash")
+    assert result.status == FineStatus.OUTSTANDING.value
+    assert result.paid_cents == 200
+    assert result.balance_cents == 300
+    assert result.resolved_at is None
+
+
+def test_pay_full_default_resolves(session):
+    patron = _make_patron(session)
+    svc = _fine_svc(session)
+    fine = svc.assess_manual(
+        patron, kind=FineKind.OTHER.value, amount_cents=500, note="xx"
+    )
+    svc.pay(fine.id, amount_cents=200)
+    result = svc.pay(fine.id)  # None = remaining balance
+    assert result.status == FineStatus.PAID.value
+    assert result.paid_cents == 500
+    assert result.resolved_at is not None
+
+
+def test_pay_rejects_zero_and_overpay(session):
+    patron = _make_patron(session)
+    svc = _fine_svc(session)
+    fine = svc.assess_manual(
+        patron, kind=FineKind.OTHER.value, amount_cents=500, note="xx"
+    )
+    with pytest.raises(ValidationError):
+        svc.pay(fine.id, amount_cents=0)
+    with pytest.raises(ValidationError):
+        svc.pay(fine.id, amount_cents=501)
+
+
+def test_waive_note_optional(session):
+    patron = _make_patron(session)
+    svc = _fine_svc(session)
+    fine = svc.assess_manual(
+        patron, kind=FineKind.OTHER.value, amount_cents=500, note="xx"
+    )
+    result = svc.waive(fine.id)
+    assert result.status == FineStatus.WAIVED.value

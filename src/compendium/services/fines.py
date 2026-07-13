@@ -319,7 +319,12 @@ class FineService:
         )
         return fine
 
-    def pay(self, fine_id: int) -> Fine:
+    def pay(
+        self,
+        fine_id: int,
+        amount_cents: int | None = None,
+        note: str | None = None,
+    ) -> Fine:
         fine = self._fines.get(fine_id)
         if fine is None:
             raise NotFoundError(f"No fine with id={fine_id}")
@@ -327,21 +332,39 @@ class FineService:
             raise ValidationError(
                 f"Fine #{fine.id} is already {fine.status}; cannot pay."
             )
-        fine.status = FineStatus.PAID.value
-        fine.resolved_at = datetime.now(tz=timezone.utc)
-        fine.resolved_by_user_id = self._actor.id if self._actor else None
+        balance = fine.balance_cents
+        amount = balance if amount_cents is None else amount_cents
+        if amount <= 0:
+            raise ValidationError("Payment amount must be greater than zero.")
+        if amount > balance:
+            raise ValidationError(
+                f"Payment of {amount} cents exceeds the remaining balance ({balance} cents)."
+            )
+        fine.paid_cents += amount
+        remaining = fine.balance_cents
+        if note and note.strip():
+            existing_note = fine.note or ""
+            fine.note = (
+                existing_note + ("\n" if existing_note else "") + f"Paid: {note.strip()}"
+            ).strip()
+        if remaining == 0:
+            fine.status = FineStatus.PAID.value
+            fine.resolved_at = datetime.now(tz=timezone.utc)
+            fine.resolved_by_user_id = self._actor.id if self._actor else None
         self._fines.update(fine)
         self._record(
             AuditEntityType.FINE,
             fine.id,
             AuditAction.PAY_FINE,
-            {"amount_cents": fine.amount_cents},
+            {
+                "amount_cents": amount,
+                "note": note.strip() if note and note.strip() else None,
+                "remaining_cents": remaining,
+            },
         )
         return fine
 
-    def waive(self, fine_id: int, note: str) -> Fine:
-        if not note or not note.strip():
-            raise ValidationError("A note is required to waive a fine.")
+    def waive(self, fine_id: int, note: str | None = None) -> Fine:
         fine = self._fines.get(fine_id)
         if fine is None:
             raise NotFoundError(f"No fine with id={fine_id}")
@@ -352,14 +375,18 @@ class FineService:
         fine.status = FineStatus.WAIVED.value
         fine.resolved_at = datetime.now(tz=timezone.utc)
         fine.resolved_by_user_id = self._actor.id if self._actor else None
-        existing_note = fine.note or ""
-        fine.note = (existing_note + ("\n" if existing_note else "") + f"Waived: {note.strip()}").strip()
+        cleaned = note.strip() if note and note.strip() else None
+        if cleaned:
+            existing_note = fine.note or ""
+            fine.note = (
+                existing_note + ("\n" if existing_note else "") + f"Waived: {cleaned}"
+            ).strip()
         self._fines.update(fine)
         self._record(
             AuditEntityType.FINE,
             fine.id,
             AuditAction.WAIVE_FINE,
-            {"amount_cents": fine.amount_cents, "waive_note": note.strip()},
+            {"amount_cents": fine.amount_cents, "waive_note": cleaned},
         )
         return fine
 
