@@ -40,9 +40,20 @@ def _version_callback(value: bool) -> None:
         raise typer.Exit()
 
 
+_EPILOG = """Quickstart:
+
+  compendium keygen              # generate secret keys -> put in env
+  compendium db init             # create / migrate the database
+  compendium user add NAME       # create the first user (Administrator)
+  compendium serve               # start the web UI + API
+
+Docs: https://github.com/statyk/compendium/tree/master/docs
+"""
+
 app = typer.Typer(
     name="compendium",
     help="Compendium — a library card catalog system for physical items.",
+    epilog=_EPILOG,
     no_args_is_help=True,
 )
 

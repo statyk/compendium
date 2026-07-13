@@ -238,3 +238,17 @@ def test_dismiss_forbidden_without_system_manage(web_client, web_session, librar
         "/ui/first-run/dismiss", data={"csrf_token": raw}, cookies=cookies
     )
     assert resp.status_code == 403
+
+
+# ── CLI epilog ────────────────────────────────────────────────────────────
+
+
+def test_root_help_shows_quickstart():
+    from typer.testing import CliRunner
+    from compendium.cli.main import app
+
+    result = CliRunner().invoke(app, ["--help"])
+    assert result.exit_code == 0
+    assert "Quickstart:" in result.output
+    assert "compendium keygen" in result.output
+    assert "compendium serve" in result.output
