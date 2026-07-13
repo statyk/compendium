@@ -1999,6 +1999,66 @@ def test_non_htmx_request_still_gets_303(web_client):
     assert resp.headers["location"].startswith("/ui/login")
 
 
+# ── row-preserving self-service errors (loans) ────────────────────────────────
+
+
+def _checkout_to_patron(web_session, work, patron):
+    """Create an active loan for the web patron; returns the Loan."""
+    from compendium.repositories.sql.loan_policy_repository import SqlLoanPolicyRepository
+    from compendium.services.audit import AuditService as _AS
+
+    svc = CirculationService(
+        item_repo=SqlItemRepository(web_session),
+        loan_repo=SqlLoanRepository(web_session),
+        patron_repo=SqlPatronRepository(web_session),
+        branch_repo=SqlBranchRepository(web_session),
+        hold_repo=SqlHoldRepository(web_session),
+        policy_repo=SqlLoanPolicyRepository(web_session),
+    )
+    loan = svc.checkout(work[1].barcode, patron.library_card_number)
+    web_session.flush()
+    return loan
+
+
+def test_me_renew_failure_preserves_row_controls(web_client, patron_user, work, web_session):
+    """A failed renew must re-render the row with its buttons, plus an error."""
+    user, patron = patron_user
+    loan = _checkout_to_patron(web_session, work, patron)
+    # Exhaust renewals so the next renew fails with BusinessRuleError.
+    loan.renewal_count = 99
+    web_session.flush()
+    cookies = _login(web_client, "patron01")
+    raw, signed = _make_csrf_pair()
+    resp = web_client.post(
+        f"/ui/me/loans/{loan.id}/renew",
+        data={"csrf_token": raw},
+        cookies={**cookies, CSRF_COOKIE: signed},
+    )
+    assert resp.status_code == 200
+    body = resp.text
+    assert f'id="loan-{loan.id}"' in body          # full row came back
+    assert "/renew" in body                         # renew form still present
+    assert "error-banner" in body                   # inline error shown
+    assert 'role="alert"' in body
+
+
+def test_me_renew_success_rerenders_row_with_new_due(web_client, patron_user, work, web_session):
+    user, patron = patron_user
+    loan = _checkout_to_patron(web_session, work, patron)
+    cookies = _login(web_client, "patron01")
+    raw, signed = _make_csrf_pair()
+    resp = web_client.post(
+        f"/ui/me/loans/{loan.id}/renew",
+        data={"csrf_token": raw},
+        cookies={**cookies, CSRF_COOKIE: signed},
+    )
+    assert resp.status_code == 200
+    body = resp.text
+    assert f'id="loan-{loan.id}"' in body
+    assert "Renewed" in body
+    assert "/renew" in body                         # buttons survive success too
+
+
 def test_inactive_user_cookie_denied(web_client, web_session, librarian):
     """An inactive user's still-valid auth cookie must not grant access."""
     cookies = _login(web_client, "lib01")

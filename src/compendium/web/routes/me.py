@@ -112,15 +112,22 @@ def renew_loan(
     check_csrf_form(request, csrf_token)
     try:
         loan = _circ(session, calendar_svc=calendar_svc).renew_by_id(loan_id, patron_id=patron.id)
-        due = loan.due_at.strftime("%Y-%m-%d") if loan.due_at else "—"
-        return HTMLResponse(
-            f"<td>{escape(loan.item.barcode)}</td>"
-            f"<td>{escape(loan.item.work.title)}</td>"
-            f"<td>{escape(due)} <small>(renewal {int(loan.renewal_count)})</small></td>"
-            f"<td><em>Renewed</em></td>"
+        return _render(
+            "me/_loan_row.html",
+            request,
+            {"request": request, "user": user, "loan": loan, "notice": "Renewed"},
         )
     except (BusinessRuleError, NotFoundError) as exc:
-        return HTMLResponse(f"<td colspan='4' class='error-banner'>{escape(str(exc))}</td>")
+        loan = SqlLoanRepository(session).get(loan_id)
+        if loan is None or loan.patron_id != patron.id:
+            return HTMLResponse(
+                f"<tr><td colspan='4' class='error-banner'>{escape(str(exc))}</td></tr>"
+            )
+        return _render(
+            "me/_loan_row.html",
+            request,
+            {"request": request, "user": user, "loan": loan, "error": str(exc)},
+        )
 
 
 @router.post("/me/loans/{loan_id:int}/claim-returned", response_class=HTMLResponse)
@@ -136,25 +143,32 @@ def claim_loan_returned(
     loan = SqlLoanRepository(session).get(loan_id)
     if loan is None or loan.patron_id != patron.id:
         return HTMLResponse(
-            "<td colspan='4' class='error-banner'>Loan not found or not yours.</td>"
+            "<tr><td colspan='4' class='error-banner'>Loan not found or not yours.</td></tr>"
         )
-    from compendium.repositories.sql.item_repository import SqlItemRepository
-
     item = SqlItemRepository(session).get(loan.item_id)
     if item is None:
         return HTMLResponse(
-            "<td colspan='4' class='error-banner'>Item not found.</td>"
+            "<tr><td colspan='4' class='error-banner'>Item not found.</td></tr>"
         )
     try:
         _circ(session, actor=user).claim_returned(item.barcode)
-        return HTMLResponse(
-            f"<td>{escape(item.barcode)}</td>"
-            f"<td>{escape(item.work.title)}</td>"
-            f"<td>—</td>"
-            f"<td><em>Claim submitted — library will investigate.</em></td>"
+        return _render(
+            "me/_loan_row.html",
+            request,
+            {
+                "request": request,
+                "user": user,
+                "loan": loan,
+                "notice": "Claim submitted — library will investigate.",
+                "hide_actions": True,
+            },
         )
     except (BusinessRuleError, NotFoundError) as exc:
-        return HTMLResponse(f"<td colspan='4' class='error-banner'>{escape(str(exc))}</td>")
+        return _render(
+            "me/_loan_row.html",
+            request,
+            {"request": request, "user": user, "loan": loan, "error": str(exc)},
+        )
 
 
 @router.get("/me/holds")
