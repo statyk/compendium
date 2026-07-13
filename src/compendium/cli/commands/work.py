@@ -66,6 +66,46 @@ def _print_works(works, fmt: str, empty: str) -> None:
     emit_list([_work_row(w) for w in works], _WORK_COLUMNS, fmt, empty=empty)
 
 
+def _work_list_row(work) -> dict:
+    return {
+        "id": work.id,
+        "title": work.title,
+        "media_type": work.media_type.code if work.media_type else None,
+        "creators": ", ".join(wc.creator.display_name for wc in work.creators),
+        "publication_year": work.publication_year,
+        "copies": len(work.items),
+    }
+
+
+_WORK_LIST_COLUMNS = [
+    Column("id", "ID", justify="right"),
+    Column("title", "Title"),
+    Column("media_type", "Media"),
+    Column("creators", "Creators"),
+    Column("publication_year", "Year", justify="right"),
+    Column("copies", "Copies", justify="right"),
+]
+
+
+@app.command("list")
+def list_works_cmd(
+    limit: int = typer.Option(20, "--limit", help="Maximum works to show"),
+    format: str = format_option(),
+) -> None:
+    """List works in the catalog."""
+    from compendium.cli.io import truncation_notice
+
+    with session_scope() as session:
+        works = SqlWorkRepository(session).list(limit=limit)
+        emit_list(
+            [_work_list_row(w) for w in works],
+            _WORK_LIST_COLUMNS,
+            format,
+            empty="No works in catalog.",
+        )
+        truncation_notice(len(works), limit)
+
+
 _VALID_SORTS = {"title", "author", "recent", "relevance"}
 
 

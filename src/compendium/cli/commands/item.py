@@ -499,43 +499,6 @@ def set_loanable_cmd(
         raise typer.Exit(1) from exc
 
 
-def _item_list_row(work) -> dict:
-    return {
-        "id": work.id,
-        "title": work.title,
-        "media_type": work.media_type.code if work.media_type else None,
-        "creators": ", ".join(wc.creator.display_name for wc in work.creators),
-        "publication_year": work.publication_year,
-        "copies": len(work.items),
-    }
-
-
-_ITEM_LIST_COLUMNS = [
-    Column("id", "ID", justify="right"),
-    Column("title", "Title"),
-    Column("media_type", "Media"),
-    Column("creators", "Creators"),
-    Column("publication_year", "Year", justify="right"),
-    Column("copies", "Copies", justify="right"),
-]
-
-
-@app.command("list")
-def list_items(
-    limit: int = typer.Option(20, "--limit", help="Maximum items to show"),
-    format: str = format_option(),
-) -> None:
-    """List works in the catalog."""
-    with session_scope() as session:
-        works = SqlWorkRepository(session).list(limit=limit)
-        emit_list(
-            [_item_list_row(w) for w in works],
-            _ITEM_LIST_COLUMNS,
-            format,
-            empty="No items in catalog.",
-        )
-
-
 @app.command("declare-lost")
 def declare_lost(
     barcode_arg: str | None = typer.Argument(None, metavar="BARCODE"),
@@ -726,3 +689,9 @@ def note_delete(
     except DomainError as e:
         typer.echo(f"Error: {e}", err=True)
         raise typer.Exit(1)
+
+
+from compendium.cli.commands.work import list_works_cmd  # noqa: E402
+from compendium.cli.io import register_alias  # noqa: E402
+
+register_alias(app, "list", list_works_cmd)

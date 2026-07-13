@@ -707,13 +707,16 @@ class TestMainCli:
 
 class TestItemCli:
     def test_list_empty(self, session):
-        r = _invoke(session, ["item", "list"], "compendium.cli.commands.item")
+        # `item list` is a hidden alias for `work list` (Task 5); the command
+        # body lives in compendium.cli.commands.work, so session_scope must be
+        # patched there for the alias invocation to hit the test DB.
+        r = _invoke(session, ["item", "list"], "compendium.cli.commands.work")
         assert r.exit_code == 0
-        assert "No items" in r.output
+        assert "No works" in r.output
 
     def test_list_shows_seeded_work(self, session):
         _seed_work(session)
-        r = _invoke(session, ["item", "list"], "compendium.cli.commands.item")
+        r = _invoke(session, ["item", "list"], "compendium.cli.commands.work")
         assert r.exit_code == 0
         assert "Dune" in r.output
 

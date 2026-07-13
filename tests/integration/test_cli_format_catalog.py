@@ -64,7 +64,10 @@ def seeded_work(session):
 
 
 def test_item_list_json(session, seeded_work):
-    res = _invoke(session, "item", ["item", "list", "--format", "json"])
+    # `item list` is a hidden alias for `work list` (Task 5): the command body
+    # now lives in compendium.cli.commands.work, so session_scope must be
+    # patched there (not on `item`) for the alias to reach the test DB.
+    res = _invoke(session, "work", ["item", "list", "--format", "json"])
     data = json.loads(res.stdout)
     assert {"id", "title", "media_type", "creators", "publication_year",
             "copies"} <= set(data[0])

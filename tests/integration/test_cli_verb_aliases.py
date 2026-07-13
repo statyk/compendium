@@ -38,3 +38,19 @@ def test_alias_help_identical_and_old_hidden(group, new, old):
     assert not re.search(rf"^\s*{re.escape(old)}\s", group_help.output, re.M), (
         f"{' '.join(group)} {old} still visible in help"
     )
+
+
+def test_work_list_exists_and_item_list_is_hidden_alias():
+    new = runner.invoke(app, ["work", "list", "--help"])
+    old = runner.invoke(app, ["item", "list", "--help"])
+    assert new.exit_code == 0 and old.exit_code == 0
+
+    # NOTE: rich renders the Commands panel with a box-drawing "│ " prefix
+    # (not plain whitespace), so anchor on a word boundary rather than
+    # start-of-line whitespace.
+    import re
+
+    item_help = runner.invoke(app, ["item", "--help"]).output
+    assert not re.search(r"\blist\b", item_help)
+    work_help = runner.invoke(app, ["work", "--help"]).output
+    assert re.search(r"\blist\b", work_help)
