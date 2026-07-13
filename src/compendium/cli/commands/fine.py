@@ -10,7 +10,7 @@ from compendium.cli.io import error
 from compendium.cli.output import Column, emit_list, format_option
 from compendium.db.engine import get_settings
 from compendium.db.session import session_scope
-from compendium.domain.enums import FineKind
+from compendium.domain.enums import FineKind, FineStatus
 from compendium.domain.errors import DomainError, NotFoundError
 from compendium.repositories.sql.audit_log_repository import SqlAuditLogRepository
 from compendium.repositories.sql.fine_repository import SqlFineRepository
@@ -81,18 +81,36 @@ def list_fines(
         )
 
 
+def _parse_amount_dollars(raw: str) -> int:
+    from decimal import Decimal, InvalidOperation
+
+    try:
+        cents = int((Decimal(raw.strip()) * 100).to_integral_value())
+    except (InvalidOperation, ValueError) as exc:
+        raise typer.BadParameter(f"'{raw}' is not a valid amount (expected e.g. 2.50)") from exc
+    return cents
+
+
 @app.command("pay")
 def pay_fine(
-    fine_id: int = typer.Option(..., "--id", help="Fine ID to mark paid"),
+    fine_id: int = typer.Option(..., "--id", help="Fine ID to pay"),
+    amount: str | None = typer.Option(
+        None, "--amount", help="Amount in dollars (e.g. 2.50). Omit to pay the full balance."
+    ),
+    note: str | None = typer.Option(None, "--note", help="Optional payment note"),
 ) -> None:
-    """Mark a fine as paid (full amount; no partial payments)."""
+    """Record a payment (full by default, partial with --amount)."""
+    amount_cents = _parse_amount_dollars(amount) if amount is not None else None
     try:
         with session_scope() as session:
-            fine = _fine_svc(session).pay(fine_id)
-            typer.echo(
-                f"Fine #{fine.id} paid "
-                f"({format_currency(fine.amount_cents)} {fine.kind})."
-            )
+            fine = _fine_svc(session).pay(fine_id, amount_cents=amount_cents, note=note)
+            if fine.status == FineStatus.PAID.value:
+                typer.echo(f"Fine #{fine.id} paid in full.")
+            else:
+                typer.echo(
+                    f"Fine #{fine.id}: payment recorded, "
+                    f"{fine.balance_cents / 100:.2f} remaining."
+                )
     except DomainError as exc:
         error(exc)
         raise typer.Exit(1) from exc
@@ -101,9 +119,9 @@ def pay_fine(
 @app.command("waive")
 def waive_fine(
     fine_id: int = typer.Option(..., "--id", help="Fine ID to waive"),
-    note: str = typer.Option(..., "--note", help="Reason for waiving (required)"),
+    note: str | None = typer.Option(None, "--note", help="Reason (optional)"),
 ) -> None:
-    """Waive a fine. Requires a note explaining why."""
+    """Waive a fine."""
     try:
         with session_scope() as session:
             fine = _fine_svc(session).waive(fine_id, note)

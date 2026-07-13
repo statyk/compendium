@@ -145,6 +145,66 @@ def test_cli_fine_waive_requires_note(session):
     assert fine.status == FineStatus.WAIVED.value
 
 
+def test_cli_fine_pay_partial(session):
+    from compendium.cli.commands.fine import app as fine_app
+
+    p = _make_patron(session, "CLI_F0005")
+    _runner(
+        session, fine_app,
+        ["assess", "--patron", "CLI_F0005", "--kind", "other", "--amount-cents", "500", "--note", "xx"],
+        "compendium.cli.commands.fine",
+    )
+    fine = SqlFineRepository(session).list(patron_id=p.id)[0]
+    r = _runner(
+        session, fine_app,
+        ["pay", "--id", str(fine.id), "--amount", "2.00"],
+        "compendium.cli.commands.fine",
+    )
+    assert r.exit_code == 0, r.output
+    assert "remaining" in r.output.lower()
+    session.refresh(fine)
+    assert fine.status == FineStatus.OUTSTANDING.value
+    assert fine.paid_cents == 200
+
+
+def test_cli_fine_pay_bad_amount_is_usage_error(session):
+    from compendium.cli.commands.fine import app as fine_app
+
+    p = _make_patron(session, "CLI_F0006")
+    _runner(
+        session, fine_app,
+        ["assess", "--patron", "CLI_F0006", "--kind", "other", "--amount-cents", "500", "--note", "xx"],
+        "compendium.cli.commands.fine",
+    )
+    fine = SqlFineRepository(session).list(patron_id=p.id)[0]
+    r = _runner(
+        session, fine_app,
+        ["pay", "--id", str(fine.id), "--amount", "abc"],
+        "compendium.cli.commands.fine",
+    )
+    assert r.exit_code == 2
+
+
+def test_cli_fine_waive_without_note(session):
+    from compendium.cli.commands.fine import app as fine_app
+
+    p = _make_patron(session, "CLI_F0007")
+    _runner(
+        session, fine_app,
+        ["assess", "--patron", "CLI_F0007", "--kind", "other", "--amount-cents", "500", "--note", "xx"],
+        "compendium.cli.commands.fine",
+    )
+    fine = SqlFineRepository(session).list(patron_id=p.id)[0]
+    r = _runner(
+        session, fine_app,
+        ["waive", "--id", str(fine.id)],
+        "compendium.cli.commands.fine",
+    )
+    assert r.exit_code == 0, r.output
+    session.refresh(fine)
+    assert fine.status == FineStatus.WAIVED.value
+
+
 def test_cli_fine_assess_overdue_for_patron(session):
     from compendium.cli.commands.fine import app as fine_app
 
