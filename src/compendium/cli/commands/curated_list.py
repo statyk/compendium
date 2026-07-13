@@ -7,6 +7,7 @@ import os
 import typer
 from sqlalchemy.orm import Session
 
+from compendium.cli.output import Column, emit_detail, emit_list, format_option
 from compendium.db.session import session_scope
 from compendium.domain.errors import DomainError
 from compendium.domain.models import AppUser
@@ -80,6 +81,7 @@ def list_lists(
     offset: int = typer.Option(0, "--offset", help="Number of results to skip"),
     public_only: bool = typer.Option(False, "--public-only", help="Show only public lists"),
     featured_only: bool = typer.Option(False, "--featured-only", help="Show only featured lists"),
+    format: str = format_option(),
 ) -> None:
     """List curated lists."""
     with session_scope() as session:
@@ -90,26 +92,60 @@ def list_lists(
             public_only=public_only,
             featured_only=featured_only,
         )
-    if not lists:
-        typer.echo("No curated lists found.")
-        return
-    for cl in lists:
-        visibility = "public" if cl.is_public else "private"
-        featured_label = "featured" if cl.is_featured else ""
-        typer.echo(
-            f"{cl.slug:30} {cl.name:40} {visibility:8} {featured_label:8} ({len(cl.entries)} works)"
-        )
+    rows = [
+        {
+            "slug": cl.slug,
+            "name": cl.name,
+            "is_public": cl.is_public,
+            "is_featured": cl.is_featured,
+            "entry_count": len(cl.entries),
+        }
+        for cl in lists
+    ]
+    emit_list(
+        rows,
+        [
+            Column("slug", "Slug"),
+            Column("name", "Name"),
+            Column("is_public", "Visibility", formatter=lambda v: "public" if v else "private"),
+            Column("is_featured", "Featured", formatter=lambda v: "featured" if v else ""),
+            Column("entry_count", "Works", justify="right"),
+        ],
+        format,
+        empty="No curated lists found.",
+    )
 
 
 @app.command("show")
 def show_list(
     slug: str = typer.Argument(..., help="List slug"),
+    format: str = format_option(),
 ) -> None:
     """Show details and entries for a curated list."""
     try:
         with session_scope() as session:
             actor = _resolve_actor(session)
             cl = _svc(session, actor).get_by_slug(slug)
+            if format == "json":
+                obj = {
+                    "slug": cl.slug,
+                    "name": cl.name,
+                    "description": cl.description,
+                    "is_public": cl.is_public,
+                    "is_featured": cl.is_featured,
+                    "display_order": cl.display_order,
+                    "entries": [
+                        {
+                            "display_order": entry.display_order,
+                            "work_id": entry.work_id,
+                            "title": entry.work.title if entry.work else None,
+                            "annotation": entry.annotation,
+                        }
+                        for entry in sorted(cl.entries, key=lambda e: e.display_order)
+                    ],
+                }
+                emit_detail(obj, format)
+                return
             typer.echo(f"Name:          {cl.name}")
             typer.echo(f"Slug:          {cl.slug}")
             typer.echo(f"Description:   {cl.description or '(none)'}")

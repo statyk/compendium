@@ -6,6 +6,7 @@ from datetime import date, time
 
 import typer
 
+from compendium.cli.output import Column, emit_detail, emit_list, format_option
 from compendium.db.session import session_scope
 from compendium.domain.errors import DomainError
 from compendium.repositories.sql.audit_log_repository import SqlAuditLogRepository
@@ -43,11 +44,27 @@ def _svc(session) -> CalendarService:
 # ------------------------------------------------------------------
 
 @hours_app.command("show")
-def hours_show() -> None:
+def hours_show(format: str = format_option()) -> None:
     """Show the weekly library hours schedule."""
     with session_scope() as session:
         rows = SqlLibraryHoursRepository(session).list()
         tz = get_site_setting("library_timezone")
+        payload = {
+            "timezone": tz,
+            "days": [
+                {
+                    "weekday": h.weekday,
+                    "weekday_name": _WEEKDAY_NAMES[h.weekday],
+                    "is_open": h.is_open,
+                    "open_time": h.open_time.strftime("%H:%M") if h.open_time else None,
+                    "close_time": h.close_time.strftime("%H:%M") if h.close_time else None,
+                }
+                for h in rows
+            ],
+        }
+        if format == "json":
+            emit_detail(payload, format)
+            return
         typer.echo(f"Library timezone: {tz}")
         typer.echo("")
         for h in rows:
@@ -94,20 +111,32 @@ def hours_set(
 # ------------------------------------------------------------------
 
 @closed_app.command("list")
-def closed_date_list() -> None:
+def closed_date_list(format: str = format_option()) -> None:
     """List upcoming and annually-recurring closed dates."""
     with session_scope() as session:
         dates = SqlClosedDateRepository(session).list(limit=200)
-        if not dates:
-            typer.echo("No closed dates defined.")
-            return
-        for cd in dates:
-            recur = " (annually)" if cd.recurs_annually else ""
-            label = f" — {cd.label}" if cd.label else ""
-            if cd.start_date == cd.end_date:
-                typer.echo(f"  {cd.id:5d}  {cd.start_date.isoformat()}{recur}{label}")
-            else:
-                typer.echo(f"  {cd.id:5d}  {cd.start_date.isoformat()} → {cd.end_date.isoformat()}{recur}{label}")
+        rows = [
+            {
+                "id": cd.id,
+                "start_date": cd.start_date,
+                "end_date": cd.end_date,
+                "recurs_annually": cd.recurs_annually,
+                "label": cd.label,
+            }
+            for cd in dates
+        ]
+        emit_list(
+            rows,
+            [
+                Column("id", "#", justify="right"),
+                Column("start_date", "Start", formatter=lambda v: v.isoformat()),
+                Column("end_date", "End", formatter=lambda v: v.isoformat()),
+                Column("recurs_annually", "Recurs", formatter=lambda v: "annually" if v else ""),
+                Column("label", "Label", formatter=lambda v: v or ""),
+            ],
+            format,
+            empty="No closed dates defined.",
+        )
 
 
 @closed_app.command("add")

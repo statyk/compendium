@@ -343,18 +343,23 @@ class TestRoleCli:
 
 class TestBranchCli:
     def test_list_shows_default_branch(self, session):
+        # Migrated to the shared table/JSON output helper (Task 7): the
+        # bracketed "[default]" marker is gone from the rich table; the
+        # lowercase "default" cell text (matching the patron-category/role
+        # list convention) is the new source of truth.
         r = _invoke(session, ["branch", "list"], "compendium.cli.commands.branch")
         assert r.exit_code == 0
-        assert "[default]" in r.output
+        assert "default" in r.output
 
     def test_set_classification_scheme(self, session):
-        r = _invoke(session, ["branch", "list"], "compendium.cli.commands.branch")
-        # Pick any branch code from first matching line.
-        code = next(
-            line.strip().split()[0].rstrip(":")
-            for line in r.output.splitlines()
-            if "[default]" in line
+        # Migrated to the shared table/JSON output helper (Task 7): use
+        # --format json to reliably pick a branch code instead of parsing
+        # the rich table's column-aligned text.
+        r = _invoke(
+            session, ["branch", "list", "--format", "json"], "compendium.cli.commands.branch"
         )
+        data = json.loads(r.stdout)
+        code = next(row["code"] for row in data if row["is_default"])
         r = _invoke(
             session,
             ["branch", "set", "--code", code, "--classification", "ddc"],
@@ -1071,9 +1076,13 @@ class TestLoanCli:
 
 class TestPolicyCli:
     def test_list_default_policy_seeded(self, session):
+        # Migrated to the shared table/JSON output helper (Task 7): the
+        # bracketed "[DEFAULT]" marker is gone from the rich table; the
+        # lowercase "default" cell text (matching the patron-category/role
+        # list convention) is the new source of truth.
         r = _invoke(session, ["policy", "list"], "compendium.cli.commands.policy")
         assert r.exit_code == 0
-        assert "[DEFAULT]" in r.output
+        assert "default" in r.output
 
     def test_create_and_set_fields(self, session):
         r = _invoke(

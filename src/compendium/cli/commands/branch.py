@@ -1,5 +1,6 @@
 import typer
 
+from compendium.cli.output import Column, emit_list, format_option
 from compendium.db.session import session_scope
 from compendium.domain.errors import DomainError
 from compendium.repositories.sql.branch_repository import SqlBranchRepository
@@ -10,17 +11,34 @@ _VALID_SCHEMES = {"lcc", "ddc", "none"}
 
 
 @app.command("list")
-def branch_list() -> None:
+def branch_list(format: str = format_option()) -> None:
     """List all branches and their classification settings."""
     with session_scope() as session:
         branches = SqlBranchRepository(session).list()
-        if not branches:
-            typer.echo("No branches configured.")
-            return
-        for b in branches:
-            default_marker = " [default]" if b.is_default else ""
-            scheme = b.default_classification_scheme.upper() if b.default_classification_scheme != "none" else "none"
-            typer.echo(f"  {b.code}{default_marker}: {b.name}  (classification: {scheme})")
+        rows = [
+            {
+                "code": b.code,
+                "name": b.name,
+                "is_default": b.is_default,
+                "classification_scheme": b.default_classification_scheme,
+            }
+            for b in branches
+        ]
+        emit_list(
+            rows,
+            [
+                Column("code", "Code"),
+                Column("name", "Name"),
+                Column("is_default", "Default", formatter=lambda v: "default" if v else ""),
+                Column(
+                    "classification_scheme",
+                    "Classification",
+                    formatter=lambda v: v.upper() if v != "none" else "none",
+                ),
+            ],
+            format,
+            empty="No branches configured.",
+        )
 
 
 @app.command("set")

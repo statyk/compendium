@@ -9,6 +9,7 @@ from typing import Optional
 import typer
 
 from compendium.cli.io import is_stdio, open_output
+from compendium.cli.output import Column, emit_list, format_option
 from compendium.db.session import session_scope
 from compendium.services.labels import (
     DEFAULT_FIELDS,
@@ -439,12 +440,29 @@ def patron_sticker(
 
 
 @app.command("templates")
-def list_templates() -> None:
+def list_templates(format: str = format_option()) -> None:
     """List the available label sheet templates."""
+    rows = []
     for t in TEMPLATES.values():
         compat = []
         for kind in list(ITEM_KIND_TO_FORMAT.keys()) + list(PATRON_KIND_TO_FORMAT.keys()):
             if t in compatible_templates(kind):
                 compat.append(kind)
-        compat_str = ", ".join(compat) if compat else "—"
-        typer.echo(f"  {t.key:20s}  {t.display}  ({t.per_sheet}/sheet)  kinds: {compat_str}")
+        rows.append(
+            {
+                "key": t.key,
+                "display": t.display,
+                "per_sheet": t.per_sheet,
+                "kinds": compat,
+            }
+        )
+    emit_list(
+        rows,
+        [
+            Column("key", "Key"),
+            Column("display", "Display"),
+            Column("per_sheet", "Per Sheet", justify="right"),
+            Column("kinds", "Kinds", formatter=lambda v: ", ".join(v) if v else "—"),
+        ],
+        format,
+    )

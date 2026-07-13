@@ -2,6 +2,7 @@ import getpass
 
 import typer
 
+from compendium.cli.output import Column, emit_list, format_option
 from compendium.db.session import session_scope
 from compendium.domain.errors import DomainError, NotFoundError
 from compendium.repositories.sql.audit_log_repository import SqlAuditLogRepository
@@ -25,21 +26,38 @@ def _policy_svc(session) -> PolicyService:
 
 
 @app.command("list")
-def list_policies() -> None:
+def list_policies(format: str = format_option()) -> None:
     """List all loan policies."""
     with session_scope() as session:
         policies = _policy_svc(session).list()
-        if not policies:
-            typer.echo("No loan policies configured.")
-            return
-        typer.echo("\nLoan policies:")
-        for p in policies:
-            mt = f"media_type={p.media_type_id}" if p.media_type_id else "general"
-            default_flag = "  [DEFAULT]" if p.is_default else ""
-            typer.echo(
-                f"  #{p.id}  {p.name}  ({mt})  "
-                f"{p.loan_period_days}d / {p.max_renewals} renewals{default_flag}"
-            )
+        rows = [
+            {
+                "id": p.id,
+                "name": p.name,
+                "media_type_id": p.media_type_id,
+                "loan_period_days": p.loan_period_days,
+                "max_renewals": p.max_renewals,
+                "is_default": p.is_default,
+            }
+            for p in policies
+        ]
+        emit_list(
+            rows,
+            [
+                Column("id", "#", justify="right"),
+                Column("name", "Name"),
+                Column(
+                    "media_type_id",
+                    "Media",
+                    formatter=lambda v: f"media_type={v}" if v else "general",
+                ),
+                Column("loan_period_days", "Days", justify="right"),
+                Column("max_renewals", "Renewals", justify="right"),
+                Column("is_default", "Default", formatter=lambda v: "default" if v else ""),
+            ],
+            format,
+            empty="No loan policies configured.",
+        )
 
 
 @app.command("create")
