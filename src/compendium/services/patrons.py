@@ -4,7 +4,7 @@ import secrets
 from datetime import date
 
 from compendium.domain.enums import HoldStatus
-from compendium.domain.errors import BusinessRuleError, NotFoundError
+from compendium.domain.errors import BusinessRuleError, NotFoundError, ValidationError
 from compendium.domain.identifiers import format_patron_card
 from compendium.domain.models import AppUser, Patron
 from compendium.repositories.base import HoldRepository, LoanRepository, PatronRepository
@@ -88,14 +88,36 @@ class PatronService:
         self,
         card_number: str,
         *,
+        full_name: str | object = _MISSING,
+        contact_email: str | None | object = _MISSING,
+        contact_phone: str | None | object = _MISSING,
         category_id: int | None | object = _MISSING,
         expires_at: date | None | object = _MISSING,
     ) -> Patron:
-        """Edit category and/or expiry. None clears the field; _MISSING leaves it."""
+        """Edit name, contact info, category, and/or expiry. None clears a
+        clearable field; _MISSING leaves it untouched."""
         patron = self._patrons.get_by_card_number(card_number)
         if patron is None:
             raise NotFoundError(f"No patron with card number '{card_number}'")
-        before = {"category_id": patron.category_id, "expires_at": patron.expires_at.isoformat() if patron.expires_at else None}
+        before = {
+            "full_name": patron.full_name,
+            "contact_email": patron.contact_email,
+            "contact_phone": patron.contact_phone,
+            "category_id": patron.category_id,
+            "expires_at": patron.expires_at.isoformat() if patron.expires_at else None,
+        }
+        if full_name is not _MISSING:
+            if not str(full_name).strip():
+                raise ValidationError("Patron name cannot be blank.")
+            patron.full_name = str(full_name).strip()
+        if contact_email is not _MISSING:
+            patron.contact_email = (
+                str(contact_email).strip() or None if contact_email is not None else None
+            )
+        if contact_phone is not _MISSING:
+            patron.contact_phone = (
+                str(contact_phone).strip() or None if contact_phone is not None else None
+            )
         if category_id is not _MISSING:
             patron.category_id = category_id  # type: ignore[assignment]
         if expires_at is not _MISSING:
@@ -108,6 +130,9 @@ class PatronService:
             {
                 "before": before,
                 "after": {
+                    "full_name": patron.full_name,
+                    "contact_email": patron.contact_email,
+                    "contact_phone": patron.contact_phone,
                     "category_id": patron.category_id,
                     "expires_at": patron.expires_at.isoformat() if patron.expires_at else None,
                 },

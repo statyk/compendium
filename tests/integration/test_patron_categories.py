@@ -178,6 +178,27 @@ class TestPatronWithCategoryAndExpiry:
         )
         assert updated.expires_at is None
 
+    def test_update_contact_fields(self, session):
+        p = _patron_svc(session).create(
+            full_name="Original Name",
+            contact_email="old@example.org",
+            contact_phone="555-0100",
+        )
+        updated = _patron_svc(session).update(
+            p.library_card_number,
+            full_name="Renamed Person",
+            contact_email="new@example.org",
+            contact_phone=None,
+        )
+        assert updated.full_name == "Renamed Person"
+        assert updated.contact_email == "new@example.org"
+        assert updated.contact_phone is None
+
+    def test_update_full_name_blank_rejected(self, session):
+        p = _patron_svc(session).create(full_name="Original Name")
+        with pytest.raises(ValidationError):
+            _patron_svc(session).update(p.library_card_number, full_name="   ")
+
 
 class TestExpiryBlocksCheckout:
     def test_expired_patron_cannot_check_out(self, session):
