@@ -140,7 +140,69 @@ def add_user(
         raise typer.Exit(1) from exc
 
 
-@app.command("set-role")
+def _change_role(session, username: str, role: str) -> None:
+    actor_username = os.environ.get("COMPENDIUM_ACTOR_USERNAME")
+    if not actor_username:
+        typer.echo(
+            "Error: Set COMPENDIUM_ACTOR_USERNAME to an existing user whose "
+            "permissions cover the requested role assignment.",
+            err=True,
+        )
+        raise typer.Exit(1)
+    actor = SqlUserRepository(session).get_by_username(actor_username)
+    if actor is None:
+        typer.echo(f"Error: COMPENDIUM_ACTOR_USERNAME '{actor_username}' not found", err=True)
+        raise typer.Exit(1)
+    all_roles = SqlRoleRepository(session).list()
+    allowed_names = {r.name for r in assignable_roles(actor.role.permissions, all_roles)}
+    if role not in allowed_names:
+        typer.echo(f"Error: Your account cannot assign the '{role}' role.", err=True)
+        raise typer.Exit(1)
+    user = _auth_svc(session).update_role(username, role)
+    typer.echo(f"\nUser '{user.username}' role set to '{user.role.name}'.")
+
+
+def _change_password(session, username: str, password: str) -> None:
+    user = _auth_svc(session).set_password(username, password)
+    typer.echo(f"\nPassword reset for user '{user.username}'.")
+
+
+@app.command("edit")
+def edit_user(
+    username_arg: str | None = typer.Argument(None, metavar="USERNAME"),
+    username_opt: str | None = typer.Option(None, "--username", hidden=True),
+    role: str | None = typer.Option(None, "--role", help="New role name"),
+    password: str | None = typer.Option(
+        None,
+        "--password",
+        help="New password. Use --prompt-password to be prompted interactively instead.",
+        hide_input=True,
+    ),
+    prompt_password: bool = typer.Option(
+        False, "--prompt-password", help="Prompt interactively for a new password."
+    ),
+) -> None:
+    """Edit a user account's role and/or password."""
+    from compendium.cli.io import error, resolve_identifier
+
+    username = resolve_identifier(username_arg, username_opt, label="username")
+    if role is None and password is None and not prompt_password:
+        error("specify at least one of --role, --password, --prompt-password")
+        raise typer.Exit(2)
+    if prompt_password and password is None:
+        password = typer.prompt("Password", hide_input=True, confirmation_prompt=True)
+    try:
+        with session_scope() as session:
+            if role is not None:
+                _change_role(session, username, role)
+            if password is not None:
+                _change_password(session, username, password)
+    except DomainError as exc:
+        error(exc)
+        raise typer.Exit(1) from exc
+
+
+@app.command("set-role", hidden=True)
 def set_user_role(
     username: str = typer.Option(..., "--username", help="Username to update"),
     role: str = typer.Option(..., "--role", help="New role name"),
@@ -148,31 +210,13 @@ def set_user_role(
     """Change the role assigned to a user account."""
     try:
         with session_scope() as session:
-            actor_username = os.environ.get("COMPENDIUM_ACTOR_USERNAME")
-            if not actor_username:
-                typer.echo(
-                    "Error: Set COMPENDIUM_ACTOR_USERNAME to an existing user whose "
-                    "permissions cover the requested role assignment.",
-                    err=True,
-                )
-                raise typer.Exit(1)
-            actor = SqlUserRepository(session).get_by_username(actor_username)
-            if actor is None:
-                typer.echo(f"Error: COMPENDIUM_ACTOR_USERNAME '{actor_username}' not found", err=True)
-                raise typer.Exit(1)
-            all_roles = SqlRoleRepository(session).list()
-            allowed_names = {r.name for r in assignable_roles(actor.role.permissions, all_roles)}
-            if role not in allowed_names:
-                typer.echo(f"Error: Your account cannot assign the '{role}' role.", err=True)
-                raise typer.Exit(1)
-            user = _auth_svc(session).update_role(username, role)
-            typer.echo(f"\nUser '{user.username}' role set to '{user.role.name}'.")
+            _change_role(session, username, role)
     except DomainError as exc:
         typer.echo(f"Error: {exc}", err=True)
         raise typer.Exit(1) from exc
 
 
-@app.command("set-password")
+@app.command("set-password", hidden=True)
 def set_user_password(
     username: str = typer.Option(..., "--username", help="Username to update"),
     password: str | None = typer.Option(
@@ -187,8 +231,7 @@ def set_user_password(
         password = typer.prompt("Password", hide_input=True, confirmation_prompt=True)
     try:
         with session_scope() as session:
-            user = _auth_svc(session).set_password(username, password)
-            typer.echo(f"\nPassword reset for user '{user.username}'.")
+            _change_password(session, username, password)
     except DomainError as exc:
         typer.echo(f"Error: {exc}", err=True)
         raise typer.Exit(1) from exc
