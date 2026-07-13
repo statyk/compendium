@@ -15,23 +15,23 @@
 {% endif %}
 
 <form method="get" action="/ui/catalog" id="catalog-form" class="catalog-search-form">
-  <select name="field" style="max-width:10rem; flex-shrink:0; margin-bottom:0">
+  <select name="field" aria-label="Search field" style="max-width:10rem; flex-shrink:0; margin-bottom:0">
     <option value="all" {% if field == "all" %}selected{% endif %}>All fields</option>
     <option value="title" {% if field == "title" %}selected{% endif %}>Title</option>
     <option value="author" {% if field == "author" %}selected{% endif %}>Author</option>
     <option value="publisher" {% if field == "publisher" %}selected{% endif %}>Publisher</option>
     <option value="isbn" {% if field == "isbn" %}selected{% endif %}>ISBN</option>
   </select>
-  <select name="order_by" style="max-width:10rem; flex-shrink:0; margin-bottom:0"
+  <select name="order_by" aria-label="Sort order" style="max-width:10rem; flex-shrink:0; margin-bottom:0"
           hx-get="/ui/catalog/search-results"
           hx-trigger="change"
           hx-target="#results"
           hx-include="closest form"
           hx-indicator="#search-ind">
+    {% if field == "all" %}<option value="relevance" {% if order_by == "relevance" %}selected{% endif %}>Sort: Relevance</option>{% endif %}
     <option value="title" {% if order_by == "title" %}selected{% endif %}>Sort: Title</option>
     <option value="author" {% if order_by == "author" %}selected{% endif %}>Sort: Author</option>
     <option value="recent" {% if order_by == "recent" %}selected{% endif %}>Sort: Recent</option>
-    <option value="relevance" {% if order_by == "relevance" %}selected{% endif %}>Sort: Relevance</option>
   </select>
   <div class="suggest-wrap">
     <input id="q-input" type="search" name="q" placeholder="Search…" value="{{ q }}"
@@ -295,6 +295,27 @@
         form.submit();
       });
     });
+
+    // Relevance is only meaningful for All-Fields searches; keep the option in
+    // sync when the user flips the field select before submitting.
+    var fieldSel = document.querySelector('select[name="field"]');
+    var sortSel = document.querySelector('select[name="order_by"]');
+    if (fieldSel && sortSel) {
+      fieldSel.addEventListener('change', function () {
+        var rel = sortSel.querySelector('option[value="relevance"]');
+        if (fieldSel.value === 'all') {
+          if (!rel) {
+            rel = document.createElement('option');
+            rel.value = 'relevance';
+            rel.textContent = 'Sort: Relevance';
+            sortSel.insertBefore(rel, sortSel.firstChild);
+          }
+        } else if (rel) {
+          if (sortSel.value === 'relevance') sortSel.value = 'title';
+          rel.remove();
+        }
+      });
+    }
   })();
 </script>
 <script nonce="{{ csp_nonce(request) }}">

@@ -116,6 +116,21 @@ def _parse_int(s: str) -> int | None:
 _VALID_ORDER_BY = {"title", "author", "recent", "relevance"}
 
 
+def _resolve_order_by(order_by: str, q: str, field: str) -> str:
+    """Resolve the effective sort. Empty/invalid input means 'no explicit
+    choice' → relevance for All-Fields keyword searches, title otherwise.
+    An explicit 'relevance' off the FTS path degrades to title so the
+    dropdown state stays truthful (ILIKE paths have no rank)."""
+    is_fts = bool(q.strip()) and field == "all"
+    if order_by not in _VALID_ORDER_BY:
+        order_by = ""
+    if not order_by:
+        return "relevance" if is_fts else "title"
+    if order_by == "relevance" and not is_fts:
+        return "title"
+    return order_by
+
+
 def _filters_qs(
     *, q: str, field: str, media: list[str], decade: int | None, avail: bool,
     include_withdrawn: bool = False,
@@ -146,14 +161,13 @@ def catalog_search(
     decade: str = "",
     avail: str = "",
     include_withdrawn: str = "",
-    order_by: str = "title",
+    order_by: str = "",
     page: int = 1,
     user=Depends(get_web_user),
     session: Session = Depends(get_session),
 ):
     settings = get_settings()
-    if order_by not in _VALID_ORDER_BY:
-        order_by = "title"
+    order_by = _resolve_order_by(order_by, q, field)
     if not (get_site_setting("guest_search_enabled") or user is not None):
         return _render(
             "catalog/search.html",
@@ -270,13 +284,12 @@ def catalog_search_results(
     decade: str = "",
     avail: str = "",
     include_withdrawn: str = "",
-    order_by: str = "title",
+    order_by: str = "",
     page: int = 1,
     user=Depends(get_web_user),
     session: Session = Depends(get_session),
 ):
-    if order_by not in _VALID_ORDER_BY:
-        order_by = "title"
+    order_by = _resolve_order_by(order_by, q, field)
     if not (get_site_setting("guest_search_enabled") or user is not None):
         return templates.TemplateResponse(
             request, "_partials/work_list.html", {"page": None, "q": q, "field": field, "user": user}

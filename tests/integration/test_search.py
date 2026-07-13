@@ -248,3 +248,23 @@ def test_order_by_relevance_empty_query_falls_back_to_title(session):
     results = SqlWorkRepository(session).search("", order_by="relevance", include_withdrawn_only=True)
     titles = [w.title for w in results]
     assert titles.index("Alpha") < titles.index("Zebra")
+
+
+def test_relevance_rank_differs_from_title_order(session):
+    """bm25 must outrank alphabetical order when term frequency differs."""
+    from compendium.domain.models import MediaType, Work
+
+    mt = session.query(MediaType).filter_by(code="book").first()
+    # Title-sorts first, mentions the term once.
+    session.add(Work(title="Aardvark and the Dune", sort_title="aardvark and the dune",
+                     search_text="Aardvark and the Dune", media_type_id=mt.id))
+    # Title-sorts last, mentions the term heavily → better bm25 rank.
+    session.add(Work(title="Zebra Atlas", sort_title="zebra atlas",
+                     search_text="Zebra Atlas Dune Dune Dune Dune Dune", media_type_id=mt.id))
+    session.flush()
+
+    repo = SqlWorkRepository(session)
+    by_rank = [w.title for w in repo.search("Dune", order_by="relevance", include_withdrawn_only=True)]
+    by_title = [w.title for w in repo.search("Dune", order_by="title", include_withdrawn_only=True)]
+    assert by_rank.index("Zebra Atlas") < by_rank.index("Aardvark and the Dune")
+    assert by_title.index("Aardvark and the Dune") < by_title.index("Zebra Atlas")
