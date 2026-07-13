@@ -132,9 +132,8 @@ new commands must follow them.
 - **`--yes` skips the confirmation prompt on destructive commands**
   (`patron-category delete`, `closed-date delete`, `secrets clear`,
   `settings reset`, `backup` overwrite, `household delete`, `curated-list
-  delete`, `item declare-lost`/`mark-damaged`-style irreversible actions,
-  etc.). Without it, the command prompts interactively; `--yes` is required
-  for any non-interactive/cron use.
+  delete`, etc.). Without it, the command prompts interactively; `--yes` is
+  required for any non-interactive/cron use.
 - **`--quiet` / `--dry-run` on maintenance commands.** Every
   `compendium maintenance ...` cron task accepts `--quiet` (suppress the
   per-run summary line so cron logs stay silent on success) and, where the

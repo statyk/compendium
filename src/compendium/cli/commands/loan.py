@@ -252,3 +252,4 @@ def item_history(
             [_loan_row(loan) for loan in loans], _LOAN_COLUMNS, format,
             empty=f"Item {barcode} has no loan history.",
         )
+        truncation_notice(len(loans), limit)

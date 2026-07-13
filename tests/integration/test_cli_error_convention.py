@@ -72,6 +72,58 @@ def thirty_patrons(cli_db):
     session.close()
 
 
+@pytest.fixture
+def item_with_loan_history(cli_db):
+    """Seed a single item with more loan history rows than a small --limit.
+
+    Cycles checkout/checkin on one item several times so `loan item-history`
+    has more rows than a deliberately small --limit.
+    """
+    from compendium.domain.models import Branch, Item, MediaType, Patron, Work
+    from compendium.repositories.sql.branch_repository import SqlBranchRepository
+    from compendium.repositories.sql.item_repository import SqlItemRepository
+    from compendium.repositories.sql.loan_policy_repository import (
+        SqlLoanPolicyRepository,
+    )
+    from compendium.services.circulation import CirculationService
+
+    factory = sessionmaker(bind=cli_db, autoflush=False, expire_on_commit=False)
+    session = factory()
+
+    media_type = session.query(MediaType).filter_by(code="book").one()
+    branch = session.query(Branch).filter_by(code="MAIN").one()
+    work = Work(title="Loan History Test", media_type_id=media_type.id)
+    session.add(work)
+    session.flush()
+    item = Item(
+        work_id=work.id,
+        branch_id=branch.id,
+        barcode="LOANHIST01",
+        accession_number="ACC-LOANHIST01",
+    )
+    session.add(item)
+    patron = Patron(library_card_number="LHCARD", full_name="Loop Patron")
+    session.add(patron)
+    session.flush()
+    session.commit()
+
+    circulation = CirculationService(
+        item_repo=SqlItemRepository(session),
+        loan_repo=SqlLoanRepository(session),
+        patron_repo=SqlPatronRepository(session),
+        branch_repo=SqlBranchRepository(session),
+        hold_repo=SqlHoldRepository(session),
+        policy_repo=SqlLoanPolicyRepository(session),
+    )
+    for _ in range(8):
+        circulation.checkout(item.barcode, patron.library_card_number)
+        circulation.checkin(item.barcode)
+    session.commit()
+    barcode = item.barcode
+    session.close()
+    return barcode
+
+
 def test_error_goes_to_stderr_with_prefix(cli_db):
     result = runner.invoke(app, ["item", "show", "NO-SUCH-BARCODE"])
     assert result.exit_code == 1
@@ -89,6 +141,15 @@ def test_patron_list_truncation_notice(cli_db, thirty_patrons):
     result = runner.invoke(app, ["patron", "list", "--limit", "10"])
     assert result.exit_code == 0
     assert "Showing first 10 row(s)" in result.stderr
+
+
+def test_loan_item_history_truncation_notice(cli_db, item_with_loan_history):
+    result = runner.invoke(
+        app,
+        ["loan", "item-history", "--barcode", item_with_loan_history, "--limit", "5"],
+    )
+    assert result.exit_code == 0
+    assert "Showing first 5 row(s)" in result.stderr
 
 
 def test_patron_list_offset_pages_past_first_batch(cli_db, thirty_patrons):
