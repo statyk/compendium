@@ -1133,6 +1133,9 @@ body.kiosk-page { max-width: none; }
   border-bottom: none !important;
 }
 
+/* Permission picker: raw token shown after the plain-language label */
+.perm-token { font-size: 0.78em; opacity: 0.65; margin-left: 0.35rem; }
+
 /* Standalone form helper text — use instead of bare <small> for
    context that applies to the form but not a single field. */
 .form-help {

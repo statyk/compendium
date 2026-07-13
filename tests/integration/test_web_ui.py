@@ -1739,6 +1739,31 @@ def test_role_clone_creates_editable_copy(web_client, librarian, web_session):
     assert cloned.name == "ReadOnly (copy)"
 
 
+def test_role_picker_shows_descriptions_not_tooltips(web_client, librarian, web_session):
+    from compendium.repositories.sql.role_repository import SqlRoleRepository
+    read_only = SqlRoleRepository(web_session).get_by_name("ReadOnly")
+    auth_cookies = _login(web_client, "lib01")
+    raw, signed = _make_csrf_pair()
+    resp = web_client.post(
+        f"/ui/roles/{read_only.id}/clone",
+        data={"csrf_token": raw},
+        cookies={**auth_cookies, CSRF_COOKIE: signed},
+    )
+    role_id = int(resp.headers["location"].rsplit("/", 1)[-1].split("?")[0])
+
+    cookies = _login(web_client, "lib01")
+    r = web_client.get(f"/ui/roles/{role_id}", cookies=cookies)
+    assert r.status_code == 200
+    # description is visible label text
+    assert "Check items out to patrons at the circulation desk." in r.text
+    # token demoted to secondary code element
+    assert '<code class="perm-token">loan.checkout</code>' in r.text
+    # tooltips gone from the picker
+    assert 'data-tooltip=' not in r.text.split('id="perm-groups"')[1]
+    # .self/.any explainer present on scoped groups
+    assert "apply only to the signed-in user" in r.text
+
+
 # ── Security regressions ──────────────────────────────────────────────────────
 
 

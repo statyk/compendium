@@ -61,12 +61,18 @@
       {% for category, perms in permission_groups %}
       <fieldset>
         <legend>{{ category }}</legend>
+        {% set _scoped = namespace(v=false) %}
+        {% for p in perms %}{% if p.endswith('.self') or p.endswith('.any') %}{% set _scoped.v = true %}{% endif %}{% endfor %}
+        {% if _scoped.v %}
+        <p><small>Permissions ending in <code>.self</code> apply only to the signed-in user's own records; <code>.any</code> applies to any patron's.</small></p>
+        {% endif %}
         {% for perm in perms %}
         <label>
           <input type="checkbox" name="permissions" value="{{ perm }}" class="perm-check"
                  {% if perm in role.permissions %}checked{% endif %}
                  {% if is_full_access %}disabled{% endif %}>
-          <code>{{ perm }}</code>{% if permission_descriptions.get(perm) %}<span class="field-hint" data-tooltip="{{ permission_descriptions[perm] }}">ⓘ</span>{% endif %}
+          {{ permission_descriptions.get(perm, perm) }}
+          <code class="perm-token">{{ perm }}</code>
         </label>
         {% endfor %}
       </fieldset>
