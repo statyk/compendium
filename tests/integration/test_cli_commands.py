@@ -1862,3 +1862,14 @@ def test_reports_dormant_bad_not_since_is_clean_usage_error(session):
     assert r.exit_code == 2, r.output
     assert "--not-since" in r.output and "YYYY-MM-DD" in r.output
     assert "Traceback" not in r.output
+
+
+def test_labels_spine_bad_since_is_clean_usage_error(session):
+    r = _invoke(
+        session,
+        ["labels", "spine", "-o", "ignored.pdf", "--since", "not-a-date"],
+        "compendium.cli.commands.labels",
+    )
+    assert r.exit_code == 2, r.output
+    assert "--since" in r.output and "YYYY-MM-DD" in r.output
+    assert "Traceback" not in r.output

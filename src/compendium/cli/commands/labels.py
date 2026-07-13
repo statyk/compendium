@@ -29,7 +29,10 @@ app = typer.Typer(help="Generate printable PDFs for item labels and patron cards
 
 
 def _parse_date(s: str) -> datetime:
-    return datetime.strptime(s, "%Y-%m-%d")
+    try:
+        return datetime.strptime(s, "%Y-%m-%d")
+    except ValueError as exc:
+        raise typer.BadParameter(f"--since must be YYYY-MM-DD, got '{s}'") from exc
 
 
 def _collect_items(

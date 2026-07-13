@@ -2,7 +2,6 @@ from __future__ import annotations
 
 import getpass
 import os
-from datetime import datetime
 
 import typer
 
@@ -20,10 +19,6 @@ from compendium.services.auth import AuthService, assignable_roles
 from compendium.services.patrons import PatronService
 
 app = typer.Typer(help="User account commands.")
-
-
-def _parse_date(s: str):
-    return datetime.strptime(s, "%Y-%m-%d").date()
 
 
 def _auth_svc(session) -> AuthService:
