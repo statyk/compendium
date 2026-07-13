@@ -7,6 +7,20 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Fixed
+
+- **Web self-service:** an expired session during renew/hold actions now
+  returns you to the login page instead of rendering it inside the table;
+  failed renew/claim/cancel/resume keep the row and its buttons with the
+  error shown inline; resuming a hold shows the updated row immediately.
+- **Settings:** API-key validator warnings no longer block or mislabel a
+  successful save; a failed validation now offers a "Save anyway" override.
+- **CLI:** `labels spine/pocket/barcode --since` rejects malformed dates
+  with a usage error instead of a traceback.
+- **Docker:** `docker run … compendium --version` (and `--help`, `keygen`,
+  `init`) no longer fails behind database migrations; unreachable databases
+  produce one clear error instead of a traceback wall.
+
 ## [1.5.0] - 2026-07-12
 
 ### Added
