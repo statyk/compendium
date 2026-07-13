@@ -38,6 +38,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Catalog results and work pages show aggregate copy availability ("2 of 5
   copies available"); the work page notes the earliest due date when every
   copy is on loan.
+- **Admin hub:** all administration — policies, hours, branches, users, roles,
+  settings, reports — now lives on one permission-aware page at **Admin →
+  Admin Home** (`/ui/admin`). The old Settings hub URL redirects there.
+- **Policy delete:** loan policies can be deleted from the web, CLI
+  (`compendium policy delete --id N`), and API (`DELETE /policies/{id}`);
+  the default policy is protected.
 
 ### Changed
 
@@ -56,11 +62,23 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - The copies table labels the call number column "Shelf location".
 - Suspending a hold no longer reloads the page, and the date picker refuses
   past dates up front.
+- The Admin and Settings navigation dropdowns are merged into one; the kiosk
+  link moved to the top-level navigation.
+- The role permission picker shows plain-language descriptions (with the raw
+  token secondary) and explains the `.self` / `.any` scope convention inline.
+- Changing which policy is the default now asks for confirmation, and the
+  policies page states exactly when edits take effect (new checkouts and
+  future renewals).
+- Library hours are edited and saved as a single form; leaving either the
+  hours or policies page with unsaved edits now warns first.
 
 ### Fixed
 
 - The "Checked Out" availability pill was unstyled due to a CSS class-name
   mismatch.
+- Unchecking "Full access" on a role no longer silently wipes every
+  permission checkbox — the previous selection (or the Librarian preset) is
+  restored.
 
 ## [1.5.1] - 2026-07-12
 

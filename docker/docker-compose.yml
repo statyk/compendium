@@ -52,7 +52,7 @@ services:
       COMPENDIUM_GOOGLE_BOOKS_API_KEY: ${COMPENDIUM_GOOGLE_BOOKS_API_KEY:-}
       # Encryption key for DB-stored secrets (Admin → System → Secrets).
       COMPENDIUM_SECRET_KEY: ${COMPENDIUM_SECRET_KEY:-}
-      # Optional overrides — usually configured at /ui/admin/settings instead.
+      # Optional overrides — usually configured at /ui/admin instead.
       COMPENDIUM_BOOK_METADATA_SOURCE_PREFERENCE: ${COMPENDIUM_BOOK_METADATA_SOURCE_PREFERENCE:-}
       COMPENDIUM_BOOK_METADATA_FALLBACK_ENABLED: ${COMPENDIUM_BOOK_METADATA_FALLBACK_ENABLED:-}
       COMPENDIUM_METADATA_CACHE_TTL_DAYS: ${COMPENDIUM_METADATA_CACHE_TTL_DAYS:-}
@@ -78,7 +78,7 @@ services:
       COMPENDIUM_ADMIN_PASSWORD: ${COMPENDIUM_ADMIN_PASSWORD:-}
       COMPENDIUM_ADMIN_ROLE: ${COMPENDIUM_ADMIN_ROLE:-Administrator}
       # Library name, theme, fines, holds, SMTP host/port/from, retention,
-      # etc. are configured at /ui/admin/settings (or via `compendium settings`)
+      # etc. are configured at /ui/admin (or via `compendium settings`)
       # after first login — env vars override but normally aren't set here.
     # secrets:
     #   - postgres_password    # only if using Option B above
