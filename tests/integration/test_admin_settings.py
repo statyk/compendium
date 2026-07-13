@@ -7,6 +7,7 @@ respects per-key scope, and the CLI prints + writes correctly.
 
 from __future__ import annotations
 
+import json
 from unittest.mock import patch
 
 import pytest
@@ -191,19 +192,31 @@ class TestSettingsCli:
         assert "database_url" not in r.output
 
     def test_list_all_includes_env_only(self, s_engine, monkeypatch):
+        # Task 8 migrated `settings list` onto the shared table/JSON output
+        # helper (rich table, box.SIMPLE). With this many columns and rows,
+        # rich's default (non-tty, 80-col) width detection ellipsizes long
+        # KEY/ENV VAR cells — e.g. "default_loan_period_days" renders as
+        # "default_loan_pe…". Use --format json to inspect full values
+        # reliably, matching the precedent set by Task 7's branch-list tests.
         monkeypatch.setattr("compendium.db.engine.get_engine", lambda: s_engine)
-        r = CliRunner().invoke(cli_app, ["settings", "list", "--all"])
+        r = CliRunner().invoke(
+            cli_app, ["settings", "list", "--all", "--format", "json"]
+        )
         assert r.exit_code == 0, r.output
+        data = json.loads(r.stdout)
+        keys = {row["key"] for row in data}
+        env_vars = {row["env_var"] for row in data}
+        scopes = {row["scope"] for row in data}
         # Both kinds are listed
-        assert "library_name" in r.output  # registry
-        assert "jwt_secret_key" in r.output  # env-only
-        assert "database_url" in r.output  # env-only
-        assert "default_loan_period_days" in r.output  # env-only (not yet migrated)
+        assert "library_name" in keys  # registry
+        assert "jwt_secret_key" in keys  # env-only
+        assert "database_url" in keys  # env-only
+        assert "default_loan_period_days" in keys  # env-only (not yet migrated)
         # New ENV VAR column rendered
-        assert "COMPENDIUM_LIBRARY_NAME" in r.output
-        assert "COMPENDIUM_JWT_SECRET_KEY" in r.output
+        assert "COMPENDIUM_LIBRARY_NAME" in env_vars
+        assert "COMPENDIUM_JWT_SECRET_KEY" in env_vars
         # New env-only scope label
-        assert "env-only" in r.output
+        assert "env-only" in scopes
 
     def test_list_all_masks_secrets_by_default(self, s_engine, monkeypatch):
         monkeypatch.setattr("compendium.db.engine.get_engine", lambda: s_engine)
@@ -219,13 +232,17 @@ class TestSettingsCli:
                 assert "sqlite" not in line, line
 
     def test_list_all_show_secrets_unmasks(self, s_engine, monkeypatch):
+        # --format json to avoid rich's column-width ellipsis on the long
+        # jwt_secret_key default value (see test_list_all_includes_env_only).
         monkeypatch.setattr("compendium.db.engine.get_engine", lambda: s_engine)
         r = CliRunner().invoke(
-            cli_app, ["settings", "list", "--all", "--show-secrets"]
+            cli_app, ["settings", "list", "--all", "--show-secrets", "--format", "json"]
         )
         assert r.exit_code == 0, r.output
-        assert "********" not in r.output
-        assert "insecure-default-change-in-production" in r.output
+        data = json.loads(r.stdout)
+        values = [row["value"] for row in data]
+        assert not any(v == "********" for v in values)
+        assert any(v == "insecure-default-change-in-production" for v in values)
 
     def test_list_scope_env_only(self, s_engine, monkeypatch):
         monkeypatch.setattr("compendium.db.engine.get_engine", lambda: s_engine)
@@ -257,14 +274,15 @@ class TestSettingsCli:
             cli_app, ["settings", "set", "library_name", "Riverdale Public"]
         )
         ss.invalidate_cache()
-        r = CliRunner().invoke(cli_app, ["settings", "list"])
+        # --format json: reliable row lookup rather than scanning
+        # column-aligned (and potentially rich-ellipsized) table text.
+        r = CliRunner().invoke(cli_app, ["settings", "list", "--format", "json"])
         assert r.exit_code == 0, r.output
-        for line in r.output.splitlines():
-            if line.startswith("library_name"):
-                assert " db " in f" {line} ", line
-                break
-        else:
+        data = json.loads(r.stdout)
+        row = next((row for row in data if row["key"] == "library_name"), None)
+        if row is None:
             pytest.fail("library_name not in list output")
+        assert row["source"] == "db"
 
 
 # ──────────────────────────────────────────────────────────────────────────

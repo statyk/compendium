@@ -6,6 +6,8 @@ import getpass
 
 import typer
 
+from compendium.cli.output import emit_detail, format_option
+
 app = typer.Typer(help="Metadata utilities.")
 cache_app = typer.Typer(help="Metadata cache management.")
 app.add_typer(cache_app, name="cache")
@@ -14,13 +16,28 @@ app.add_typer(gb_quota_app, name="gb-quota")
 
 
 @cache_app.command("stats")
-def cache_stats() -> None:
+def cache_stats(format: str = format_option()) -> None:
     """Print metadata cache row counts and oldest entry."""
     from compendium.db.session import session_scope
     from compendium.services.metadata_cache import get_stats
 
     with session_scope() as session:
         stats = get_stats(session)
+
+    if format == "json":
+        emit_detail(
+            {
+                "total": stats.total,
+                "positive": stats.positive,
+                "negative": stats.negative,
+                "expired_positive": stats.expired_positive,
+                "expired_negative": stats.expired_negative,
+                "oldest_fetched_at": stats.oldest_fetched_at,
+                "adapter_counts": stats.adapter_counts,
+            },
+            format,
+        )
+        return
 
     typer.echo(f"Total rows:       {stats.total}")
     typer.echo(f"  Positive (hit): {stats.positive}")
@@ -70,7 +87,7 @@ def cache_clear(
 
 
 @gb_quota_app.command("status")
-def gb_quota_status() -> None:
+def gb_quota_status(format: str = format_option()) -> None:
     """Show whether the Google Books daily quota is currently exhausted."""
     from compendium.services.metadata import is_gb_quota_exhausted, _GB_QUOTA_ADAPTER, _GB_QUOTA_KIND, _GB_QUOTA_VALUE
     from compendium.db.session import session_scope
@@ -79,11 +96,24 @@ def gb_quota_status() -> None:
     with session_scope() as s:
         entry = s.get(MetadataCache, (_GB_QUOTA_ADAPTER, _GB_QUOTA_KIND, _GB_QUOTA_VALUE))
 
+    exhausted = is_gb_quota_exhausted()
+
+    if format == "json":
+        emit_detail(
+            {
+                "exhausted": exhausted,
+                "hit_at": entry.fetched_at if entry else None,
+                "auto_reset": entry is not None and not exhausted,
+            },
+            format,
+        )
+        return
+
     if entry is None:
         typer.echo("Google Books quota: not exhausted")
         return
 
-    if is_gb_quota_exhausted():
+    if exhausted:
         typer.echo(f"Google Books quota: exhausted (hit at {entry.fetched_at.isoformat()})")
         typer.echo("  Book lookups are falling back to Open Library until the quota resets (~24 h).")
         typer.echo("  Use 'compendium metadata gb-quota clear' to force an early reset.")

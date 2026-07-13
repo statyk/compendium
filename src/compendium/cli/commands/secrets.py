@@ -5,6 +5,7 @@ import getpass
 
 import typer
 
+from compendium.cli.output import Column, emit_list, format_option
 from compendium.db.session import session_scope
 from compendium.repositories.sql.audit_log_repository import SqlAuditLogRepository
 from compendium.services.audit import AuditService
@@ -33,8 +34,16 @@ def _secret_descriptors():
     return [d for d in all_descriptors() if d.secret]
 
 
+_COLUMNS = [
+    Column("key", "KEY"),
+    Column("env_var", "ENV VAR"),
+    Column("source", "SOURCE"),
+    Column("display_name", "DISPLAY NAME"),
+]
+
+
 @app.command("list")
-def list_secrets() -> None:
+def list_secrets(format: str = format_option()) -> None:
     """Show registered secrets and their current source (env / db / not set)."""
     if not secret_key_configured():
         typer.echo(
@@ -45,7 +54,7 @@ def list_secrets() -> None:
 
     descs = _secret_descriptors()
     if not descs:
-        typer.echo("No secrets registered.")
+        emit_list([], _COLUMNS, format, empty="No secrets registered.")
         return
 
     with session_scope() as session:
@@ -69,13 +78,16 @@ def list_secrets() -> None:
             _refresh_cache_if_needed()
             db_val = _cache.get(d.key)
             source = "db" if db_val else "not set"
-        rows.append((d.key, env_var, source, d.resolved_display_name()))
+        rows.append(
+            {
+                "key": d.key,
+                "env_var": env_var,
+                "source": source,
+                "display_name": d.resolved_display_name(),
+            }
+        )
 
-    header = f"{'KEY':<28} {'ENV VAR':<38} {'SOURCE':<10} DISPLAY NAME"
-    typer.echo("\n" + header)
-    typer.echo("-" * len(header))
-    for key, env_var, source, display in rows:
-        typer.echo(f"{key:<28} {env_var:<38} {source:<10} {display}")
+    emit_list(rows, _COLUMNS, format, empty="No secrets registered.")
 
 
 def _get_secret_validators() -> dict:

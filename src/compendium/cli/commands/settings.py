@@ -13,6 +13,7 @@ import os
 
 import typer
 
+from compendium.cli.output import Column, emit_detail, emit_list, format_option
 from compendium.db.session import session_scope
 from compendium.repositories.sql.audit_log_repository import SqlAuditLogRepository
 from compendium.services.audit import AuditService
@@ -62,6 +63,15 @@ def _audit_svc(session) -> AuditService:
     return AuditService(SqlAuditLogRepository(session))
 
 
+_COLUMNS = [
+    Column("key", "KEY"),
+    Column("env_var", "ENV VAR"),
+    Column("scope", "SCOPE"),
+    Column("source", "SOURCE"),
+    Column("value", "VALUE"),
+]
+
+
 @app.command("list")
 def list_settings(
     scope: str | None = typer.Option(
@@ -79,6 +89,7 @@ def list_settings(
         "--show-secrets",
         help="Print sensitive values in plaintext (default: masked as ********).",
     ),
+    format: str = format_option(),
 ) -> None:
     """List recognized settings with their current value, source, and env var.
 
@@ -90,6 +101,11 @@ def list_settings(
       env     — env var is set; that's what readers will see
       db      — env not set; a row exists in site_setting
       default — env not set; no row; falls back to the registered default
+
+    The ``--show-secrets`` masking is applied to the ``value`` placed in each
+    row *before* the row is built, so ``--format json`` honors the same
+    masking as the table (JSON never leaks an unmasked secret that the table
+    hides).
     """
     valid_scopes = {"librarian", "system", "env-only"}
     if scope and scope not in valid_scopes:
@@ -98,7 +114,7 @@ def list_settings(
         )
         raise typer.Exit(1)
 
-    rows: list[tuple[str, str, str, str, str]] = []  # key, env_var, scope, source, formatted_value
+    rows: list[dict] = []
 
     # Registry items (DB-editable).
     if scope != "env-only":
@@ -111,11 +127,27 @@ def list_settings(
             try:
                 value = get_site_setting(d.key)
             except SettingValidationError as exc:
-                rows.append((d.key, env_var, d.scope, "env", f"ERROR: {exc}"))
+                rows.append(
+                    {
+                        "key": d.key,
+                        "env_var": env_var,
+                        "scope": d.scope,
+                        "source": "env",
+                        "value": f"ERROR: {exc}",
+                    }
+                )
                 continue
             source = _resolve_source_for_registry(d.key, env_set)
             formatted = _format_listing_value(d.key, value, show_secrets=show_secrets)
-            rows.append((d.key, env_var, d.scope, source, formatted))
+            rows.append(
+                {
+                    "key": d.key,
+                    "env_var": env_var,
+                    "scope": d.scope,
+                    "source": source,
+                    "value": formatted,
+                }
+            )
 
     # Env-only items (Pydantic Settings fields outside the registry).
     if all_settings or scope == "env-only":
@@ -128,15 +160,19 @@ def list_settings(
             value = getattr(s, name)
             source = "env" if env_set else "default"
             formatted = _format_listing_value(name, value, show_secrets=show_secrets)
-            rows.append((name, env_var, "env-only", source, formatted))
+            rows.append(
+                {
+                    "key": name,
+                    "env_var": env_var,
+                    "scope": "env-only",
+                    "source": source,
+                    "value": formatted,
+                }
+            )
 
-    rows.sort(key=lambda r: (r[2], r[0]))
+    rows.sort(key=lambda r: (r["scope"], r["key"]))
 
-    header = f"{'KEY':<32} {'ENV VAR':<42} {'SCOPE':<10} {'SOURCE':<8} VALUE"
-    typer.echo("\n" + header)
-    typer.echo("-" * len(header))
-    for key, env_var, scope_val, source, formatted in rows:
-        typer.echo(f"{key:<32} {env_var:<42} {scope_val:<10} {source:<8} {formatted}")
+    emit_list(rows, _COLUMNS, format)
 
 
 def _resolve_source_for_registry(key: str, env_set: bool) -> str:
@@ -165,8 +201,16 @@ def _resolve_source_for_registry(key: str, env_set: bool) -> str:
 
 
 @app.command("get")
-def get_setting(key: str = typer.Argument(..., help="Setting key to read.")) -> None:
-    """Print the current value of a single setting."""
+def get_setting(
+    key: str = typer.Argument(..., help="Setting key to read."),
+    format: str = format_option(),
+) -> None:
+    """Print the current value of a single setting.
+
+    Table output is the bare value only (no label) — scripts depend on this
+    exact shape. ``--format json`` emits ``{"key": ..., "value": ...}`` with
+    the raw typed value (not the table's stringified/formatted form).
+    """
     try:
         get_descriptor(key)
     except UnknownSettingError:
@@ -177,6 +221,9 @@ def get_setting(key: str = typer.Argument(..., help="Setting key to read.")) -> 
     except SettingValidationError as exc:
         typer.echo(f"Error parsing {key}: {exc}", err=True)
         raise typer.Exit(1)
+    if format == "json":
+        emit_detail({"key": key, "value": value}, format)
+        return
     typer.echo(_format_value(value))
 
 

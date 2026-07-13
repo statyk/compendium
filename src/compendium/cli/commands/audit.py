@@ -1,10 +1,27 @@
 import typer
 
+from compendium.cli.output import Column, emit_list, format_option
 from compendium.db.session import session_scope
 from compendium.repositories.sql.audit_log_repository import SqlAuditLogRepository
 from compendium.services.audit import AuditService
 
 app = typer.Typer(help="Audit log commands.")
+
+_COLUMNS = [
+    Column("id", "ID", justify="right"),
+    Column(
+        "occurred_at",
+        "Occurred (UTC)",
+        formatter=lambda v: v.strftime("%Y-%m-%d %H:%M:%S") if v else "—",
+    ),
+    Column("source", "Src"),
+    Column("actor", "Actor"),
+    Column("entity_type", "Entity"),
+    Column("entity_id", "EID", justify="right"),
+    Column("action", "Action"),
+    # Table rendering only — JSON always gets the raw dict (see cli/output.py).
+    Column("details", "Details", formatter=lambda v: str(v) if v else ""),
+]
 
 
 @app.command("list")
@@ -13,6 +30,7 @@ def list_audit(
     entity_id: int | None = typer.Option(None, "--id", help="Entity ID"),
     user_id: int | None = typer.Option(None, "--user-id", help="Filter by acting user ID"),
     limit: int = typer.Option(20, "--limit", help="Maximum rows to show"),
+    format: str = format_option(),
 ) -> None:
     """List audit log entries."""
     with session_scope() as session:
@@ -23,18 +41,22 @@ def list_audit(
             user_id=user_id,
             limit=limit,
         )
-        if not entries:
-            typer.echo("No audit log entries found.")
-            return
-        header = f"{'ID':>6}  {'Occurred (UTC)':19}  {'Src':3}  {'Actor':20}  {'Entity':7}  {'EID':>6}  {'Action':12}  Details"
-        typer.echo(header)
-        typer.echo("-" * len(header))
-        for e in entries:
-            actor = e.actor_label or (f"uid:{e.user_id}" if e.user_id else "—")
-            occurred = e.occurred_at.strftime("%Y-%m-%d %H:%M:%S") if e.occurred_at else "—"
-            eid = str(e.entity_id) if e.entity_id is not None else "—"
-            details_str = str(e.details) if e.details else ""
-            typer.echo(
-                f"  {e.id:>6}  {occurred:19}  {e.source:3}  {actor:20}  "
-                f"{e.entity_type:7}  {eid:>6}  {e.action:12}  {details_str}"
-            )
+        rows = [
+            {
+                "id": e.id,
+                "occurred_at": e.occurred_at,
+                "source": e.source,
+                "actor": e.actor_label or (f"uid:{e.user_id}" if e.user_id else None),
+                "entity_type": e.entity_type,
+                "entity_id": e.entity_id,
+                "action": e.action,
+                "details": e.details,
+            }
+            for e in entries
+        ]
+        emit_list(
+            rows,
+            _COLUMNS,
+            format,
+            empty="No audit log entries found.",
+        )
