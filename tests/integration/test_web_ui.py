@@ -1513,7 +1513,7 @@ def test_patron_link_unlink_user(web_client, librarian, web_session):
         data={"csrf_token": raw2},
         cookies={**auth_cookies, CSRF_COOKIE: signed2},
     )
-    assert resp2.status_code == 303
+    assert resp2.status_code == 200
     web_session.refresh(patron)
     assert patron.user_id is None
 
@@ -2085,6 +2085,45 @@ def test_user_deactivate_returns_success_fragment_with_reactivate(
     assert "success-banner" in resp.text
     assert "error-banner" not in resp.text
     assert "/ui/users/deact01/reactivate" in resp.text
+
+
+def test_patron_reactivate_returns_status_fragment(web_client, librarian, patron_user):
+    _, patron = patron_user
+    auth_cookies = _login(web_client, "lib01")
+    raw, signed = _make_csrf_pair()
+    web_client.post(
+        f"/ui/patrons/{patron.library_card_number}/deactivate",
+        data={"csrf_token": raw},
+        cookies={**auth_cookies, CSRF_COOKIE: signed},
+    )
+
+    raw2, signed2 = _make_csrf_pair()
+    resp = web_client.post(
+        f"/ui/patrons/{patron.library_card_number}/reactivate",
+        data={"csrf_token": raw2},
+        cookies={**auth_cookies, CSRF_COOKIE: signed2},
+    )
+    assert resp.status_code == 200
+    assert "success-banner" in resp.text
+    assert "error-banner" not in resp.text
+    assert f"/ui/patrons/{patron.library_card_number}/deactivate" in resp.text
+    assert "<nav" not in resp.text
+
+
+def test_patron_unlink_returns_account_fragment(web_client, librarian, patron_user):
+    _, patron = patron_user
+    auth_cookies = _login(web_client, "lib01")
+    raw, signed = _make_csrf_pair()
+    resp = web_client.post(
+        f"/ui/patrons/{patron.library_card_number}/unlink-user",
+        data={"csrf_token": raw},
+        cookies={**auth_cookies, CSRF_COOKIE: signed},
+    )
+    assert resp.status_code == 200
+    assert "success-banner" in resp.text
+    assert "error-banner" not in resp.text
+    assert "<nav" not in resp.text
+    assert "Link" in resp.text or "Create a login" in resp.text
 
 
 def test_zero_results_all_fields_hints_at_field_search(web_client, work):

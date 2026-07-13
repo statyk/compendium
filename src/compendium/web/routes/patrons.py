@@ -363,7 +363,7 @@ def patron_link_user(
         )
 
 
-@router.post("/patrons/{card_number}/unlink-user")
+@router.post("/patrons/{card_number}/unlink-user", response_class=HTMLResponse)
 def patron_unlink_user(
     card_number: str,
     request: Request,
@@ -374,13 +374,21 @@ def patron_unlink_user(
     check_csrf_form(request, csrf_token)
     try:
         _patron_svc(session, user).unlink_user(card_number)
-        return RedirectResponse(
-            f"/ui/patrons/{card_number}?message=User+account+unlinked.", status_code=303
-        )
     except (BusinessRuleError, NotFoundError) as exc:
-        return RedirectResponse(
-            f"/ui/patrons/{card_number}?error={exc}", status_code=303
-        )
+        return HTMLResponse(f"<span class='error-banner'>{escape(str(exc))}</span>")
+    patron = SqlPatronRepository(session).get_by_card_number(card_number)
+    return _render(
+        "patrons/_account.html",
+        request,
+        {
+            "request": request,
+            "user": user,
+            "patron": patron,
+            "linked_user": None,
+            "unlinked_users": _unlinked_users(session),
+            "account_message": "User account unlinked.",
+        },
+    )
 
 
 @router.post("/patrons/{card_number}/create-user")
@@ -516,7 +524,7 @@ def deactivate_patron(
     )
 
 
-@router.post("/patrons/{card_number}/reactivate")
+@router.post("/patrons/{card_number}/reactivate", response_class=HTMLResponse)
 def reactivate_patron(
     card_number: str,
     request: Request,
@@ -527,10 +535,11 @@ def reactivate_patron(
     check_csrf_form(request, csrf_token)
     try:
         _patron_svc(session, user).reactivate(card_number)
-        return RedirectResponse(
-            f"/ui/patrons/{card_number}?message=Patron+reactivated.", status_code=303
-        )
     except (BusinessRuleError, NotFoundError) as exc:
-        return RedirectResponse(
-            f"/ui/patrons/{card_number}?error={escape(str(exc))}", status_code=303
-        )
+        return HTMLResponse(f"<span class='error-banner'>{escape(str(exc))}</span>")
+    patron = SqlPatronRepository(session).get_by_card_number(card_number)
+    return _render(
+        "patrons/_status.html",
+        request,
+        {"request": request, "patron": patron, "status_message": "Patron reactivated."},
+    )

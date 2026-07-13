@@ -1,0 +1,67 @@
+{% if account_message | default(none) %}<span class="success-banner">{{ account_message }}</span> {% endif %}
+{% if linked_user %}
+  <a href="/ui/users/{{ linked_user.username }}">{{ linked_user.username }}</a>
+  <small>({{ linked_user.role.name }})</small>
+  {% if patron.is_active %}
+  <form
+    hx-post="/ui/patrons/{{ patron.library_card_number }}/unlink-user"
+    hx-include="[name='csrf_token']"
+    hx-confirm="Unlink this user account from the patron?"
+    hx-target="#patron-account"
+    hx-swap="innerHTML"
+    style="display:inline"
+  >
+    <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+    <button type="submit" class="outline contrast" style="padding:0.2rem 0.6rem; margin-left:1rem">Unlink</button>
+  </form>
+  {% endif %}
+{% elif patron.is_active and unlinked_users %}
+  <form method="post" action="/ui/patrons/{{ patron.library_card_number }}/link-user" style="display:flex; gap:0.5rem; align-items:center; margin-top:0.25rem">
+    <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+    <select name="user_id" style="margin:0; width:auto">
+      {% for u in unlinked_users %}
+      <option value="{{ u.id }}">{{ u.username }}{% if u.email %} ({{ u.email }}){% endif %} — {{ u.role.name }}</option>
+      {% endfor %}
+    </select>
+    <button type="submit" style="padding:0.2rem 0.6rem; margin:0">Link</button>
+  </form>
+  {% if has_permission(user, 'patron.account.manage') %}
+  <details style="margin-top:0.5rem">
+    <summary class="outline secondary" role="button">Create a new login for this patron</summary>
+    <form method="post" action="/ui/patrons/{{ patron.library_card_number }}/create-user" style="margin-top:0.5rem; max-width:24rem">
+      <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+      <label for="new_login_username">Username
+        <input type="text" id="new_login_username" name="username" autocomplete="off" required>
+      </label>
+      <label for="new_login_password">Password
+        <input type="password" id="new_login_password" name="password" autocomplete="new-password" required>
+      </label>
+      <label for="new_login_confirm">Confirm password
+        <input type="password" id="new_login_confirm" name="password_confirm" autocomplete="new-password" required>
+      </label>
+      <button type="submit">Create login</button>
+    </form>
+  </details>
+  {% endif %}
+{% elif patron.is_active and has_permission(user, 'patron.account.manage') %}
+  <details>
+    <summary class="outline secondary" role="button">Create a login for this patron</summary>
+    <form method="post" action="/ui/patrons/{{ patron.library_card_number }}/create-user" style="margin-top:0.5rem; max-width:24rem">
+      <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+      <label for="solo_login_username">Username
+        <input type="text" id="solo_login_username" name="username" autocomplete="off" required>
+      </label>
+      <label for="solo_login_password">Password
+        <input type="password" id="solo_login_password" name="password" autocomplete="new-password" required>
+      </label>
+      <label for="solo_login_confirm">Confirm password
+        <input type="password" id="solo_login_confirm" name="password_confirm" autocomplete="new-password" required>
+      </label>
+      <button type="submit">Create login</button>
+    </form>
+  </details>
+{% elif patron.is_active %}
+  <em>None</em>
+{% else %}
+  <em>None</em>
+{% endif %}
