@@ -173,6 +173,31 @@ class TestPatronCli:
         assert r.exit_code == 0
         assert "Ada Lovelace" in r.output
 
+    def test_list_search_filters(self, session):
+        for name in ("Greta Findme", "Hank Skipme"):
+            _invoke(
+                session,
+                ["patron", "add", "--name", name],
+                "compendium.cli.commands.patron",
+            )
+        r = _invoke(
+            session,
+            ["patron", "list", "--search", "findme"],
+            "compendium.cli.commands.patron",
+        )
+        assert r.exit_code == 0
+        assert "Greta Findme" in r.output
+        assert "Hank Skipme" not in r.output
+
+    def test_list_search_no_match_message(self, session):
+        r = _invoke(
+            session,
+            ["patron", "list", "--search", "zzz-no-such"],
+            "compendium.cli.commands.patron",
+        )
+        assert r.exit_code == 0
+        assert "No patrons match." in r.output
+
     def test_add_with_unknown_link_user_fails(self, session):
         r = _invoke(
             session,

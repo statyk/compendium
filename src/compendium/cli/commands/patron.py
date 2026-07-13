@@ -271,15 +271,22 @@ def create_user_for_patron(
 @app.command("list")
 def list_patrons(
     limit: int = typer.Option(20, "--limit"),
-    include_inactive: bool = typer.Option(False, "--include-inactive", help="Include inactive patrons"),
+    include_inactive: bool = typer.Option(
+        False, "--include-inactive", help="Include inactive patrons"
+    ),
+    search: str = typer.Option(
+        None, "--search", "-s", help="Filter by name, card number, or email (substring)"
+    ),
 ) -> None:
     """List registered patrons (active only by default)."""
     with session_scope() as session:
         patrons = SqlPatronRepository(session).list(
-            limit=limit, status="all" if include_inactive else "active"
+            limit=limit,
+            status="all" if include_inactive else "active",
+            query=search,
         )
         if not patrons:
-            typer.echo("No patrons registered.")
+            typer.echo("No patrons match." if search else "No patrons registered.")
             return
         for p in patrons:
             status = "" if p.is_active else " [inactive]"
