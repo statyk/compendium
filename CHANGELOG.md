@@ -35,6 +35,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Circulation desk: renew works from the item barcode alone; the patron card
   is optional and verifies the borrower when supplied.
 - "Check out to this patron" shortcut on the patron page prefills the desk.
+- Catalog results and work pages show aggregate copy availability ("2 of 5
+  copies available"); the work page notes the earliest due date when every
+  copy is on loan.
 
 ### Changed
 
@@ -47,6 +50,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Item edit uses the same condition dropdown as add-copy (legacy free-text
   values are preserved as a "(current)" option).
 - Patron reactivate and account-unlink update in place like deactivate does.
+- All-fields keyword searches now sort by relevance by default (best match
+  first); pick another order from the sort menu to override. Field-scoped
+  searches keep alphabetical order.
+- The copies table labels the call number column "Shelf location".
+- Suspending a hold no longer reloads the page, and the date picker refuses
+  past dates up front.
+
+### Fixed
+
+- The "Checked Out" availability pill was unstyled due to a CSS class-name
+  mismatch.
 
 ## [1.5.1] - 2026-07-12
 

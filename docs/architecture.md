@@ -232,7 +232,7 @@ The same repository code targets both backends. Dialect-specific features:
 
 The catalog search box has two modes, and they match differently:
 
-- **All Fields** (default) runs full-text search — whole tokens only, with stemming. `"civil"` matches `"Civil War"`; `"civ"` does **not**.
+- **All Fields** (default) runs full-text search — whole tokens only, with stemming. `"civil"` matches `"Civil War"`; `"civ"` does **not**. Keyword results are ordered by relevance (FTS rank) by default; the sort menu overrides this.
 - **Field-scoped** (Title, Author, Publisher, …) uses substring matching. `"civ"` does match `"Civil"`.
 
 If a partial-word query returns nothing from the default box, switch to a field-scoped search. This asymmetry is a known quirk; we're leaving it as-is until real-world feedback says otherwise.
@@ -248,7 +248,7 @@ The sort order is configurable via the `order_by` parameter on `DiscoveryService
 | `title` (default) | Ascending by `sort_title` then `title`. |
 | `author` | Ascending by the primary creator's `sort_name` (`Creator.sort_name`, first by `WorkCreator.display_order`). Works with no creators sort last. |
 | `recent` | Descending by `Work.created_at` (when the work record was added to the catalog). |
-| `relevance` | When the query takes the FTS path (All Fields + non-empty query), preserves FTS rank order. On all other paths (field-scoped search, empty query) falls back to `title`. |
+| `relevance` | Default for All-Fields keyword queries. When the query takes the FTS path (All Fields + non-empty query), preserves FTS rank order. On all other paths (field-scoped search, empty query) falls back to `title`. |
 
 **Import normalization:** LibraryThing TSV, GoodReads CSV (and any source that calls `CatalogService`) normalizes two conventions on the way in:
 - *Trailing-article titles* — `"Information, The"` is stored as `"The Information"` with `sort_title = "Information"`.

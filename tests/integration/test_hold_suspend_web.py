@@ -174,7 +174,9 @@ class TestSuspendRoute:
             data={"until": until, "reason": "vacation", "csrf_token": raw},
             cookies=cookies,
         )
-        assert resp.status_code == 303
+        assert resp.status_code == 200
+        assert f'id="hold-{hold.id}"' in resp.text
+        assert f"Suspended until {until}" in resp.text
         hw_session.expire_all()
         fresh = SqlHoldRepository(hw_session).get(hold.id)
         assert fresh.suspended_until == date.fromisoformat(until)
@@ -189,8 +191,9 @@ class TestSuspendRoute:
             data={"until": "not-a-date", "csrf_token": raw},
             cookies=cookies,
         )
-        assert resp.status_code == 303
-        assert "error=" in resp.headers["location"]
+        assert resp.status_code == 200
+        assert "error-banner" in resp.text
+        assert f'id="hold-{hold.id}"' in resp.text
 
 
 class TestResumeRoute:
