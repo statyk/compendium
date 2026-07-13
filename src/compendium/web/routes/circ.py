@@ -73,6 +73,7 @@ def _render(name: str, request: Request, ctx: dict):
 @router.get("/circ")
 def circ_desk(
     request: Request,
+    card: str = "",
     user: AppUser = Depends(require_web_permission(_PERM)),
 ):
     scan_modes = permitted_scan_modes(user.role.permissions)
@@ -91,6 +92,7 @@ def circ_desk(
             "scan_modes": scan_modes,
             "scan_modes_checked": scan_modes_checked,
             "scan_isbn_enabled": get_site_setting("circulation_scan_isbn_enabled"),
+            "prefill_card": card,
         },
     )
 

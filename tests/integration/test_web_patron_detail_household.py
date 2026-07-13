@@ -9,7 +9,7 @@ from sqlalchemy.pool import StaticPool
 from compendium.api.app import create_app
 from compendium.config.seed import seed_defaults
 from compendium.db.session import get_session
-from compendium.domain.models import AppUser, Base, Household, Patron
+from compendium.domain.models import AppUser, Base, Household, Patron, Role
 from compendium.repositories.sql.household_repository import SqlHouseholdRepository
 from compendium.repositories.sql.patron_repository import SqlPatronRepository
 from compendium.repositories.sql.role_repository import SqlRoleRepository
@@ -198,3 +198,53 @@ def test_patron_detail_no_household_section_when_unlinked(client, db):
     assert r.status_code == 200
     # No household heading present
     assert "Household:" not in r.text
+
+
+def test_patron_detail_shows_checkout_shortcut_for_librarian(client, db):
+    """Patron detail shows a checkout shortcut linking to the prefilled circ desk."""
+    p = Patron(library_card_number="DET-020", full_name="Checkout Me")
+    SqlPatronRepository(db).add(p)
+    db.commit()
+
+    username, pw = _make_librarian(db)
+    _login(client, username, pw)
+    r = client.get("/ui/patrons/DET-020")
+    assert r.status_code == 200
+    assert 'href="/ui/circ?card=DET-020"' in r.text
+    assert "Check out to this patron" in r.text
+
+
+def test_patron_detail_hides_checkout_shortcut_without_permission(client, db):
+    """A user who can view patron detail (patron.manage) but lacks loan.checkout
+    does not see the shortcut."""
+    p = Patron(library_card_number="DET-021", full_name="No Checkout For You")
+    SqlPatronRepository(db).add(p)
+    db.commit()
+
+    role = SqlRoleRepository(db).add(
+        Role(name="PatronManagerNoCheckout", permissions=["patron.manage"])
+    )
+    username = "det_no_checkout"
+    u = AppUser(username=username, password_hash=hash_password("Str0ng!Pass"), role_id=role.id)
+    SqlUserRepository(db).add(u)
+    db.commit()
+
+    _login(client, username, "Str0ng!Pass")
+    r = client.get("/ui/patrons/DET-021")
+    assert r.status_code == 200
+    assert 'href="/ui/circ?card=DET-021"' not in r.text
+    assert "Check out to this patron" not in r.text
+
+
+def test_patron_detail_hides_checkout_shortcut_for_inactive_patron(client, db):
+    """An inactive patron does not get the checkout shortcut, even for a librarian."""
+    p = Patron(library_card_number="DET-022", full_name="Inactive Patron", is_active=False)
+    SqlPatronRepository(db).add(p)
+    db.commit()
+
+    username, pw = _make_librarian(db)
+    _login(client, username, pw)
+    r = client.get("/ui/patrons/DET-022")
+    assert r.status_code == 200
+    assert 'href="/ui/circ?card=DET-022"' not in r.text
+    assert "Check out to this patron" not in r.text

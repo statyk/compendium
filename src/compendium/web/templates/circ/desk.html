@@ -17,7 +17,7 @@
       </fieldset>
       <label for="co-card">Patron card #</label>
       <fieldset role="group">
-        <input type="text" id="co-card" name="card_number" placeholder="Library card #" autocomplete="off">
+        <input type="text" id="co-card" name="card_number" placeholder="Library card #" autocomplete="off" value="{{ prefill_card or '' }}">
         <button type="button" class="outline secondary" data-scan-target="co-card">Scan</button>
       </fieldset>
       <button type="submit" class="btn-block">Check Out</button>

@@ -14,6 +14,12 @@
   <p><code>{{ patron.library_card_number }}</code></p>
 </hgroup>
 
+{% if has_permission(user, 'loan.checkout') and patron.is_active %}
+<p>
+  <a role="button" class="outline" href="/ui/circ?card={{ patron.library_card_number }}">Check out to this patron</a>
+</p>
+{% endif %}
+
 {% if message %}<p class="success-banner">{{ message }}</p>{% endif %}
 {% if error %}<p class="error-banner">{{ error }}</p>{% endif %}
 

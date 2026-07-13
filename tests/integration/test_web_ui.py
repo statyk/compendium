@@ -383,6 +383,32 @@ def test_circ_desk_barcode_inputs_select_on_refocus(web_client, librarian):
         ), f"{input_id} form does not select-on-refocus"
 
 
+def test_circ_desk_prefills_card_from_query_param(web_client, librarian):
+    """GET /ui/circ?card=CARD prefills the checkout card input (only)."""
+    cookies = _login(web_client, "lib01")
+    resp = web_client.get("/ui/circ?card=WEB0001", cookies=cookies)
+    assert resp.status_code == 200
+    assert (
+        '<input type="text" id="co-card" name="card_number" '
+        'placeholder="Library card #" autocomplete="off" value="WEB0001">' in resp.text
+    )
+    # The renew form's card field must NOT be prefilled.
+    assert (
+        '<input type="text" id="rn-card" name="card_number" '
+        'placeholder="Library card #" autocomplete="off" value="WEB0001">' not in resp.text
+    )
+
+
+def test_circ_desk_without_card_param_leaves_card_blank(web_client, librarian):
+    cookies = _login(web_client, "lib01")
+    resp = web_client.get("/ui/circ", cookies=cookies)
+    assert resp.status_code == 200
+    assert (
+        '<input type="text" id="co-card" name="card_number" '
+        'placeholder="Library card #" autocomplete="off" value="">' in resp.text
+    )
+
+
 def test_patrons_list_renders_for_librarian(web_client, librarian):
     cookies = _login(web_client, "lib01")
     resp = web_client.get("/ui/patrons", cookies=cookies)
