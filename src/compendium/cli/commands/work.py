@@ -2,6 +2,7 @@ import getpass
 
 import typer
 
+from compendium.cli.output import Column, emit_detail, emit_list, format_option
 from compendium.db.session import session_scope
 from compendium.domain.errors import DomainError, NotFoundError
 from compendium.repositories.sql.audit_log_repository import SqlAuditLogRepository
@@ -42,12 +43,27 @@ def _catalog(session, *, audit: bool = False):
     )
 
 
-def _print_works(works) -> None:
-    for w in works:
-        creators = ", ".join(wc.creator.display_name for wc in w.creators)
-        year = f" ({w.publication_year})" if w.publication_year else ""
-        media = f" [{w.media_type.code}]" if w.media_type else ""
-        typer.echo(f"  [{w.id}] {w.title}{media}" + (f" — {creators}" if creators else "") + year)
+def _work_row(w) -> dict:
+    return {
+        "id": w.id,
+        "title": w.title,
+        "media_type": w.media_type.code if w.media_type else None,
+        "creators": ", ".join(wc.creator.display_name for wc in w.creators),
+        "publication_year": w.publication_year,
+    }
+
+
+_WORK_COLUMNS = [
+    Column("id", "ID", justify="right"),
+    Column("title", "Title"),
+    Column("media_type", "Media"),
+    Column("creators", "Creators"),
+    Column("publication_year", "Year", justify="right"),
+]
+
+
+def _print_works(works, fmt: str, empty: str) -> None:
+    emit_list([_work_row(w) for w in works], _WORK_COLUMNS, fmt, empty=empty)
 
 
 _VALID_SORTS = {"title", "author", "recent", "relevance"}
@@ -78,6 +94,7 @@ def search_works(
     sort: str = typer.Option(
         "title", "--sort", help="Sort order: title, author, recent, relevance."
     ),
+    format: str = format_option(),
 ) -> None:
     """Search the catalog by title, author, publisher, or ISBN."""
     if sort not in _VALID_SORTS:
@@ -96,10 +113,7 @@ def search_works(
             include_withdrawn_only=include_withdrawn,
             order_by=sort,
         )
-        if not works:
-            typer.echo(f"No results for '{query}'.")
-            return
-        _print_works(works)
+        _print_works(works, format, empty=f"No results for '{query}'.")
 
 
 @app.command("new-arrivals")
@@ -110,16 +124,14 @@ def new_arrivals(
         False, "--include-withdrawn/--hide-withdrawn",
         help="Include works whose copies are all withdrawn.",
     ),
+    format: str = format_option(),
 ) -> None:
     """List works added to the catalog recently."""
     with session_scope() as session:
         works = SqlWorkRepository(session).list_recent(
             days=days, limit=limit, include_withdrawn_only=include_withdrawn
         )
-        if not works:
-            typer.echo(f"No works added in the last {days} days.")
-            return
-        _print_works(works)
+        _print_works(works, format, empty=f"No works added in the last {days} days.")
 
 
 @app.command("recently-returned")
@@ -130,16 +142,14 @@ def recently_returned(
         False, "--include-withdrawn/--hide-withdrawn",
         help="Include works whose copies are all withdrawn.",
     ),
+    format: str = format_option(),
 ) -> None:
     """List works whose most recent return was in the last N days."""
     with session_scope() as session:
         works = SqlWorkRepository(session).list_recently_returned(
             days=days, limit=limit, include_withdrawn_only=include_withdrawn
         )
-        if not works:
-            typer.echo(f"No works returned in the last {days} days.")
-            return
-        _print_works(works)
+        _print_works(works, format, empty=f"No works returned in the last {days} days.")
 
 
 @app.command("edit")
@@ -360,6 +370,7 @@ def creator_move(
 @app.command("show")
 def show_work(
     work_id: int = typer.Argument(..., help="Work ID"),
+    format: str = format_option(),
 ) -> None:
     """Show details for a work, including all copies."""
     with session_scope() as session:
@@ -368,34 +379,36 @@ def show_work(
             typer.echo(f"No work with id {work_id}.", err=True)
             raise typer.Exit(1)
 
-        creators = ", ".join(
-            f"{wc.creator.display_name} ({wc.role})" if wc.role != "author" else wc.creator.display_name
-            for wc in work.creators
-        )
-        typer.echo(f"\n{work.title}" + (f" — {creators}" if creators else ""))
-        if work.subtitle:
-            typer.echo(f"  Subtitle  : {work.subtitle}")
-        if work.publication_year:
-            typer.echo(f"  Year      : {work.publication_year}")
-        if work.publisher:
-            typer.echo(f"  Publisher : {work.publisher}")
-        if work.isbn:
-            typer.echo(f"  ISBN      : {work.isbn}")
-        if work.upc:
-            typer.echo(f"  UPC       : {work.upc}")
-        if work.media_type:
-            typer.echo(f"  Media     : {work.media_type.display_name}")
-        if work.classification_code:
-            scheme = work.classification_scheme or "?"
-            typer.echo(f"  Class     : {scheme} {work.classification_code}")
-
-        if work.items:
-            typer.echo(f"\n  Copies ({len(work.items)}):")
-            for item in work.items:
-                loc = f" @ {item.location}" if item.location else ""
-                typer.echo(f"    {item.barcode}  [{item.status}]{loc}")
-        else:
-            typer.echo("\n  No copies.")
+        obj = {
+            "id": work.id,
+            "title": work.title,
+            "subtitle": work.subtitle,
+            "publication_year": work.publication_year,
+            "publisher": work.publisher,
+            "isbn": work.isbn,
+            "upc": work.upc,
+            "media_type": work.media_type.display_name if work.media_type else None,
+            "classification_scheme": work.classification_scheme,
+            "classification_code": work.classification_code,
+            "creators": ", ".join(
+                f"{wc.creator.display_name} ({wc.role})" if wc.role != "author"
+                else wc.creator.display_name
+                for wc in work.creators
+            ),
+            "items": [
+                {"barcode": i.barcode, "status": i.status, "location": i.location}
+                for i in work.items
+            ],
+        }
+        if format == "json":
+            emit_detail(obj, format)
+            return
+        emit_detail({k: v for k, v in obj.items() if k != "items" and v is not None},
+                    format, title=f"{work.title}")
+        typer.echo(f"\n  Copies ({len(work.items)}):" if work.items else "\n  No copies.")
+        for item in work.items:
+            loc = f" @ {item.location}" if item.location else ""
+            typer.echo(f"    {item.barcode}  [{item.status}]{loc}")
 
 
 @app.command("refresh-metadata")
@@ -498,19 +511,29 @@ def delete_work(
         typer.echo(f"Moved to trash: {summary.label} (trash id {summary.trash_id}).")
 
 
+_TRASH_COLUMNS = [
+    Column("trash_id", "Trash ID", justify="right"),
+    Column("label", "Label"),
+    Column("deleted_at", "Deleted", formatter=lambda v: f"{v:%Y-%m-%d %H:%M} UTC"),
+]
+
+
 @trash_app.command("list")
-def trash_list(limit: int = typer.Option(50, "--limit")) -> None:
+def trash_list(limit: int = typer.Option(50, "--limit"), format: str = format_option()) -> None:
     """List recently deleted works."""
     with session_scope() as session:
         rows = _trash_svc(session).list_deleted_works(limit=limit)
-        if not rows:
-            typer.echo("Trash is empty.")
-            return
-        for r in rows:
-            typer.echo(
-                f"  [{r.trash_id}] {r.label} — deleted "
-                f"{r.deleted_at:%Y-%m-%d %H:%M} UTC"
-            )
+        row_dicts = [
+            {
+                "trash_id": r.trash_id,
+                "label": r.label,
+                "deleted_at": r.deleted_at,
+                "original_work_id": r.original_work_id,
+                "item_count": r.item_count,
+            }
+            for r in rows
+        ]
+        emit_list(row_dicts, _TRASH_COLUMNS, format, empty="Trash is empty.")
 
 
 @trash_app.command("restore")

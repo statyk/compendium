@@ -4,6 +4,7 @@ from typing import Optional
 
 import typer
 
+from compendium.cli.output import Column, emit_detail, emit_list, format_option
 from compendium.db.engine import get_settings
 from compendium.db.session import session_scope
 from compendium.domain.errors import DomainError, ExternalLookupError
@@ -364,6 +365,7 @@ def edit_item(
 @app.command("show")
 def show_item(
     barcode: str = typer.Argument(..., help="Item barcode"),
+    format: str = format_option(),
 ) -> None:
     """Show details for an item."""
     try:
@@ -376,18 +378,25 @@ def show_item(
 
             work = item.work
             creators = ", ".join(wc.creator.display_name for wc in work.creators)
-            typer.echo(f"\n{work.title}" + (f" — {creators}" if creators else ""))
-            typer.echo(f"  Barcode   : {item.barcode}")
-            typer.echo(f"  Accession : {item.accession_number}")
-            typer.echo(f"  Status    : {item.status}")
-            typer.echo(f"  Loanable  : {'yes' if item.is_loanable else 'no'}")
-            if item.loan_restriction_reason:
-                typer.echo(f"  Reason    : {item.loan_restriction_reason}")
-            if item.loan_restriction_note:
-                typer.echo(f"  Note      : {item.loan_restriction_note}")
-            typer.echo(f"  Condition : {item.condition or 'not set'}")
-            if item.location:
-                typer.echo(f"  Location  : {item.location}")
+            obj = {
+                "barcode": item.barcode,
+                "accession_number": item.accession_number,
+                "status": item.status,
+                "is_loanable": item.is_loanable,
+                "loan_restriction_reason": item.loan_restriction_reason,
+                "loan_restriction_note": item.loan_restriction_note,
+                "condition": item.condition,
+                "location": item.location,
+                "title": work.title,
+                "creators": creators,
+            }
+            if format == "json":
+                emit_detail(obj, format)
+                return
+            title = f"{work.title}" + (f" — {creators}" if creators else "")
+            emit_detail(
+                {k: v for k, v in obj.items() if v is not None}, format, title=title
+            )
     except DomainError as exc:
         typer.echo(f"Error: {exc}", err=True)
         raise typer.Exit(1) from exc
@@ -458,21 +467,41 @@ def set_loanable_cmd(
         raise typer.Exit(1) from exc
 
 
+def _item_list_row(work) -> dict:
+    return {
+        "id": work.id,
+        "title": work.title,
+        "media_type": work.media_type.code if work.media_type else None,
+        "creators": ", ".join(wc.creator.display_name for wc in work.creators),
+        "publication_year": work.publication_year,
+        "copies": len(work.items),
+    }
+
+
+_ITEM_LIST_COLUMNS = [
+    Column("id", "ID", justify="right"),
+    Column("title", "Title"),
+    Column("media_type", "Media"),
+    Column("creators", "Creators"),
+    Column("publication_year", "Year", justify="right"),
+    Column("copies", "Copies", justify="right"),
+]
+
+
 @app.command("list")
 def list_items(
     limit: int = typer.Option(20, "--limit", help="Maximum items to show"),
+    format: str = format_option(),
 ) -> None:
     """List works in the catalog."""
     with session_scope() as session:
         works = SqlWorkRepository(session).list(limit=limit)
-        if not works:
-            typer.echo("No items in catalog.")
-            return
-        for work in works:
-            creators = ", ".join(wc.creator.display_name for wc in work.creators)
-            copies = len(work.items)
-            suffix = f" [{copies} cop{'y' if copies == 1 else 'ies'}]"
-            typer.echo(f"  {work.title}" + (f" — {creators}" if creators else "") + suffix)
+        emit_list(
+            [_item_list_row(w) for w in works],
+            _ITEM_LIST_COLUMNS,
+            format,
+            empty="No items in catalog.",
+        )
 
 
 @app.command("declare-lost")
@@ -596,9 +625,19 @@ def note_add(
         raise typer.Exit(1)
 
 
+_NOTE_COLUMNS = [
+    Column("id", "ID", justify="right"),
+    Column("event_date", "Date"),
+    Column("kind", "Kind"),
+    Column("is_system", "System", formatter=lambda v: "system" if v else ""),
+    Column("note", "Note", formatter=lambda v: v if len(v) <= 60 else v[:57] + "..."),
+]
+
+
 @note_app.command("list")
 def note_list(
     barcode: str = typer.Argument(..., help="Item barcode"),
+    format: str = format_option(),
 ) -> None:
     """List notes for an item."""
     try:
@@ -608,15 +647,17 @@ def note_list(
         typer.echo(f"Error: {e}", err=True)
         raise typer.Exit(1)
 
-    if not notes:
-        typer.echo("No notes found.")
-        return
-
-    for n in notes:
-        date_col = str(n.event_date or n.created_at.date())
-        system_tag = " [system]" if n.is_system else ""
-        text = n.note if len(n.note) <= 60 else n.note[:57] + "..."
-        typer.echo(f"  [{n.id}] {date_col}  {n.kind:<12}{system_tag}  {text}")
+    rows = [
+        {
+            "id": n.id,
+            "event_date": n.event_date or n.created_at.date(),
+            "kind": n.kind,
+            "is_system": n.is_system,
+            "note": n.note,
+        }
+        for n in notes
+    ]
+    emit_list(rows, _NOTE_COLUMNS, format, empty="No notes found.")
 
 
 @note_app.command("delete")
