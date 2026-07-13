@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from datetime import datetime
-from urllib.parse import urlencode
+from urllib.parse import quote, urlencode
 
 from fastapi import APIRouter, Depends, Form, Query, Request
 from fastapi.responses import HTMLResponse, RedirectResponse
@@ -222,10 +222,40 @@ def patron_create(
     return RedirectResponse(f"/ui/patrons/{patron.library_card_number}", status_code=303)
 
 
+@router.get("/patrons/{card_number}/edit")
+def patron_edit_form(
+    card_number: str,
+    request: Request,
+    user: AppUser = Depends(require_web_permission(_PERM)),
+    session: Session = Depends(get_session),
+):
+    patron = SqlPatronRepository(session).get_by_card_number(card_number)
+    if patron is None:
+        return _render(
+            "error.html",
+            request,
+            {"request": request, "user": user, "message": f"Patron '{card_number}' not found"},
+            status_code=404,
+        )
+    return _render(
+        "patrons/edit.html",
+        request,
+        {
+            "request": request,
+            "user": user,
+            "patron": patron,
+            "categories": _categories(session),
+        },
+    )
+
+
 @router.post("/patrons/{card_number}/edit")
 def patron_edit(
     card_number: str,
     request: Request,
+    full_name: str | None = Form(default=None),
+    contact_email: str | None = Form(default=None),
+    contact_phone: str | None = Form(default=None),
     category_id: str = Form(default=""),
     expires_at: str = Form(default=""),
     csrf_token: str = Form(default=""),
@@ -233,15 +263,22 @@ def patron_edit(
     session: Session = Depends(get_session),
 ):
     check_csrf_form(request, csrf_token)
+    kwargs: dict = {}
+    if full_name is not None:
+        kwargs["full_name"] = full_name
+    if contact_email is not None:
+        kwargs["contact_email"] = contact_email.strip() or None
+    if contact_phone is not None:
+        kwargs["contact_phone"] = contact_phone.strip() or None
     try:
         exp_at = _parse_date_or_none(expires_at) if expires_at.strip() else None
         cat_arg: object = int(category_id) if category_id.strip() else None
         _patron_svc(session, user).update(
-            card_number, category_id=cat_arg, expires_at=exp_at
+            card_number, category_id=cat_arg, expires_at=exp_at, **kwargs
         )
     except (BusinessRuleError, NotFoundError, ValidationError) as exc:
         return RedirectResponse(
-            f"/ui/patrons/{card_number}?error={exc}", status_code=303
+            f"/ui/patrons/{card_number}?error={quote(str(exc))}", status_code=303
         )
     return RedirectResponse(
         f"/ui/patrons/{card_number}?message=Patron+updated.", status_code=303

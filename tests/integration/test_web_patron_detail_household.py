@@ -92,6 +92,80 @@ def _login(client: TestClient, username: str, password: str) -> None:
     assert r.status_code == 303, f"Login failed: {r.status_code}"
 
 
+def test_patron_edit_page_shows_prefilled_form(client, db):
+    """GET /ui/patrons/{card}/edit renders 200 with the patron's name prefilled."""
+    p = Patron(library_card_number="DET-010", full_name="Edit Me Patron")
+    SqlPatronRepository(db).add(p)
+    db.commit()
+
+    username, pw = _make_librarian(db)
+    _login(client, username, pw)
+    r = client.get("/ui/patrons/DET-010/edit")
+    assert r.status_code == 200
+    assert 'value="Edit Me Patron"' in r.text
+
+
+def test_patron_edit_full_form_persists_contact_fields(client, db):
+    """POST with all fields (name/email/phone/category/expiry) updates the patron."""
+    p = Patron(library_card_number="DET-011", full_name="Original Name")
+    SqlPatronRepository(db).add(p)
+    db.commit()
+
+    username, pw = _make_librarian(db)
+    _login(client, username, pw)
+    raw, signed = _make_csrf_pair()
+    resp = client.post(
+        "/ui/patrons/DET-011/edit",
+        data={
+            "full_name": "Renamed Patron",
+            "contact_email": "renamed@example.com",
+            "contact_phone": "555-0100",
+            "category_id": "",
+            "expires_at": "",
+            "csrf_token": raw,
+        },
+        cookies={CSRF_COOKIE: signed},
+    )
+    assert resp.status_code == 303
+
+    page = client.get("/ui/patrons/DET-011")
+    assert "Renamed Patron" in page.text
+    assert "renamed@example.com" in page.text
+    assert "555-0100" in page.text
+
+
+def test_patron_edit_inline_category_only_regression(client, db):
+    """The detail page's inline category/expiry form (no contact fields) still works."""
+    p = Patron(
+        library_card_number="DET-012",
+        full_name="Inline Patron",
+        contact_email="keep@example.com",
+        contact_phone="555-0200",
+    )
+    SqlPatronRepository(db).add(p)
+    db.commit()
+
+    username, pw = _make_librarian(db)
+    _login(client, username, pw)
+    raw, signed = _make_csrf_pair()
+    resp = client.post(
+        "/ui/patrons/DET-012/edit",
+        data={
+            "category_id": "",
+            "expires_at": "2028-01-01",
+            "csrf_token": raw,
+        },
+        cookies={CSRF_COOKIE: signed},
+    )
+    assert resp.status_code == 303
+
+    page = client.get("/ui/patrons/DET-012")
+    assert "2028-01-01" in page.text
+    # Contact fields must be preserved untouched since they weren't submitted.
+    assert "keep@example.com" in page.text
+    assert "555-0200" in page.text
+
+
 def test_patron_detail_shows_household_section(client, db):
     """Patron detail shows household name and other members."""
     hh = SqlHouseholdRepository(db).add(Household(name="Detail Test HH"))

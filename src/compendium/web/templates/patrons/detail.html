@@ -10,7 +10,7 @@
 </nav>
 
 <hgroup>
-  <h2>{{ patron.full_name }}</h2>
+  <h2>{{ patron.full_name }} <a href="/ui/patrons/{{ patron.library_card_number }}/edit">Edit</a></h2>
   <p><code>{{ patron.library_card_number }}</code></p>
 </hgroup>
 

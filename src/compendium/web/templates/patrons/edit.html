@@ -1,0 +1,37 @@
+{% extends "base.html" %}
+{% block title %}Edit {{ patron.full_name }} — {{ library_name() }}{% endblock %}
+{% block content %}
+<nav aria-label="breadcrumb">
+  <ul>
+    <li><a href="/ui/patrons">Patrons</a></li>
+    <li><a href="/ui/patrons/{{ patron.library_card_number }}">{{ patron.full_name }}</a></li>
+    <li>Edit</li>
+  </ul>
+</nav>
+
+<h2>Edit Patron</h2>
+
+<form method="post" action="/ui/patrons/{{ patron.library_card_number }}/edit">
+  <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+  <label for="full_name">Full name *</label>
+  <input type="text" id="full_name" name="full_name" value="{{ patron.full_name }}" required autofocus>
+  <label for="contact_email">Email</label>
+  <input type="email" id="contact_email" name="contact_email" value="{{ patron.contact_email or '' }}">
+  <label for="contact_phone">Phone</label>
+  <input type="tel" id="contact_phone" name="contact_phone" value="{{ patron.contact_phone or '' }}">
+  <label for="category_id">Category</label>
+  <select id="category_id" name="category_id">
+    <option value="">— none —</option>
+    {% for c in categories %}
+    <option value="{{ c.id }}"{% if patron.category_id == c.id %} selected{% endif %}>{{ c.display_name }}</option>
+    {% endfor %}
+  </select>
+  <label for="expires_at">Card expires</label>
+  <input type="date" id="expires_at" name="expires_at"
+         value="{{ patron.expires_at.isoformat() if patron.expires_at else '' }}">
+  <div style="margin-top:1rem; display:flex; gap:0.5rem">
+    <button type="submit">Save</button>
+    <a href="/ui/patrons/{{ patron.library_card_number }}" role="button" class="outline secondary">Cancel</a>
+  </div>
+</form>
+{% endblock %}
