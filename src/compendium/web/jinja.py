@@ -1,4 +1,4 @@
-from datetime import date, datetime, timezone
+from datetime import datetime, timezone
 from pathlib import Path
 
 from fastapi.templating import Jinja2Templates
@@ -22,7 +22,13 @@ def _jinja_default_theme() -> str:
 
 
 def _jinja_today_iso() -> str:
-    return date.today().isoformat()
+    from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
+
+    try:
+        tz = ZoneInfo(get_site_setting("library_timezone"))
+    except (ZoneInfoNotFoundError, KeyError, ValueError):
+        tz = timezone.utc
+    return datetime.now(tz).date().isoformat()
 
 
 def _jinja_now() -> datetime:
