@@ -35,6 +35,17 @@ PERMISSION_GROUPS = [
     ("System", ["system.manage", "user.manage", "role.manage"]),
 ]
 
+# Fallback selection when Full access is untoggled on a form that loaded
+# with ["*"]: the Librarian preset's shape = every grouped permission except
+# the System group. Derived here (not imported from config.seed) to keep the
+# web layer off config; both track PERMISSION_GROUPS by convention.
+LIBRARIAN_DEFAULT_PERMISSIONS: list[str] = [
+    perm
+    for category, perms in PERMISSION_GROUPS
+    if category != "System"
+    for perm in perms
+]
+
 PERMISSION_DESCRIPTIONS: dict[str, str] = {
     # Catalog
     "work.view":      "View work titles, metadata, and cover images in the catalog.",
@@ -128,6 +139,7 @@ def role_new_form(
             "user": user,
             "permission_groups": PERMISSION_GROUPS,
             "permission_descriptions": PERMISSION_DESCRIPTIONS,
+            "librarian_defaults": LIBRARIAN_DEFAULT_PERMISSIONS,
             "error": None,
         },
     )
@@ -156,6 +168,7 @@ def role_create(
                 "user": user,
                 "permission_groups": PERMISSION_GROUPS,
             "permission_descriptions": PERMISSION_DESCRIPTIONS,
+                "librarian_defaults": LIBRARIAN_DEFAULT_PERMISSIONS,
                 "error": str(exc),
             },
         )
@@ -188,6 +201,7 @@ def role_detail(
             "role": role,
             "permission_groups": PERMISSION_GROUPS,
             "permission_descriptions": PERMISSION_DESCRIPTIONS,
+            "librarian_defaults": LIBRARIAN_DEFAULT_PERMISSIONS,
             "message": message,
             "error": error,
         },

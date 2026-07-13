@@ -23,6 +23,9 @@
       <input type="checkbox" id="full-access" name="full_access" value="on">
       <strong>Full access</strong> — grants all permissions (stores <code>["*"]</code>)
     </label>
+    <p id="fa-restore-notice" class="warning-banner" hidden>
+      Restored Librarian defaults — adjust as needed.
+    </p>
     <hr>
     <div id="perm-groups">
       {% for category, perms in permission_groups %}
@@ -53,13 +56,26 @@
 {% endblock %}
 {% block scripts %}
 <script nonce="{{ csp_nonce(request) }}">
-function togglePerms(cb) {
-  document.querySelectorAll('.perm-check').forEach(el => {
-    el.disabled = cb.checked;
-    if (cb.checked) el.checked = false;
+var LIBRARIAN_DEFAULTS = {{ librarian_defaults | tojson }};
+(function () {
+  var fa = document.getElementById('full-access');
+  if (!fa) return;
+  var snapshot = null;
+  function boxes() { return Array.prototype.slice.call(document.querySelectorAll('.perm-check')); }
+  fa.addEventListener('change', function (e) {
+    var bs = boxes();
+    var notice = document.getElementById('fa-restore-notice');
+    if (e.target.checked) {
+      snapshot = bs.filter(function (b) { return b.checked; }).map(function (b) { return b.value; });
+      bs.forEach(function (b) { b.disabled = true; b.checked = false; });
+      if (notice) notice.hidden = true;
+    } else {
+      var usingFallback = !(snapshot && snapshot.length);
+      var restore = usingFallback ? LIBRARIAN_DEFAULTS : snapshot;
+      bs.forEach(function (b) { b.disabled = false; b.checked = restore.indexOf(b.value) !== -1; });
+      if (notice) notice.hidden = !usingFallback;
+    }
   });
-}
-const _fa = document.getElementById('full-access');
-if (_fa) _fa.addEventListener('change', (e) => togglePerms(e.target));
+})();
 </script>
 {% endblock %}

@@ -1764,6 +1764,29 @@ def test_role_picker_shows_descriptions_not_tooltips(web_client, librarian, web_
     assert "apply only to the signed-in user" in r.text
 
 
+def test_role_form_injects_librarian_defaults(web_client, librarian, web_session):
+    from compendium.repositories.sql.role_repository import SqlRoleRepository
+    read_only = SqlRoleRepository(web_session).get_by_name("ReadOnly")
+    auth_cookies = _login(web_client, "lib01")
+    raw, signed = _make_csrf_pair()
+    resp = web_client.post(
+        f"/ui/roles/{read_only.id}/clone",
+        data={"csrf_token": raw},
+        cookies={**auth_cookies, CSRF_COOKIE: signed},
+    )
+    role_id = int(resp.headers["location"].rsplit("/", 1)[-1].split("?")[0])
+
+    cookies = _login(web_client, "lib01")
+    r = web_client.get(f"/ui/roles/{role_id}", cookies=cookies)
+    assert "var LIBRARIAN_DEFAULTS =" in r.text
+    assert '"loan.checkout"' in r.text  # in the defaults payload
+    assert (
+        '"system.manage"'
+        not in r.text.split("LIBRARIAN_DEFAULTS =")[1].split(";")[0]
+    )
+    assert 'id="fa-restore-notice"' in r.text
+
+
 # ── Security regressions ──────────────────────────────────────────────────────
 
 
