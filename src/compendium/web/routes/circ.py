@@ -113,8 +113,10 @@ def checkout(
         )
         due = loan.due_at.strftime("%Y-%m-%d") if loan.due_at else "—"
         return HTMLResponse(
-            f"<p class='success-banner'>Checked out <strong>{escape(barcode)}</strong> to "
-            f"<strong>{escape(card_number)}</strong>. Due: {escape(due)}</p>"
+            f"<p class='success-banner'>Checked out <strong>{escape(loan.item.work.title)}</strong> "
+            f"(barcode <code>{escape(loan.item.barcode)}</code>) to "
+            f"<strong>{escape(loan.patron.full_name)}</strong> "
+            f"({escape(loan.patron.library_card_number)}). Due: {escape(due)}</p>"
         )
     except HoldQueueBlockError as exc:
         # Offer the librarian an override button. Re-submits the same form

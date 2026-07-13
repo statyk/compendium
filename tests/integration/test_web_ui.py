@@ -1688,6 +1688,23 @@ def test_circ_checkout_escapes_barcode_and_card(web_client, librarian):
     assert "&lt;script&gt;" in body or "&#x27;" in body or "&lt;img" in body
 
 
+def test_web_checkout_banner_shows_resolution(web_client, librarian, patron_user, work):
+    """Success banner echoes the RESOLVED loan (title, barcode, patron name), not just typed input."""
+    _, item = work
+    _, patron = patron_user
+    cookies = _login(web_client, "lib01")
+    raw, signed = _make_csrf_pair()
+    resp = web_client.post(
+        "/ui/circ/checkout",
+        data={"barcode": item.barcode, "card_number": patron.library_card_number, "csrf_token": raw},
+        cookies={**cookies, CSRF_COOKIE: signed},
+    )
+    assert resp.status_code == 200
+    assert item.work.title in resp.text
+    assert item.barcode in resp.text
+    assert patron.full_name in resp.text
+
+
 def test_me_renew_loan_escapes_error_message(web_client, patron_user):
     """Error branch returns HTMLResponse; make sure user input can't break HTML."""
     cookies = _login(web_client, "patron01")
