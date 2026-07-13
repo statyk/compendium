@@ -2270,6 +2270,27 @@ def test_me_renew_success_rerenders_row_with_new_due(web_client, patron_user, wo
     assert "/renew" in body                         # buttons survive success too
 
 
+def test_catalog_results_show_copy_counts(web_client, web_session, work):
+    from compendium.domain.enums import ItemStatus
+
+    w, item1 = work
+    item2 = Item(
+        work_id=w.id,
+        branch_id=item1.branch_id,
+        barcode="9780441013593-b",
+        accession_number="ACC-DUNE-2",
+        status=ItemStatus.CHECKED_OUT.value,
+    )
+    SqlItemRepository(web_session).add(item2)
+    web_session.flush()
+
+    resp = web_client.get("/ui/catalog?q=Dune")
+
+    assert resp.status_code == 200
+    assert "1 of 2 copies available" in resp.text
+    assert "pill-checked_out" not in resp.text or "pill-checked-out" not in resp.text
+
+
 def test_inactive_user_cookie_denied(web_client, web_session, librarian):
     """An inactive user's still-valid auth cookie must not grant access."""
     cookies = _login(web_client, "lib01")

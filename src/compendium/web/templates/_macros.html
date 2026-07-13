@@ -12,9 +12,12 @@
 /ui/covers?url={{ raw | urlencode }}{% if version %}&v={{ version | string | urlencode }}{% endif %}
 {%- endmacro %}
 
-{% macro availability_pill(status) -%}
-{% if status == 'available' %}<span class="pill pill-available">Available</span>
-{%- elif status == 'checked_out' %}<span class="pill pill-checked-out">Checked Out</span>
+{% macro availability_pill(av) -%}
+{% if av %}
+  {%- if av.status == 'available' %}<span class="pill pill-available">Available</span>
+  {%- elif av.status == 'checked_out' %}<span class="pill pill-checked_out">Checked Out</span>
+  {%- else %}<span class="pill pill-unavailable">Unavailable</span>
+  {%- endif %}
 {%- endif %}
 {%- endmacro %}
 

@@ -66,6 +66,7 @@
   /* Status pills */
   --cmp-pill-available-bg:       #d1fadf; --cmp-pill-available-fg:       #036b44;
   --cmp-pill-checked-out-bg:     #fef3c7; --cmp-pill-checked-out-fg:     #92400e;
+  --cmp-pill-unavailable-bg:     #e5e7eb; --cmp-pill-unavailable-fg:     #4b5563;
   --cmp-pill-on-hold-bg:         #d6ecff; --cmp-pill-on-hold-fg:         #0353a4;
   --cmp-pill-lost-bg:            #fecaca; --cmp-pill-lost-fg:            #991b1b;
   --cmp-pill-damaged-bg:         #fed7aa; --cmp-pill-damaged-fg:         #9a3412;
@@ -202,6 +203,7 @@
   /* Status pills */
   --cmp-pill-available-bg:       #1a3d28; --cmp-pill-available-fg:       #5ad090;
   --cmp-pill-checked-out-bg:     #3d2e08; --cmp-pill-checked-out-fg:     #e0b840;
+  --cmp-pill-unavailable-bg:     #33363b; --cmp-pill-unavailable-fg:     #9ca3af;
   --cmp-pill-on-hold-bg:         #0e2040; --cmp-pill-on-hold-fg:         #6aacf0;
   --cmp-pill-lost-bg:            #2e0c0c; --cmp-pill-lost-fg:            #e07070;
   --cmp-pill-damaged-bg:         #3a1808; --cmp-pill-damaged-fg:         #e09060;
@@ -826,6 +828,8 @@ nav details.dropdown form.dropdown-form button:hover {
 .pill-lost            { background: var(--cmp-pill-lost-bg);            color: var(--cmp-pill-lost-fg); }
 .pill-damaged         { background: var(--cmp-pill-damaged-bg);         color: var(--cmp-pill-damaged-fg); }
 .pill-claims_returned { background: var(--cmp-pill-claims-returned-bg); color: var(--cmp-pill-claims-returned-fg); }
+.pill-unavailable     { background: var(--cmp-pill-unavailable-bg);     color: var(--cmp-pill-unavailable-fg); }
+.copies-count         { color: var(--pico-muted-color); white-space: nowrap; }
 .pill-withdrawn       { background: var(--cmp-pill-withdrawn-bg);       color: var(--cmp-pill-withdrawn-fg); }
 .pill-waiting         { background: var(--cmp-pill-waiting-bg);         color: var(--cmp-pill-waiting-fg); }
 .pill-fulfilled       { background: var(--cmp-pill-fulfilled-bg);       color: var(--cmp-pill-fulfilled-fg); }

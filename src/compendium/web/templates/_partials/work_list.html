@@ -44,8 +44,12 @@
         </div>
         {% endif %}
         <div class="work-entry-pills">
-          {{ availability_pill(avail.get(work.id, '')) }}
+          {% set av = avail.get(work.id) %}
+          {{ availability_pill(av) }}
           {{ media_pill(work.media_type) }}
+          {% if av and av.total > 0 %}
+          <small class="copies-count">{{ av.available }} of {{ av.total }} {{ 'copy' if av.total == 1 else 'copies' }} available</small>
+          {% endif %}
         </div>
       </div>
       <span class="work-card-punch" aria-hidden="true"></span>
