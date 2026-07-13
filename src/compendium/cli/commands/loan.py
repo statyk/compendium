@@ -151,7 +151,11 @@ def checkin(
 @app.command("renew")
 def renew(
     barcode: str = typer.Option(..., "--barcode", help="Item barcode"),
-    card: str = typer.Option(..., "--card", help="Patron library card number"),
+    card: str | None = typer.Option(
+        None,
+        "--card",
+        help="Patron card (optional for exact barcodes; required for ISBN/UPC)",
+    ),
 ) -> None:
     """Renew an active loan."""
     try:

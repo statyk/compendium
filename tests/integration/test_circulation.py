@@ -64,6 +64,20 @@ def patron(session):
     return p
 
 
+@pytest.fixture
+def patron2(session):
+    p = Patron(library_card_number="TEST0002", full_name="Second Patron")
+    SqlPatronRepository(session).add(p)
+    session.flush()
+    return p
+
+
+@pytest.fixture
+def loaned_copy(session, item, patron):
+    _circulation(session).checkout(item.barcode, patron.library_card_number)
+    return item
+
+
 def test_checkout_marks_item_checked_out(session, item, patron):
     loan = _circulation(session).checkout(item.barcode, patron.library_card_number)
 
@@ -106,6 +120,21 @@ def test_checkout_unknown_barcode_raises(session, patron):
 def test_checkout_unknown_patron_raises(session, item):
     with pytest.raises(NotFoundError):
         _circulation(session).checkout(item.barcode, "NOTREAL")
+
+
+def test_renew_by_barcode_alone(session, loaned_copy):
+    loan = _circulation(session).renew(loaned_copy.barcode)
+    assert loan.renewal_count == 1
+
+
+def test_renew_card_mismatch_rejected(session, loaned_copy, patron2):
+    with pytest.raises(BusinessRuleError):
+        _circulation(session).renew(loaned_copy.barcode, patron2.library_card_number)
+
+
+def test_renew_isbn_without_card_rejected(session, loaned_copy):
+    with pytest.raises(BusinessRuleError, match="requires the patron card"):
+        _circulation(session).renew(_ISBN)
 
 
 def test_checkout_non_loanable_item_raises(session, item, patron):

@@ -946,6 +946,27 @@ class TestLoanCli:
         assert r.exit_code == 0
         assert "Checked in" in r.output
 
+    def test_renew_without_card_by_barcode_alone(self, session):
+        _, item = _seed_work(session)
+        patron = Patron(library_card_number="CLIL002", full_name="Cardless Renew Patron")
+        SqlPatronRepository(session).add(patron)
+        session.flush()
+
+        r = _invoke(
+            session,
+            ["loan", "checkout", "--barcode", item.barcode, "--card", "CLIL002"],
+            "compendium.cli.commands.loan",
+        )
+        assert r.exit_code == 0, r.output
+
+        r = _invoke(
+            session,
+            ["loan", "renew", "--barcode", item.barcode],
+            "compendium.cli.commands.loan",
+        )
+        assert r.exit_code == 0, r.output
+        assert "Renewed" in r.output
+
     def test_checkout_unknown_item_fails(self, session):
         patron = Patron(library_card_number="CLIL002", full_name="X")
         SqlPatronRepository(session).add(patron)

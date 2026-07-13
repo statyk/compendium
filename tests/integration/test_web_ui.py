@@ -1705,6 +1705,29 @@ def test_web_checkout_banner_shows_resolution(web_client, librarian, patron_user
     assert patron.full_name in resp.text
 
 
+def test_desk_renew_empty_card_succeeds(web_client, librarian, patron_user, work):
+    """Renewing from the desk with a blank card field succeeds by barcode alone."""
+    _, item = work
+    _, patron = patron_user
+    cookies = _login(web_client, "lib01")
+    raw, signed = _make_csrf_pair()
+    resp = web_client.post(
+        "/ui/circ/checkout",
+        data={"barcode": item.barcode, "card_number": patron.library_card_number, "csrf_token": raw},
+        cookies={**cookies, CSRF_COOKIE: signed},
+    )
+    assert resp.status_code == 200
+    assert b"Checked out" in resp.content
+
+    resp = web_client.post(
+        "/ui/circ/renew",
+        data={"barcode": item.barcode, "card_number": "", "csrf_token": raw},
+        cookies={**cookies, CSRF_COOKIE: signed},
+    )
+    assert resp.status_code == 200
+    assert b"Renewed" in resp.content
+
+
 def test_me_renew_loan_escapes_error_message(web_client, patron_user):
     """Error branch returns HTMLResponse; make sure user input can't break HTML."""
     cookies = _login(web_client, "patron01")

@@ -378,18 +378,26 @@ class CirculationService:
         self._items.update(item)
         return loan
 
-    def renew(self, barcode: str, card_number: str) -> Loan:
+    def renew(self, barcode: str, card_number: str | None = None) -> Loan:
         item = self._items.get_by_barcode(barcode)
         if item is None:
+            if card_number is None:
+                raise BusinessRuleError(
+                    "Renewing by ISBN/UPC requires the patron card number"
+                )
             item = self._resolve_copy_for_renew(barcode, card_number)
 
         loan = self._loans.get_active_for_item(item.id)
         if loan is None:
             raise BusinessRuleError(f"Item '{barcode}' has no active loan to renew")
 
-        patron = self._patrons.get_by_card_number(card_number)
-        if patron is None or loan.patron_id != patron.id:
-            raise BusinessRuleError(f"Loan does not belong to patron with card '{card_number}'")
+        if card_number is not None:
+            patron = self._patrons.get_by_card_number(card_number)
+            if patron is None or loan.patron_id != patron.id:
+                raise BusinessRuleError(
+                    f"Loan does not belong to patron with card '{card_number}'"
+                )
+        patron = self._patrons.get(loan.patron_id)
 
         loan_period_days, max_renewals = self._get_policy(item, patron)
         if loan.renewal_count >= max_renewals:

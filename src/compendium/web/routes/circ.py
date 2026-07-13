@@ -204,7 +204,7 @@ def admin_claims(
 def renew(
     request: Request,
     barcode: str = Form(),
-    card_number: str = Form(),
+    card_number: str = Form(default=""),
     csrf_token: str = Form(default=""),
     user: AppUser = Depends(require_web_permission(_PERM)),
     session: Session = Depends(get_session),
@@ -212,7 +212,9 @@ def renew(
 ):
     check_csrf_form(request, csrf_token)
     try:
-        loan = _circ(session, calendar_svc=calendar_svc).renew(barcode, card_number)
+        loan = _circ(session, calendar_svc=calendar_svc).renew(
+            barcode, card_number.strip() or None
+        )
         due = loan.due_at.strftime("%Y-%m-%d") if loan.due_at else "—"
         return HTMLResponse(
             f"<p class='success-banner'>Renewed <strong>{escape(barcode)}</strong>. "
