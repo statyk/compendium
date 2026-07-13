@@ -379,6 +379,24 @@ class TestListPatrons:
         assert resp.status_code == 422
 
 
+class TestGetPatron:
+    def test_api_get_patron(self, client, db):
+        tok = _token(db, "lib_get1", "Librarian")
+        patron = _make_patron(db, "PAT-G001", "Getable Patron")
+        resp = client.get(
+            f"/patrons/{patron.library_card_number}", headers=_auth(tok)
+        )
+        assert resp.status_code == 200, resp.text
+        body = resp.json()
+        assert body["library_card_number"] == patron.library_card_number
+        assert body["full_name"] == patron.full_name
+
+    def test_api_get_patron_unknown_404(self, client, db):
+        tok = _token(db, "lib_get2", "Librarian")
+        resp = client.get("/patrons/NO-SUCH-CARD", headers=_auth(tok))
+        assert resp.status_code == 404
+
+
 class TestPatchPatronContactFields:
     def test_update_full_name(self, client, db):
         tok = _token(db, "lib_edit1", "Librarian")

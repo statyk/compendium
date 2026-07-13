@@ -122,6 +122,18 @@ def create_patron(
     return PatronResponse.model_validate(patron)
 
 
+@router.get("/{card_number}", response_model=PatronResponse)
+def get_patron(
+    card_number: str,
+    session: Session = Depends(get_session),
+    _user: AppUser = Depends(require_permission("patron.manage")),
+) -> PatronResponse:
+    patron = SqlPatronRepository(session).get_by_card_number(card_number)
+    if patron is None:
+        raise HTTPException(status_code=404, detail=f"No patron with card '{card_number}'")
+    return PatronResponse.model_validate(patron)
+
+
 @router.post("/{card_number}/account", response_model=PatronResponse)
 def create_patron_account(
     card_number: str,
