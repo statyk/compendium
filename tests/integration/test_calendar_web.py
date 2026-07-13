@@ -101,6 +101,13 @@ class TestLibraryHoursWeb:
         assert "Library Hours" in resp.text
         assert "Monday" in resp.text
 
+    def test_hours_page_has_dirty_guard(self, calw_client, calw_session):
+        info = _login(calw_client, calw_session, "lib_hours_dirty", "Librarian")
+        resp = calw_client.get("/ui/admin/library-hours", cookies=info["cookies"])
+        assert resp.status_code == 200
+        assert "data-dirty-guard" in resp.text
+        assert "/ui/static/dirty-guard.js" in resp.text
+
     def test_hours_save_all_updates_multiple_rows(self, calw_client, calw_session):
         info = _login(calw_client, calw_session, "lib_hours_upd", "Librarian")
         csrf = _get_csrf(calw_client, "/ui/admin/library-hours", info["cookies"])

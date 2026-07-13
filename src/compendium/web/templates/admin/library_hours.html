@@ -7,7 +7,7 @@
 {% if message %}<p class="success-banner">{{ message }}</p>{% endif %}
 {% if error %}<p class="error-banner">{{ error }}</p>{% endif %}
 
-<form method="post" action="/ui/admin/library-hours/update" id="hours-form">
+<form method="post" action="/ui/admin/library-hours/update" id="hours-form" data-dirty-guard>
   <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
   <table>
     <thead>
@@ -37,4 +37,7 @@
 </form>
 
 <p><small>Timezone used: <strong>{{ library_timezone }}</strong> — change in <a href="/ui/admin/settings/general">General Settings</a>.</small></p>
+{% endblock %}
+{% block scripts %}
+<script src="/ui/static/dirty-guard.js" nonce="{{ csp_nonce(request) }}" defer></script>
 {% endblock %}

@@ -32,7 +32,7 @@
     {% if p.is_default %}<span class="pill pill-book" style="font-size:0.8rem">default</span>{% endif %}
     <a href="/ui/policies/{{ p.id }}/delete-confirm" class="secondary" style="float:right; font-size:0.85rem">Delete</a>
   </header>
-  <form method="post" action="/ui/policies/{{ p.id }}/update"
+  <form method="post" action="/ui/policies/{{ p.id }}/update" data-dirty-guard
         style="display:grid; grid-template-columns: repeat(auto-fit, minmax(140px, 1fr)); gap:0.6rem; align-items:end">
     <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
     <label>Loan period (days)
@@ -82,4 +82,7 @@
 </article>
 {% endfor %}
 {% endif %}
+{% endblock %}
+{% block scripts %}
+<script src="/ui/static/dirty-guard.js" nonce="{{ csp_nonce(request) }}" defer></script>
 {% endblock %}

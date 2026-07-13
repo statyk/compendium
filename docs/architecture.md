@@ -309,7 +309,7 @@ The `assignable_roles(actor_permissions, all_roles)` function lives in `services
 
 `_SecurityHeadersMiddleware` (`api/app.py`) generates a fresh CSP nonce per request via `secrets.token_urlsafe(16)`, stamps it on `request.state.csp_nonce`, and emits `script-src 'self' 'nonce-{nonce}' 'strict-dynamic'`. There is no `'unsafe-inline'` for scripts — a comment-field XSS that slips past output sanitization can't smuggle a `<script>` block because nonces are unguessable per request.
 
-**Convention for inline scripts in templates.** Every `<script>...</script>` block in `web/templates/` must include `nonce="{{ csp_nonce(request) }}"`. External `<script src="/ui/static/...">` tags don't need a nonce — they match `'self'`. The `csp_nonce()` Jinja global is registered in `web/jinja.py` and reads from `request.state`.
+**Convention for inline scripts in templates.** Every `<script>...</script>` block in `web/templates/` must include `nonce="{{ csp_nonce(request) }}"`. Because the policy includes `'strict-dynamic'`, browsers ignore `'self'` for scripts entirely — so external `<script src="/ui/static/...">` tags need the *same* `nonce="{{ csp_nonce(request) }}"` attribute as inline blocks (see `htmx.min.js`'s include in `base.html`). The `csp_nonce()` Jinja global is registered in `web/jinja.py` and reads from `request.state`.
 
 A pytest test (`tests/integration/test_csp_nonce.py::test_every_script_in_templates_has_nonce`) walks the templates directory and fails if any inline script is missing a nonce. Miss one in a future template and the test catches it before the page silently breaks in a browser.
 
@@ -338,6 +338,15 @@ toggle). Canonical fixes in this codebase:
   /ui/.../X-confirm` route returns a confirm template with a plain HTML
   `<form method="post">` posting to the existing action endpoint. Examples:
   `items/withdraw_confirm.html`, `fines/verify_returned_confirm.html`.
+- **Shared behavior in an external static file** — for cross-page behaviors
+  (e.g. the unsaved-changes `beforeunload` guard in `dirty-guard.js`), ship a
+  file under `web/static/` and include it with
+  `<script src="/ui/static/..." nonce="{{ csp_nonce(request) }}">` (the
+  `nonce` is still required — see the strict-dynamic note above). The payoff
+  over inlining is not skipping the nonce, it's sharing one file across
+  templates instead of duplicating an inline `<script>` block per page. Opt
+  in per element with a data attribute (`data-dirty-guard`). Example:
+  `admin/library_hours.html`, `policies/list.html`.
 
 A second pytest test
 (`tests/integration/test_csp_inline_handlers.py::test_no_inline_event_handlers_in_templates`)
