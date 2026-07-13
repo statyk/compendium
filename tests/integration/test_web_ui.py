@@ -1630,6 +1630,54 @@ def test_policy_create_as_default_swaps(web_client, librarian, web_session):
     assert new_default.name == "New Default"
 
 
+def test_policy_delete_confirm_renders(web_client, librarian, web_session):
+    from compendium.repositories.sql.loan_policy_repository import SqlLoanPolicyRepository
+    from compendium.domain.models import LoanPolicy
+
+    policy = LoanPolicy(name="Deletable", loan_period_days=14, max_renewals=1, is_default=False)
+    SqlLoanPolicyRepository(web_session).add(policy)
+
+    cookies = _login(web_client, "lib01")
+    resp = web_client.get(f"/ui/policies/{policy.id}/delete-confirm", cookies=cookies)
+    assert resp.status_code == 200
+    assert "Delete policy" in resp.text
+
+
+def test_policy_delete_web_flow(web_client, librarian, web_session):
+    from compendium.repositories.sql.loan_policy_repository import SqlLoanPolicyRepository
+    from compendium.domain.models import LoanPolicy
+
+    policy = LoanPolicy(name="ToDelete", loan_period_days=14, max_renewals=1, is_default=False)
+    SqlLoanPolicyRepository(web_session).add(policy)
+
+    cookies = _login(web_client, "lib01")
+    raw, signed = _make_csrf_pair()
+    resp = web_client.post(
+        f"/ui/policies/{policy.id}/delete",
+        data={"csrf_token": raw},
+        cookies={**cookies, CSRF_COOKIE: signed},
+    )
+    assert resp.status_code == 303
+    assert "message=" in resp.headers["location"]
+
+
+def test_policy_delete_default_shows_error(web_client, librarian, web_session):
+    from compendium.repositories.sql.loan_policy_repository import SqlLoanPolicyRepository
+    repo = SqlLoanPolicyRepository(web_session)
+    default_policy = repo.get_default()
+    assert default_policy is not None
+
+    cookies = _login(web_client, "lib01")
+    raw, signed = _make_csrf_pair()
+    resp = web_client.post(
+        f"/ui/policies/{default_policy.id}/delete",
+        data={"csrf_token": raw},
+        cookies={**cookies, CSRF_COOKIE: signed},
+    )
+    assert resp.status_code == 303
+    assert "error=" in resp.headers["location"]
+
+
 # ── Role management ───────────────────────────────────────────────────────────
 
 

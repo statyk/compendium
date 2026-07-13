@@ -1177,6 +1177,36 @@ class TestPolicyCli:
         )
         assert r.exit_code == 1
 
+    def test_delete_requires_yes_or_confirmation(self, session):
+        r = _invoke(
+            session,
+            ["policy", "create", "--name", "Deletable", "--loan-days", "5"],
+            "compendium.cli.commands.policy",
+        )
+        assert r.exit_code == 0, r.output
+        r = _invoke(session, ["policy", "list"], "compendium.cli.commands.policy")
+        pid = next(
+            line.strip().split()[0].lstrip("#")
+            for line in r.output.splitlines()
+            if "Deletable" in line
+        )
+
+        r = _invoke(
+            session,
+            ["policy", "delete", "--id", pid],
+            "compendium.cli.commands.policy",
+            input="n\n",
+        )
+        assert r.exit_code == 1
+
+        r = _invoke(
+            session,
+            ["policy", "delete", "--id", pid, "--yes"],
+            "compendium.cli.commands.policy",
+        )
+        assert r.exit_code == 0, r.output
+        assert "deleted" in r.output.lower()
+
 
 # ──────────────────────────────────────────────────────────────────────────────
 # patron-category

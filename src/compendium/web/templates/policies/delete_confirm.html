@@ -1,0 +1,23 @@
+{% extends "base.html" %}
+{% block title %}Delete {{ policy.name }} — {{ library_name() }}{% endblock %}
+{% block content %}
+<nav aria-label="breadcrumb">
+  <ul><li><a href="/ui/policies">Loan Policies</a></li><li>Delete</li></ul>
+</nav>
+
+<hgroup>
+  <h2>Delete policy</h2>
+  <p>{{ policy.name }}</p>
+</hgroup>
+
+<p>
+  Items that matched this policy will fall back to the next most-specific
+  policy (usually the default). <strong>This cannot be undone.</strong>
+</p>
+
+<form method="post" action="/ui/policies/{{ policy.id }}/delete">
+  <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+  <button type="submit" class="outline contrast">Delete policy</button>
+  <a href="/ui/policies" role="button" class="outline secondary">Cancel</a>
+</form>
+{% endblock %}

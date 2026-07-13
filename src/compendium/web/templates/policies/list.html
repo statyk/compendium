@@ -26,6 +26,7 @@
     &middot;
     {% if p.patron_category %}<small>{{ p.patron_category.display_name }}</small>{% else %}<small>All patrons</small>{% endif %}
     {% if p.is_default %}<span class="pill pill-book" style="font-size:0.8rem">default</span>{% endif %}
+    <a href="/ui/policies/{{ p.id }}/delete-confirm" class="secondary" style="float:right; font-size:0.85rem">Delete</a>
   </header>
   <form method="post" action="/ui/policies/{{ p.id }}/update"
         style="display:grid; grid-template-columns: repeat(auto-fit, minmax(140px, 1fr)); gap:0.6rem; align-items:end">

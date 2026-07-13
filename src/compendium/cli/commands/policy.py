@@ -202,6 +202,26 @@ def set_policy(
         raise typer.Exit(1) from exc
 
 
+@app.command("delete")
+def delete_policy(
+    policy_id: int = typer.Option(..., "--id", help="Policy ID to delete"),
+    yes: bool = typer.Option(False, "--yes", "-y", help="Skip confirmation prompt"),
+) -> None:
+    """Delete a loan policy (the default policy cannot be deleted)."""
+    if not yes:
+        typer.confirm(f"Delete policy #{policy_id}? This cannot be undone.", abort=True)
+    try:
+        with session_scope() as session:
+            svc = _policy_svc(session)
+            policy = SqlLoanPolicyRepository(session).get(policy_id)
+            name = policy.name if policy else str(policy_id)
+            svc.delete(policy_id)
+            typer.echo(f"Policy #{policy_id} '{name}' deleted.")
+    except (DomainError, NotFoundError) as exc:
+        error(exc)
+        raise typer.Exit(1) from exc
+
+
 from compendium.cli.io import register_alias  # noqa: E402
 
 register_alias(app, "create", create_policy)

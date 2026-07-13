@@ -152,6 +152,43 @@ class TestCategoryEndpoints:
         assert resp.status_code == 422
 
 
+class TestPolicyEndpoints:
+    def test_delete_then_404(self, pc_client, pc_session):
+        token = _librarian_token(pc_session)
+        resp = pc_client.post(
+            "/policies/",
+            json={"name": "API Deletable", "loan_period_days": 14},
+            headers={"Authorization": f"Bearer {token}"},
+        )
+        assert resp.status_code == 201
+        pid = resp.json()["id"]
+
+        resp = pc_client.delete(
+            f"/policies/{pid}", headers={"Authorization": f"Bearer {token}"}
+        )
+        assert resp.status_code == 204
+
+        resp = pc_client.delete(
+            f"/policies/{pid}", headers={"Authorization": f"Bearer {token}"}
+        )
+        assert resp.status_code == 404
+
+    def test_delete_default_returns_422(self, pc_client, pc_session):
+        from compendium.repositories.sql.loan_policy_repository import (
+            SqlLoanPolicyRepository,
+        )
+
+        token = _librarian_token(pc_session)
+        default_policy = SqlLoanPolicyRepository(pc_session).get_default()
+        assert default_policy is not None
+
+        resp = pc_client.delete(
+            f"/policies/{default_policy.id}",
+            headers={"Authorization": f"Bearer {token}"},
+        )
+        assert resp.status_code == 422
+
+
 class TestPatronCreateWithCategory:
     def test_creates_patron_with_category_code(self, pc_client, pc_session):
         token = _librarian_token(pc_session)

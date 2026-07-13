@@ -189,3 +189,36 @@ def policy_update(
         return RedirectResponse("/ui/policies?message=Policy+updated.", status_code=303)
     except (BusinessRuleError, NotFoundError) as exc:
         return RedirectResponse(f"/ui/policies?error={quote(str(exc))}", status_code=303)
+
+
+@router.get("/policies/{policy_id}/delete-confirm")
+def policy_delete_confirm(
+    policy_id: int,
+    request: Request,
+    user: AppUser = Depends(require_web_permission(_PERM)),
+    session: Session = Depends(get_session),
+):
+    policy = SqlLoanPolicyRepository(session).get(policy_id)
+    if policy is None:
+        return RedirectResponse("/ui/policies?error=Policy+not+found.", status_code=303)
+    return _render(
+        "policies/delete_confirm.html",
+        request,
+        {"request": request, "user": user, "policy": policy},
+    )
+
+
+@router.post("/policies/{policy_id}/delete")
+def policy_delete(
+    policy_id: int,
+    request: Request,
+    csrf_token: str = Form(default=""),
+    user: AppUser = Depends(require_web_permission(_PERM)),
+    session: Session = Depends(get_session),
+):
+    check_csrf_form(request, csrf_token)
+    try:
+        _policy_svc(session, user).delete(policy_id)
+        return RedirectResponse("/ui/policies?message=Policy+deleted.", status_code=303)
+    except (BusinessRuleError, NotFoundError) as exc:
+        return RedirectResponse(f"/ui/policies?error={quote(str(exc))}", status_code=303)

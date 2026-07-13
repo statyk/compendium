@@ -4,7 +4,7 @@ from sqlalchemy.orm import Session
 from compendium.api.deps import require_permission
 from compendium.api.schemas import CreatePolicyRequest, LoanPolicyResponse
 from compendium.db.session import get_session
-from compendium.domain.errors import BusinessRuleError
+from compendium.domain.errors import BusinessRuleError, NotFoundError
 from compendium.domain.models import AppUser
 from compendium.repositories.sql.audit_log_repository import SqlAuditLogRepository
 from compendium.repositories.sql.loan_policy_repository import SqlLoanPolicyRepository
@@ -50,3 +50,17 @@ def create_policy(
     except BusinessRuleError as exc:
         raise HTTPException(status_code=422, detail=str(exc)) from exc
     return LoanPolicyResponse.model_validate(policy)
+
+
+@router.delete("/{policy_id}", status_code=204)
+def delete_policy(
+    policy_id: int,
+    session: Session = Depends(get_session),
+    user: AppUser = Depends(require_permission("policy.edit")),
+) -> None:
+    try:
+        _policy_service(session, user).delete(policy_id)
+    except NotFoundError as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
+    except BusinessRuleError as exc:
+        raise HTTPException(status_code=422, detail=str(exc)) from exc
