@@ -2317,6 +2317,43 @@ def test_work_detail_counts_and_shelf_location(web_client, web_session, work):
     assert "Call #" not in resp.text
 
 
+def test_hold_suspend_htmx_swaps_row_and_enforces_min(web_client, patron_user, work, web_session):
+    """Suspend form is HTMX (row swap, no redirect) and the date input enforces a
+    min=today floor; a rejected (past) date re-renders the row inline with an error."""
+    from compendium.domain.enums import ItemStatus
+
+    w, item = work
+    _, patron = patron_user
+    # No copy available → the hold lands in "waiting" status (not immediately
+    # promoted to "available"), which is what renders the suspend form.
+    item.status = ItemStatus.CHECKED_OUT.value
+    web_session.flush()
+
+    cookies = _login(web_client, "patron01")
+    raw, signed = _make_csrf_pair()
+    place = web_client.post(
+        f"/ui/catalog/{w.id}/hold",
+        data={"csrf_token": raw},
+        cookies={**cookies, CSRF_COOKIE: signed},
+    )
+    assert place.status_code == 200
+    hold_id = SqlHoldRepository(web_session).get_active_for_patron(patron.id)[0].id
+
+    page = web_client.get("/ui/me/holds", cookies=cookies)
+    assert page.status_code == 200
+    assert 'min="' in page.text
+    assert 'hx-post="/ui/me/holds/' in page.text
+
+    resp = web_client.post(
+        f"/ui/me/holds/{hold_id}/suspend",
+        data={"until": "1999-01-01", "csrf_token": raw},
+        cookies={**cookies, CSRF_COOKIE: signed},
+    )
+    assert resp.status_code == 200
+    assert "<tr" in resp.text and "Suspend" in resp.text
+    assert "error-banner" in resp.text
+
+
 def test_inactive_user_cookie_denied(web_client, web_session, librarian):
     """An inactive user's still-valid auth cookie must not grant access."""
     cookies = _login(web_client, "lib01")

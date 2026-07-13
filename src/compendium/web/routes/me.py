@@ -331,7 +331,7 @@ def cancel_hold(
         )
 
 
-@router.post("/me/holds/{hold_id:int}/suspend")
+@router.post("/me/holds/{hold_id:int}/suspend", response_class=HTMLResponse)
 def suspend_hold(
     hold_id: int,
     request: Request,
@@ -348,19 +348,24 @@ def suspend_hold(
     try:
         parsed = datetime.strptime(until.strip(), "%Y-%m-%d").date()
     except ValueError:
-        return RedirectResponse(
-            "/ui/me/holds?error=Please+pick+a+valid+end+date.", status_code=303
+        return _render_hold_row(
+            request,
+            user,
+            session,
+            hold_id,
+            patron_id=patron.id,
+            error="Please pick a valid end date.",
         )
     try:
         _holds_svc(session, actor=user).suspend(
             hold_id, until=parsed, patron_id=patron.id, reason=reason.strip() or None
         )
-        return RedirectResponse("/ui/me/holds", status_code=303)
+        return _render_hold_row(
+            request, user, session, hold_id, patron_id=patron.id, notice="Hold suspended."
+        )
     except (BusinessRuleError, NotFoundError, ValidationError) as exc:
-        from urllib.parse import quote
-
-        return RedirectResponse(
-            f"/ui/me/holds?error={quote(str(exc))}", status_code=303
+        return _render_hold_row(
+            request, user, session, hold_id, patron_id=patron.id, error=str(exc)
         )
 
 
