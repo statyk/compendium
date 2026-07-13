@@ -95,7 +95,9 @@ def patron_list(
     session: Session = Depends(get_session),
 ):
     show_inactive = include_inactive == 1
-    patrons = SqlPatronRepository(session).list(limit=500, include_inactive=show_inactive)
+    patrons = SqlPatronRepository(session).list(
+        limit=500, status="all" if show_inactive else "active"
+    )
     return _render(
         "patrons/list.html",
         request,

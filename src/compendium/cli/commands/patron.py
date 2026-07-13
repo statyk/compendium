@@ -275,7 +275,9 @@ def list_patrons(
 ) -> None:
     """List registered patrons (active only by default)."""
     with session_scope() as session:
-        patrons = SqlPatronRepository(session).list(limit=limit, include_inactive=include_inactive)
+        patrons = SqlPatronRepository(session).list(
+            limit=limit, status="all" if include_inactive else "active"
+        )
         if not patrons:
             typer.echo("No patrons registered.")
             return

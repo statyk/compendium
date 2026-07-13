@@ -1,8 +1,11 @@
 from __future__ import annotations
 
+from sqlalchemy import or_
 from sqlalchemy.orm import Session
 
 from compendium.domain.models import Patron
+
+_STATUSES = ("active", "inactive", "all")
 
 
 class SqlPatronRepository:
@@ -27,11 +30,43 @@ class SqlPatronRepository:
         self._s.flush()
         return patron
 
-    def list(self, limit: int = 50, offset: int = 0, include_inactive: bool = False) -> list[Patron]:
+    def _filtered(self, *, status: str, query: str | None):
+        if status not in _STATUSES:
+            raise ValueError(f"status must be one of {_STATUSES}")
         q = self._s.query(Patron)
-        if not include_inactive:
+        if status == "active":
             q = q.filter(Patron.is_active == True)  # noqa: E712
-        return q.order_by(Patron.full_name).offset(offset).limit(limit).all()
+        elif status == "inactive":
+            q = q.filter(Patron.is_active == False)  # noqa: E712
+        if query:
+            like = f"%{query}%"
+            q = q.filter(
+                or_(
+                    Patron.full_name.ilike(like),
+                    Patron.library_card_number.ilike(like),
+                    Patron.contact_email.ilike(like),
+                )
+            )
+        return q
+
+    def list(
+        self,
+        limit: int = 50,
+        offset: int = 0,
+        *,
+        status: str = "active",
+        query: str | None = None,
+    ) -> list[Patron]:
+        return (
+            self._filtered(status=status, query=query)
+            .order_by(Patron.full_name)
+            .offset(offset)
+            .limit(limit)
+            .all()
+        )
+
+    def count(self, *, status: str = "active", query: str | None = None) -> int:
+        return self._filtered(status=status, query=query).count()
 
     def list_by_household(self, household_id: int) -> list[Patron]:
         return (
