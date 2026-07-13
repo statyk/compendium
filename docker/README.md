@@ -114,6 +114,11 @@ command passed to the container runs migrations first and fails with a
 clear error if the database is unreachable. The normal no-argument start
 (migrate → bootstrap admin → serve) is unchanged.
 
+Note: only the no-argument start bootstraps the first-run admin account. An
+explicit `docker run … compendium serve` migrates and serves but skips the
+bootstrap — use the plain no-argument start (as `docker compose` does), or
+create the admin yourself with `compendium user add`.
+
 ## Persistence
 
 - `db_data` (Docker named volume) — PostgreSQL data.
