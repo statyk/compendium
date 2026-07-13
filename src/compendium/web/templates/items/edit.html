@@ -26,7 +26,16 @@
   <input type="text" id="call_number" name="call_number" value="{{ item.call_number or '' }}">
 
   <label for="condition">Condition</label>
-  <input type="text" id="condition" name="condition" value="{{ item.condition or '' }}" placeholder="e.g. good, worn, damaged">
+  <select id="condition" name="condition">
+    <option value="">—</option>
+    {% set canonical = ["New", "Good", "Fair", "Poor"] %}
+    {% if item.condition and item.condition not in canonical %}
+    <option value="{{ item.condition }}" selected>{{ item.condition }} (current)</option>
+    {% endif %}
+    {% for c in canonical %}
+    <option value="{{ c }}"{% if item.condition == c %} selected{% endif %}>{{ c }}</option>
+    {% endfor %}
+  </select>
 
   <label for="notes">Notes</label>
   <textarea id="notes" name="notes" rows="3">{{ item.notes or '' }}</textarea>

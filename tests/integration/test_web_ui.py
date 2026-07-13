@@ -798,6 +798,54 @@ def test_item_edit_submit_updates_fields(web_client, librarian, work, web_sessio
     assert refreshed.notes == "cover repaired"
 
 
+def test_item_edit_form_condition_dropdown_selects_canonical_value(web_client, librarian, work, web_session):
+    _, item = work
+    item.condition = "Good"
+    web_session.flush()
+    cookies = _login(web_client, "lib01")
+    resp = web_client.get(f"/ui/items/{item.barcode}/edit", cookies=cookies)
+    assert resp.status_code == 200
+    assert b'<select id="condition" name="condition">' in resp.content
+    assert b'<option value="Good" selected>Good</option>' in resp.content
+
+
+def test_item_edit_form_condition_dropdown_preserves_legacy_value(web_client, librarian, work, web_session):
+    _, item = work
+    item.condition = "well-loved"
+    web_session.flush()
+    cookies = _login(web_client, "lib01")
+    resp = web_client.get(f"/ui/items/{item.barcode}/edit", cookies=cookies)
+    assert resp.status_code == 200
+    assert b'<option value="well-loved" selected>well-loved (current)</option>' in resp.content
+    # Canonical options are still present, unselected.
+    assert b'<option value="New">New</option>' in resp.content
+
+
+def test_item_edit_submit_without_touching_condition_keeps_legacy_value(
+    web_client, librarian, work, web_session
+):
+    _, item = work
+    item.condition = "well-loved"
+    web_session.flush()
+    auth_cookies = _login(web_client, "lib01")
+    raw, signed = _make_csrf_pair()
+    resp = web_client.post(
+        f"/ui/items/{item.barcode}/edit",
+        data={
+            "location": "Shelf Z",
+            "call_number": "FIC HER",
+            "condition": "well-loved",
+            "notes": "cover repaired",
+            "csrf_token": raw,
+        },
+        cookies={**auth_cookies, CSRF_COOKIE: signed},
+    )
+    assert resp.status_code == 303
+
+    refreshed = SqlItemRepository(web_session).get_by_barcode(item.barcode)
+    assert refreshed.condition == "well-loved"
+
+
 def test_item_edit_submit_unknown_barcode_404(web_client, librarian):
     auth_cookies = _login(web_client, "lib01")
     raw, signed = _make_csrf_pair()
