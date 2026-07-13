@@ -684,6 +684,7 @@ The optional ISBN-as-barcode flow (`--use-isbn-barcode` / `?use_isbn_barcode=tru
 ### Model
 
 - `Fine` table with FK to `patron` (required), optional `loan_id` / `item_id`, `kind` (enum), `amount_cents`, `status` (enum), timestamps, free-text `reason` and `note`, and `resolved_by_user_id`. Partial unique index ensures at most one outstanding `overdue` fine per loan.
+- `Fine.paid_cents` (default 0) tracks the running total of partial payments; `pay()` accepts an optional `amount_cents` (defaults to the remaining balance) and note, only flipping `status` to `paid` once `paid_cents` reaches `amount_cents`.
 - `LoanPolicy` gained nullable columns: `overdue_fine_per_day_cents`, `overdue_fine_cap_cents`, `grace_period_days` (default 0), `lost_item_default_cents`, `lost_item_processing_fee_cents`. None/0 on the per-day rate means "no overdue fines for this policy," which preserves pre-slice behavior for un-configured deployments.
 - `ItemStatus` extended with `lost` and `damaged`.
 

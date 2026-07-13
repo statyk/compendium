@@ -25,6 +25,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Getting Started checklist card on the staff landing page for administrators,
   with live setup-state checks and one-click dismiss.
 - `compendium --help` now ends with a quickstart (keygen → db init → user add → serve).
+- Partial fine payments: the Pay action now takes an amount (defaults to the
+  full balance) and an optional note, with a confirmation page in the web UI,
+  `--amount/--note` on `compendium fine pay`, and optional body fields on the
+  pay API. Waive notes are now optional everywhere.
+- Patron name, email, and phone are editable after creation (web edit page,
+  `patron set --name/--email/--phone`, API PATCH fields), and the API gains a
+  `GET /patrons/{card}` show endpoint.
+- Circulation desk: renew works from the item barcode alone; the patron card
+  is optional and verifies the borrower when supplied.
+- "Check out to this patron" shortcut on the patron page prefills the desk.
 
 ### Changed
 
@@ -32,6 +42,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   `patron edit`, ...); natural keys are positional (`item edit B-0001 ...`);
   `work list` replaces `item list`. Every old spelling keeps working
   indefinitely as a hidden alias — no scripts break.
+- Desk checkout confirmation shows the resolved title, copy barcode, and
+  patron name instead of echoing what was typed.
+- Item edit uses the same condition dropdown as add-copy (legacy free-text
+  values are preserved as a "(current)" option).
+- Patron reactivate and account-unlink update in place like deactivate does.
 
 ## [1.5.1] - 2026-07-12
 
