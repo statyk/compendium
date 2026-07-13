@@ -9,6 +9,7 @@ from sqlalchemy.orm import Session, aliased, selectinload
 
 from compendium.domain.enums import ItemStatus
 from compendium.domain.models import Branch, Creator, Item, Loan, MediaType, Work, WorkCreator
+from compendium.repositories.base import WorkAvailability
 
 _TOKEN_SANITIZE = re.compile(r"[^A-Za-z0-9'-]+")
 
@@ -57,16 +58,21 @@ class SqlWorkRepository:
             is not None
         )
 
-    def availability_for_works(self, work_ids: list[int]) -> dict[int, str]:
-        """Return {work_id: 'available'|'checked_out'} for works with loanable copies.
+    def availability_counts_for_works(
+        self, work_ids: list[int]
+    ) -> dict[int, WorkAvailability]:
+        """Aggregate copy counts per work for OPAC display.
 
-        Works with no loanable items are omitted from the result.
-        'available'    — ≥1 loanable item with status AVAILABLE
-        'checked_out'  — 0 available but ≥1 in [checked_out, on_hold, claims_returned]
+        available — items with status AVAILABLE (regardless of is_loanable;
+                    the count describes physical copies, not loanability)
+        total     — items with any status except WITHDRAWN
+        status    — 'available' | 'checked_out' (circulating copies exist)
+                    | 'unavailable'
+        Works with zero items are omitted.
         """
         if not work_ids:
             return {}
-        recoverable = [
+        circulating = [
             ItemStatus.CHECKED_OUT.value,
             ItemStatus.ON_HOLD.value,
             ItemStatus.CLAIMS_RETURNED.value,
@@ -74,24 +80,29 @@ class SqlWorkRepository:
         rows = (
             self._s.query(
                 Item.work_id,
+                func.sum(
+                    case((Item.status == ItemStatus.AVAILABLE.value, 1), else_=0)
+                ).label("avail"),
+                func.sum(
+                    case((Item.status != ItemStatus.WITHDRAWN.value, 1), else_=0)
+                ).label("total"),
                 func.max(
-                    case(
-                        (Item.status == ItemStatus.AVAILABLE.value, 2),
-                        (Item.status.in_(recoverable), 1),
-                        else_=0,
-                    )
-                ).label("score"),
+                    case((Item.status.in_(circulating), 1), else_=0)
+                ).label("circ"),
             )
-            .filter(Item.work_id.in_(work_ids), Item.is_loanable.is_(True))
+            .filter(Item.work_id.in_(work_ids))
             .group_by(Item.work_id)
             .all()
         )
-        result: dict[int, str] = {}
-        for work_id, score in rows:
-            if score >= 2:
-                result[work_id] = "available"
-            elif score >= 1:
-                result[work_id] = "checked_out"
+        result: dict[int, WorkAvailability] = {}
+        for work_id, avail, total, circ in rows:
+            if avail:
+                status = "available"
+            elif circ:
+                status = "checked_out"
+            else:
+                status = "unavailable"
+            result[work_id] = WorkAvailability(int(avail), int(total), status)
         return result
 
     def first_available_loanable_copy(self, work_id: int) -> Item | None:

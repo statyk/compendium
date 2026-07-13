@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from datetime import date, datetime
-from typing import Protocol, runtime_checkable
+from typing import NamedTuple, Protocol, runtime_checkable
 
 from compendium.domain.models import (
     AppUser,
@@ -27,6 +27,14 @@ from compendium.domain.models import (
     Role,
     Work,
 )
+
+
+class WorkAvailability(NamedTuple):
+    """Aggregate copy availability for OPAC display."""
+
+    available: int  # items with status 'available'
+    total: int      # items with any status except 'withdrawn'
+    status: str     # 'available' | 'checked_out' | 'unavailable'
 
 
 @runtime_checkable
@@ -98,7 +106,9 @@ class WorkRepository(Protocol):
     def update(self, work: Work) -> Work: ...
     def has_loanable_item(self, work_id: int) -> bool: ...
     def first_available_loanable_copy(self, work_id: int) -> Item | None: ...
-    def availability_for_works(self, work_ids: list[int]) -> dict[int, str]: ...
+    def availability_counts_for_works(
+        self, work_ids: list[int]
+    ) -> dict[int, "WorkAvailability"]: ...
     def iter_for_export(
         self,
         *,

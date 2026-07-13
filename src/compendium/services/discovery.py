@@ -6,7 +6,7 @@ from dataclasses import dataclass, field
 from typing import Literal
 
 from compendium.domain.models import Work
-from compendium.repositories.base import MediaTypeRepository, WorkRepository
+from compendium.repositories.base import MediaTypeRepository, WorkAvailability, WorkRepository
 
 
 @dataclass
@@ -23,7 +23,7 @@ class SearchPage:
     facets: FacetCounts
     page: int
     page_size: int
-    availability: dict[int, str] = field(default_factory=dict)
+    availability: dict[int, WorkAvailability] = field(default_factory=dict)
 
     @property
     def has_prev(self) -> bool:
@@ -86,7 +86,7 @@ class DiscoveryService:
             available_only=available_only,
             include_withdrawn_only=include_withdrawn_only,
         )
-        availability = self._works.availability_for_works([w.id for w in works])
+        availability = self._works.availability_counts_for_works([w.id for w in works])
         return SearchPage(
             works=works,
             total=total,
