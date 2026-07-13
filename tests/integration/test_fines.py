@@ -9,7 +9,7 @@ import pytest
 from compendium.config.settings import Settings
 from compendium.domain.enums import FineKind, FineStatus, ItemStatus
 from compendium.domain.errors import NotFoundError, ValidationError
-from compendium.domain.models import Loan, LoanPolicy, Patron
+from compendium.domain.models import Fine, Loan, LoanPolicy, Patron
 from compendium.repositories.sql.audit_log_repository import SqlAuditLogRepository
 from compendium.repositories.sql.branch_repository import SqlBranchRepository
 from compendium.repositories.sql.creator_repository import SqlCreatorRepository
@@ -408,3 +408,32 @@ def test_outstanding_total_only_counts_outstanding(session):
     svc.waive(f3.id, note="goodwill")
     # Only f2 is outstanding
     assert svc.outstanding_total(patron.id) == 200
+
+
+def test_fine_paid_cents_defaults_zero_and_balance(session):
+    patron = _make_patron(session)
+    fine = Fine(
+        patron_id=patron.id,
+        kind=FineKind.OTHER.value,
+        amount_cents=500,
+        status=FineStatus.OUTSTANDING.value,
+    )
+    session.add(fine)
+    session.flush()
+    assert fine.paid_cents == 0
+    assert fine.balance_cents == 500
+
+
+def test_outstanding_total_subtracts_partial_payments(session):
+    patron = _make_patron(session)
+    fine = Fine(
+        patron_id=patron.id,
+        kind=FineKind.OTHER.value,
+        amount_cents=500,
+        paid_cents=200,
+        status=FineStatus.OUTSTANDING.value,
+    )
+    session.add(fine)
+    session.flush()
+    repo = SqlFineRepository(session)
+    assert repo.outstanding_total(patron.id) == 300

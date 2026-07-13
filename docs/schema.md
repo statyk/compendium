@@ -309,6 +309,7 @@ Outstanding or resolved charges owed by a patron. One row per definitive charge;
 | item_id | integer FK → item NULLABLE | |
 | kind | varchar(16) | `overdue`, `lost`, `damaged`, `processing`, `other` |
 | amount_cents | integer | Always positive |
+| paid_cents | integer NOT NULL DEFAULT 0 | Running total of partial payments; balance = amount_cents - paid_cents |
 | status | varchar(16) | `outstanding`, `paid`, `waived` |
 | assessed_at | timestamptz | |
 | resolved_at | timestamptz | Set when paid or waived |

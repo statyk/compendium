@@ -372,6 +372,9 @@ class Fine(Base):
     item_id: Mapped[int | None] = mapped_column(ForeignKey("item.id"), nullable=True)
     kind: Mapped[str] = mapped_column(String(16))
     amount_cents: Mapped[int] = mapped_column(Integer)
+    paid_cents: Mapped[int] = mapped_column(
+        Integer, nullable=False, server_default=text("0"), default=0
+    )
     status: Mapped[str] = mapped_column(String(16))
     assessed_at: Mapped[datetime] = mapped_column(
         UtcDateTime, server_default=func.now()
@@ -387,6 +390,10 @@ class Fine(Base):
     loan: Mapped[Loan | None] = relationship()
     item: Mapped[Item | None] = relationship()
     resolved_by: Mapped[AppUser | None] = relationship(foreign_keys=[resolved_by_user_id])
+
+    @property
+    def balance_cents(self) -> int:
+        return self.amount_cents - self.paid_cents
 
 
 class Notification(Base):

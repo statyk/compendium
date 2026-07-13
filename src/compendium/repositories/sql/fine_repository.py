@@ -46,7 +46,9 @@ class SqlFineRepository:
 
     def outstanding_total(self, patron_id: int) -> int:
         total = (
-            self._s.query(func.coalesce(func.sum(Fine.amount_cents), 0))
+            self._s.query(
+                func.coalesce(func.sum(Fine.amount_cents - Fine.paid_cents), 0)
+            )
             .filter(
                 Fine.patron_id == patron_id,
                 Fine.status == FineStatus.OUTSTANDING.value,
@@ -113,10 +115,12 @@ class SqlFineRepository:
         kind: str | None = None,
         query: str | None = None,
     ) -> int:
-        """Sum of amount_cents across outstanding fines matching the filter."""
+        """Sum of balance (amount_cents - paid_cents) across outstanding fines matching the filter."""
         total = (
             self._outstanding_filter(kind=kind, query=query)
-            .with_entities(func.coalesce(func.sum(Fine.amount_cents), 0))
+            .with_entities(
+                func.coalesce(func.sum(Fine.amount_cents - Fine.paid_cents), 0)
+            )
             .scalar()
         )
         return int(total or 0)
