@@ -341,3 +341,39 @@ class TestUserPatronLinkUnlink:
         db.commit()
         resp = client.delete(f"/users/{target.username}/patron", headers=_auth(tok))
         assert resp.status_code == 404
+
+
+class TestListPatrons:
+    def test_list_search_and_status(self, client, db):
+        tok = _token(db, "lib_list1", "Librarian")
+        _make_patron(db, card="LIST-0001", name="Searchable Ada")
+        p2 = _make_patron(db, card="LIST-0002", name="Dormant Bob")
+        p2.is_active = False
+        db.commit()
+
+        # default status=active
+        resp = client.get("/patrons", params={"q": "LIST-"}, headers=_auth(tok))
+        assert resp.status_code == 200
+        names = [p["full_name"] for p in resp.json()]
+        assert "Searchable Ada" in names
+        assert "Dormant Bob" not in names
+
+        # status=all + name search
+        resp = client.get(
+            "/patrons", params={"status": "all", "q": "dormant b"}, headers=_auth(tok)
+        )
+        assert [p["full_name"] for p in resp.json()] == ["Dormant Bob"]
+
+        # card-number search
+        resp = client.get("/patrons", params={"q": "LIST-0001"}, headers=_auth(tok))
+        assert [p["library_card_number"] for p in resp.json()] == ["LIST-0001"]
+
+    def test_patron_role_forbidden(self, client, db):
+        tok = _token(db, "pat_list1", "Patron")
+        resp = client.get("/patrons", headers=_auth(tok))
+        assert resp.status_code == 403
+
+    def test_bad_status_rejected(self, client, db):
+        tok = _token(db, "lib_list2", "Librarian")
+        resp = client.get("/patrons", params={"status": "bogus"}, headers=_auth(tok))
+        assert resp.status_code == 422

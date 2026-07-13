@@ -1,4 +1,4 @@
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy.orm import Session
 
 from compendium.api.deps import require_permission
@@ -67,6 +67,23 @@ def _patron_service_with_auth(session: Session, actor: AppUser, source: str = "a
         actor=actor,
         source=source,
         auth_svc=auth_svc,
+    )
+
+
+@router.get("", response_model=list[PatronResponse])
+def list_patrons(
+    q: str | None = Query(default=None),
+    status: str = Query(default="active", pattern="^(active|inactive|all)$"),
+    limit: int = Query(default=50, ge=1, le=500),
+    offset: int = Query(default=0, ge=0),
+    user: AppUser = Depends(require_permission("patron.manage")),
+    session: Session = Depends(get_session),
+):
+    return SqlPatronRepository(session).list(
+        limit=limit,
+        offset=offset,
+        status=status,
+        query=(q or "").strip() or None,
     )
 
 
