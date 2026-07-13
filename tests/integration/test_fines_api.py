@@ -201,7 +201,10 @@ def test_api_pay_fine(client, db_session):
     assert resp.json()["status"] == FineStatus.PAID.value
 
 
-def test_api_waive_requires_note(client, db_session):
+def test_api_waive_empty_note_allowed(client, db_session):
+    # Note is now optional on waive (Task 2 service change); empty string and a
+    # populated note both succeed. Was `test_api_waive_requires_note` asserting
+    # 422 on an empty note, which is no longer the case.
     _make_patron(db_session, "API_F0003")
     _, token = _make_user(db_session, "Librarian", "api_fine_waive")
     db_session.commit()
@@ -210,16 +213,83 @@ def test_api_waive_requires_note(client, db_session):
         json={"patron_card": "API_F0003", "kind": "other", "amount_cents": 100, "note": "x"},
         headers=_bearer(token),
     )
-    fine_id = client.get("/patrons/API_F0003/fines", headers=_bearer(token)).json()[0]["id"]
-    resp_bad = client.post(
-        f"/fines/{fine_id}/waive", json={"note": ""}, headers=_bearer(token)
+    client.post(
+        "/fines",
+        json={"patron_card": "API_F0003", "kind": "other", "amount_cents": 100, "note": "x"},
+        headers=_bearer(token),
     )
-    assert resp_bad.status_code == 422
+    fines = client.get("/patrons/API_F0003/fines", headers=_bearer(token)).json()
+    fine_id_1, fine_id_2 = fines[0]["id"], fines[1]["id"]
+
+    resp_empty = client.post(
+        f"/fines/{fine_id_1}/waive", json={"note": ""}, headers=_bearer(token)
+    )
+    assert resp_empty.status_code == 200
+    assert resp_empty.json()["status"] == FineStatus.WAIVED.value
+
     resp_ok = client.post(
-        f"/fines/{fine_id}/waive", json={"note": "goodwill"}, headers=_bearer(token)
+        f"/fines/{fine_id_2}/waive", json={"note": "goodwill"}, headers=_bearer(token)
     )
     assert resp_ok.status_code == 200
     assert resp_ok.json()["status"] == FineStatus.WAIVED.value
+
+
+def test_api_pay_partial(client, db_session):
+    _make_patron(db_session, "API_F0008")
+    _, token = _make_user(db_session, "Librarian", "api_fine_pay_partial")
+    db_session.commit()
+    client.post(
+        "/fines",
+        json={"patron_card": "API_F0008", "kind": "other", "amount_cents": 500, "note": "x"},
+        headers=_bearer(token),
+    )
+    fine_id = client.get("/patrons/API_F0008/fines", headers=_bearer(token)).json()[0]["id"]
+
+    resp = client.post(
+        f"/fines/{fine_id}/pay",
+        json={"amount_cents": 200, "note": "cash"},
+        headers=_bearer(token),
+    )
+    assert resp.status_code == 200, resp.text
+    body = resp.json()
+    assert body["paid_cents"] == 200
+    assert body["balance_cents"] == 300
+    assert body["status"] == FineStatus.OUTSTANDING.value
+
+
+def test_api_pay_no_body_pays_full(client, db_session):
+    _make_patron(db_session, "API_F0009")
+    _, token = _make_user(db_session, "Librarian", "api_fine_pay_full")
+    db_session.commit()
+    client.post(
+        "/fines",
+        json={"patron_card": "API_F0009", "kind": "other", "amount_cents": 150, "note": "x"},
+        headers=_bearer(token),
+    )
+    fine_id = client.get("/patrons/API_F0009/fines", headers=_bearer(token)).json()[0]["id"]
+
+    resp = client.post(f"/fines/{fine_id}/pay", headers=_bearer(token))
+    assert resp.status_code == 200
+    body = resp.json()
+    assert body["status"] == FineStatus.PAID.value
+    assert body["paid_cents"] == 150
+    assert body["balance_cents"] == 0
+
+
+def test_api_waive_note_optional(client, db_session):
+    _make_patron(db_session, "API_F0010")
+    _, token = _make_user(db_session, "Librarian", "api_fine_waive_opt")
+    db_session.commit()
+    client.post(
+        "/fines",
+        json={"patron_card": "API_F0010", "kind": "other", "amount_cents": 100, "note": "x"},
+        headers=_bearer(token),
+    )
+    fine_id = client.get("/patrons/API_F0010/fines", headers=_bearer(token)).json()[0]["id"]
+
+    resp = client.post(f"/fines/{fine_id}/waive", json={}, headers=_bearer(token))
+    assert resp.status_code == 200, resp.text
+    assert resp.json()["status"] == FineStatus.WAIVED.value
 
 
 def test_api_assess_overdue_scoped_to_patron(client, db_session):

@@ -326,6 +326,8 @@ class FineResponse(BaseModel):
     item_id: int | None
     kind: str
     amount_cents: int
+    paid_cents: int
+    balance_cents: int
     status: str
     assessed_at: datetime
     resolved_at: datetime | None
@@ -344,7 +346,12 @@ class AssessManualFineRequest(BaseModel):
 
 
 class WaiveFineRequest(BaseModel):
-    note: str
+    note: str | None = None
+
+
+class PayFineRequest(BaseModel):
+    amount_cents: int | None = None
+    note: str | None = None
 
 
 class DeclareLostRequest(BaseModel):

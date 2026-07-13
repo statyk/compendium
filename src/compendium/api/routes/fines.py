@@ -10,6 +10,7 @@ from compendium.api.schemas import (
     AssessManualFineRequest,
     AssessOverdueResponse,
     FineResponse,
+    PayFineRequest,
     WaiveFineRequest,
 )
 from compendium.db.engine import get_settings
@@ -123,11 +124,15 @@ def assess_manual_fine(
 @fines_router.post("/{fine_id}/pay", response_model=FineResponse)
 def pay_fine(
     fine_id: int,
+    body: PayFineRequest | None = None,
     session: Session = Depends(get_session),
     user: AppUser = Depends(require_permission("fine.manage")),
 ) -> FineResponse:
+    payload = body or PayFineRequest()
     try:
-        fine = _fine_svc(session, user).pay(fine_id)
+        fine = _fine_svc(session, user).pay(
+            fine_id, amount_cents=payload.amount_cents, note=payload.note
+        )
     except NotFoundError as exc:
         raise HTTPException(status_code=404, detail=str(exc)) from exc
     except ValidationError as exc:
@@ -138,12 +143,12 @@ def pay_fine(
 @fines_router.post("/{fine_id}/waive", response_model=FineResponse)
 def waive_fine(
     fine_id: int,
-    body: WaiveFineRequest,
+    body: WaiveFineRequest | None = None,
     session: Session = Depends(get_session),
     user: AppUser = Depends(require_permission("fine.manage")),
 ) -> FineResponse:
     try:
-        fine = _fine_svc(session, user).waive(fine_id, body.note)
+        fine = _fine_svc(session, user).waive(fine_id, body.note if body else None)
     except NotFoundError as exc:
         raise HTTPException(status_code=404, detail=str(exc)) from exc
     except ValidationError as exc:
