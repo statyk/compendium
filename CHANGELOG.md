@@ -7,6 +7,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- Patron list search and pagination: the staff patron list gains a search box
+  (name, card number, or email), an Active/Inactive/All status filter, and
+  pages of 50 (the previous 500-row cap is gone). `compendium patron list`
+  gains `--search`, and the API gains `GET /patrons` with `q`/`status`/
+  `limit`/`offset`.
+
 ## [1.5.1] - 2026-07-12
 
 ### Fixed
