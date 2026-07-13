@@ -106,6 +106,14 @@ docker compose exec compendium compendium user set-password --username admin
 
 (A password-change flow in the web UI is a planned follow-up.)
 
+### One-off commands without the stack
+
+`docker run --rm ghcr.io/statyk/compendium compendium --version` (also
+`--help`, `keygen`, `init`) runs directly — no database needed. Any other
+command passed to the container runs migrations first and fails with a
+clear error if the database is unreachable. The normal no-argument start
+(migrate → bootstrap admin → serve) is unchanged.
+
 ## Persistence
 
 - `db_data` (Docker named volume) — PostgreSQL data.

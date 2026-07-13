@@ -17,8 +17,43 @@ if [ -n "${POSTGRES_PASSWORD_FILE:-}" ] && [ -z "${COMPENDIUM_DATABASE_URL:-}" ]
     unset _pg_pass
 fi
 
-echo "[compendium] Running database migrations..."
-compendium db init
+_is_trivial() {
+    # Commands that never need the database (or must work without one).
+    case "${1:-}" in
+        --version|--help|-h|help|keygen|init) return 0 ;;
+        *) return 1 ;;
+    esac
+}
+
+_run_migrations() {
+    echo "[compendium] Running database migrations..."
+    if ! compendium db init; then
+        _url="${COMPENDIUM_DATABASE_URL:-sqlite:///compendium.db}"
+        # strip user:password@ credentials before printing
+        _redacted="$(printf '%s' "${_url}" | sed -E 's#//[^@/]+@#//#')"
+        echo "[compendium] Error: cannot reach or migrate database (${_redacted}); check COMPENDIUM_DATABASE_URL. Run 'compendium db init' in the container for details." >&2
+        exit 1
+    fi
+}
+
+# Explicit command: `docker run IMAGE compendium --version`, `docker run IMAGE sh`, …
+if [ "$#" -gt 0 ]; then
+    if [ "$1" = "compendium" ]; then
+        if _is_trivial "${2:-}"; then
+            exec "$@"
+        fi
+        _run_migrations
+        exec "$@"
+    fi
+    case "$1" in
+        # Bare flags reach the compendium CLI (only introspection flags exist
+        # at the root level, so no DB needed).
+        -*) exec compendium "$@" ;;
+        *)  exec "$@" ;;
+    esac
+fi
+
+_run_migrations
 
 if compendium user list --limit 1000 2>/dev/null \
         | awk '{print $1}' \
