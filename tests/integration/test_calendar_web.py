@@ -101,30 +101,56 @@ class TestLibraryHoursWeb:
         assert "Library Hours" in resp.text
         assert "Monday" in resp.text
 
-    def test_update_weekday_closes_sunday(self, calw_client, calw_session):
+    def test_hours_save_all_updates_multiple_rows(self, calw_client, calw_session):
         info = _login(calw_client, calw_session, "lib_hours_upd", "Librarian")
         csrf = _get_csrf(calw_client, "/ui/admin/library-hours", info["cookies"])
+        data = {"csrf_token": csrf}
+        for w in range(7):
+            data[f"is_open_{w}"] = "on"
+            data[f"open_time_{w}"] = "09:00"
+            data[f"close_time_{w}"] = "17:00"
+        data["is_open_6"] = ""  # Sunday closed
         resp = calw_client.post(
-            "/ui/admin/library-hours/6/update",
-            data={"is_open": "", "csrf_token": csrf},
+            "/ui/admin/library-hours/update",
+            data=data,
             cookies=info["cookies"],
         )
-        assert resp.status_code in (302, 303)
-        row = SqlLibraryHoursRepository(calw_session).get(6)
-        assert row.is_open is False
+        assert resp.status_code == 303
 
-    def test_update_weekday_sets_times(self, calw_client, calw_session):
-        info = _login(calw_client, calw_session, "lib_hours_time", "Librarian")
+        row0 = SqlLibraryHoursRepository(calw_session).get(0)
+        assert row0.is_open is True
+        assert row0.open_time == time(9, 0)
+        assert row0.close_time == time(17, 0)
+        row6 = SqlLibraryHoursRepository(calw_session).get(6)
+        assert row6.is_open is False
+
+        page = calw_client.get("/ui/admin/library-hours", cookies=info["cookies"])
+        assert page.text.count("09:00") >= 6
+
+    def test_hours_save_all_invalid_time_rejects_whole_form(self, calw_client, calw_session):
+        info = _login(calw_client, calw_session, "lib_hours_bad", "Librarian")
         csrf = _get_csrf(calw_client, "/ui/admin/library-hours", info["cookies"])
+
+        before = SqlLibraryHoursRepository(calw_session).get(0)
+        before_open, before_close = before.open_time, before.close_time
+
+        data = {"csrf_token": csrf}
+        for w in range(7):
+            data[f"is_open_{w}"] = "on"
+            data[f"open_time_{w}"] = "10:00"
+            data[f"close_time_{w}"] = "18:00"
+        data["close_time_3"] = "not-a-time"  # bad row, mid-loop
         resp = calw_client.post(
-            "/ui/admin/library-hours/0/update",
-            data={"is_open": "on", "open_time": "09:00", "close_time": "17:00", "csrf_token": csrf},
+            "/ui/admin/library-hours/update",
+            data=data,
             cookies=info["cookies"],
         )
-        assert resp.status_code in (302, 303)
-        row = SqlLibraryHoursRepository(calw_session).get(0)
-        assert row.is_open is True
-        assert row.close_time == time(17, 0)
+        assert resp.status_code == 303
+        assert "error=" in resp.headers["location"]
+
+        after = SqlLibraryHoursRepository(calw_session).get(0)
+        assert after.open_time == before_open
+        assert after.close_time == before_close
 
     def test_update_without_permission_returns_403(self, calw_client, calw_session):
         info = _login(calw_client, calw_session, "patron_hrs", "Patron")

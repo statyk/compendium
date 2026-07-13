@@ -78,27 +78,30 @@ def library_hours_list(
     )
 
 
-@router.post("/admin/library-hours/{weekday}/update")
-def library_hours_update(
-    weekday: int,
+@router.post("/admin/library-hours/update")
+async def library_hours_update_all(
     request: Request,
-    is_open: str = Form(default=""),
-    open_time: str = Form(default=""),
-    close_time: str = Form(default=""),
-    csrf_token: str = Form(default=""),
     user: AppUser = Depends(require_web_permission(_PERM)),
     session: Session = Depends(get_session),
 ):
-    check_csrf_form(request, csrf_token)
+    form = await request.form()
+    check_csrf_form(request, str(form.get("csrf_token", "")))
     try:
-        parsed_open = _parse_time(open_time)
-        parsed_close = _parse_time(close_time)
-        _svc(session, user).update_weekday(
-            weekday,
-            is_open=(is_open == "on"),
-            open_time=parsed_open,
-            close_time=parsed_close,
-        )
+        # Parse and validate ALL rows before writing any (atomic UX + one
+        # transaction via get_session).
+        parsed: list[tuple[int, bool, time | None, time | None]] = []
+        for weekday in range(7):
+            parsed.append(
+                (
+                    weekday,
+                    form.get(f"is_open_{weekday}", "") == "on",
+                    _parse_time(str(form.get(f"open_time_{weekday}", ""))),
+                    _parse_time(str(form.get(f"close_time_{weekday}", ""))),
+                )
+            )
+        svc = _svc(session, user)
+        for weekday, is_open, open_t, close_t in parsed:
+            svc.update_weekday(weekday, is_open=is_open, open_time=open_t, close_time=close_t)
         return RedirectResponse("/ui/admin/library-hours?message=Hours+updated.", status_code=303)
     except (ValidationError, NotFoundError, BusinessRuleError, ValueError) as exc:
         return RedirectResponse(
