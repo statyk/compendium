@@ -2005,7 +2005,6 @@ def test_non_htmx_request_still_gets_303(web_client):
 def _checkout_to_patron(web_session, work, patron):
     """Create an active loan for the web patron; returns the Loan."""
     from compendium.repositories.sql.loan_policy_repository import SqlLoanPolicyRepository
-    from compendium.services.audit import AuditService as _AS
 
     svc = CirculationService(
         item_repo=SqlItemRepository(web_session),
