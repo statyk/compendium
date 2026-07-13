@@ -1063,6 +1063,36 @@ class TestLoanCli:
         assert "CLIAMB01" in r.output
         assert "Re-run with the copy's --barcode." in r.output
 
+    def test_checkout_by_isbn_resolves_to_available_copy(self, session):
+        from compendium.domain.models import Item, MediaType, Work
+        from compendium.repositories.sql.branch_repository import SqlBranchRepository
+        from compendium.repositories.sql.item_repository import SqlItemRepository
+        from compendium.repositories.sql.work_repository import SqlWorkRepository
+
+        book = session.query(MediaType).filter_by(code="book").one()
+        w = Work(title="Dune ISBN Checkout", media_type_id=book.id, isbn="9780441013593")
+        SqlWorkRepository(session).add(w)
+        session.flush()
+        branch = SqlBranchRepository(session).get_default()
+        item = Item(
+            work_id=w.id,
+            branch_id=branch.id,
+            barcode="CLIISBN-1",
+            accession_number="CLIISBN-A1",
+        )
+        SqlItemRepository(session).add(item)
+        patron = Patron(library_card_number="CLIISBN01", full_name="ISBN Checkout Patron")
+        SqlPatronRepository(session).add(patron)
+        session.flush()
+
+        r = _invoke(
+            session,
+            ["loan", "checkout", "--barcode", "9780441013593", "--card", "CLIISBN01"],
+            "compendium.cli.commands.loan",
+        )
+        assert r.exit_code == 0, r.output
+        assert "CLIISBN-1" in r.output
+
     def test_mark_damaged_then_clear(self, session):
         _, item = _seed_work(session)
         patron = Patron(library_card_number="CLIL005", full_name="DamagePatron")
