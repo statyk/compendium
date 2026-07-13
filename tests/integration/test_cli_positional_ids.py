@@ -413,7 +413,7 @@ def test_patron_category_edit_and_delete_positional(session):
     assert edit.exit_code == 0, edit.output
     delete = _invoke(
         session,
-        ["patron-category", "delete", "posidcat"],
+        ["patron-category", "delete", "posidcat", "--yes"],
         "compendium.cli.commands.patron_category",
     )
     assert delete.exit_code == 0, delete.output

@@ -1151,7 +1151,7 @@ class TestPatronCategoryCli:
         assert r.exit_code == 0
         r = _invoke(
             session,
-            ["patron-category", "delete", "--code", "vipcli"],
+            ["patron-category", "delete", "--code", "vipcli", "--yes"],
             "compendium.cli.commands.patron_category",
         )
         assert r.exit_code == 0
@@ -1159,7 +1159,7 @@ class TestPatronCategoryCli:
     def test_cannot_delete_default(self, session):
         r = _invoke(
             session,
-            ["patron-category", "delete", "--code", "adult"],
+            ["patron-category", "delete", "--code", "adult", "--yes"],
             "compendium.cli.commands.patron_category",
         )
         assert r.exit_code == 1

@@ -95,11 +95,14 @@ def update_category(
 def delete_category(
     code_arg: str | None = typer.Argument(None, metavar="CODE"),
     code_opt: str | None = typer.Option(None, "--code", hidden=True),
+    yes: bool = typer.Option(False, "--yes", "-y", help="Skip confirmation prompt"),
 ) -> None:
     """Delete a patron category. Refuses if patrons or policies reference it."""
     from compendium.cli.io import resolve_identifier
 
     code = resolve_identifier(code_arg, code_opt, label="category code")
+    if not yes:
+        typer.confirm(f"Delete patron category '{code}'?", abort=True)
     try:
         with session_scope() as session:
             cat = SqlPatronCategoryRepository(session).get_by_code(code.lower())

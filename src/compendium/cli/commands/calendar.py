@@ -166,8 +166,11 @@ def closed_date_add(
 @closed_app.command("delete")
 def closed_date_delete(
     id: int = typer.Option(..., "--id", help="Closed date row id"),
+    yes: bool = typer.Option(False, "--yes", "-y", help="Skip confirmation prompt"),
 ) -> None:
     """Delete a closed-date entry by id."""
+    if not yes:
+        typer.confirm(f"Delete closed date id={id}?", abort=True)
     try:
         with session_scope() as session:
             _svc(session).delete_closed_date(id)

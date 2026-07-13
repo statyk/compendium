@@ -89,6 +89,6 @@ class TestCalendarCliClosedDates:
         cd_id = cd.id
 
         with _patch_session(session):
-            result = runner.invoke(app, ["calendar", "closed-date", "delete", "--id", str(cd_id)])
+            result = runner.invoke(app, ["calendar", "closed-date", "delete", "--id", str(cd_id), "--yes"])
         assert result.exit_code == 0
         assert SqlClosedDateRepository(session).get(cd_id) is None

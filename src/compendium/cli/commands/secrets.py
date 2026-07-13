@@ -163,6 +163,7 @@ def set_secret(
 @app.command("clear")
 def clear_secret(
     key: str = typer.Argument(..., help="Secret key to clear."),
+    yes: bool = typer.Option(False, "--yes", "-y", help="Skip confirmation prompt"),
 ) -> None:
     """Remove a stored secret from the DB (reverts to env-only or unset)."""
     try:
@@ -174,6 +175,9 @@ def clear_secret(
     if not desc.secret:
         typer.echo(f"Error: '{key}' is not a secret setting. Use 'compendium settings reset' instead.", err=True)
         raise typer.Exit(1)
+
+    if not yes:
+        typer.confirm(f"Clear stored secret '{key}'?", abort=True)
 
     with session_scope() as session:
         deleted = delete_site_setting(

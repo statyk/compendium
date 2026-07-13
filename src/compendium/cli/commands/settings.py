@@ -271,6 +271,7 @@ def set_setting(
 @app.command("reset")
 def reset_setting(
     key: str = typer.Argument(..., help="Setting key to reset to its default."),
+    yes: bool = typer.Option(False, "--yes", "-y", help="Skip confirmation prompt"),
 ) -> None:
     """Delete the override row so reads fall back to the registered default."""
     try:
@@ -278,6 +279,8 @@ def reset_setting(
     except UnknownSettingError:
         typer.echo(f"Error: unknown setting {key!r}.", err=True)
         raise typer.Exit(1)
+    if not yes:
+        typer.confirm(f"Reset '{key}' to its default?", abort=True)
     with session_scope() as session:
         deleted = delete_site_setting(
             key,
