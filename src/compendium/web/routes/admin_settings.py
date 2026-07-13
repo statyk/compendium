@@ -472,21 +472,8 @@ def _require_settings_access(
 
 
 @router.get("/admin/settings")
-def settings_hub_get(
-    request: Request,
-    user: AppUser = Depends(_require_settings_access),
-):
-    pages = [
-        p for p in SETTINGS_PAGES
-        if has_permission(user.role.permissions, p["scope_perm"])
-    ]
-    ctx: dict[str, Any] = {
-        "request": request,
-        "user": user,
-        "pages": pages,
-        "settings_pages": SETTINGS_PAGES,
-    }
-    return _render("admin/settings_index.html", request, ctx)
+def settings_hub_get(request: Request):
+    return RedirectResponse("/ui/admin", status_code=301)
 
 
 # ── Librarian-tier pages ──────────────────────────────────────────────────

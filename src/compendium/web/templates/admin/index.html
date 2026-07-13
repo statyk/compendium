@@ -1,0 +1,29 @@
+{% extends "base.html" %}
+{% block title %}Admin — {{ library_name() }}{% endblock %}
+{% block content %}
+
+<nav aria-label="breadcrumb">
+  <ul>
+    <li><a href="/ui/catalog">Home</a></li>
+    <li>Admin</li>
+  </ul>
+</nav>
+
+<h2>Administration</h2>
+<p>Configure circulation rules, the catalog, library settings, and system options.</p>
+
+{% for heading, entries in groups %}
+<section>
+  <h3>{{ heading }}</h3>
+  <div class="settings-cards">
+    {% for e in entries %}
+    <article class="settings-card">
+      <h4><a href="{{ e.url }}">{{ e.title }}</a></h4>
+      <p>{{ e.intro }}</p>
+    </article>
+    {% endfor %}
+  </div>
+</section>
+{% endfor %}
+
+{% endblock %}

@@ -801,6 +801,58 @@ class TestSettingsApiValidation:
 
 
 # ──────────────────────────────────────────────────────────────────────────
+# /ui/admin hub
+# ──────────────────────────────────────────────────────────────────────────
+
+
+class TestAdminHub:
+    def _cookies_for_role(self, client, s_session, uname, role_name):
+        _make_user(s_session, role_name=role_name, username=uname)
+        return _login_cookies(client, uname)
+
+    def test_old_settings_hub_redirects_permanently(self, client, s_session):
+        cookies = self._cookies_for_role(client, s_session, "hub_adm1", "Administrator")
+        r = client.get("/ui/admin/settings", cookies=cookies)
+        assert r.status_code == 301
+        assert r.headers["location"] == "/ui/admin"
+
+    def test_administrator_sees_all_groups(self, client, s_session):
+        cookies = self._cookies_for_role(client, s_session, "hub_adm2", "Administrator")
+        r = client.get("/ui/admin", cookies=cookies)
+        assert r.status_code == 200
+        for heading in ("Circulation &amp; policies", "Catalog &amp; library",
+                        "Settings", "System", "Insights"):
+            assert heading in r.text
+        for link in ("/ui/policies", "/ui/admin/library-hours", "/ui/branches",
+                     "/ui/trash", "/ui/admin/settings/general",
+                     "/ui/admin/system/secrets", "/ui/users", "/ui/roles",
+                     "/ui/audit", "/ui/reports", "/ui/admin/notifications"):
+            assert f'href="{link}"' in r.text
+
+    def test_systemadmin_scoping(self, client, s_session):
+        cookies = self._cookies_for_role(client, s_session, "hub_sys1", "SystemAdmin")
+        r = client.get("/ui/admin", cookies=cookies)
+        assert r.status_code == 200
+        assert '/ui/users' in r.text and '/ui/roles' in r.text
+        assert '/ui/admin/system/secrets' in r.text
+        assert '/ui/policies' not in r.text          # no policy.edit
+        assert '/ui/admin/settings/general' not in r.text  # no patron.manage
+
+    def test_librarian_scoping(self, client, s_session):
+        cookies = self._cookies_for_role(client, s_session, "hub_lib1", "Librarian")
+        r = client.get("/ui/admin", cookies=cookies)
+        assert r.status_code == 200
+        assert '/ui/policies' in r.text and '/ui/trash' in r.text
+        assert '/ui/users' not in r.text and '/ui/roles' not in r.text
+        assert '/ui/admin/system/smtp' not in r.text  # system tier hidden
+
+    def test_patron_role_forbidden(self, client, s_session):
+        cookies = self._cookies_for_role(client, s_session, "hub_pat1", "Patron")
+        r = client.get("/ui/admin", cookies=cookies)
+        assert r.status_code == 403
+
+
+# ──────────────────────────────────────────────────────────────────────────
 # API — secrets must never be echoed in responses (security invariant)
 # ──────────────────────────────────────────────────────────────────────────
 
