@@ -2354,6 +2354,24 @@ def test_hold_suspend_htmx_swaps_row_and_enforces_min(web_client, patron_user, w
     assert "error-banner" in resp.text
 
 
+def test_admin_nav_merged_and_kiosk_top_level(web_client, librarian):
+    """The Admin and Settings dropdowns merge into one; Kiosk moves top-level."""
+    cookies = _login(web_client, "lib01")
+    r = web_client.get("/ui/catalog", cookies=cookies)
+    assert r.status_code == 200
+    # single merged dropdown: Admin Home present, old Settings summary gone
+    assert 'href="/ui/admin"' in r.text
+    assert "⚙ Settings" not in r.text
+    # kiosk is a top-level link now, still checkout-gated
+    assert '<a href="/ui/kiosk">Kiosk</a>' in r.text
+    # a librarian keeps every link they had before the merge
+    for link in ("/ui/admin/patron-categories", "/ui/policies", "/ui/branches",
+                 "/ui/admin/library-hours", "/ui/admin/closed-dates",
+                 "/ui/admin/notifications", "/ui/reports", "/ui/audit",
+                 "/ui/curated-lists", "/ui/admin/settings/general"):
+        assert link in r.text
+
+
 def test_inactive_user_cookie_denied(web_client, web_session, librarian):
     """An inactive user's still-valid auth cookie must not grant access."""
     cookies = _login(web_client, "lib01")
