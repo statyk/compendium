@@ -1953,6 +1953,52 @@ def test_zero_results_field_scoped_keeps_generic_hint(web_client, work):
     assert "whole words" not in resp.text
 
 
+# ── HTMX session-expiry redirect ──────────────────────────────────────────────
+
+
+def test_htmx_request_without_auth_gets_hx_redirect(web_client):
+    """HTMX fragment requests must get HX-Redirect, not a 303 login page swap."""
+    raw, signed = _make_csrf_pair()
+    resp = web_client.post(
+        "/ui/me/loans/1/renew",
+        data={"csrf_token": raw},
+        cookies={CSRF_COOKIE: signed},
+        headers={
+            "HX-Request": "true",
+            "HX-Current-URL": "http://testserver/ui/me/loans",
+        },
+        follow_redirects=False,
+    )
+    assert resp.status_code == 200
+    assert resp.headers["HX-Redirect"] == "/ui/login?next=/ui/me/loans"
+    assert "<form" not in resp.text  # no login page in the fragment body
+
+
+def test_htmx_request_foreign_current_url_falls_back(web_client):
+    """A non-/ui/ HX-Current-URL must not be echoed into next=."""
+    raw, signed = _make_csrf_pair()
+    resp = web_client.post(
+        "/ui/me/loans/1/renew",
+        data={"csrf_token": raw},
+        cookies={CSRF_COOKIE: signed},
+        headers={
+            "HX-Request": "true",
+            "HX-Current-URL": "https://evil.example.com/phish",
+        },
+        follow_redirects=False,
+    )
+    assert resp.status_code == 200
+    # falls back to the request path raised in RequiresLoginException
+    assert resp.headers["HX-Redirect"].startswith("/ui/login")
+    assert "evil.example.com" not in resp.headers["HX-Redirect"]
+
+
+def test_non_htmx_request_still_gets_303(web_client):
+    resp = web_client.get("/ui/me/loans", follow_redirects=False)
+    assert resp.status_code == 303
+    assert resp.headers["location"].startswith("/ui/login")
+
+
 def test_inactive_user_cookie_denied(web_client, web_session, librarian):
     """An inactive user's still-valid auth cookie must not grant access."""
     cookies = _login(web_client, "lib01")

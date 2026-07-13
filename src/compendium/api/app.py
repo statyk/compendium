@@ -2,9 +2,10 @@ import logging
 import os
 import secrets
 from pathlib import Path
+from urllib.parse import quote, urlparse
 
 from fastapi import FastAPI, Request
-from fastapi.responses import HTMLResponse, RedirectResponse
+from fastapi.responses import HTMLResponse, RedirectResponse, Response
 from fastapi.staticfiles import StaticFiles
 from starlette.middleware.base import BaseHTTPMiddleware
 from starlette.middleware.trustedhost import TrustedHostMiddleware
@@ -187,7 +188,19 @@ def create_app() -> FastAPI:
     app.include_router(create_web_router(), prefix="/ui", tags=["web"])
 
     @app.exception_handler(RequiresLoginException)
-    async def _login_redirect(request: Request, exc: RequiresLoginException) -> RedirectResponse:
+    async def _login_redirect(request: Request, exc: RequiresLoginException) -> Response:
+        if request.headers.get("HX-Request"):
+            # HTMX fragment request: a 303 would swap the login page into the
+            # fragment target. HX-Redirect makes the browser navigate instead.
+            next_path = exc.next_url
+            current = request.headers.get("HX-Current-URL", "")
+            parsed = urlparse(current)
+            if parsed.path.startswith("/ui/"):
+                next_path = parsed.path + (f"?{parsed.query}" if parsed.query else "")
+            url = "/ui/login"
+            if next_path:
+                url = f"/ui/login?next={quote(next_path, safe='/?=&')}"
+            return Response(status_code=200, headers={"HX-Redirect": url})
         url = "/ui/login"
         if exc.next_url:
             url = f"/ui/login?next={exc.next_url}"
