@@ -19,6 +19,7 @@
 
 {% if message %}<p class="success-banner">{{ message }}</p>{% endif %}
 {% if error %}<p class="error-banner">{{ error }}</p>{% endif %}
+{% if warning %}<p class="warning-banner">{{ warning }}</p>{% endif %}
 
 {% if has_secrets %}
   {% if not key_configured %}
@@ -92,6 +93,12 @@
                    placeholder="{% if row.db_set %}••••••••  (leave blank to keep current){% else %}not set{% endif %}"
                    autocomplete="new-password">
             {% if row.db_set %}<small>Currently set. Enter a new value to rotate, or use Clear to remove.</small>{% endif %}
+            {% if row.key in validation_failed %}
+            <label style="margin-top:0.25rem">
+              <input type="checkbox" name="override_validation_{{ row.key }}" value="1">
+              Save anyway — skip validation for this key
+            </label>
+            {% endif %}
             {% endif %}
           {% elif row.desc.widget == 'shortcut_picker' %}
             <input type="hidden" name="{{ row.key }}" id="sc-admin-value-{{ row.key }}"

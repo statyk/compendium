@@ -348,6 +348,10 @@ def _show_page(
         ctx.update(_secrets_banner_ctx(session))
     if extra_ctx:
         ctx.update(extra_ctx)
+    ctx["warning"] = request.query_params.get("warning")
+    ctx["validation_failed"] = set(
+        filter(None, request.query_params.get("validation_failed", "").split(","))
+    )
     return _render("admin/settings.html", request, ctx)
 
 
@@ -360,8 +364,11 @@ def _apply_form(
     clear_keys: list[str],
     session: Session,
     user: AppUser,
-) -> tuple[str | None, str | None]:
-    """Apply submitted settings + resets + inline secrets. Returns (message, error)."""
+) -> tuple[str | None, str | None, str | None, list[str]]:
+    """Apply submitted settings + resets + inline secrets.
+
+    Returns (message, error, warning, failed_keys).
+    """
     audit = _audit_svc(session)
     errors: list[str] = []
     changed = 0
@@ -399,18 +406,23 @@ def _apply_form(
         except SettingValidationError as exc:
             errors.append(f"{key}: {exc}")
 
+    warnings: list[str] = []
+    failed_keys: list[str] = []
     if secret_keys:
-        s_changed, s_errors = _apply_secret_fields(
+        s_changed, s_errors, s_warnings, s_failed = _apply_secret_fields(
             secret_keys, form, clear_keys, session, user, audit
         )
         changed += s_changed
         errors.extend(s_errors)
+        warnings.extend(s_warnings)
+        failed_keys.extend(s_failed)
 
+    warning = "; ".join(warnings) if warnings else None
     if errors:
-        return (None, "; ".join(errors))
+        return (None, "; ".join(errors), warning, failed_keys)
     if changed == 0:
-        return ("Nothing to save.", None)
-    return (f"Saved {changed} change(s).", None)
+        return ("Nothing to save.", None, warning, failed_keys)
+    return (f"Saved {changed} change(s).", None, warning, failed_keys)
 
 
 def _post_handler(
@@ -423,7 +435,7 @@ def _post_handler(
     session: Session,
     user: AppUser,
 ):
-    msg, err = _apply_form(
+    msg, err, warn, failed = _apply_form(
         page_key, page_meta, request, form, reset_keys, clear_keys, session, user
     )
     target = (
@@ -431,11 +443,16 @@ def _post_handler(
         if page_key in _SYSTEM_PAGES
         else f"/ui/admin/settings/{page_key}"
     )
-    qs = (
-        f"?message={quote(msg)}"
-        if msg
-        else (f"?error={quote(err)}" if err else "")
-    )
+    params: list[str] = []
+    if msg:
+        params.append(f"message={quote(msg)}")
+    if err:
+        params.append(f"error={quote(err)}")
+    if warn:
+        params.append(f"warning={quote(warn)}")
+    if failed:
+        params.append(f"validation_failed={quote(','.join(failed))}")
+    qs = "?" + "&".join(params) if params else ""
     return RedirectResponse(target + qs, status_code=303)
 
 
@@ -787,17 +804,20 @@ def _apply_secret_fields(
     session: Session,
     user: AppUser,
     audit: AuditService,
-) -> tuple[int, list[str]]:
-    """Apply secret sets/clears for the given keys. Returns (changed, errors).
+) -> tuple[int, list[str], list[str], list[str]]:
+    """Apply secret sets/clears. Returns (changed, errors, warnings, failed_keys).
 
-    `form` is the starlette FormData (supports .get). Validation failures are
-    returned as error strings (the page surfaces them via ?error=).
+    `errors` block the save of their key; `warnings` (validator ok=True) do not.
+    `failed_keys` lists keys whose validator refused, so the page can offer the
+    override checkbox on re-render.
     """
     from compendium.services.secrets import SecretKeyMismatchError, SecretKeyMissingError
 
     secret_descs = {d.key: d for d in all_descriptors() if d.secret}
     changed = 0
     errors: list[str] = []
+    warnings: list[str] = []
+    failed_keys: list[str] = []
 
     for key in clear_keys:
         if key not in secret_keys or key not in secret_descs:
@@ -821,9 +841,10 @@ def _apply_secret_fields(
                     f"{desc.resolved_display_name()}: "
                     f"{result.reason or 'validation failed'}"
                 )
+                failed_keys.append(key)
                 continue
             if result.warning:
-                errors.append(f"{desc.resolved_display_name()}: {result.warning}")
+                warnings.append(f"{desc.resolved_display_name()}: {result.warning}")
         try:
             set_site_setting(
                 key, raw, session=session, updated_by_id=user.id,
@@ -835,7 +856,7 @@ def _apply_secret_fields(
         except Exception as exc:
             errors.append(f"{key}: {exc}")
 
-    return changed, errors
+    return changed, errors, warnings, failed_keys
 
 
 @router.post("/admin/system/secrets")
@@ -857,14 +878,20 @@ async def secrets_post(
     secret_keys = [d.key for d in all_descriptors() if d.secret]
     clear_keys = form.getlist("clear")
     audit = _audit_svc(session)
-    changed, errors = _apply_secret_fields(
+    changed, errors, warnings, failed = _apply_secret_fields(
         secret_keys, form, clear_keys, session, user, audit
     )
 
+    params: list[str] = []
     if errors:
-        qs = f"?error={quote('; '.join(errors))}"
+        params.append(f"error={quote('; '.join(errors))}")
     elif changed:
-        qs = f"?message={quote(f'Saved {changed} change(s).')}"
+        params.append(f"message={quote(f'Saved {changed} change(s).')}")
     else:
-        qs = "?message=Nothing+to+save."
+        params.append("message=Nothing+to+save.")
+    if warnings:
+        params.append(f"warning={quote('; '.join(warnings))}")
+    if failed:
+        params.append(f"validation_failed={quote(','.join(failed))}")
+    qs = "?" + "&".join(params)
     return RedirectResponse(redirect_to + qs, status_code=303)

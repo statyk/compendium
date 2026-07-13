@@ -396,9 +396,10 @@ def test_quota_exhausted_key_saves_with_warning(client, s_session, monkeypatch):
             cookies={AUTH_COOKIE: token, CSRF_COOKIE: signed_csrf},
         )
 
-    # Should redirect (save succeeded) with error/warning in query string.
+    # Should redirect (save succeeded) with a warning, not an error, in the query string.
     assert resp.status_code == 303
-    assert "error=" in resp.headers["location"]
+    assert "warning=" in resp.headers["location"]
+    assert "error=" not in resp.headers["location"]
 
     from sqlalchemy.orm import Session
     with Session(s_session.get_bind()) as s:
@@ -480,3 +481,80 @@ def test_metadata_page_clear_removes_secret_inline(client, s_session, monkeypatc
     assert resp.status_code == 303
     with Session(s_session.get_bind()) as s:
         assert SqlSiteSettingRepository(s).get("tmdb_api_key") is None
+
+
+# ── Warnings split from errors + override checkbox rendering ─────────────
+
+
+def test_validator_warning_still_saves_and_shows_warning(client, s_session, monkeypatch):
+    """ok=True + warning must save, redirect with message= AND warning=, no error=."""
+    from unittest.mock import patch
+    from compendium.services.metadata import KeyValidationResult
+
+    monkeypatch.setenv("COMPENDIUM_SECRET_KEY", _FERNET_KEY)
+    _, token = _make_admin(s_session)
+    raw_csrf, signed_csrf = _csrf_pair()
+
+    warn = KeyValidationResult(ok=True, warning="Quota nearly exhausted")
+
+    with patch(
+        "compendium.web.routes.admin_settings._SECRET_VALIDATORS",
+        {"google_books_api_key": lambda _: warn},
+    ):
+        resp = client.post(
+            "/ui/admin/system/secrets",
+            data={"csrf_token": raw_csrf, "google_books_api_key": "warned-key"},
+            cookies={AUTH_COOKIE: token, CSRF_COOKIE: signed_csrf},
+        )
+
+    assert resp.status_code == 303
+    loc = resp.headers["location"]
+    assert "message=" in loc
+    assert "warning=" in loc
+    assert "error=" not in loc
+
+    from sqlalchemy.orm import Session
+    with Session(s_session.get_bind()) as s:
+        row = SqlSiteSettingRepository(s).get("google_books_api_key")
+    assert row is not None  # the warning did not block the save
+
+
+def test_failed_validation_redirect_carries_validation_failed_key(client, s_session, monkeypatch):
+    from unittest.mock import patch
+    from compendium.services.metadata import KeyValidationResult
+
+    monkeypatch.setenv("COMPENDIUM_SECRET_KEY", _FERNET_KEY)
+    _, token = _make_admin(s_session)
+    raw_csrf, signed_csrf = _csrf_pair()
+
+    bad = KeyValidationResult(ok=False, reason="API key not valid")
+
+    with patch(
+        "compendium.web.routes.admin_settings._SECRET_VALIDATORS",
+        {"google_books_api_key": lambda _: bad},
+    ):
+        resp = client.post(
+            "/ui/admin/system/secrets",
+            data={"csrf_token": raw_csrf, "google_books_api_key": "bad-key"},
+            cookies={AUTH_COOKIE: token, CSRF_COOKIE: signed_csrf},
+        )
+
+    assert resp.status_code == 303
+    assert "validation_failed=google_books_api_key" in resp.headers["location"]
+
+
+def test_metadata_page_renders_override_checkbox_after_failure(client, s_session, monkeypatch):
+    monkeypatch.setenv("COMPENDIUM_SECRET_KEY", _FERNET_KEY)
+    _, token = _make_admin(s_session)
+
+    resp = client.get(
+        "/ui/admin/system/metadata?error=x&validation_failed=google_books_api_key",
+        cookies={AUTH_COOKIE: token},
+    )
+    assert resp.status_code == 200
+    assert 'name="override_validation_google_books_api_key"' in resp.text
+    assert "Save anyway" in resp.text
+
+    # And absent without the param:
+    resp2 = client.get("/ui/admin/system/metadata", cookies={AUTH_COOKIE: token})
+    assert "override_validation_" not in resp2.text
