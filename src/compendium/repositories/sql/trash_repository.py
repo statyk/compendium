@@ -90,6 +90,16 @@ class SqlTrashRepository:
         self._s.delete(entity)
         self._s.flush()
 
+    def count_older_than(self, entity_type: str, cutoff: datetime) -> int:
+        return (
+            self._s.query(DeletedEntity)
+            .filter(
+                DeletedEntity.entity_type == entity_type,
+                DeletedEntity.deleted_at < cutoff,
+            )
+            .count()
+        )
+
     def delete_older_than(self, entity_type: str, cutoff: datetime) -> int:
         # synchronize_session="fetch": a plain "False" leaves stale rows in
         # the session identity map, so a subsequent get() on a just-deleted

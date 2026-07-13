@@ -91,6 +91,9 @@ def _holds_svc(session) -> HoldService:
 
 @app.command("expire-holds")
 def expire_holds(
+    dry_run: bool = typer.Option(
+        False, "--dry-run", help="Report what would be expired without changing data."
+    ),
     quiet: bool = typer.Option(
         False, "--quiet", "-q",
         help="Suppress output when there is nothing to do.",
@@ -98,10 +101,11 @@ def expire_holds(
 ) -> None:
     """Expire waiting holds whose expiry date has passed."""
     with session_scope() as session:
-        count = _holds_svc(session).expire_holds()
+        count = _holds_svc(session).expire_holds(dry_run=dry_run)
     if count == 0 and quiet:
         return
-    typer.echo(f"Expired {count} hold(s).")
+    verb = "Would expire" if dry_run else "Expired"
+    typer.echo(f"{verb} {count} hold(s).")
 
 
 @app.command("resume-expired-suspends")
@@ -631,6 +635,9 @@ def refresh_metadata_cmd(
 
 @app.command("prune-metadata-cache")
 def prune_metadata_cache(
+    dry_run: bool = typer.Option(
+        False, "--dry-run", help="Report what would be pruned without deleting."
+    ),
     quiet: bool = typer.Option(
         False, "--quiet", "-q",
         help="Suppress output when there is nothing to do.",
@@ -641,13 +648,14 @@ def prune_metadata_cache(
     from compendium.services.metadata_cache import prune_expired
 
     with session_scope() as session:
-        deleted = prune_expired(session)
+        deleted = prune_expired(session, dry_run=dry_run)
     if deleted == 0:
         if quiet:
             return
         typer.echo("Metadata cache: no expired entries found.")
     else:
-        typer.echo(f"Metadata cache: pruned {deleted} expired row(s).")
+        verb = "would prune" if dry_run else "pruned"
+        typer.echo(f"Metadata cache: {verb} {deleted} expired row(s).")
 
 
 def _trash_svc(session):
@@ -671,6 +679,9 @@ def purge_trash_cmd(
         "--older-than-days",
         help="Purge trash entries older than this (default: the trash_retention_days setting).",
     ),
+    dry_run: bool = typer.Option(
+        False, "--dry-run", help="Report what would be purged without deleting."
+    ),
     quiet: bool = typer.Option(
         False, "--quiet", "-q",
         help="Suppress output when there is nothing to do.",
@@ -691,10 +702,11 @@ def purge_trash_cmd(
             typer.echo("Trash retention is disabled (trash_retention_days=0); nothing purged.")
         raise typer.Exit(0)
     with session_scope() as session:
-        purged = _trash_svc(session).purge(older_than_days=days)
+        purged = _trash_svc(session).purge(older_than_days=days, dry_run=dry_run)
     if purged == 0 and quiet:
         return
-    typer.echo(f"Purged {purged} trash entr{'y' if purged == 1 else 'ies'}.")
+    verb = "Would purge" if dry_run else "Purged"
+    typer.echo(f"{verb} {purged} trash entr{'y' if purged == 1 else 'ies'}.")
 
 
 @app.command("prune-cover-cache")
@@ -702,6 +714,9 @@ def prune_cover_cache(
     max_mb: int = typer.Option(
         500, "--max-mb",
         help="Cache size cap in MB. Oldest files (by mtime) are deleted until under cap.",
+    ),
+    dry_run: bool = typer.Option(
+        False, "--dry-run", help="Report what would be pruned without deleting."
     ),
     quiet: bool = typer.Option(
         False, "--quiet", "-q",
@@ -714,10 +729,11 @@ def prune_cover_cache(
         raise typer.Exit(1)
     from compendium.services.covers import prune
 
-    removed, freed = prune(max_mb * 1024 * 1024)
+    removed, freed = prune(max_mb * 1024 * 1024, dry_run=dry_run)
     if removed == 0:
         if quiet:
             return
         typer.echo(f"Cover cache under {max_mb} MB cap; nothing to prune.")
     else:
-        typer.echo(f"Pruned {removed} file(s), freed {freed // 1024} KB.")
+        verb = "Would prune" if dry_run else "Pruned"
+        typer.echo(f"{verb} {removed} file(s), freed {freed // 1024} KB.")

@@ -354,8 +354,10 @@ class HoldService:
     def queue_position(self, hold_id: int) -> int | None:
         return self._holds.queue_position(hold_id)
 
-    def expire_holds(self) -> int:
+    def expire_holds(self, *, dry_run: bool = False) -> int:
         holds = self._holds.get_expired_waiting(datetime.now(timezone.utc))
+        if dry_run:
+            return len(holds)
         for hold in holds:
             self._release_held_item(hold)
             hold.status = HoldStatus.EXPIRED.value

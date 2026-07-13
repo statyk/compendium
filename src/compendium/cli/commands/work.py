@@ -594,6 +594,9 @@ def trash_purge(
     older_than_days: int | None = typer.Option(
         None, "--older-than-days", help="Purge all entries older than N days."
     ),
+    dry_run: bool = typer.Option(
+        False, "--dry-run", help="Report what would be purged without deleting."
+    ),
 ) -> None:
     """Permanently delete trash entries. Pass an id OR --older-than-days."""
     with session_scope() as session:
@@ -601,8 +604,10 @@ def trash_purge(
             purged = _trash_svc(session).purge(
                 older_than_days=older_than_days,
                 trash_id=trash_id,
+                dry_run=dry_run,
             )
         except DomainError as exc:
             typer.echo(f"Error: {exc}", err=True)
             raise typer.Exit(1) from exc
-        typer.echo(f"Purged {purged} trash entr{'y' if purged == 1 else 'ies'}.")
+        verb = "Would purge" if dry_run else "Purged"
+        typer.echo(f"{verb} {purged} trash entr{'y' if purged == 1 else 'ies'}.")

@@ -208,24 +208,27 @@ def _upsert_to_session(session: Session, entry: MetadataCache) -> None:
 # ---------------------------------------------------------------------------
 
 
-def prune_expired(session: Session) -> int:
-    """Delete rows past their TTL. Returns number of deleted rows."""
+def prune_expired(session: Session, *, dry_run: bool = False) -> int:
+    """Delete rows past their TTL. Returns number of (would-be) deleted rows.
+
+    ``dry_run=True`` counts the matching rows and returns without deleting.
+    """
     now = _now_utc()
     positive_cutoff = now - timedelta(days=_positive_ttl_days())
     negative_cutoff = now - timedelta(hours=_NEGATIVE_TTL_HOURS)
 
-    result = session.execute(
-        delete(MetadataCache).where(
-            (
-                (MetadataCache.is_negative == False)  # noqa: E712
-                & (MetadataCache.fetched_at < positive_cutoff)
-            )
-            | (
-                (MetadataCache.is_negative == True)  # noqa: E712
-                & (MetadataCache.fetched_at < negative_cutoff)
-            )
-        )
+    where_clause = (
+        (MetadataCache.is_negative == False)  # noqa: E712
+        & (MetadataCache.fetched_at < positive_cutoff)
+    ) | (
+        (MetadataCache.is_negative == True)  # noqa: E712
+        & (MetadataCache.fetched_at < negative_cutoff)
     )
+
+    if dry_run:
+        return session.query(MetadataCache).filter(where_clause).count()
+
+    result = session.execute(delete(MetadataCache).where(where_clause))
     return result.rowcount
 
 

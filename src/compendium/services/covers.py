@@ -164,10 +164,11 @@ def invalidate(url: str) -> bool:
     return removed
 
 
-def prune(max_bytes: int) -> tuple[int, int]:
+def prune(max_bytes: int, *, dry_run: bool = False) -> tuple[int, int]:
     """Evict cache files (oldest mtime first) until total size ≤ ``max_bytes``.
 
-    Returns ``(removed_count, freed_bytes)``.
+    Returns ``(removed_count, freed_bytes)``. ``dry_run=True`` walks the same
+    eviction order and sums the candidates without unlinking anything.
     """
     d = cache_dir()
     entries = []
@@ -188,10 +189,11 @@ def prune(max_bytes: int) -> tuple[int, int]:
     for _mtime, size, path in entries:
         if total <= max_bytes:
             break
-        try:
-            path.unlink()
-        except OSError:
-            continue
+        if not dry_run:
+            try:
+                path.unlink()
+            except OSError:
+                continue
         total -= size
         freed += size
         removed += 1

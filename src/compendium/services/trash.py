@@ -138,6 +138,7 @@ class TrashService:
         *,
         older_than_days: int | None = None,
         trash_id: int | None = None,
+        dry_run: bool = False,
     ) -> int:
         if (older_than_days is None) == (trash_id is None):
             raise ValidationError("Pass exactly one of older_than_days or trash_id.")
@@ -147,10 +148,14 @@ class TrashService:
             row = self._trash.get(trash_id)
             if row is None:
                 raise NotFoundError(f"No trash entry with id={trash_id}")
+            if dry_run:
+                return 1
             self._trash.delete(row)
             purged = 1
         else:
             cutoff = datetime.now(timezone.utc) - timedelta(days=older_than_days)
+            if dry_run:
+                return self._trash.count_older_than(ENTITY_WORK, cutoff)
             purged = self._trash.delete_older_than(ENTITY_WORK, cutoff)
         if purged:
             self._record(
