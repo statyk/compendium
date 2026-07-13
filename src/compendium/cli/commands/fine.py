@@ -6,6 +6,7 @@ import getpass
 
 import typer
 
+from compendium.cli.output import Column, emit_list, format_option
 from compendium.db.engine import get_settings
 from compendium.db.session import session_scope
 from compendium.domain.enums import FineKind
@@ -49,6 +50,7 @@ def list_fines(
     patron: str | None = typer.Option(None, "--patron", help="Filter by library card."),
     status: str | None = typer.Option(None, "--status", help="outstanding | paid | waived"),
     limit: int = typer.Option(50, "--limit"),
+    format: str = format_option(),
 ) -> None:
     """List fines, optionally filtered."""
     with session_scope() as session:
@@ -57,16 +59,25 @@ def list_fines(
             p = _resolve_patron(session, patron)
             patron_id = p.id
         fines = _fine_svc(session).list(patron_id=patron_id, status=status, limit=limit)
-        if not fines:
-            typer.echo("No fines matching filter.")
-            return
-        typer.echo(f"\n{len(fines)} fine(s):")
-        for f in fines:
-            typer.echo(
-                f"  #{f.id}  {f.kind:10s}  {format_currency(f.amount_cents):>10}  "
-                f"{f.status:11s}  patron_id={f.patron_id}"
-                + (f"  note={f.note}" if f.note else "")
-            )
+        emit_list(
+            [{
+                "id": f.id,
+                "kind": f.kind,
+                "amount_cents": f.amount_cents,
+                "status": f.status,
+                "patron_id": f.patron_id,
+                "note": f.note,
+            } for f in fines],
+            [Column("id", "Fine", justify="right"),
+             Column("kind", "Kind"),
+             Column("amount_cents", "Amount", justify="right",
+                    formatter=lambda v: format_currency(v)),
+             Column("status", "Status"),
+             Column("patron_id", "Patron ID", justify="right"),
+             Column("note", "Note", formatter=lambda v: v or "")],
+            format,
+            empty="No fines matching filter.",
+        )
 
 
 @app.command("pay")

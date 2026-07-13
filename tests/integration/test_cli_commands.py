@@ -11,6 +11,7 @@ SQLite-in-memory DB every other integration test uses.
 
 from __future__ import annotations
 
+import json
 from contextlib import contextmanager
 from unittest.mock import patch
 
@@ -618,20 +619,23 @@ class TestHoldCli:
         # seeded work has an AVAILABLE copy.
         assert "available" in r.output
 
+        # Extract hold id straight from the `place` confirmation (format
+        # "  Hold ID : <id>") rather than parsing the `list` table — table
+        # cells can be truncated to fit the (narrow, non-tty) console width.
+        hold_id = next(
+            line.split(":", 1)[1].strip()
+            for line in r.output.splitlines()
+            if line.strip().startswith("Hold ID")
+        )
+
         r = _invoke(
             session,
             ["hold", "list", "--card", "CLIH001"],
             "compendium.cli.commands.hold",
         )
         assert r.exit_code == 0
-        assert "Active holds" in r.output
+        assert "Status" in r.output
 
-        # Extract hold id (format "  #<id>  Work ...")
-        hold_id = next(
-            line.strip().split()[0].lstrip("#")
-            for line in r.output.splitlines()
-            if line.strip().startswith("#")
-        )
         r = _invoke(
             session,
             ["hold", "cancel", "--id", hold_id, "--card", "CLIH001"],
@@ -912,7 +916,7 @@ class TestLoanCli:
             "compendium.cli.commands.loan",
         )
         assert r.exit_code == 0
-        assert "Active loans" in r.output
+        assert "Due" in r.output
 
         r = _invoke(
             session,
@@ -1407,20 +1411,24 @@ class TestLoanVisibilityCli:
 
     def test_loan_list_system_wide(self, session):
         _, item, _, loan = self._seed_loan(session)
-        r = _invoke(session, ["loan", "list"], "compendium.cli.commands.loan")
+        # Table cells can be truncated to fit the (narrow, non-tty) console
+        # width, so verify exact values via --format json instead of scraping
+        # rendered table text.
+        r = _invoke(session, ["loan", "list", "--format", "json"], "compendium.cli.commands.loan")
         assert r.exit_code == 0, r.output
-        assert f"loan={loan.id}" in r.output
-        assert item.barcode in r.output
+        data = json.loads(r.stdout)
+        assert any(row["id"] == loan.id and row["item_barcode"] == item.barcode for row in data)
 
     def test_loan_history_for_patron(self, session):
         _, item, patron, _ = self._seed_loan(session)
         r = _invoke(
             session,
-            ["loan", "history", "--card", patron.library_card_number, "--status", "all"],
+            ["loan", "history", "--card", patron.library_card_number, "--status", "all", "--format", "json"],
             "compendium.cli.commands.loan",
         )
         assert r.exit_code == 0, r.output
-        assert item.barcode in r.output
+        data = json.loads(r.stdout)
+        assert any(row["item_barcode"] == item.barcode for row in data)
 
     def test_loan_item_history(self, session):
         _, item, patron, _ = self._seed_loan(session)
@@ -1476,8 +1484,11 @@ class TestHoldListVisibilityCli:
         _, hold = self._seed_work_waiting_hold(session)
         r = _invoke(session, ["hold", "list"], "compendium.cli.commands.hold")
         assert r.exit_code == 0, r.output
-        assert f"#{hold.id}" in r.output
-        assert "active hold" in r.output
+        # Patron card / status survive the console-width table truncation
+        # (the work title column does not) — assert on those instead of the
+        # dropped "active hold(s)" count header or a "#<id>" prefix.
+        assert "HVWAIT" in r.output
+        assert "waiting" in r.output
 
     def test_list_with_query_filter(self, session):
         self._seed_work_waiting_hold(session)
@@ -1497,7 +1508,7 @@ class TestHoldListVisibilityCli:
             "compendium.cli.commands.hold",
         )
         assert r.exit_code == 0, r.output
-        assert f"hold={hold.id}" in r.output
+        assert "HVWAIT" in r.output
 
     def test_queue_empty(self, session):
         work, _ = _seed_work(session)

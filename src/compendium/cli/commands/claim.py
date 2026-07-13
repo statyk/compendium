@@ -2,6 +2,7 @@ import getpass
 
 import typer
 
+from compendium.cli.output import Column, emit_list, format_option
 from compendium.db.engine import get_settings
 from compendium.db.session import session_scope
 from compendium.domain.errors import DomainError
@@ -106,6 +107,7 @@ def write_off(
 @app.command("list")
 def list_claims(
     limit: int = typer.Option(50, "--limit"),
+    format: str = format_option(),
 ) -> None:
     """List items currently in claims-returned status (outstanding investigations)."""
     from compendium.domain.enums import ItemStatus
@@ -119,16 +121,23 @@ def list_claims(
             .limit(limit)
             .all()
         )
-        if not items:
-            typer.echo("No active claims-returned items.")
-            return
+        rows = []
         for item in items:
             loan = SqlLoanRepository(session).get_active_for_item(item.id)
-            if loan is None:
-                typer.echo(f"  {item.barcode}  (no active loan — desync?)")
-                continue
-            card = loan.patron.library_card_number if loan.patron else "?"
-            title = item.work.title if item.work else "?"
-            typer.echo(
-                f"  {item.barcode}  loan={loan.id}  card={card}  title={title}"
-            )
+            rows.append({
+                "barcode": item.barcode,
+                "loan_id": loan.id if loan else None,
+                "patron_card": loan.patron.library_card_number
+                if loan and loan.patron else None,
+                "title": item.work.title if item.work else None,
+            })
+        emit_list(
+            rows,
+            [Column("barcode", "Barcode"),
+             Column("loan_id", "Loan", justify="right",
+                    formatter=lambda v: str(v) if v else "no active loan — desync?"),
+             Column("patron_card", "Card"),
+             Column("title", "Title")],
+            format,
+            empty="No active claims-returned items.",
+        )

@@ -2,6 +2,7 @@ import getpass
 
 import typer
 
+from compendium.cli.output import Column, emit_list, format_option
 from compendium.services.site_settings import get_site_setting
 from compendium.db.engine import get_settings
 from compendium.db.session import session_scope
@@ -22,6 +23,38 @@ from compendium.services.fines import FineService
 
 
 app = typer.Typer(help="Loan (checkout / checkin) commands.")
+
+
+def _loan_row(loan) -> dict:
+    from datetime import datetime, timezone
+
+    return {
+        "id": loan.id,
+        "patron_card": loan.patron.library_card_number,
+        "item_barcode": loan.item.barcode,
+        "title": loan.item.work.title,
+        "checked_out_at": loan.checked_out_at,
+        "due_at": loan.due_at,
+        "returned_at": loan.returned_at,
+        "renewal_count": loan.renewal_count,
+        "overdue": loan.returned_at is None
+        and loan.due_at < datetime.now(timezone.utc),
+    }
+
+
+_DATE = lambda v: v.strftime("%Y-%m-%d") if v else "—"  # noqa: E731
+
+_LOAN_COLUMNS = [
+    Column("id", "Loan", justify="right"),
+    Column("patron_card", "Card"),
+    Column("item_barcode", "Barcode"),
+    Column("title", "Title"),
+    Column("checked_out_at", "Out", formatter=_DATE),
+    Column("due_at", "Due", formatter=_DATE),
+    Column("returned_at", "Returned",
+           formatter=lambda v: v.strftime("%Y-%m-%d") if v else "open"),
+    Column("overdue", "Overdue", formatter=lambda v: "YES" if v else ""),
+]
 
 
 def _circulation(session) -> CirculationService:
@@ -135,24 +168,19 @@ def renew(
 @app.command("active")
 def active_loans(
     card: str = typer.Option(..., "--card", help="Patron library card number"),
+    format: str = format_option(),
 ) -> None:
     """List active loans for a patron."""
-    from datetime import datetime, timezone
-
     with session_scope() as session:
         patron = SqlPatronRepository(session).get_by_card_number(card)
         if patron is None:
             typer.echo(f"No patron with card '{card}'.", err=True)
             raise typer.Exit(1)
         loans = SqlLoanRepository(session).get_active_for_patron(patron.id)
-        if not loans:
-            typer.echo(f"{patron.full_name} has no active loans.")
-            return
-        typer.echo(f"\nActive loans for {patron.full_name}:")
-        for loan in loans:
-            overdue = "  *** OVERDUE ***" if loan.due_at < datetime.now(timezone.utc) else ""
-            due = loan.due_at.strftime("%Y-%m-%d")
-            typer.echo(f"  {loan.item.work.title}  |  due {due}{overdue}")
+        emit_list(
+            [_loan_row(loan) for loan in loans], _LOAN_COLUMNS, format,
+            empty=f"{patron.full_name} has no active loans.",
+        )
 
 
 @app.command("list")
@@ -161,6 +189,7 @@ def list_loans(
     branch: str | None = typer.Option(None, "--branch", help="Filter: branch code"),
     query: str | None = typer.Option(None, "--query", "-q", help="Search patron / barcode / title"),
     limit: int = typer.Option(100, "--limit"),
+    format: str = format_option(),
 ) -> None:
     """System-wide active loans (librarian view). For a single patron's loans use 'active --card X'."""
     with session_scope() as session:
@@ -174,16 +203,8 @@ def list_loans(
         loans = SqlLoanRepository(session).list_active(
             due=due, branch_id=branch_id, query=query, limit=limit
         )
-        if not loans:
-            typer.echo("No matching loans.")
-            return
-        typer.echo(f"\n{len(loans)} active loan(s):")
-        for loan in loans:
-            due_str = loan.due_at.strftime("%Y-%m-%d")
-            typer.echo(
-                f"  loan={loan.id}  patron={loan.patron.library_card_number}  "
-                f"barcode={loan.item.barcode}  title={loan.item.work.title!r}  due={due_str}"
-            )
+        emit_list([_loan_row(loan) for loan in loans], _LOAN_COLUMNS, format,
+                  empty="No matching loans.")
 
 
 @app.command("history")
@@ -191,6 +212,7 @@ def patron_history(
     card: str = typer.Option(..., "--card", help="Patron library card number"),
     status: str = typer.Option("all", "--status", help="active / returned / all"),
     limit: int = typer.Option(100, "--limit"),
+    format: str = format_option(),
 ) -> None:
     """Loan history for a patron (active, returned, or all)."""
     if status not in ("active", "returned", "all"):
@@ -204,23 +226,17 @@ def patron_history(
         loans = SqlLoanRepository(session).list_for_patron(
             patron.id, status=status, limit=limit
         )
-        if not loans:
-            typer.echo(f"{patron.full_name} has no {status} loans.")
-            return
-        typer.echo(f"\n{len(loans)} {status} loan(s) for {patron.full_name}:")
-        for loan in loans:
-            out = loan.checked_out_at.strftime("%Y-%m-%d") if loan.checked_out_at else "—"
-            ret = loan.returned_at.strftime("%Y-%m-%d") if loan.returned_at else "open"
-            typer.echo(
-                f"  loan={loan.id}  barcode={loan.item.barcode}  "
-                f"title={loan.item.work.title!r}  out={out}  returned={ret}"
-            )
+        emit_list(
+            [_loan_row(loan) for loan in loans], _LOAN_COLUMNS, format,
+            empty=f"{patron.full_name} has no {status} loans.",
+        )
 
 
 @app.command("item-history")
 def item_history(
     barcode: str = typer.Option(..., "--barcode", help="Item barcode"),
     limit: int = typer.Option(25, "--limit"),
+    format: str = format_option(),
 ) -> None:
     """Loan history for a specific copy."""
     with session_scope() as session:
@@ -229,14 +245,7 @@ def item_history(
             typer.echo(f"No item with barcode '{barcode}'.", err=True)
             raise typer.Exit(1)
         loans = SqlLoanRepository(session).list_for_item(item.id, limit=limit)
-        if not loans:
-            typer.echo(f"Item {barcode} has no loan history.")
-            return
-        typer.echo(f"\n{len(loans)} loan(s) for item {barcode}:")
-        for loan in loans:
-            out = loan.checked_out_at.strftime("%Y-%m-%d") if loan.checked_out_at else "—"
-            ret = loan.returned_at.strftime("%Y-%m-%d") if loan.returned_at else "open"
-            typer.echo(
-                f"  loan={loan.id}  patron={loan.patron.library_card_number}  "
-                f"out={out}  returned={ret}  renewals={loan.renewal_count}"
-            )
+        emit_list(
+            [_loan_row(loan) for loan in loans], _LOAN_COLUMNS, format,
+            empty=f"Item {barcode} has no loan history.",
+        )
