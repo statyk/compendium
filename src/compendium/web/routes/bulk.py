@@ -119,7 +119,7 @@ def _run_import_job(
     options: ImportOptions,
     replaced: int,
 ) -> None:
-    """payload is str for csv/librarything/goodreads, bytes for marc/marcxml."""
+    """payload is str for csv/librarything/goodreads/discogs, bytes for marc/marcxml."""
 
     def on_progress(report: ImportReport) -> None:
         with state.lock:
@@ -156,6 +156,13 @@ def _run_import_job(
                 )
             elif fmt == "goodreads":
                 report = importer.import_goodreads(
+                    io.StringIO(payload),  # type: ignore[arg-type]
+                    options,
+                    filename=state.filename,
+                    on_progress=on_progress,
+                )
+            elif fmt == "discogs":
+                report = importer.import_discogs(
                     io.StringIO(payload),  # type: ignore[arg-type]
                     options,
                     filename=state.filename,
@@ -335,7 +342,7 @@ async def import_submit(
 
     # Decode text formats synchronously so encoding errors surface immediately.
     replaced = 0
-    if fmt in ("csv", "librarything", "goodreads"):
+    if fmt in ("csv", "librarything", "goodreads", "discogs"):
         try:
             payload_str, replaced = decode_text_bytes(data, strict=strict_encoding_bool)
         except UnicodeDecodeError as exc:

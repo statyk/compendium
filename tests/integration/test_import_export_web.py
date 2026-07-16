@@ -149,6 +149,19 @@ def _marc_bytes(isbn="9780441013702"):
     return buf.getvalue()
 
 
+def _discogs_csv_bytes() -> bytes:
+    return (
+        "Catalog#,Artist,Title,Label,Format,Rating,Released,release_id,"
+        "CollectionFolder,Date Added,Collection Media Condition,"
+        "Collection Sleeve Condition,Collection Notes\n"
+        'CL 1355,Miles Davis,Kind of Blue,Columbia,"Vinyl, LP, Album, Reissue",'
+        "5,1959,12345,Jazz,2026-01-02 10:00:00,Near Mint (NM or M-),"
+        "Very Good Plus (VG+),first pressing\n"
+        'CK 64935,Miles Davis,Kind of Blue,Columbia,"CD, Album, Reissue",'
+        "4,1997,67890,Jazz,2026-01-03 11:00:00,,,\n"
+    ).encode("utf-8")
+
+
 def _wait_for_import(client, cookies, location, timeout=5.0):
     """Poll the job status endpoint until the import finishes (done or failed)."""
     deadline = time.monotonic() + timeout
@@ -224,6 +237,32 @@ def test_web_import_csv_applies(client, db_session):
     assert b"Import applied" in final.content
     db_session.expire_all()
     assert SqlWorkRepository(db_session).get_by_isbn("9780441013703") is not None
+
+
+def test_web_import_discogs_applies(client, db_session):
+    _make_user(db_session, "Librarian", "web_imp_discogs")
+    db_session.commit()
+    cookies = _login(client, "web_imp_discogs")
+    raw, signed = _make_csrf_pair()
+    resp = client.post(
+        "/ui/admin/import",
+        data={
+            "format": "discogs",
+            "mode": "append",
+            "default_media_type": "",
+            "default_branch": "",
+            "csrf_token": raw,
+        },
+        files={"file": ("discogs.csv", _discogs_csv_bytes(), "text/csv")},
+        cookies={**cookies, CSRF_COOKIE: signed},
+    )
+    assert resp.status_code == 303
+    location = resp.headers["location"]
+
+    final = _wait_for_import(client, cookies, location)
+    assert b"Import applied" in final.content
+    assert b"Works created</dt><dd>2" in final.content
+    db_session.expire_all()
 
 
 def test_web_import_forbidden_without_catalog_import(client, db_session):
