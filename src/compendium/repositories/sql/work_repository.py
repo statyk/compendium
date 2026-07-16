@@ -36,6 +36,14 @@ class SqlWorkRepository:
     def get_by_upc(self, upc: str) -> Work | None:
         return self._s.query(Work).filter_by(upc=upc).first()
 
+    def get_by_external_id(self, source: str, value: str) -> Work | None:
+        # Portable JSON-scalar lookup; verified on SQLite + Postgres.
+        return (
+            self._s.query(Work)
+            .filter(Work.external_ids[source].as_string() == value)
+            .first()
+        )
+
     def has_loanable_item(self, work_id: int) -> bool:
         # Whitelist statuses where the copy will realistically circulate again.
         # LOST / DAMAGED / WITHDRAWN copies shouldn't count, so a hold placed
