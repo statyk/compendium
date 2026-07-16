@@ -435,6 +435,105 @@ def import_goodreads_cmd(
         raise typer.Exit(1 if report.created_works + report.added_copies == 0 else 0)
 
 
+@import_app.command("discogs")
+def import_discogs_cmd(
+    file: str = typer.Argument(
+        ..., help="Discogs collection CSV to import. Use '-' for stdin."
+    ),
+    dry_run: bool = typer.Option(False, "--dry-run", help="Parse and validate without writing."),
+    mode: str = typer.Option(
+        "append",
+        "--mode",
+        help="Dedup behavior: append | skip-duplicates | error-on-conflict",
+    ),
+    default_branch: str | None = typer.Option(
+        None, "--default-branch", help="Branch code applied to rows without one."
+    ),
+    default_media_type: str | None = typer.Option(
+        None,
+        "--default-media-type",
+        help="Fallback media type; Discogs format detection normally covers vinyl/cd.",
+    ),
+    enrich: bool = typer.Option(
+        False,
+        "--enrich",
+        help=(
+            "When a row has an ISBN, fill missing fields from the relevant "
+            "external source (Google Books / Open Library for books, "
+            "MusicBrainz for music, TMDb for film). Default off."
+        ),
+    ),
+    preserve_barcodes: bool = typer.Option(
+        False,
+        "--preserve-barcodes",
+        help=(
+            "Preserve barcode values from the import rather than minting fresh "
+            "codes. Discogs exports do not include barcodes, so this has no "
+            "effect in practice."
+        ),
+    ),
+    strict_encoding: bool = typer.Option(
+        False,
+        "--strict-encoding",
+        help=(
+            "Reject the file on any non-UTF-8 byte. Default is lenient: "
+            "invalid bytes are replaced with U+FFFD and a warning is added "
+            "to the report."
+        ),
+    ),
+    quiet: bool = typer.Option(
+        False,
+        "--quiet",
+        help=(
+            "Suppress per-warning and per-error detail in the import report. "
+            "Summary block (counts, file, dry-run note) still prints."
+        ),
+    ),
+    fail_on_error: bool = typer.Option(
+        False,
+        "--fail-on-error",
+        help="Exit 1 if any row fails (default: exit 1 only when nothing was imported).",
+    ),
+) -> None:
+    """Import catalog rows from a Discogs collection CSV export."""
+    options = _common_import_options(
+        dry_run,
+        mode,
+        default_branch,
+        default_media_type,
+        enrich,
+        preserve_barcodes,
+        strict_encoding,
+    )
+    label = "stdin" if is_stdio(file) else Path(file).name
+    try:
+        with session_scope() as session:
+            importer = _make_importer(session)
+            try:
+                stream, replaced = _read_text_input(
+                    file, strict_encoding=strict_encoding
+                )
+            except UnicodeDecodeError as exc:
+                error(f"file is not valid UTF-8: {exc}")
+                raise typer.Exit(1) from exc
+            report = importer.import_discogs(stream, options, filename=label)
+            if replaced:
+                report.warnings.insert(
+                    0,
+                    f"Decoded with {replaced} byte replacement(s); "
+                    "file is not clean UTF-8.",
+                )
+            _print_report(report, quiet=quiet)
+        importer.flush_metadata_cache()
+    except DomainError as exc:
+        error(exc)
+        raise typer.Exit(1) from exc
+    if report.errors and not dry_run:
+        if fail_on_error:
+            raise typer.Exit(1)
+        raise typer.Exit(1 if report.created_works + report.added_copies == 0 else 0)
+
+
 @import_app.command("marc")
 def import_marc_cmd(
     file: str = typer.Argument(

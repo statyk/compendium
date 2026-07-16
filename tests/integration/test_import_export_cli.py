@@ -258,6 +258,35 @@ def test_cli_import_librarything_strict_encoding_rejects_stray_byte(session, tmp
     assert "not valid utf-8" in output.lower()
 
 
+_DISCOGS_CSV = (
+    "Catalog#,Artist,Title,Label,Format,Rating,Released,release_id,"
+    "CollectionFolder,Date Added,Collection Media Condition,"
+    "Collection Sleeve Condition,Collection Notes\n"
+    'CL 1355,Miles Davis,Kind of Blue,Columbia,"Vinyl, LP, Album, Reissue",5,'
+    "1959,12345,Jazz,2026-01-02 10:00:00,Near Mint (NM or M-),"
+    "Very Good Plus (VG+),first pressing\n"
+    'CK 64935,Miles Davis,Kind of Blue,Columbia,"CD, Album, Reissue",4,'
+    "1997,67890,Jazz,2026-01-03 11:00:00,,,\n"
+)
+
+
+def _discogs_csv(tmp_path, name="collection.csv", content=_DISCOGS_CSV):
+    p = tmp_path / name
+    p.write_text(content, encoding="utf-8")
+    return p
+
+
+def test_cli_import_discogs_default(session, tmp_path):
+    f = _discogs_csv(tmp_path)
+    result = _run(session, import_app, ["discogs", str(f)])
+    assert result.exit_code == 0, result.output
+    assert "created" in result.output.lower()
+    works = SqlWorkRepository(session).list()
+    assert len(works) == 2
+    assert {w.title for w in works} == {"Kind of Blue"}
+    assert {w.media_type.code for w in works} == {"vinyl", "cd"}
+
+
 def test_cli_import_csv_strict_encoding_rejects_stray_byte(session, tmp_path):
     raw = b"media_type,title,authors,isbn\nbook,D\xe8ne,Frank Herbert,9780441013593\n"
     f = tmp_path / "messy.csv"
