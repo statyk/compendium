@@ -1544,6 +1544,85 @@ def _discogs_media_type(fmt: str) -> str | None:
     return None
 
 
+_DISCOGS_DISAMBIG_RE = re.compile(r"\s+\(\d+\)$")
+
+
+def _discogs_to_compendium(row: dict) -> tuple[dict, int]:
+    """Translate one Discogs collection-CSV row into a Compendium CSV row.
+
+    Returns ``(row, 1)`` — Discogs exports are one owned copy per row. Uses the
+    same synthetic-key contract as the other importers (``_creators``,
+    ``_external_ids``, ``_extra_metadata``) plus ``_dedup_external_ids`` for
+    release_id-anchored dedup. Unmapped-but-useful columns (Date Added, Rating)
+    are stashed in ``extra_metadata["discogs"]`` so nothing is silently dropped.
+    """
+    title = normalize_title(_strip(row.get("Title")) or "")
+    if not title:
+        raise ValidationError("Row is missing required column 'Title'")
+
+    fmt = _strip(row.get("Format")) or ""
+    media_type = _discogs_media_type(fmt)
+    if media_type is None:
+        raise ValidationError(
+            f"Unsupported Discogs format '{fmt}' (no vinyl/cd descriptor)"
+        )
+
+    creators: list[tuple[str, str]] = []
+    artist = _strip(row.get("Artist"))
+    if artist:
+        creators.append((_DISCOGS_DISAMBIG_RE.sub("", artist), "artist"))
+
+    publisher = _strip(row.get("Label"))
+
+    year_raw = _strip(row.get("Released"))
+    publication_year = year_raw if (year_raw and year_raw != "0") else ""
+
+    media_cond = _discogs_grade(_strip(row.get("Collection Media Condition")))
+    sleeve_cond = _discogs_grade(_strip(row.get("Collection Sleeve Condition")))
+    if media_cond and sleeve_cond:
+        condition = f"{media_cond}/{sleeve_cond}"[:16]
+    else:
+        condition = (media_cond or sleeve_cond or "")[:16]
+
+    release_id = _strip(row.get("release_id"))
+    external_ids = {"discogs": release_id} if release_id else {}
+
+    discogs_extra: dict = {"format": fmt}
+    catalog_number = _strip(row.get("Catalog#"))
+    if catalog_number:
+        discogs_extra["catalog_number"] = catalog_number
+    date_added = _strip(row.get("Date Added"))
+    if date_added:
+        discogs_extra["date_added"] = date_added
+    rating = _strip(row.get("Rating"))
+    if rating:
+        discogs_extra["rating"] = rating
+
+    return (
+        {
+            "title": title,
+            "_creators": creators,
+            "authors": "",
+            "publisher": publisher or "",
+            "publication_year": publication_year,
+            "media_type": media_type,
+            "language": "",
+            "isbn": "",
+            "classification_scheme": "",
+            "classification_code": "",
+            "call_number": "",
+            "barcode": "",
+            "condition": condition,
+            "location": _strip(row.get("CollectionFolder")) or "",
+            "notes": _strip(row.get("Collection Notes")) or "",
+            "_external_ids": external_ids,
+            "_dedup_external_ids": external_ids or None,
+            "_extra_metadata": {"discogs": discogs_extra},
+        },
+        1,
+    )
+
+
 def _gr_unwrap_isbn(raw: str | None) -> str | None:
     """Strip GoodReads' Excel-style =\"...\" ISBN wrapper and return the value.
 
