@@ -1049,11 +1049,13 @@ class CatalogService:
         accession_number: str | None = None,
         call_number: str | None = None,
         condition: str | None = None,
+        notes: str | None = None,
         location: str | None = None,
         branch_code: str | None = None,
         is_loanable: bool = True,
         loan_restriction_reason: str | None = None,
         loan_restriction_note: str | None = None,
+        dedup_external_ids: dict[str, str] | None = None,
     ) -> tuple[Work | None, Item | None, str]:
         """Import-dedicated entry point. Dedups by ISBN/UPC, honours conflict_mode
         ('append' | 'skip-duplicates' | 'error-on-conflict'), and propagates
@@ -1077,12 +1079,18 @@ class CatalogService:
             existing = self._works.get_by_isbn(meta["isbn"])
         if existing is None and meta.get("upc"):
             existing = self._works.get_by_upc(meta["upc"])
+        if existing is None and dedup_external_ids:
+            for source, value in dedup_external_ids.items():
+                existing = self._works.get_by_external_id(source, str(value))
+                if existing is not None:
+                    break
 
         item_kwargs = {
             "barcode": barcode,
             "accession_number": accession_number,
             "call_number": call_number,
             "condition": condition,
+            "notes": notes,
             "location": location,
             "is_loanable": is_loanable,
             "loan_restriction_reason": loan_restriction_reason,
@@ -1196,6 +1204,7 @@ class CatalogService:
         accession_number: str | None = None,
         call_number: str | None = None,
         condition: str | None = None,
+        notes: str | None = None,
         is_loanable: bool = True,
         loan_restriction_reason: str | None = None,
         loan_restriction_note: str | None = None,
@@ -1215,6 +1224,7 @@ class CatalogService:
             location=location,
             call_number=call_number,
             condition=condition,
+            notes=notes,
             is_loanable=is_loanable,
             loan_restriction_reason=loan_restriction_reason,
             loan_restriction_note=loan_restriction_note,

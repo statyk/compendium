@@ -154,6 +154,26 @@ def test_add_from_lookup_raises_when_not_found(_, session):
         _service(session).add_from_lookup("vinyl", "upc", _UPC)
 
 
+def test_add_from_import_dedups_by_external_id(session):
+    catalog_service = _service(session)
+    meta = {"title": "Kind of Blue", "external_ids": {"discogs": "42"}}
+    w1, i1, o1 = catalog_service.add_from_import(
+        media_type_code="vinyl", meta=meta, conflict_mode="append",
+        dedup_external_ids={"discogs": "42"},
+    )
+    assert o1 == "created_work"
+    w2, i2, o2 = catalog_service.add_from_import(
+        media_type_code="vinyl", meta=meta, conflict_mode="skip-duplicates",
+        dedup_external_ids={"discogs": "42"},
+    )
+    assert o2 == "skipped_duplicate" and w2.id == w1.id
+    w3, i3, o3 = catalog_service.add_from_import(
+        media_type_code="vinyl", meta=meta, conflict_mode="append",
+        dedup_external_ids={"discogs": "42"},
+    )
+    assert o3 == "added_copy" and w3.id == w1.id
+
+
 # ── TMDb / DVD / Blu-ray / VHS ────────────────────────────────────────────────
 
 _TMDB_ID = "497"

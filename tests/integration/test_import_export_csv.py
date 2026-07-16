@@ -230,3 +230,32 @@ dvd,Blade Runner,The Final Cut,Ridley Scott:director,Warner Bros,2007,,012569810
     bld = next(r for r in rows if r["title"] == "Blade Runner")
     assert bld["upc"] == "012569810426"
     assert bld["authors"] == "Ridley Scott:director"
+
+
+def test_csv_notes_round_trips(session):
+    """Per-copy notes survive both export and reimport."""
+    importer, exporter, _ = _make_services(session)
+    csv_text = """media_type,title,authors,isbn,notes
+book,Dune,Frank Herbert,9780441013593,"shelf B, sleeve torn"
+"""
+    importer.import_csv(io.StringIO(csv_text), ImportOptions())
+
+    dune = SqlWorkRepository(session).get_by_isbn("9780441013593")
+    assert dune.items[0].notes == "shelf B, sleeve torn"
+
+    # Export emits the notes column with the value.
+    out = io.StringIO()
+    exporter.export_csv(out, ExportFilters())
+    out.seek(0)
+    rows = list(__import__("csv").DictReader(out))
+    exported = next(r for r in rows if r["title"] == "Dune")
+    assert exported["notes"] == "shelf B, sleeve torn"
+
+    # Reimport the exported CSV (append mode mints a fresh barcode) preserves notes.
+    out.seek(0)
+    report = importer.import_csv(out, ImportOptions())
+    assert report.added_copies == 1
+    session.expire_all()
+    dune = SqlWorkRepository(session).get_by_isbn("9780441013593")
+    assert len(dune.items) == 2
+    assert all(item.notes == "shelf B, sleeve torn" for item in dune.items)

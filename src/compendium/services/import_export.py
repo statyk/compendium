@@ -161,6 +161,7 @@ CSV_COLUMNS = [
     "call_number",
     "condition",
     "location",
+    "notes",
     "is_loanable",
     "loan_restriction_reason",
     "loan_restriction_note",
@@ -1066,11 +1067,13 @@ class ImportService:
             accession_number=accession,
             call_number=_strip(row.get("call_number")),
             condition=_strip(row.get("condition")),
+            notes=_strip(row.get("notes")),
             location=_strip(row.get("location")),
             branch_code=_strip(row.get("branch")) or options.default_branch_code,
             is_loanable=is_loanable,
             loan_restriction_reason=reason,
             loan_restriction_note=note,
+            dedup_external_ids=row.get("_dedup_external_ids") or None,
         )
         return work, item, outcome, enriched
 
@@ -1187,6 +1190,7 @@ class ExportService:
                     "call_number": item.call_number or "",
                     "condition": item.condition or "",
                     "location": item.location or "",
+                    "notes": item.notes or "",
                     "is_loanable": "yes" if item.is_loanable else "no",
                     "loan_restriction_reason": item.loan_restriction_reason or "",
                     "loan_restriction_note": item.loan_restriction_note or "",
