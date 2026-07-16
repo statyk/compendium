@@ -9,8 +9,10 @@ from compendium.services.metadata import (
     MusicBrainzAdapter,
     OpenLibraryAdapter,
     TMDbAdapter,
+    _mb_fetch_release,
     _parse_mb_release,
     _parse_tmdb_movie,
+    musicbrainz_search_title,
     normalize_isbn,
     normalize_upc,
 )
@@ -77,9 +79,15 @@ _MB_RESPONSE = {
     "id": "cb7b5c31-10ef-4b73-a42f-80d9af8b6aee",
     "title": "Kind of Blue",
     "date": "1959-08-17",
+    "country": "US",
     "artist-credit": [{"artist": {"name": "Miles Davis"}}],
-    "label-info": [{"label": {"name": "Columbia"}}],
+    "label-info": [{"label": {"name": "Columbia"}, "catalog-number": "CL 1355"}],
     "barcode": "724353063870",
+    "genres": [{"name": "Modal Jazz"}],
+    "release-group": {
+        "first-release-date": "1959-08-17",
+        "genres": [{"name": "Jazz"}],
+    },
     "media": [
         {
             "format": "Vinyl",
@@ -134,6 +142,106 @@ def test_parse_mb_release_missing_label_is_none():
     data = {**_MB_RESPONSE, "label-info": []}
     meta = _parse_mb_release(data, "")
     assert meta["publisher"] is None
+
+
+def test_parse_mb_release_extracts_catalog_number():
+    meta = _parse_mb_release(_MB_RESPONSE, "724353063870")
+    assert meta["extra_metadata"]["catalog_number"] == "CL 1355"
+
+
+def test_parse_mb_release_extracts_country():
+    meta = _parse_mb_release(_MB_RESPONSE, "724353063870")
+    assert meta["extra_metadata"]["country"] == "US"
+
+
+def test_parse_mb_release_extracts_original_year():
+    meta = _parse_mb_release(_MB_RESPONSE, "724353063870")
+    assert meta["extra_metadata"]["original_year"] == 1959
+
+
+def test_parse_mb_release_original_year_differs_from_pressing_year():
+    """A reissue's own date is the pressing; original_year comes from the group."""
+    data = {
+        **_MB_RESPONSE,
+        "date": "2015-06-01",
+        "release-group": {"first-release-date": "1959-08-17"},
+    }
+    meta = _parse_mb_release(data, "")
+    assert meta["publication_year"] == 2015
+    assert meta["extra_metadata"]["original_year"] == 1959
+
+
+def test_parse_mb_release_prefers_release_level_genres():
+    meta = _parse_mb_release(_MB_RESPONSE, "724353063870")
+    assert meta["extra_metadata"]["genres"] == ["Modal Jazz"]
+
+
+def test_parse_mb_release_falls_back_to_release_group_genres():
+    data = {**_MB_RESPONSE, "genres": []}
+    meta = _parse_mb_release(data, "")
+    assert meta["extra_metadata"]["genres"] == ["Jazz"]
+
+
+def test_parse_mb_release_caps_genres_at_five():
+    data = {
+        **_MB_RESPONSE,
+        "genres": [{"name": f"g{i}"} for i in range(8)],
+    }
+    meta = _parse_mb_release(data, "")
+    assert meta["extra_metadata"]["genres"] == ["g0", "g1", "g2", "g3", "g4"]
+
+
+def test_parse_mb_release_missing_new_fields_are_empty():
+    data = {
+        "id": "x",
+        "title": "Bare Release",
+        "media": [],
+        "artist-credit": [],
+        "label-info": [],
+    }
+    meta = _parse_mb_release(data, "")
+    extra = meta["extra_metadata"]
+    assert extra["catalog_number"] is None
+    assert extra["country"] is None
+    assert extra["original_year"] is None
+    assert extra["genres"] == []
+
+
+@patch("compendium.services.metadata._mb_get")
+def test_mb_fetch_release_requests_extended_inc(mock_get):
+    mock_get.return_value = _MB_RESPONSE
+    _mb_fetch_release("cb7b5c31-10ef-4b73-a42f-80d9af8b6aee", upc=None)
+    _path, params = mock_get.call_args[0]
+    assert "release-groups" in params["inc"]
+    assert "genres" in params["inc"]
+
+
+# ---------------------------------------------------------------------------
+# musicbrainz_search_title
+# ---------------------------------------------------------------------------
+
+_MB_SEARCH_RESPONSE = {
+    "releases": [
+        {
+            "id": "aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee",
+            "title": "Kind of Blue",
+            "date": "1959-08-17",
+            "country": "US",
+            "artist-credit": [{"artist": {"name": "Miles Davis"}}],
+            "media": [{"format": "Vinyl"}],
+        }
+    ]
+}
+
+
+@patch("compendium.services.metadata._mb_get")
+def test_musicbrainz_search_title_includes_cover_url(mock_get):
+    mock_get.return_value = _MB_SEARCH_RESPONSE
+    candidates = musicbrainz_search_title("kind of blue")
+    assert candidates[0]["image_url"] == (
+        "https://coverartarchive.org/release/"
+        "aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee/front-250"
+    )
 
 
 # ---------------------------------------------------------------------------

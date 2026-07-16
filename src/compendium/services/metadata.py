@@ -660,7 +660,7 @@ def _mb_lookup_by_mbid(mbid: str) -> dict | None:
 def _mb_fetch_release(mbid: str, upc: str | None) -> dict | None:
     data = _mb_get(
         f"release/{mbid}",
-        {"inc": "recordings artist-credits labels", "fmt": "json"},
+        {"inc": "recordings artist-credits labels release-groups genres", "fmt": "json"},
     )
     return _parse_mb_release(data, upc or data.get("barcode") or "")
 
@@ -678,12 +678,27 @@ def _parse_mb_release(data: dict, upc: str) -> dict:
         if label_info and isinstance(label_info[0].get("label"), dict)
         else None
     )
+    catalog_number = (label_info[0].get("catalog-number") if label_info else None) or None
+    country = data.get("country") or None
 
     date_str = data.get("date", "")
     year: int | None = None
     m = re.search(r"\d{4}", date_str)
     if m:
         year = int(m.group())
+
+    # A release's own date is the pressing date; the release group's
+    # first-release-date is when the album originally came out. Collectors want both.
+    release_group = data.get("release-group") or {}
+    first_date = release_group.get("first-release-date", "")
+    original_year: int | None = (
+        int(first_date[:4]) if len(first_date) >= 4 and first_date[:4].isdigit() else None
+    )
+
+    # Release-level genres are usually sparse; fall back to the release group.
+    genres = [g["name"] for g in (data.get("genres") or []) if g.get("name")]
+    if not genres:
+        genres = [g["name"] for g in (release_group.get("genres") or []) if g.get("name")]
 
     media_list = data.get("media", [])
     fmt = media_list[0].get("format", "") if media_list else ""
@@ -714,6 +729,10 @@ def _parse_mb_release(data: dict, upc: str) -> dict:
             "format": fmt,
             "tracks": tracks,
             "track_count": len(tracks),
+            "catalog_number": catalog_number,
+            "country": country,
+            "original_year": original_year,
+            "genres": genres[:5],
         },
     }
 
@@ -794,7 +813,9 @@ def musicbrainz_search_title(query: str, media_type: str | None = None) -> list[
             "year": year,
             "secondary": secondary,
             "tertiary": " · ".join(tertiary_parts),
-            "image_url": None,
+            # Cover Art Archive serves a deterministic per-release thumbnail with
+            # no extra API call; 404s harmlessly when a release has no art.
+            "image_url": f"https://coverartarchive.org/release/{mbid}/front-250",
         })
         if len(candidates) >= 10:
             break

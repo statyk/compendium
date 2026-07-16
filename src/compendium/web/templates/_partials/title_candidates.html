@@ -7,7 +7,7 @@
     <input type="hidden" name="identifier" value="{{ c.identifier_value }}">
     <button type="submit" class="outline secondary" style="text-align:left; width:100%; padding:0.5rem 0.75rem; display:flex; gap:0.75rem; align-items:flex-start">
       {% if c.image_url %}
-      <img src="{{ c.image_url }}" alt="" style="width:45px; flex-shrink:0; border-radius:2px">
+      <img src="{{ c.image_url }}" alt="" data-caa loading="lazy" style="width:45px; flex-shrink:0; border-radius:2px">
       {% else %}
       <div style="width:45px; flex-shrink:0; background:var(--pico-muted-border-color); border-radius:2px; aspect-ratio:2/3"></div>
       {% endif %}

@@ -404,6 +404,18 @@
       var t = e.detail.target;
       if (t) t.removeAttribute('aria-busy');
     });
+    // Cover Art Archive thumbnails 404 harmlessly when a release has no art;
+    // swap a failed one for the neutral placeholder. Capture phase — the img
+    // 'error' event does not bubble. Registered once; survives HTMX swaps.
+    document.addEventListener('error', function (e) {
+      var img = e.target;
+      if (!img || img.tagName !== 'IMG' || !img.hasAttribute('data-caa')) return;
+      var ph = document.createElement('div');
+      ph.style.cssText =
+        'width:45px; flex-shrink:0; background:var(--pico-muted-border-color);'
+        + ' border-radius:2px; aspect-ratio:2/3';
+      img.replaceWith(ph);
+    }, true);
   </script>
   {% block scripts %}{% endblock %}
 </body>

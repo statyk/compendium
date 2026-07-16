@@ -9,6 +9,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- Richer MusicBrainz release metadata: vinyl/CD lookups now capture the label
+  catalog number, pressing country, original album year (from the release
+  group, distinct from the pressing year), and up to five genres into
+  `Work.extra_metadata` — all in the existing single API call, no schema
+  change. Title-search candidates now carry a Cover Art Archive thumbnail URL,
+  so the web add-item picker shows cover art (missing art falls back to the
+  neutral placeholder).
 - Patron list search and pagination: the staff patron list gains a search box
   (name, card number, or email), an Active/Inactive/All status filter, and
   pages of 50 (the previous 500-row cap is gone). `compendium patron list`
