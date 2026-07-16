@@ -460,7 +460,8 @@ def import_discogs_cmd(
         help=(
             "When a row has an ISBN, fill missing fields from the relevant "
             "external source (Google Books / Open Library for books, "
-            "MusicBrainz for music, TMDb for film). Default off."
+            "MusicBrainz for music, TMDb for film). Default off. Discogs "
+            "exports carry no ISBN/UPC, so this has no effect in practice."
         ),
     ),
     preserve_barcodes: bool = typer.Option(

@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import csv
 import io
 
 import pytest
@@ -219,7 +220,7 @@ dvd,Blade Runner,The Final Cut,Ridley Scott:director,Warner Bros,2007,,012569810
     assert count == 2
 
     out.seek(0)
-    rows = list(__import__("csv").DictReader(out))
+    rows = list(csv.DictReader(out))
     dune = next(r for r in rows if r["title"] == "Dune")
     assert dune["isbn"] == "9780441013593"
     assert dune["classification_code"] == "PS3558.E63 D8"
@@ -247,7 +248,7 @@ book,Dune,Frank Herbert,9780441013593,"shelf B, sleeve torn"
     out = io.StringIO()
     exporter.export_csv(out, ExportFilters())
     out.seek(0)
-    rows = list(__import__("csv").DictReader(out))
+    rows = list(csv.DictReader(out))
     exported = next(r for r in rows if r["title"] == "Dune")
     assert exported["notes"] == "shelf B, sleeve torn"
 

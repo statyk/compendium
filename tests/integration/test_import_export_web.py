@@ -263,6 +263,7 @@ def test_web_import_discogs_applies(client, db_session):
     assert b"Import applied" in final.content
     assert b"Works created</dt><dd>2" in final.content
     db_session.expire_all()
+    assert SqlWorkRepository(db_session).get_by_external_id("discogs", "12345") is not None
 
 
 def test_web_import_forbidden_without_catalog_import(client, db_session):
