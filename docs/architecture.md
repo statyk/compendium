@@ -516,11 +516,11 @@ Rows that reference the deleted work's items/loans/holds but aren't part of the 
 
 ## Bulk import & export
 
-`services/import_export.py` provides bulk ingest and extract for CSV, MARC21 binary (`.mrc`), MARCXML, LibraryThing TSV, and GoodReads CSV exports. Surfaced on all three interfaces:
+`services/import_export.py` provides bulk ingest and extract for CSV, MARC21 binary (`.mrc`), MARCXML, LibraryThing TSV, GoodReads CSV, and Discogs collection-CSV exports. Surfaced on all three interfaces:
 
-- CLI: `compendium import {csv|goodreads|librarything|marc} <file>` and `compendium export {csv|marc} <out>` (with `--xml` for MARCXML on export).
-- API: `POST /import/{csv,goodreads,librarything,marc}` (multipart) and `GET /export/{csv,marc}?xml=…` (streaming). Import requires the `catalog.import` permission; export is gated on `item.view`.
-- Web: `/ui/admin/import` (upload with dry-run preview + apply; format dropdown selects CSV / GoodReads CSV / LibraryThing TSV / MARC21 / MARCXML) and `/ui/admin/export` (filter form → download).
+- CLI: `compendium import {csv|goodreads|librarything|discogs|marc} <file>` and `compendium export {csv|marc} <out>` (with `--xml` for MARCXML on export).
+- API: `POST /import/{csv,goodreads,librarything,discogs,marc}` (multipart) and `GET /export/{csv,marc}?xml=…` (streaming). Import requires the `catalog.import` permission; export is gated on `item.view`.
+- Web: `/ui/admin/import` (upload with dry-run preview + apply; format dropdown selects CSV / GoodReads CSV / LibraryThing TSV / Discogs CSV / MARC21 / MARCXML) and `/ui/admin/export` (filter form → download).
 
 **Semantics:**
 
@@ -537,11 +537,11 @@ One row per physical copy. Work metadata repeats across copies. Authors are `;`-
 ```
 media_type, title, subtitle, authors, publisher, publication_year,
 isbn, upc, classification_scheme, classification_code, description, language,
-barcode, accession_number, branch, call_number, condition, location,
+barcode, accession_number, branch, call_number, condition, location, notes,
 is_loanable, loan_restriction_reason, loan_restriction_note
 ```
 
-Only `title` is required on import. `media_type` is required unless `--default-media-type` is supplied. Unknown columns on import are ignored (so CSVs from other tools work); unknown-but-expected fields default to empty on export.
+Only `title` is required on import. `media_type` is required unless `--default-media-type` is supplied. Unknown columns on import are ignored (so CSVs from other tools work); unknown-but-expected fields default to empty on export. `notes` is a per-copy free-text field that now round-trips through native CSV export/import; previously it wasn't part of the column contract and was silently dropped.
 
 ### MARC mapping
 
@@ -589,6 +589,19 @@ GoodReads exports a 23-column CSV. The importer runs through the same `_process_
 - `My Rating`, `My Review`, `Spoiler`, `Private Notes`, `Read Count`, `Date Read`, `Date Added`, `Bookshelves`, `Exclusive Shelf`, `Original Publication Year`, `Number of Pages`, and the raw `Binding` value are preserved in `Work.extra_metadata["goodreads"]` for a future reading-history or tags slice.
 
 `Author l-f` (last-first format) and `Bookshelves with positions` (redundant with `Bookshelves`) are dropped.
+
+### Discogs collection-CSV mapping
+
+Discogs' "Export Collection" CSV requires the `Title` and `release_id` header columns; a header missing either is rejected before any rows are processed. Each row is one owned copy (Discogs has no quantity column) and runs through the same `_process_csv_row` pipeline as LibraryThing and GoodReads:
+
+- `Title` → `title` (via `normalize_title`). `Artist` → a single `artist`-role creator; Discogs' "(N)" disambiguation suffix (used to distinguish same-named artists, e.g. `"Boston (2)"`) is stripped, and a multi-artist credit is kept as one creator rather than split.
+- **Identity/dedup anchors on `release_id`**, not ISBN/UPC — Discogs rows carry neither. `release_id` is stored in `Work.external_ids["discogs"]` and looked up via the repository's `get_by_external_id(source, value)` (a portable `JSON` scalar-equality lookup verified on both SQLite and Postgres), so re-importing the same collection updates/dedups against existing rows instead of creating duplicates.
+- **Media type** is detected from the comma-joined `Format` column (`_discogs_media_type`): any token containing `vinyl`, or a bare `LP`/`7"`/`10"`/`12"` size token, maps to `vinyl`; a token equal to (or starting with) `cd` maps to `cd`. A leading `"N×"`/`"Nx"` quantity prefix (e.g. `2xVinyl`) is stripped first. Formats with no vinyl/cd descriptor (cassette, file, DVD, etc.) are rejected as a **per-row error** — the row is skipped and the rest of the import continues.
+- `Collection Media Condition` / `Collection Sleeve Condition` — Discogs' long-form Goldmine grade names (e.g. `"Very Good Plus (VG+)"`) are abbreviated to compact grades (`VG+`) via `_discogs_grade`; `"Not Graded"`/empty → no condition. When both media and sleeve grades are present they're combined as `"NM/VG+"`; an unrecognized grade name passes through verbatim. The combined string is capped at `Item.condition`'s 16-character limit.
+- `Label` → `publisher`. `Released` → `publication_year` (a literal `"0"` or empty value is dropped rather than stored as a bogus year).
+- `CollectionFolder` → item `location`. `Collection Notes` → item `notes` (see the CSV `notes` round-trip note above).
+- `Catalog#`, `Date Added`, and `Rating` have no first-class Compendium home and are preserved in `Work.extra_metadata["discogs"]` alongside the raw `Format` string, so nothing is silently dropped.
+- No enrichment pass: Discogs rows carry no ISBN/UPC, so `--enrich` has nothing to look up against Open Library/Google Books.
 
 ### Bulk metadata enrichment
 

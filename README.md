@@ -14,7 +14,7 @@ A library card catalog system for physical items — books, vinyl records, DVDs,
 - **Notifications** — outbox-pattern email delivery (hold-ready, due-soon, overdue) drained by a cron-invoked CLI; admin viewer + retry; per-patron opt-out; configurable retention
 - **Reports** — checkouts/month, popular works, dormant items (weeding list), current overdues; CSV export; Chart.js trendlines
 - **Patrons & cards** — patron categories (Adult/Child/Staff/Teacher seeded), card expiry with maintenance auto-deactivation, optional 1:1 patron↔user link for self-service
-- **Bulk import/export** — round-trippable CSV; MARC21 binary + MARCXML import/export; LibraryThing TSV import; GoodReads CSV import (all with lenient encoding for messy real-world exports)
+- **Bulk import/export** — round-trippable CSV; MARC21 binary + MARCXML import/export; LibraryThing TSV import; GoodReads CSV import; Discogs collection-CSV import (all with lenient encoding for messy real-world exports)
 - **Backup/restore** — portable JSONL tarballs; backend-agnostic (SQLite ↔ Postgres); doubles as a DB migration path
 - **Labels** — Avery-template item labels (spine / pocket) and patron cards (full / sticker) as PDFs. Spine templates: `avery-5167-spine` (½" narrow face), `avery-5160-spine` (1" medium face, rotated), `avery-5160` (flat wrap-around, centered text), `avery-22805`/`avery-22806` (square classification labels). Live in-page SVG preview updates as you change kind/template/fields — no PDF round-trip needed.
 - **Curated lists** — librarian-editable named collections of Works ("Staff picks", "Summer reads") with slugs, per-work annotations, public/private and featured toggles; featured lists appear as a shelf on the OPAC landing page; public browse at `/ui/lists`
@@ -196,7 +196,7 @@ Start the server with `compendium serve` and open your browser to `http://localh
 | `/ui/admin/holds` | Librarian | All active holds with status/branch/work filters |
 | `/ui/admin/claims` | Librarian | Outstanding claims-returned investigations |
 | `/ui/admin/notifications` | Librarian | Notification log + manual retry |
-| `/ui/admin/import` | Librarian | Bulk CSV / GoodReads CSV / LibraryThing TSV / MARC import |
+| `/ui/admin/import` | Librarian | Bulk CSV / GoodReads CSV / LibraryThing TSV / Discogs CSV / MARC import |
 | `/ui/admin/export` | Librarian | Bulk CSV/MARC export |
 | `/ui/admin/patron-categories` | Librarian | Manage patron categories |
 | `/ui/curated-lists` | Librarian | Curated list admin CRUD (`curatedlist.manage`) |

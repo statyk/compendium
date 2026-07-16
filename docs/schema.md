@@ -88,7 +88,7 @@ Abstract title — one row per ISBN or UPC. Collapses FRBR Work/Expression/Manif
 - Postgres: `ix_work_search_gin` GIN index on `to_tsvector('english', search_text)`
 
 **extra_metadata shape by media type:**
-- *vinyl/cd:* `{format, tracks: [{position, title, length_ms}], track_count, catalog_number, country, original_year, genres}` (the last four come from MusicBrainz; `original_year` is the release group's first-release-date — the original album year, distinct from `publication_year`, which is the pressing year)
+- *vinyl/cd:* `{format, tracks: [{position, title, length_ms}], track_count, catalog_number, country, original_year, genres}` (the last four come from MusicBrainz; `original_year` is the release group's first-release-date — the original album year, distinct from `publication_year`, which is the pressing year). A work imported from a Discogs collection-CSV export additionally carries a `discogs` sub-object: `{format, catalog_number, date_added, rating}` (the raw Discogs `Format` string, Catalog#, Date Added, and Rating — fields with no first-class Compendium column).
 - *dvd/bluray/vhs:* `{runtime_minutes, genres, original_language, tagline, release_date, cast}`
 
 ---

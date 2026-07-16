@@ -9,6 +9,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- Discogs collection-CSV importer: migrate a vinyl/CD collection exported from
+  Discogs via `compendium import discogs`, `POST /import/discogs`, or the admin
+  Import page. One row per owned copy; identity/dedup anchors on the Discogs
+  `release_id`; Goldmine condition grades are abbreviated (e.g. `NM/VG+`);
+  cassette/file/DVD rows are reported as per-row errors. Per-copy notes now
+  round-trip through native CSV export/import (previously dropped).
 - Richer MusicBrainz release metadata: vinyl/CD lookups now capture the label
   catalog number, pressing country, original album year (from the release
   group, distinct from the pressing year), and up to five genres into
