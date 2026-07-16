@@ -745,6 +745,91 @@ class ImportService:
 
         return self._finalize(report, options)
 
+    def import_discogs(
+        self,
+        stream: IO[str],
+        options: ImportOptions,
+        filename: str | None = None,
+        on_progress: Callable[[ImportReport], None] | None = None,
+    ) -> ImportReport:
+        """Import a Discogs collection CSV export.
+
+        Translates Discogs' collection schema into the Compendium CSV row
+        contract and delegates per row to ``_process_csv_row``. One row = one
+        owned copy of one pressing (no quantity column). Identity/dedup anchors
+        on ``external_ids["discogs"] == release_id`` since Discogs rows carry no
+        ISBN/UPC. Rows whose Format is neither vinyl nor CD (cassette, files,
+        DVD) are recorded as per-row errors and skipped.
+        """
+        reader = csv.DictReader(stream)
+        if not reader.fieldnames:
+            raise ValidationError("Discogs CSV is empty or missing header row.")
+        header = {h.strip() for h in reader.fieldnames if h}
+        missing = {"Title", "release_id"} - header
+        if missing:
+            raise ValidationError(
+                "Discogs CSV header is missing required column(s): "
+                + ", ".join(sorted(missing))
+                + ". Got columns: "
+                + ", ".join(sorted(header))
+            )
+
+        report = ImportReport(
+            source="discogs", filename=filename, dry_run=options.dry_run
+        )
+        seen_barcodes: set[str] = set()
+        seen_accessions: set[str] = set()
+
+        for row_num, raw in enumerate(reader, start=2):
+            report.total_rows += 1
+            try:
+                compendium_row, _copies = _discogs_to_compendium(raw)
+            except (ValidationError, BusinessRuleError) as exc:
+                report.errors.append(
+                    ImportRowError(
+                        row_number=row_num,
+                        identifier=_strip(raw.get("Title")) or "(row)",
+                        message=str(exc),
+                    )
+                )
+                continue
+
+            try:
+                _, _, outcome, enriched = self._process_csv_row(
+                    compendium_row, options, seen_barcodes, seen_accessions
+                )
+                if enriched:
+                    report.enriched_rows += 1
+                if outcome == "created_work":
+                    report.created_works += 1
+                elif outcome == "added_copy":
+                    report.added_copies += 1
+                elif outcome == "skipped_duplicate":
+                    report.skipped_duplicates += 1
+                elif outcome == "errored_on_conflict":
+                    report.errors.append(
+                        ImportRowError(
+                            row_number=row_num,
+                            identifier=compendium_row.get("title") or "(row)",
+                            message=(
+                                "Duplicate Discogs release_id rejected "
+                                "(mode=error-on-conflict)"
+                            ),
+                        )
+                    )
+            except (ValidationError, BusinessRuleError) as exc:
+                report.errors.append(
+                    ImportRowError(
+                        row_number=row_num,
+                        identifier=compendium_row.get("title") or "(row)",
+                        message=str(exc),
+                    )
+                )
+            if on_progress and report.total_rows % 5 == 0:
+                on_progress(report)
+
+        return self._finalize(report, options)
+
     def import_marc(
         self,
         stream: IO[bytes],
