@@ -1501,6 +1501,49 @@ def _lt_to_compendium(row: dict) -> tuple[dict, int]:
     )
 
 
+_DISCOGS_GRADES: dict[str, str] = {
+    "Mint (M)": "M",
+    "Near Mint (NM or M-)": "NM",
+    "Very Good Plus (VG+)": "VG+",
+    "Very Good (VG)": "VG",
+    "Good Plus (G+)": "G+",
+    "Good (G)": "G",
+    "Fair (F)": "F",
+    "Poor (P)": "P",
+    # sleeve-only vocabulary
+    "Generic": "Gen",
+    "No Cover": "NoCvr",
+}
+
+
+def _discogs_grade(value: str | None) -> str | None:
+    """Map a Goldmine long-name condition to a compact grade.
+
+    Known names collapse to their abbreviation; ``Not Graded``/empty → None;
+    anything unrecognised passes through truncated to Item.condition's 16 chars.
+    """
+    v = (value or "").strip()
+    if not v or v == "Not Graded":
+        return None
+    return _DISCOGS_GRADES.get(v, v[:16])
+
+
+def _discogs_media_type(fmt: str) -> str | None:
+    """Detect vinyl/cd from a Discogs comma-joined Format descriptor list."""
+    # Strip a leading "N×"/"Nx" quantity prefix (e.g. "2xVinyl" -> "Vinyl") without
+    # touching bare leading digits in size tokens like `12"`/`10"`/`7"`.
+    tokens = [
+        re.sub(r"^\d+[x×]", "", t.strip(), flags=re.IGNORECASE).strip()
+        for t in fmt.split(",")
+    ]
+    lowered = [t.lower() for t in tokens]
+    if any("vinyl" in t or t in {"lp", '7"', '10"', '12"'} for t in lowered):
+        return "vinyl"
+    if any(t == "cd" or t.startswith("cd") for t in lowered):
+        return "cd"
+    return None
+
+
 def _gr_unwrap_isbn(raw: str | None) -> str | None:
     """Strip GoodReads' Excel-style =\"...\" ISBN wrapper and return the value.
 
