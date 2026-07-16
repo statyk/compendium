@@ -323,6 +323,40 @@ def test_api_import_goodreads_lenient_imports_with_warning(client, db_session):
     assert any("byte replacement" in w.lower() for w in body["warnings"])
 
 
+def _discogs_csv_bytes() -> bytes:
+    return (
+        "Catalog#,Artist,Title,Label,Format,Rating,Released,release_id,"
+        "CollectionFolder,Date Added,Collection Media Condition,"
+        "Collection Sleeve Condition,Collection Notes\n"
+        'CL 1355,Miles Davis,Kind of Blue,Columbia,"Vinyl, LP, Album, Reissue",'
+        "5,1959,12345,Jazz,2026-01-02 10:00:00,Near Mint (NM or M-),"
+        "Very Good Plus (VG+),first pressing\n"
+        'CK 64935,Miles Davis,Kind of Blue,Columbia,"CD, Album, Reissue",'
+        "4,1997,67890,Jazz,2026-01-03 11:00:00,,,\n"
+    ).encode("utf-8")
+
+
+def test_api_import_discogs_happy_path(client, db_session):
+    _, token = _make_user(db_session, "Librarian", "api_imp_discogs")
+    db_session.commit()
+
+    resp = client.post(
+        "/import/discogs",
+        files={
+            "file": (
+                "discogs.csv",
+                _discogs_csv_bytes(),
+                "text/csv",
+            )
+        },
+        headers=_bearer(token),
+    )
+    assert resp.status_code == 200, resp.text
+    body = resp.json()
+    assert body["source"] == "discogs"
+    assert body["created_works"] == 2
+
+
 def test_api_import_marc_happy_path(client, db_session):
     _, token = _make_user(db_session, "Librarian", "api_imp_marc")
     db_session.commit()
