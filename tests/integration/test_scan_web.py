@@ -458,6 +458,26 @@ def test_phone_page_renders_video_and_mode_buttons(scan_client, scan_session):
     assert "data-csrf-token=" in body
 
 
+def test_phone_mode_buttons_human_labels(scan_client, scan_session):
+    """Mode buttons show human-readable labels, not raw mode tokens."""
+    user = _staff_user(scan_session)
+    claim = f"CLAIM_LABELS_{_next()}"
+    _make_pairing(
+        scan_session,
+        user,
+        claim=claim,
+        allowed_modes=["checkout", "checkin", "catalog"],
+        mode="checkout",
+    )
+    resp = scan_client.get(f"/ui/scan/pair?c={claim}")
+    assert resp.status_code == 200
+    body = resp.text
+    assert ">Add item<" in body
+    assert ">Check out<" in body
+    assert ">Check in<" in body
+    assert ">catalog<" not in body
+
+
 # ── heartbeat ─────────────────────────────────────────────────────────────────
 
 

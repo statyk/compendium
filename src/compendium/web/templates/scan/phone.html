@@ -35,13 +35,12 @@
       </div>
 
       <div class="scan-phone-bottom" id="scan-mode-btns" role="group" aria-label="Scan mode">
+        {% set mode_labels = {"checkout": "Check out", "checkin": "Check in", "catalog": "Add item"} %}
         {% for m in allowed_modes %}
         <button type="button"
                 class="scan-phone-mode-btn{% if m == mode %} active{% endif %}"
                 data-mode="{{ m }}"
-                aria-pressed="{{ 'true' if m == mode else 'false' }}">
-          {{ m }}
-        </button>
+                aria-pressed="{{ 'true' if m == mode else 'false' }}">{{ mode_labels.get(m, m) }}</button>
         {% endfor %}
         <label class="scan-phone-review" id="scan-review-wrap" hidden>
           <input type="checkbox" id="scan-review-cb"{% if catalog_review %} checked{% endif %}> Review first
