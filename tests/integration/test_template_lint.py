@@ -55,7 +55,15 @@ def test_required_markers_canonical():
 def test_me_pages_rehome_focus_after_swap():
     """After a self-service loan/hold row swaps via HTMX, keyboard focus is
     lost to <body>. The enclosing row container re-homes focus to the
-    swapped row's first interactive element via hx-on::after-swap."""
+    swapped row's first interactive element via hx-on::after-swap.
+
+    Rows swap with hx-swap="outerHTML", so htmx:afterSwap's
+    event.detail.target still points at the detached pre-swap <tr> —
+    event.detail.elt (the new element the event is dispatched on) is the
+    only property that actually works here. Pin the working form so a
+    regression back to .target fails this test rather than being a silent
+    no-op discovered only in a browser."""
     for name in ("me/loans.html", "me/holds.html"):
         src = (_TEMPLATES_DIR / name).read_text()
         assert "hx-on::after-swap" in src, name
+        assert "event.detail.elt" in src, name
