@@ -82,12 +82,12 @@ Every list/show command accepts `--format table|json` (the `reports` group addit
 - `emit_list()` / `emit_detail()` — render a list of rows or a single record, dispatching on the validated `--format` value.
 - Tables render via `rich`, using one consistent style across every command: `box.SIMPLE` with a bold header row.
 - `format_option()` — the shared Typer option definition/validator for `--format`, so every command gets identical help text and rejects invalid values the same way.
-- `notice()` — writes operator-facing notices/warnings to stderr, never stdout.
+- `truncation_notice()` (in `cli/io.py`) — writes an operator-facing "showing first N" hint to stderr when a `--limit` list result was truncated, never stdout.
 
 JSON contract (applies to every command's `--format json` output):
 - Written to stdout only; notices, warnings, and errors go to stderr, so `--format json` output is always safe to pipe (e.g. into `jq`) without interleaved text.
 - Keys are snake_case, matching the names in `api/schemas.py` where the same data is exposed over the API.
-- Datetimes are ISO-8601, normalized to UTC.
+- Datetimes are ISO-8601, normalized to UTC. **Exception:** the `reports` command group emits date-only strings (`YYYY-MM-DD`, no time component) in its `--format json` output — a holdover from its CSV-first design, shared by both formats for byte-identical date fields. All other commands' JSON follows the full ISO-8601 UTC datetime rule above.
 - Monetary values are integer cents (matching the domain/DB representation), not floats.
 - Enum values are emitted as their plain string value.
 - No truncation — JSON output always contains full field values (e.g. note text, permission lists, audit details), even where the table view abbreviates for readability.
