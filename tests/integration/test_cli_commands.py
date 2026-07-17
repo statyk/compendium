@@ -860,6 +860,64 @@ class TestItemCli:
         assert "Two-Copy Title" in r2.output
         assert "Some Author" in r2.output
 
+    def test_add_existing_isbn_second_copy_survives_echo(self):
+        """`item add` for an ISBN whose Work already exists must not crash.
+
+        Same root cause as the add-manual regression above, in the sibling
+        command: ``add_from_lookup`` short-circuits via ``_find_existing_work``
+        (no network lookup) and returns the pre-existing Work with an unloaded
+        ``creators`` relationship; echoing it after ``session_scope`` closed
+        raised DetachedInstanceError. Seeding the Work via a first ``add-manual``
+        means no metadata adapter is ever touched, so this is a true RED.
+        """
+        from contextlib import contextmanager as _cm
+
+        from sqlalchemy import create_engine
+        from sqlalchemy.orm import sessionmaker
+
+        from compendium.config.seed import seed_defaults
+        from compendium.domain.models import Base
+        from tests.helpers import setup_sqlite_fts
+
+        eng = create_engine(
+            "sqlite:///:memory:", connect_args={"check_same_thread": False}
+        )
+        Base.metadata.create_all(eng)
+        setup_sqlite_fts(eng)
+        factory = sessionmaker(bind=eng, autoflush=False, expire_on_commit=False)
+        seed = factory()
+        seed_defaults(seed)
+        seed.commit()
+        seed.close()
+
+        @_cm
+        def _closing_scope():
+            s = factory()
+            try:
+                yield s
+                s.commit()
+            finally:
+                s.close()
+
+        runner = CliRunner()
+        with patch("compendium.cli.commands.item.session_scope", _closing_scope):
+            r1 = runner.invoke(
+                app,
+                [
+                    "item", "add-manual",
+                    "--title", "Existing Work",
+                    "--author", "Known Author",
+                    "--media-type", "book",
+                    "--isbn", "0000000000001",
+                ],
+            )
+            assert r1.exit_code == 0, r1.output
+            # Second copy via `item add` — existing-Work path, no network lookup.
+            r2 = runner.invoke(app, ["item", "add", "--isbn", "0000000000001"])
+        assert r2.exit_code == 0, (r2.output, repr(r2.exception))
+        assert "Existing Work" in r2.output
+        assert "Known Author" in r2.output
+
     def test_add_requires_identifier(self, session):
         r = _invoke(
             session,

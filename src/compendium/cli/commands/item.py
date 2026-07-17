@@ -212,37 +212,42 @@ def add_item(
         error("provide --isbn, --upc, --mbid, --tmdb-id, or --title.")
         raise typer.Exit(1)
 
+    # NOTE: the success echo lives *inside* the session scope (matching
+    # add-manual / edit / withdraw / set-loanable). When a second copy is added
+    # for an existing identifier, add_from_lookup returns the pre-existing Work
+    # whose ``creators`` relationship was never loaded in-session; echoing it
+    # after the scope closed detached the instance → DetachedInstanceError.
     try:
         with session_scope() as session:
             work, item = _catalog(session).add_from_lookup(
                 mt_code, kind, value, location=location
             )
+
+            creators = ", ".join(
+                f"{wc.creator.display_name} ({wc.role})" if wc.role != "author" else wc.creator.display_name
+                for wc in work.creators
+            )
+            typer.echo(f"\nAdded: {work.title}" + (f" — {creators}" if creators else ""))
+            if work.publication_year:
+                typer.echo(f"  Year      : {work.publication_year}")
+            if work.publisher:
+                typer.echo(f"  Publisher : {work.publisher}")
+            if work.upc:
+                typer.echo(f"  UPC       : {work.upc}")
+            if work.extra_metadata.get("runtime_minutes"):
+                typer.echo(f"  Runtime   : {work.extra_metadata['runtime_minutes']} min")
+            if work.extra_metadata.get("genres"):
+                typer.echo(f"  Genres    : {', '.join(work.extra_metadata['genres'])}")
+            typer.echo(f"  Barcode   : {item.barcode}")
+            typer.echo(f"  Accession : {item.accession_number}")
+            if item.location:
+                typer.echo(f"  Location  : {item.location}")
     except ExternalLookupError as exc:
         error(f"Lookup failed: {exc}")
         raise typer.Exit(1) from exc
     except DomainError as exc:
         error(exc)
         raise typer.Exit(1) from exc
-
-    creators = ", ".join(
-        f"{wc.creator.display_name} ({wc.role})" if wc.role != "author" else wc.creator.display_name
-        for wc in work.creators
-    )
-    typer.echo(f"\nAdded: {work.title}" + (f" — {creators}" if creators else ""))
-    if work.publication_year:
-        typer.echo(f"  Year      : {work.publication_year}")
-    if work.publisher:
-        typer.echo(f"  Publisher : {work.publisher}")
-    if work.upc:
-        typer.echo(f"  UPC       : {work.upc}")
-    if work.extra_metadata.get("runtime_minutes"):
-        typer.echo(f"  Runtime   : {work.extra_metadata['runtime_minutes']} min")
-    if work.extra_metadata.get("genres"):
-        typer.echo(f"  Genres    : {', '.join(work.extra_metadata['genres'])}")
-    typer.echo(f"  Barcode   : {item.barcode}")
-    typer.echo(f"  Accession : {item.accession_number}")
-    if item.location:
-        typer.echo(f"  Location  : {item.location}")
 
 
 @app.command("add-manual")
