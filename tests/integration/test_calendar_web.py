@@ -124,6 +124,11 @@ class TestLibraryHoursWeb:
         )
         assert resp.status_code == 303
 
+        # The POST handler writes through a separate request-scoped session;
+        # expire the test session's identity map so the re-read below can't
+        # be satisfied by a stale cached row (false positive).
+        calw_session.expire_all()
+
         row0 = SqlLibraryHoursRepository(calw_session).get(0)
         assert row0.is_open is True
         assert row0.open_time == time(9, 0)
