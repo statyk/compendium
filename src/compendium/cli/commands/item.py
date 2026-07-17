@@ -263,6 +263,11 @@ def add_manual_item(
     call_number: str | None = typer.Option(None, "--call-number", help="Call number on the spine label"),
 ) -> None:
     """Add an item by manually entering its metadata (skips external lookup)."""
+    # NOTE: the success echo lives *inside* the session scope (matching edit /
+    # withdraw / set-loanable). When a second copy is added for an existing
+    # ISBN, add_manual returns the pre-existing Work whose ``creators``
+    # relationship was never loaded in-session; echoing it after the scope
+    # closed detached the instance and raised DetachedInstanceError.
     try:
         with session_scope() as session:
             work, item = _catalog(session).add_manual(
@@ -278,26 +283,26 @@ def add_manual_item(
             )
             if call_number and call_number.strip():
                 item.call_number = call_number.strip()
+
+            creators = ", ".join(wc.creator.display_name for wc in work.creators)
+            typer.echo(f"\nAdded: {work.title}" + (f" — {creators}" if creators else ""))
+            if work.publication_year:
+                typer.echo(f"  Year      : {work.publication_year}")
+            if work.publisher:
+                typer.echo(f"  Publisher : {work.publisher}")
+            if work.isbn:
+                typer.echo(f"  ISBN      : {work.isbn}")
+            if work.upc:
+                typer.echo(f"  UPC       : {work.upc}")
+            typer.echo(f"  Barcode   : {item.barcode}")
+            typer.echo(f"  Accession : {item.accession_number}")
+            if item.call_number:
+                typer.echo(f"  Call #    : {item.call_number}")
+            if item.location:
+                typer.echo(f"  Location  : {item.location}")
     except DomainError as exc:
         error(exc)
         raise typer.Exit(1) from exc
-
-    creators = ", ".join(wc.creator.display_name for wc in work.creators)
-    typer.echo(f"\nAdded: {work.title}" + (f" — {creators}" if creators else ""))
-    if work.publication_year:
-        typer.echo(f"  Year      : {work.publication_year}")
-    if work.publisher:
-        typer.echo(f"  Publisher : {work.publisher}")
-    if work.isbn:
-        typer.echo(f"  ISBN      : {work.isbn}")
-    if work.upc:
-        typer.echo(f"  UPC       : {work.upc}")
-    typer.echo(f"  Barcode   : {item.barcode}")
-    typer.echo(f"  Accession : {item.accession_number}")
-    if item.call_number:
-        typer.echo(f"  Call #    : {item.call_number}")
-    if item.location:
-        typer.echo(f"  Location  : {item.location}")
 
 
 @app.command("edit")

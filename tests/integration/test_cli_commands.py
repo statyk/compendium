@@ -800,6 +800,66 @@ class TestItemCli:
         assert "Hand-Entered Book" in r.output
         assert "CAL.123" in r.output
 
+    def test_add_manual_second_copy_same_isbn_survives_echo(self):
+        """Adding a 2nd copy of an existing ISBN must not crash on the echo.
+
+        Regression (slice-7 review note, Task 17): ``CatalogService.add_manual``
+        returns the pre-existing Work (fetched via ``get_by_isbn``) whose
+        ``creators`` relationship is never loaded in-session. The command echoed
+        the result *after* ``session_scope`` closed, so ``for wc in
+        work.creators`` triggered a lazy-load on a detached instance →
+        ``DetachedInstanceError``. A brand-new work does not hit this because its
+        creators collection is built in-session.
+
+        The default ``_invoke`` yields one long-lived session that never closes,
+        which hides the bug; a faithful repro needs a real close-per-invocation
+        scope so the returned instances are genuinely detached before the echo.
+        """
+        from contextlib import contextmanager as _cm
+
+        from sqlalchemy import create_engine
+        from sqlalchemy.orm import sessionmaker
+
+        from compendium.config.seed import seed_defaults
+        from compendium.domain.models import Base
+        from tests.helpers import setup_sqlite_fts
+
+        eng = create_engine(
+            "sqlite:///:memory:", connect_args={"check_same_thread": False}
+        )
+        Base.metadata.create_all(eng)
+        setup_sqlite_fts(eng)
+        factory = sessionmaker(bind=eng, autoflush=False, expire_on_commit=False)
+        seed = factory()
+        seed_defaults(seed)
+        seed.commit()
+        seed.close()
+
+        @_cm
+        def _closing_scope():
+            s = factory()
+            try:
+                yield s
+                s.commit()
+            finally:
+                s.close()
+
+        args = [
+            "item", "add-manual",
+            "--title", "Two-Copy Title",
+            "--author", "Some Author",
+            "--media-type", "book",
+            "--isbn", "0000000000001",
+        ]
+        runner = CliRunner()
+        with patch("compendium.cli.commands.item.session_scope", _closing_scope):
+            r1 = runner.invoke(app, args)
+            assert r1.exit_code == 0, r1.output
+            r2 = runner.invoke(app, args)
+        assert r2.exit_code == 0, (r2.output, repr(r2.exception))
+        assert "Two-Copy Title" in r2.output
+        assert "Some Author" in r2.output
+
     def test_add_requires_identifier(self, session):
         r = _invoke(
             session,
