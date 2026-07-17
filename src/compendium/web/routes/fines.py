@@ -9,6 +9,7 @@ from fastapi import APIRouter, Depends, Form, Request
 from fastapi.responses import RedirectResponse
 from sqlalchemy.orm import Session
 
+from compendium.services.formatting import format_currency
 from compendium.services.site_settings import get_site_setting
 from compendium.db.engine import get_settings
 from compendium.db.session import get_session
@@ -232,7 +233,10 @@ def pay_fine(
         if fine.status == FineStatus.PAID.value:
             msg = f"Fine #{fine_id} paid in full."
         else:
-            msg = f"Fine #{fine_id}: recorded {amount.strip()} — {fine.balance_cents / 100:.2f} remaining."
+            msg = (
+                f"Fine #{fine_id}: recorded {amount.strip()} — "
+                f"{format_currency(fine.balance_cents)} remaining."
+            )
         return RedirectResponse(
             f"/ui/patrons/{patron_card}/fines?message={quote(msg)}",
             status_code=303,

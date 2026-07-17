@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from datetime import datetime, timedelta, timezone
 from unittest.mock import patch
+from urllib.parse import unquote
 from uuid import uuid4
 
 import pytest
@@ -368,6 +369,9 @@ def test_pay_partial_via_web(client, db_session, seeded_fine):
     assert resp.status_code == 303, resp.text
     db_session.refresh(fine)
     assert fine.paid_cents == 200
+    # "remaining" message routes through format_currency (not raw /100 division),
+    # so it carries the configured currency symbol like every other money string.
+    assert "$3.00 remaining" in unquote(resp.headers["location"])
     assert fine.status == FineStatus.OUTSTANDING.value
 
 

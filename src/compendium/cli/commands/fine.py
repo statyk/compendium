@@ -6,7 +6,7 @@ import getpass
 
 import typer
 
-from compendium.cli.io import error
+from compendium.cli.io import error, truncation_notice
 from compendium.cli.output import Column, emit_list, format_option
 from compendium.db.engine import get_settings
 from compendium.db.session import session_scope
@@ -79,6 +79,7 @@ def list_fines(
             format,
             empty="No fines matching filter.",
         )
+        truncation_notice(len(fines), limit)
 
 
 def _parse_amount_dollars(raw: str) -> int:
@@ -109,7 +110,7 @@ def pay_fine(
             else:
                 typer.echo(
                     f"Fine #{fine.id}: payment recorded, "
-                    f"{fine.balance_cents / 100:.2f} remaining."
+                    f"{format_currency(fine.balance_cents)} remaining."
                 )
     except DomainError as exc:
         error(exc)

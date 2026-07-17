@@ -162,6 +162,9 @@ def test_cli_fine_pay_partial(session):
     )
     assert r.exit_code == 0, r.output
     assert "remaining" in r.output.lower()
+    # "remaining" routes through format_currency (not raw /100 division), so it
+    # carries the configured currency symbol like every other money output.
+    assert "$3.00 remaining" in r.output
     session.refresh(fine)
     assert fine.status == FineStatus.OUTSTANDING.value
     assert fine.paid_cents == 200
