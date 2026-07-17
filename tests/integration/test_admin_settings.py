@@ -524,6 +524,35 @@ class TestSettingsWeb:
         assert get_site_setting("default_theme") == "dark"
         assert get_site_setting("guest_search_enabled") is True
 
+    def test_settings_save_redirect_has_anchor_and_reset_label(
+        self, client, s_session
+    ):
+        _make_user(s_session, role_name="Librarian", username="lib_anchor")
+        cookies = _login_cookies(client, "lib_anchor")
+        raw, signed = _make_csrf_pair()
+        resp = client.post(
+            "/ui/admin/settings/general",
+            data={
+                "csrf_token": raw,
+                "library_name": "Anchor Town",
+                "library_timezone": "America/Chicago",
+                "default_theme": "dark",
+                "guest_search_enabled": "true",
+                "trash_retention_days": "90",
+            },
+            cookies={**cookies, CSRF_COOKIE: signed},
+        )
+        assert resp.status_code == 303
+        location = resp.headers["location"]
+        assert location.endswith("#saved")
+        # The fragment isn't sent to the server on GET, but the query string
+        # (everything before it) is — following the redirect renders the
+        # success banner with the matching id.
+        page = client.get(location, cookies=cookies)
+        assert page.status_code == 200
+        assert 'id="saved"' in page.text
+        assert "Reset to default" in page.text
+
     def test_post_unchecked_bool_persists_false(self, client, s_session):
         _make_user(s_session, role_name="Librarian", username="lib_bool")
         cookies = _login_cookies(client, "lib_bool")

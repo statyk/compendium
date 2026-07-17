@@ -17,8 +17,8 @@
 <h2>{{ title }}</h2>
 <p>{{ intro | safe }}</p>
 
-{% if message %}<p class="success-banner">{{ message }}</p>{% endif %}
-{% if error %}<p class="error-banner">{{ error }}</p>{% endif %}
+{% if message %}<p class="success-banner" id="saved">{{ message }}</p>{% endif %}
+{% if error %}<p class="error-banner" id="saved">{{ error }}</p>{% endif %}
 {% if warning %}<p class="warning-banner">{{ warning }}</p>{% endif %}
 
 {% if has_secrets %}
@@ -45,7 +45,7 @@
       <tr>
         <th style="width:35%">Setting</th>
         <th>Value</th>
-        <th style="width:5em">Reset</th>
+        <th style="width:7em">Reset</th>
       </tr>
     </thead>
     <tbody>
@@ -264,7 +264,7 @@
           {% else %}
           <label>
             <input type="checkbox" name="reset" value="{{ row.key }}">
-            <span>reset</span>
+            <span>Reset to default</span>
           </label>
           {% endif %}
         </td>

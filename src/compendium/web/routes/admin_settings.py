@@ -453,6 +453,13 @@ def _post_handler(
     if failed:
         params.append(f"validation_failed={quote(','.join(failed))}")
     qs = "?" + "&".join(params) if params else ""
+    # #saved anchors the redirect at the outcome banner (message or error) so
+    # long settings pages don't strand the user at the top, away from the row
+    # they just edited. Only message/error render with id="saved" (see
+    # settings.html); the warning banner never carries the id, so appending
+    # the fragment whenever one of msg/err fired can't produce a duplicate id.
+    if msg or err:
+        qs += "#saved"
     return RedirectResponse(target + qs, status_code=303)
 
 
