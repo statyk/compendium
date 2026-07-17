@@ -119,6 +119,17 @@ def _jinja_csp_nonce(request) -> str:
     return getattr(request.state, "csp_nonce", "")
 
 
+def _jinja_humanize_enum(value: str | None) -> str:
+    """Render a snake_case enum token as a human-readable label.
+
+    `"claims_returned"` -> `"Claims returned"`. Falsy input (None or "")
+    renders as an em dash so templates don't need a separate `or "—"` guard.
+    """
+    if not value:
+        return "—"
+    return value.replace("_", " ").capitalize()
+
+
 templates.env.globals["has_permission"] = _jinja_has_permission
 templates.env.globals["default_theme"] = _jinja_default_theme
 templates.env.globals["today_iso"] = _jinja_today_iso
@@ -132,3 +143,4 @@ templates.env.globals["guest_search_enabled"] = _jinja_guest_search_enabled
 templates.env.globals["timezone_picker_data"] = _jinja_timezone_picker_data
 templates.env.globals["app_version"] = __version__
 templates.env.filters["currency"] = _format_currency
+templates.env.filters["humanize_enum"] = _jinja_humanize_enum

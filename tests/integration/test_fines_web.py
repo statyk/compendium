@@ -505,6 +505,37 @@ def test_web_me_fines_lists_own_fines(client, db_session):
     assert b"$2.50" in resp.content
 
 
+def test_me_fines_humanized_enums(client, db_session):
+    role = SqlRoleRepository(db_session).get_by_name("Patron")
+    u = AppUser(username="web_me_hu", password_hash=hash_password("password"), role_id=role.id)
+    SqlUserRepository(db_session).add(u)
+    db_session.flush()
+    u.role = role
+    p = _make_patron(db_session, "WEB_ME_HU1", user=u)
+
+    from compendium.services.audit import AuditService
+    from compendium.repositories.sql.audit_log_repository import SqlAuditLogRepository
+    from compendium.services.fines import FineService
+
+    FineService(
+        fine_repo=SqlFineRepository(db_session),
+        patron_repo=SqlPatronRepository(db_session),
+        loan_repo=SqlLoanRepository(db_session),
+        item_repo=SqlItemRepository(db_session),
+        policy_repo=SqlLoanPolicyRepository(db_session),
+        settings=Settings(database_url="sqlite:///:memory:"),
+        audit_svc=AuditService(SqlAuditLogRepository(db_session)),
+    ).assess_manual(p, kind=FineKind.OVERDUE.value, amount_cents=150, note="x")
+    db_session.commit()
+
+    cookies = _login(client, "web_me_hu")
+    resp = client.get("/ui/me/fines", cookies=cookies)
+    assert resp.status_code == 200
+    assert "Overdue" in resp.text
+    assert "Outstanding" in resp.text
+    assert "outstanding</td>" not in resp.text
+
+
 def test_web_me_holds_shows_pay_at_pickup_warning(client_with_block, db_session):
     role = SqlRoleRepository(db_session).get_by_name("Patron")
     u = AppUser(username="web_me_h", password_hash=hash_password("password"), role_id=role.id)
