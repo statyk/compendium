@@ -16,7 +16,12 @@
     {% for fine in fines %}
     <tr>
       <td data-label="Kind">{{ fine.kind | humanize_enum }}</td>
-      <td data-label="Amount">{{ fine.amount_cents | currency }}</td>
+      <td data-label="Amount">
+        {{ fine.amount_cents | currency }}
+        {% if fine.paid_cents and fine.status == "outstanding" %}
+        <br><small>{{ fine.paid_cents | currency }} paid &middot; {{ fine.balance_cents | currency }} remaining</small>
+        {% endif %}
+      </td>
       <td data-label="Status">{{ fine.status | humanize_enum }}</td>
       <td data-label="Assessed">{{ fine.assessed_at.strftime("%Y-%m-%d") }}</td>
       <td data-label="Note">{{ fine.note or "—" }}</td>

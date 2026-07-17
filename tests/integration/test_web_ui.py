@@ -1728,6 +1728,25 @@ def test_policy_delete_web_flow(web_client, librarian, web_session):
     assert "message=" in resp.headers["location"]
 
 
+def test_policy_list_hides_delete_link_for_default_policy(web_client, librarian, web_session):
+    from compendium.repositories.sql.loan_policy_repository import SqlLoanPolicyRepository
+    from compendium.domain.models import LoanPolicy
+
+    repo = SqlLoanPolicyRepository(web_session)
+    default_policy = repo.get_default()
+    assert default_policy is not None
+
+    non_default = LoanPolicy(name="NonDefault", loan_period_days=14, max_renewals=1, is_default=False)
+    repo.add(non_default)
+    web_session.flush()
+
+    cookies = _login(web_client, "lib01")
+    resp = web_client.get("/ui/policies", cookies=cookies)
+    assert resp.status_code == 200
+    assert f'/ui/policies/{default_policy.id}/delete-confirm' not in resp.text
+    assert f'/ui/policies/{non_default.id}/delete-confirm' in resp.text
+
+
 def test_policy_delete_default_shows_error(web_client, librarian, web_session):
     from compendium.repositories.sql.loan_policy_repository import SqlLoanPolicyRepository
     repo = SqlLoanPolicyRepository(web_session)
@@ -2451,7 +2470,27 @@ def test_catalog_results_show_copy_counts(web_client, web_session, work):
 
     assert resp.status_code == 200
     assert "1 of 2 copies available" in resp.text
-    assert "pill-checked_out" not in resp.text or "pill-checked-out" not in resp.text
+
+
+def test_catalog_results_show_checked_out_pill(web_client, web_session, work):
+    from compendium.domain.enums import ItemStatus
+
+    # A work whose only copy is checked out gets an aggregate 'checked_out'
+    # availability status (see SqlWorkRepository.availability_counts_for_works),
+    # which the pill macro renders as class="pill pill-checked_out". Assert the
+    # class positively (and the old broken "pill-checked-out" hyphen spelling
+    # absent) — a prior version of this coverage used an `or` that could never
+    # fail regardless of which spelling shipped.
+    w, item1 = work
+    item1.status = ItemStatus.CHECKED_OUT.value
+    SqlItemRepository(web_session).update(item1)
+    web_session.flush()
+
+    resp = web_client.get("/ui/catalog?q=Dune")
+
+    assert resp.status_code == 200
+    assert "pill-checked_out" in resp.text
+    assert "pill-checked-out" not in resp.text
 
 
 def test_work_detail_counts_and_shelf_location(web_client, web_session, work):
@@ -2587,6 +2626,9 @@ def test_footer_has_docs_link_and_version(web_client):
     from compendium import __version__
 
     assert f"v{__version__}" in resp.text
+    # Footer links are external — open in a new tab without granting the
+    # opened page access back to window.opener.
+    assert resp.text.count('target="_blank" rel="noopener"') == 2
 
 
 def test_branch_name_editable_code_locked(web_client, librarian, web_session):

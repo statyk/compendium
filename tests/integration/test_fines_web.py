@@ -540,6 +540,42 @@ def test_me_fines_humanized_enums(client, db_session):
     assert "outstanding</td>" not in resp.text
 
 
+def test_web_me_fines_shows_remaining_balance_for_partial_payment(client, db_session):
+    role = SqlRoleRepository(db_session).get_by_name("Patron")
+    u = AppUser(username="web_me_bal", password_hash=hash_password("password"), role_id=role.id)
+    SqlUserRepository(db_session).add(u)
+    db_session.flush()
+    u.role = role
+    p = _make_patron(db_session, "WEB_ME_BAL1", user=u)
+
+    from compendium.services.audit import AuditService
+    from compendium.repositories.sql.audit_log_repository import SqlAuditLogRepository
+    from compendium.services.fines import FineService
+
+    fs = FineService(
+        fine_repo=SqlFineRepository(db_session),
+        patron_repo=SqlPatronRepository(db_session),
+        loan_repo=SqlLoanRepository(db_session),
+        item_repo=SqlItemRepository(db_session),
+        policy_repo=SqlLoanPolicyRepository(db_session),
+        settings=Settings(database_url="sqlite:///:memory:"),
+        audit_svc=AuditService(SqlAuditLogRepository(db_session)),
+    )
+    fine = fs.assess_manual(p, kind=FineKind.OTHER.value, amount_cents=500, note="x")
+    fs.pay(fine.id, amount_cents=200)
+    db_session.commit()
+
+    cookies = _login(client, "web_me_bal")
+    resp = client.get("/ui/me/fines", cookies=cookies)
+    assert resp.status_code == 200
+    # The row still shows the original amount plus the balance breakdown
+    # (mirrors fines/patron.html's paid/remaining pattern) rather than
+    # silently swapping the original $5.00 for the $3.00 remaining balance.
+    assert "$5.00" in resp.text
+    assert "$2.00 paid" in resp.text
+    assert "$3.00 remaining" in resp.text
+
+
 def test_web_me_holds_shows_pay_at_pickup_warning(client_with_block, db_session):
     role = SqlRoleRepository(db_session).get_by_name("Patron")
     u = AppUser(username="web_me_h", password_hash=hash_password("password"), role_id=role.id)

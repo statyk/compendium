@@ -60,8 +60,6 @@ ADMIN_HUB_GROUPS: list[tuple[str, list[dict[str, Any]]]] = [
         "System",
         _settings_entries("system")
         + [
-            _entry("/ui/admin/system/secrets", "Secrets",
-                   "Encrypted API keys and SMTP password.", "system.manage"),
             _entry("/ui/users", "Users",
                    "Staff and patron login accounts.", "user.manage"),
             _entry("/ui/roles", "Roles",

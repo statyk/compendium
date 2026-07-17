@@ -136,6 +136,18 @@ def test_notification_log_links_to_smtp_settings(client, db_session):
     assert '/ui/admin/system/smtp">SMTP settings</a>' in resp.text
 
 
+def test_notification_log_hides_smtp_link_for_librarian(client, db_session):
+    # Librarian has notification.manage (can view the log) but not
+    # system.manage, so the SMTP cross-link — gated on system.manage — must
+    # not appear.
+    make_user(db_session, "web_n_lib_smtp", "Librarian")
+    db_session.commit()
+    cookies = _login(client, "web_n_lib_smtp")
+    resp = client.get("/ui/admin/notifications", cookies=cookies)
+    assert resp.status_code == 200, resp.text
+    assert "SMTP settings" not in resp.text
+
+
 def test_web_admin_notifications_forbidden_readonly(client, db_session):
     make_user(db_session, "web_n_ro", "ReadOnly")
     db_session.commit()

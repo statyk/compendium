@@ -9,7 +9,7 @@
 <nav aria-label="breadcrumb">
   <ul>
     <li><a href="/ui/catalog">Home</a></li>
-    <li><a href="/ui/admin/settings">Settings</a></li>
+    <li><a href="/ui/admin">Settings</a></li>
     <li>{{ title }}</li>
   </ul>
 </nav>
@@ -17,7 +17,7 @@
 <h2>{{ title }}</h2>
 <p>{{ intro | safe }}</p>
 
-{% if page_key == "smtp" %}
+{% if page_key == "smtp" and has_permission(user, 'notification.manage') %}
 <p><small>Delivery failures are recorded in the
   <a href="/ui/admin/notifications">notification log</a>.</small></p>
 {% endif %}

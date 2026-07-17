@@ -460,6 +460,17 @@ class TestSettingsWeb:
         assert b"overdue_tiers" in r.content
         assert b"circulation_scan_isbn_enabled" in r.content
 
+    def test_settings_page_breadcrumb_points_at_hub(self, client, s_session):
+        # /ui/admin/settings is a 301 to /ui/admin (see
+        # test_old_settings_hub_redirects_permanently); the breadcrumb must
+        # link the live canonical target, not the redirect.
+        _make_user(s_session, role_name="Librarian", username="lib_web_bc")
+        cookies = _login_cookies(client, "lib_web_bc")
+        r = client.get("/ui/admin/settings/general", cookies=cookies)
+        assert r.status_code == 200
+        assert '<a href="/ui/admin">Settings</a>' in r.text
+        assert '<a href="/ui/admin/settings">Settings</a>' not in r.text
+
     def test_kiosk_page_renders(self, client, s_session):
         _make_user(s_session, role_name="Librarian", username="lib_web_k")
         cookies = _login_cookies(client, "lib_web_k")
@@ -507,6 +518,16 @@ class TestSettingsWeb:
         # positive from the nav.
         assert "notification log" in r.text
         assert '/ui/admin/notifications">notification log</a>' in r.text
+
+    def test_smtp_page_hides_notification_log_link_for_systemadmin(self, client, s_session):
+        # SystemAdmin holds system.manage (sees the SMTP page) but NOT
+        # notification.manage, so the cross-link to the notification log
+        # would 403 if shown — the block must gate on notification.manage.
+        _make_user(s_session, role_name="SystemAdmin", username="sysadm_smtp_link")
+        cookies = _login_cookies(client, "sysadm_smtp_link")
+        r = client.get("/ui/admin/system/smtp", cookies=cookies)
+        assert r.status_code == 200
+        assert "notification log" not in r.text
 
     def test_retention_page_renders_for_admin(self, client, s_session):
         _make_user(s_session, role_name="Administrator", username="admin_ret")
@@ -865,16 +886,21 @@ class TestAdminHub:
             assert heading in r.text
         for link in ("/ui/policies", "/ui/admin/library-hours", "/ui/branches",
                      "/ui/trash", "/ui/admin/settings/general",
-                     "/ui/admin/system/secrets", "/ui/users", "/ui/roles",
+                     "/ui/admin/system/metadata", "/ui/users", "/ui/roles",
                      "/ui/audit", "/ui/reports", "/ui/admin/notifications"):
             assert f'href="{link}"' in r.text
+        # The "Secrets" card was a duplicate of "Metadata sources" (both
+        # landed on /ui/admin/system/metadata via a 301) — removed so every
+        # hub destination is reachable exactly once.
+        assert '/ui/admin/system/secrets' not in r.text
 
     def test_systemadmin_scoping(self, client, s_session):
         cookies = self._cookies_for_role(client, s_session, "hub_sys1", "SystemAdmin")
         r = client.get("/ui/admin", cookies=cookies)
         assert r.status_code == 200
         assert '/ui/users' in r.text and '/ui/roles' in r.text
-        assert '/ui/admin/system/secrets' in r.text
+        assert '/ui/admin/system/metadata' in r.text
+        assert '/ui/admin/system/secrets' not in r.text  # duplicate card removed
         assert '/ui/policies' not in r.text          # no policy.edit
         assert '/ui/admin/settings/general' not in r.text  # no patron.manage
 
