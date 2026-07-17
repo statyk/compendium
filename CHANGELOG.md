@@ -5,6 +5,66 @@ All notable changes to Compendium are documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [Unreleased]
+
+### Added
+
+- **Footer:** every page now shows the running app version and links to the
+  README and issue tracker (external links open in a new tab).
+- **SMTP settings:** cross-links to and from the notification delivery log,
+  so a delivery failure is one click from the settings that caused it
+  (gated on `notification.manage`).
+- **Branches:** name is now editable from the web branch-edit page, CLI
+  (`compendium branch edit --name`), and API (`PATCH /branches/{id}`); the
+  branch code stays permanently locked (it's printed on spine labels) and
+  the edit form now explains why.
+
+### Fixed
+
+- **Error redirects:** exception text is now URL-encoded before being
+  appended to a redirect location, so messages containing `&` no longer
+  corrupt the query string.
+- **Curated lists:** status pills on the list and detail pages use
+  theme-safe status classes instead of hardcoded colors that washed out in
+  dark mode.
+- **Audit log:** the details column now renders as collapsible
+  pretty-printed JSON in the web UI and compact JSON in the CLI, instead of
+  a raw dumped blob.
+- **Create forms:** required-field markers (patrons, users, policies,
+  roles, curated lists, households) are now consistent, replacing stray
+  ad-hoc asterisks and filling in markers that were missing entirely.
+- **Settings save:** the page now scrolls to the outcome banner after a
+  save instead of leaving the user at the top of a long settings page; the
+  reset checkbox is relabeled from "reset" to "Reset to default".
+- **Patron fines (self-service):** kind/status cells render as
+  Title Case instead of raw `snake_case` tokens, and partially-paid fines
+  show a paid/remaining breakdown, matching the staff fines view.
+- **Self-service tables:** keyboard focus is re-homed to the swapped row
+  after a loan renewal or hold action instead of dropping to the page body.
+- **Phone scanner:** mode buttons show human-readable labels
+  ("Check Out" instead of `checkout`).
+- **Google Books quota check:** the daily-exhaustion check compared an
+  aware and a naive datetime and silently misreported "not exhausted";
+  both sides are now normalized to aware UTC before comparing.
+- **Patron update:** an explicit `full_name=None` is now rejected instead
+  of overwriting the patron's name with the literal string `"None"`.
+- **CLI:** `--limit` truncation notices were missing on `work search`,
+  `work new-arrivals`, `work recently-returned`, `claim list`, `fine list`,
+  `curated-list list`, and `reports popular`/`dormant`; all now report
+  when results were truncated. `--help`'s quickstart epilog now renders
+  each step on its own line (a missing blank line was collapsing them
+  into one).
+- **Money formatting:** the web pay-confirmation page and CLI `fine pay`
+  now format the remaining balance as currency (e.g. `$3.00`) instead of
+  a bare number.
+- **Admin hub:** removed the redundant "Secrets" entry that duplicated the
+  Metadata Sources link; the loan-policy list hides the Delete link on the
+  default policy (the server already rejects deleting it); the settings
+  breadcrumb points at the admin hub instead of a redirect.
+- **CLI:** adding a second copy of an already-catalogued work via
+  `item add` or `item add-manual` no longer crashes with
+  `DetachedInstanceError`.
+
 ## [1.6.1] - 2026-07-17
 
 ### Fixed
