@@ -303,6 +303,19 @@ def test_is_gb_quota_exhausted_returns_true_with_fresh_sentinel_session():
     assert is_gb_quota_exhausted(session=mock_session) is True
 
 
+def test_is_gb_quota_exhausted_handles_aware_fetched_at():
+    """Real reads go through UtcDateTime, which always yields a tz-aware
+    fetched_at (even on SQLite). Comparing that against a naive threshold
+    raises TypeError, which the broad except swallows and misreports as
+    "not exhausted" (returns False instead of True)."""
+    mock_session = MagicMock()
+    entry = _make_sentinel_entry()
+    entry.fetched_at = datetime.now(timezone.utc)  # aware, as UtcDateTime returns
+    mock_session.get.return_value = entry
+
+    assert is_gb_quota_exhausted(session=mock_session) is True
+
+
 def test_clear_gb_quota_exhausted_uses_injected_session():
     """clear_gb_quota_exhausted deletes from the provided session."""
     mock_session = MagicMock()

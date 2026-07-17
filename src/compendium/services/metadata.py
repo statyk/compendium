@@ -314,8 +314,11 @@ def is_gb_quota_exhausted(*, session=None) -> bool:
         entry = s.get(MetadataCache, (_GB_QUOTA_ADAPTER, _GB_QUOTA_KIND, _GB_QUOTA_VALUE))
         if entry is None:
             return False
-        threshold = datetime.now(timezone.utc).replace(tzinfo=None) - timedelta(hours=24)
-        return entry.fetched_at >= threshold
+        fetched = entry.fetched_at
+        if fetched.tzinfo is None:
+            fetched = fetched.replace(tzinfo=timezone.utc)
+        threshold = datetime.now(timezone.utc) - timedelta(hours=24)
+        return fetched >= threshold
 
     s = session or _active_lookup_session.get()
     try:

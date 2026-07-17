@@ -107,7 +107,7 @@ class PatronService:
             "expires_at": patron.expires_at.isoformat() if patron.expires_at else None,
         }
         if full_name is not _MISSING:
-            if not str(full_name).strip():
+            if full_name is None or not str(full_name).strip():
                 raise ValidationError("Patron name cannot be blank.")
             patron.full_name = str(full_name).strip()
         if contact_email is not _MISSING:
