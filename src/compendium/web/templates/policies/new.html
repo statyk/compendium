@@ -14,7 +14,7 @@
 
 <form method="post" action="/ui/policies/new">
   <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
-  <label for="name">Name</label>
+  <label for="name">Name <span class="required-marker" aria-hidden="true">*</span></label>
   <input type="text" id="name" name="name" required autofocus autocomplete="off">
   <label for="media_type_id">Applies to media <span class="field-hint" data-tooltip="Leave blank to match all media types.">ⓘ</span></label>
   <select id="media_type_id" name="media_type_id">
@@ -30,9 +30,9 @@
     <option value="{{ c.id }}">{{ c.display_name }}</option>
     {% endfor %}
   </select>
-  <label for="loan_period_days">Loan period (days)</label>
+  <label for="loan_period_days">Loan period (days) <span class="required-marker" aria-hidden="true">*</span></label>
   <input type="number" id="loan_period_days" name="loan_period_days" min="1" value="14" required>
-  <label for="max_renewals">Maximum renewals</label>
+  <label for="max_renewals">Maximum renewals <span class="required-marker" aria-hidden="true">*</span></label>
   <input type="number" id="max_renewals" name="max_renewals" min="0" value="2" required>
   <label>
     <input type="checkbox" name="is_default" value="on">

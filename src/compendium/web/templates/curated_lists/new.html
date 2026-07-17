@@ -8,7 +8,7 @@
   {% endif %}
   <form method="post" action="/ui/curated-lists/new">
     <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
-    <label for="name">Name <sup>*</sup></label>
+    <label for="name">Name <span class="required-marker" aria-hidden="true">*</span></label>
     <input type="text" id="name" name="name" required autofocus placeholder="e.g. Staff Picks" value="{{ name or '' }}">
     <label for="description">Description</label>
     <textarea id="description" name="description" rows="3" placeholder="Optional description">{{ description or '' }}</textarea>
