@@ -13,7 +13,7 @@
 
 <p style="font-size:0.9em;color:#666;margin-top:0">
   Slug: <code>{{ cl.slug }}</code> ·
-  {% if cl.is_public %}<span style="color:#2d7a2d">Public</span>{% else %}<span style="color:#888">Private</span>{% endif %}
+  {% if cl.is_public %}<span class="status-public">Public</span>{% else %}<span class="status-private">Private</span>{% endif %}
   {% if cl.is_featured %} · <strong>Featured</strong>{% endif %}
   · Order: {{ cl.display_order }}
 </p>
