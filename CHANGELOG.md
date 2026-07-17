@@ -17,7 +17,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **Branches:** name is now editable from the web branch-edit page, CLI
   (`compendium branch edit --name`), and API (`PATCH /branches/{id}`); the
   branch code stays permanently locked (it's printed on spine labels) and
-  the edit form now explains why.
+  the edit form now explains why. An empty `PATCH` body is rejected with
+  422 (matching the CLI's "nothing to update" error).
 
 ### Fixed
 
