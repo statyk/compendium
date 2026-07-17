@@ -1,3 +1,5 @@
+import json
+
 import typer
 
 from compendium.cli.io import truncation_notice
@@ -21,7 +23,11 @@ _COLUMNS = [
     Column("entity_id", "EID", justify="right"),
     Column("action", "Action"),
     # Table rendering only — JSON always gets the raw dict (see cli/output.py).
-    Column("details", "Details", formatter=lambda v: str(v) if v else ""),
+    Column(
+        "details",
+        "Details",
+        formatter=lambda v: json.dumps(v, separators=(",", ":")) if v else "",
+    ),
 ]
 
 

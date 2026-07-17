@@ -412,6 +412,38 @@ class TestAuditCli:
         assert r.exit_code == 0
         # Either header shows or "No audit" — both fine, we just want no crash.
 
+    def test_details_are_compact_json(self, session):
+        from compendium.repositories.sql.audit_log_repository import SqlAuditLogRepository
+        from compendium.services.audit import AuditService
+
+        AuditService(SqlAuditLogRepository(session)).record(
+            actor=None,
+            actor_label="cli:test",
+            source="cli",
+            entity_type="work",
+            entity_id=1,
+            action="update",
+            details={"field": "title", "to": "New"},
+        )
+        session.flush()
+
+        # Widen the Rich console (via COLUMNS) so the Details cell isn't
+        # ellipsis-truncated in the default 80-col fallback.
+        r = _invoke(
+            session,
+            ["audit", "list"],
+            "compendium.cli.commands.audit",
+            env={"COLUMNS": "200"},
+        )
+        assert r.exit_code == 0
+        assert '{"field":"title","to":"New"}' in r.output
+        assert "{'field'" not in r.output
+
+        r_json = _invoke(session, ["audit", "list", "--format", "json"], "compendium.cli.commands.audit")
+        assert r_json.exit_code == 0
+        payload = json.loads(r_json.output)
+        assert payload[0]["details"] == {"field": "title", "to": "New"}
+
 
 # ──────────────────────────────────────────────────────────────────────────────
 # work + creator (needs seeded work with one item)
