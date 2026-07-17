@@ -182,7 +182,9 @@
 
   {% block footer %}<footer>
   <div class="container">
-    <small>Compendium &middot; A library catalog system</small>
+    <small>Compendium v{{ app_version }} &middot; A library catalog system &middot;
+      <a href="https://github.com/statyk/compendium/blob/master/README.md">Documentation</a> &middot;
+      <a href="https://github.com/statyk/compendium/issues">Report an issue</a></small>
   </div>
   </footer>{% endblock %}
   {% if user %}

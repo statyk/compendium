@@ -2579,6 +2579,16 @@ def test_patron_error_redirect_is_urlencoded(web_client, web_session):
     assert parsed["error"][0] == f"No patron with card number '{card_number}'"
 
 
+def test_footer_has_docs_link_and_version(web_client):
+    # Use catalog (full base layout with footer) — login is a cover page
+    # that overrides the footer block to empty, so it won't do here.
+    resp = web_client.get("/ui/catalog")
+    assert "github.com/statyk/compendium" in resp.text
+    from compendium import __version__
+
+    assert f"v{__version__}" in resp.text
+
+
 def test_inactive_user_cookie_denied(web_client, web_session, librarian):
     """An inactive user's still-valid auth cookie must not grant access."""
     cookies = _login(web_client, "lib01")

@@ -3,6 +3,7 @@ from pathlib import Path
 
 from fastapi.templating import Jinja2Templates
 
+from compendium import __version__
 from compendium.services.auth import has_permission as _has_permission
 from compendium.services.formatting import format_currency as _format_currency
 from compendium.services.site_settings import get_site_setting
@@ -129,4 +130,5 @@ templates.env.globals["shortcut_pages"] = _jinja_shortcut_pages
 templates.env.globals["shortcut_pages_for_user"] = _jinja_shortcut_pages_for_user
 templates.env.globals["guest_search_enabled"] = _jinja_guest_search_enabled
 templates.env.globals["timezone_picker_data"] = _jinja_timezone_picker_data
+templates.env.globals["app_version"] = __version__
 templates.env.filters["currency"] = _format_currency
