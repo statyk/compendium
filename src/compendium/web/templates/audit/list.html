@@ -48,7 +48,7 @@
         <td data-label="Type">{{ e.entity_type }}</td>
         <td data-label="ID">{{ e.entity_id if e.entity_id is not none else "—" }}</td>
         <td data-label="Action">{{ e.action }}</td>
-        <td data-label="Details"><small><code>{% if e.details %}{{ e.details | tojson }}{% else %}—{% endif %}</code></small></td>
+        <td data-label="Details">{% if e.details %}<details><summary>view</summary><pre class="audit-details">{{ e.details | tojson(indent=2) }}</pre></details>{% else %}—{% endif %}</td>
       </tr>
       {% endfor %}
     </tbody>

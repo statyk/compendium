@@ -663,6 +663,20 @@ def test_audit_log_filter_by_entity_type(web_client, librarian, work):
     assert b"item" in resp.content
 
 
+def test_audit_details_rendered_as_collapsible_pretty_json(web_client, librarian):
+    cookies = _login(web_client, "lib01")
+    raw, signed = _make_csrf_pair()
+    web_client.post(
+        "/ui/patrons/new",
+        data={"full_name": "Audit Detail Patron", "csrf_token": raw},
+        cookies={**cookies, CSRF_COOKIE: signed},
+    )
+    resp = web_client.get("/ui/audit", cookies=cookies)
+    assert resp.status_code == 200
+    assert "<details" in resp.text and "<summary" in resp.text
+    assert "<pre" in resp.text
+
+
 # ── Patron create ─────────────────────────────────────────────────────────────
 
 

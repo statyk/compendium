@@ -1192,6 +1192,13 @@ tbody tr:hover { background: rgba(184, 146, 74, 0.07); }
 table tbody tr:nth-child(even) { background: transparent; }
 table tbody tr:nth-child(even):hover { background: rgba(184, 146, 74, 0.07); }
 
+.audit-details {
+  font-size: 0.75rem;
+  max-width: 28rem;
+  overflow-x: auto;
+  margin: 0.25rem 0 0 0;
+}
+
 /* ── Heritage: editorial dl metadata grid ─────────────────────── */
 dl {
   display: grid;
