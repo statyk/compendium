@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from urllib.parse import quote
+
 from fastapi import APIRouter, Depends, Form, Query, Request
 from fastapi.responses import RedirectResponse
 from sqlalchemy.orm import Session
@@ -159,7 +161,7 @@ def edit_household(
         )
     except (BusinessRuleError, NotFoundError, ValidationError) as exc:
         return RedirectResponse(
-            f"/ui/households/{household_id}?error={exc}", status_code=303
+            f"/ui/households/{household_id}?error={quote(str(exc))}", status_code=303
         )
     return RedirectResponse(f"/ui/households/{household_id}", status_code=303)
 
@@ -177,7 +179,7 @@ def delete_household(
         _svc(session, user).delete(household_id)
     except (BusinessRuleError, NotFoundError) as exc:
         return RedirectResponse(
-            f"/ui/households/{household_id}?error={exc}", status_code=303
+            f"/ui/households/{household_id}?error={quote(str(exc))}", status_code=303
         )
     return RedirectResponse("/ui/households", status_code=303)
 
@@ -196,7 +198,7 @@ def add_member(
         _svc(session, user).add_member(household_id, card_number.strip())
     except (BusinessRuleError, NotFoundError) as exc:
         return RedirectResponse(
-            f"/ui/households/{household_id}?error={exc}", status_code=303
+            f"/ui/households/{household_id}?error={quote(str(exc))}", status_code=303
         )
     return RedirectResponse(f"/ui/households/{household_id}", status_code=303)
 
@@ -215,6 +217,6 @@ def remove_member(
         _svc(session, user).remove_member(household_id, card)
     except (BusinessRuleError, NotFoundError) as exc:
         return RedirectResponse(
-            f"/ui/households/{household_id}?error={exc}", status_code=303
+            f"/ui/households/{household_id}?error={quote(str(exc))}", status_code=303
         )
     return RedirectResponse(f"/ui/households/{household_id}", status_code=303)

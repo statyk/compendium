@@ -359,7 +359,7 @@ def patron_link_user(
         )
     except (BusinessRuleError, NotFoundError) as exc:
         return RedirectResponse(
-            f"/ui/patrons/{card_number}?error={exc}", status_code=303
+            f"/ui/patrons/{card_number}?error={quote(str(exc))}", status_code=303
         )
 
 
@@ -416,7 +416,7 @@ def patron_create_user(
         )
     except (BusinessRuleError, NotFoundError, ValidationError) as exc:
         return RedirectResponse(
-            f"/ui/patrons/{card_number}?error={exc}", status_code=303
+            f"/ui/patrons/{card_number}?error={quote(str(exc))}", status_code=303
         )
 
 

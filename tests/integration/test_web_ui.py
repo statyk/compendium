@@ -2521,6 +2521,50 @@ def test_admin_nav_merged_and_kiosk_top_level(web_client, librarian):
         assert link in r.text
 
 
+def test_patron_error_redirect_is_urlencoded(web_client, web_session):
+    # NOTE: deviates from the task brief's suggested trigger (linking a
+    # nonexistent user_id). This test suite's SQLite engine does not enable
+    # `PRAGMA foreign_keys=ON`, so setting Patron.user_id to a nonexistent
+    # user id doesn't raise at all -- it silently "succeeds" with a dangling
+    # FK. It also turns out spaces alone can't distinguish encoded from
+    # unencoded: Starlette's RedirectResponse already runs the *entire* URL
+    # through `quote()` with a safe-set that includes space-unsafe... i.e. it
+    # already escapes bare spaces to %20 regardless of app-level encoding.
+    # What it does NOT escape (its safe-set explicitly preserves them) is
+    # `&`, `#`, and `=` -- characters that are query-string-structural. An
+    # exception message containing a raw `&` therefore corrupts the query
+    # string (splits it into extra bogus params) unless the app quotes the
+    # value itself before interpolating. This test drives that scenario via
+    # a nonexistent card number containing "&", which flows verbatim into
+    # the NotFoundError message raised by PatronService.link_user.
+    role = SqlRoleRepository(web_session).get_by_name("Administrator")
+    lib = AppUser(
+        username="lib_enc01", password_hash=hash_password("secret"), role_id=role.id
+    )
+    SqlUserRepository(web_session).add(lib)
+    web_session.flush()
+    cookies = _login(web_client, "lib_enc01")
+    raw, signed = _make_csrf_pair()
+    card_number = "NOPE&X"
+    resp = web_client.post(
+        f"/ui/patrons/{card_number}/link-user",
+        data={"user_id": "1", "csrf_token": raw},
+        cookies={**cookies, CSRF_COOKIE: signed},
+        follow_redirects=False,
+    )
+    assert resp.status_code == 303
+    loc = resp.headers["location"]
+
+    from urllib.parse import parse_qs, urlsplit
+
+    query = urlsplit(loc).query
+    parsed = parse_qs(query, keep_blank_values=True)
+    # An unencoded "&" in the exception text splits the query string into
+    # extra bogus params; a properly-encoded redirect has exactly one.
+    assert list(parsed.keys()) == ["error"]
+    assert parsed["error"][0] == f"No patron with card number '{card_number}'"
+
+
 def test_inactive_user_cookie_denied(web_client, web_session, librarian):
     """An inactive user's still-valid auth cookie must not grant access."""
     cookies = _login(web_client, "lib01")
