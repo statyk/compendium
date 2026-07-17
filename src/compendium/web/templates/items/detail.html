@@ -52,7 +52,7 @@
 {% if has_permission(user, 'item.edit') %}
 <a href="/ui/items/{{ item.barcode }}/edit" role="button" class="outline">Edit</a>
 {% endif %}
-{% if user and ("*" in user.role.permissions or "item.delete" in user.role.permissions) and item.status != "withdrawn" %}
+{% if has_permission(user, 'item.delete') and item.status != "withdrawn" %}
 <a href="/ui/items/{{ item.barcode }}/withdraw-confirm" role="button" class="outline contrast">Withdraw</a>
 {% endif %}
 
