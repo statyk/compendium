@@ -385,6 +385,17 @@ class TestBranchCli:
         )
         assert r.exit_code == 1
 
+    def test_branch_set_name(self, session):
+        from compendium.repositories.sql.branch_repository import SqlBranchRepository
+
+        r = _invoke(
+            session,
+            ["branch", "set", "--code", "MAIN", "--name", "Annex"],
+            "compendium.cli.commands.branch",
+        )
+        assert r.exit_code == 0
+        assert SqlBranchRepository(session).get_by_code("MAIN").name == "Annex"
+
 
 # ──────────────────────────────────────────────────────────────────────────────
 # audit

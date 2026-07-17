@@ -462,3 +462,17 @@ class TestBranchPatch:
         )
 
         assert resp.status_code == 403
+
+    def test_patch_branch_name(self, patch_client, patch_session):
+        branch = SqlBranchRepository(patch_session).get_default()
+        _, token = _make_user(patch_session, "Librarian", "branch_patch_name")
+        patch_session.commit()
+
+        resp = patch_client.patch(
+            f"/branches/{branch.id}",
+            json={"name": "Annex", "default_classification_scheme": "none"},
+            headers=_bearer(token),
+        )
+
+        assert resp.status_code == 200
+        assert resp.json()["name"] == "Annex"

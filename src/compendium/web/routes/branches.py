@@ -65,6 +65,7 @@ def branch_edit_form(
 def branch_edit(
     branch_id: int,
     request: Request,
+    name: str = Form(default=""),
     default_classification_scheme: str = Form(default="none"),
     location_code: str = Form(default=""),
     csrf_token: str = Form(default=""),
@@ -77,6 +78,14 @@ def branch_edit(
     branch = repo.get(branch_id)
     if branch is None:
         return _render("error.html", request, {"request": request, "user": user, "detail": "Branch not found"}, 404)
+    new_name = name.strip()
+    if not new_name or len(new_name) > 128:
+        return _render(
+            "branches/edit.html",
+            request,
+            {"request": request, "user": user, "branch": branch, "error": "Name is required (max 128 characters)."},
+            422,
+        )
     if scheme not in _VALID_SCHEMES:
         return _render(
             "branches/edit.html",
@@ -92,6 +101,7 @@ def branch_edit(
             {"request": request, "user": user, "branch": branch, "error": "Location code must be exactly 4 decimal digits (e.g. 0001)."},
             422,
         )
+    branch.name = new_name
     branch.default_classification_scheme = scheme
     branch.location_code = loc
     repo.update(branch)

@@ -12,11 +12,10 @@
     Code
     <input type="text" value="{{ branch.code }}" disabled>
   </label>
+  <small>Branch codes appear on printed spine labels and cannot be changed.</small>
 
-  <label>
-    Name
-    <input type="text" value="{{ branch.name }}" disabled>
-  </label>
+  <label for="name">Name <span class="required-marker" aria-hidden="true">*</span></label>
+  <input type="text" id="name" name="name" value="{{ branch.name }}" required maxlength="128">
 
   <label for="location_code">Barcode Location Code (4 digits, optional)</label>
   <input

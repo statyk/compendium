@@ -285,7 +285,8 @@ class BranchResponse(BaseModel):
 
 
 class UpdateBranchRequest(BaseModel):
-    default_classification_scheme: str
+    name: str | None = None
+    default_classification_scheme: str | None = None
 
 
 class AuditLogResponse(BaseModel):

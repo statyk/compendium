@@ -22,7 +22,7 @@ the same bucket, while each interface keeps its own native idiom.
 | **patrons** | add, edit (name/email/phone contact fields), show, list/search, deactivate/reactivate, link/unlink user, create account | `compendium patron …` (`edit`/`set --name/--email/--phone`) | `POST /patrons`, `GET /patrons`, `GET /patrons/{card}`, `PATCH /patrons/{card}` (name/email/phone), `POST /patrons/{card}/{deactivate,reactivate,account}` |
 | **catalog** | work search/browse, work edit, creator management, work delete, trash list/restore/purge | `compendium work …`, `compendium creator …`, `compendium work trash …` | `GET /works/search`, `/works/new-arrivals`, `/works/recently-returned`, `PATCH /works/{id}`, `PUT /works/{id}/creators`, `DELETE /works/{id}`, `GET /trash`, `POST /trash/{id}/restore`, `DELETE /trash/{id}` |
 | **patron self-service** | patron renews own loan, places/cancels own hold, disputes return | `compendium loan renew --self` (if added) | `GET /me/loans`, `POST /me/loans/{id}/{renew,claim-returned}`, `GET/POST/DELETE /me/holds`, `/me/holds/{id}/{suspend,resume}`, `GET /me/fines` |
-| **admin** | settings, calendar, users, roles, policies, branches, policy delete | `compendium settings …`, `compendium calendar …`, `compendium user …`, etc. | `GET/PATCH /settings/{key}`, `/library-hours`, `/closed-dates`, `/users`, `/policies`, `/branches`, `DELETE /policies/{id}` |
+| **admin** | settings, calendar, users, roles, policies, branches (name + classification scheme + location code edit; code is locked — see exceptions), policy delete | `compendium settings …`, `compendium calendar …`, `compendium user …`, `compendium branch edit --name/--classification`, etc. | `GET/PATCH /settings/{key}`, `/library-hours`, `/closed-dates`, `/users`, `/policies`, `PATCH /branches/{id}` (`name`, `default_classification_scheme`), `DELETE /policies/{id}` |
 | **bulk** | import, export | `compendium import …`, `compendium export …` | `POST /import/{csv,…}`, `GET /export/{csv,…}` |
 | **reports/labels** | usage reports, label printing | `compendium reports …`, `compendium labels …` | `GET /reports/{…}`, `GET /labels/{…}` |
 | **ops** | maintenance crons, backup, db migrations (CLI-only by design) | `compendium maintenance …`, `compendium backup`, `compendium db …` | — |
@@ -43,6 +43,15 @@ the same bucket, while each interface keeps its own native idiom.
 - `/ui/first-run/dismiss` + the Getting Started card — web-only by design: a
   landing-page onboarding affordance, not a library operation; the CLI's
   equivalent is the root `--help` quickstart epilog.
+
+- **Branch create/delete** — CLI/deploy-out-of-scope on all interfaces (no
+  web, API, or CLI surface). `branch.code` is permanently locked (printed on
+  spine labels; changing it would orphan already-printed labels) — only
+  `name`, `default_classification_scheme`, and `location_code` are editable.
+  Creating a second branch would implicitly enable multi-branch UI while
+  multi-branch *features* (transfers, inter-branch holds, per-branch
+  policies) are deferred (roadmap item 16); revisit branch create/delete
+  when that lands.
 
 ## Naming conventions
 

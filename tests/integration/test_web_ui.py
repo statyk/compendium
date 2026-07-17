@@ -2589,6 +2589,29 @@ def test_footer_has_docs_link_and_version(web_client):
     assert f"v{__version__}" in resp.text
 
 
+def test_branch_name_editable_code_locked(web_client, librarian, web_session):
+    branch = SqlBranchRepository(web_session).get_default()
+    auth_cookies = _login(web_client, "lib01")
+
+    page = web_client.get(f"/ui/branches/{branch.id}/edit", cookies=auth_cookies)
+    assert "cannot be changed" in page.text
+
+    raw, signed = _make_csrf_pair()
+    resp = web_client.post(
+        f"/ui/branches/{branch.id}/edit",
+        data={
+            "name": "Front Desk Collection",
+            "default_classification_scheme": "none",
+            "location_code": "",
+            "csrf_token": raw,
+        },
+        cookies={**auth_cookies, CSRF_COOKIE: signed},
+    )
+    assert resp.status_code == 303
+    web_session.expire_all()
+    assert SqlBranchRepository(web_session).get(branch.id).name == "Front Desk Collection"
+
+
 def test_inactive_user_cookie_denied(web_client, web_session, librarian):
     """An inactive user's still-valid auth cookie must not grant access."""
     cookies = _login(web_client, "lib01")
