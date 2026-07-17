@@ -6,9 +6,13 @@ _TEMPLATES_DIR = (
 )
 
 
-def test_items_detail_uses_permission_helper():
-    """items/detail.html should use the has_permission(user, perm) Jinja
-    global like every sibling permission check in the file, rather than
-    hand-rolling the role/permissions-list check inline."""
-    src = (_TEMPLATES_DIR / "items" / "detail.html").read_text()
-    assert '"*" in user.role.permissions' not in src
+def test_templates_use_permission_helper():
+    """All templates should use the has_permission(user, perm) Jinja global
+    for permission checks, rather than hand-rolling the
+    '"*" in user.role.permissions' role/permissions-list check inline."""
+    for path in sorted(_TEMPLATES_DIR.rglob("*.html")):
+        src = path.read_text()
+        assert '"*" in user.role.permissions' not in src, (
+            f"{path.relative_to(_TEMPLATES_DIR)} hand-rolls the permission "
+            "check instead of using has_permission(user, perm)"
+        )
