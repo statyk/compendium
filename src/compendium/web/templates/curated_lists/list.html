@@ -29,7 +29,7 @@
     <tr>
       <td data-label="Slug"><code>{{ cl.slug }}</code></td>
       <td data-label="Name"><a href="/ui/curated-lists/{{ cl.slug }}">{{ cl.name }}</a></td>
-      <td data-label="Status">{% if cl.is_public %}<span style="color:#2d7a2d">Public</span>{% else %}<span style="color:#888">Private</span>{% endif %}</td>
+      <td data-label="Status">{% if cl.is_public %}<span class="status-public">Public</span>{% else %}<span class="status-private">Private</span>{% endif %}</td>
       <td data-label="Featured">{% if cl.is_featured %}Yes{% else %}—{% endif %}</td>
       <td data-label="Works">{{ cl.entries | length }}</td>
       <td data-label="Order">{{ cl.display_order }}</td>

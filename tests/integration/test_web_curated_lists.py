@@ -166,6 +166,16 @@ def test_create_list(client, db):
     assert "/ui/curated-lists/" in r.headers["location"]
 
 
+def test_curated_list_status_uses_css_classes(client, db):
+    username, pw = _make_librarian(db)
+    _login(client, username, pw)
+    _create_list_via_web(client, "CSS Class Status List")
+    r = client.get("/ui/curated-lists")
+    assert r.status_code == 200
+    assert 'class="status-public"' in r.text or 'class="status-private"' in r.text
+    assert 'style="color:#2d7a2d"' not in r.text
+
+
 def test_create_list_blank_name(client, db):
     """A whitespace-only name passes FastAPI's form parsing but fails service validation."""
     username, pw = _make_librarian(db)

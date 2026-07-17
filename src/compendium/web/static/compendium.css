@@ -557,6 +557,13 @@ p.success-banner::before { content: "✓ "; }
   padding: 0.75em 1em; border-radius: 0.5em;
 }
 
+/* Status text colors — hardcoded hex like the banners (Pico color vars
+   are undefined in the minimal build). */
+.status-public { color: #2d7a2d; }
+.status-private { color: #757575; }
+[data-theme="dark"] .status-public { color: #6fbf6f; }
+[data-theme="dark"] .status-private { color: #9e9e9e; }
+
 /* ── Nav dropdown fixes ──────────────────────────────────────── */
 /* Pico's "click outside to close" attaches a transparent position:fixed;
    inset:0 overlay to summary::before. In a nav with multiple sibling
