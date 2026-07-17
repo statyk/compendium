@@ -1250,6 +1250,26 @@ class TestPolicyCli:
         assert r.exit_code == 0, r.output
         assert "deleted" in r.output.lower()
 
+    def test_cannot_delete_default_policy(self, session):
+        r = _invoke(
+            session, ["policy", "list", "--format", "json"], "compendium.cli.commands.policy"
+        )
+        default_id = next(row["id"] for row in json.loads(r.stdout) if row["is_default"])
+
+        r = _invoke(
+            session,
+            ["policy", "delete", "--id", str(default_id), "--yes"],
+            "compendium.cli.commands.policy",
+        )
+        assert r.exit_code == 1
+        assert "Error:" in r.output
+
+        r = _invoke(
+            session, ["policy", "list", "--format", "json"], "compendium.cli.commands.policy"
+        )
+        ids = [row["id"] for row in json.loads(r.stdout)]
+        assert default_id in ids
+
 
 # ──────────────────────────────────────────────────────────────────────────────
 # patron-category
