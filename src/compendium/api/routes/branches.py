@@ -32,6 +32,11 @@ def update_branch(
     branch = repo.get(branch_id)
     if branch is None:
         raise HTTPException(status_code=404, detail="Branch not found")
+    if body.name is None and body.default_classification_scheme is None:
+        raise HTTPException(
+            status_code=422,
+            detail="Nothing to update — provide name and/or default_classification_scheme",
+        )
     if body.name is not None:
         stripped = body.name.strip()
         if not stripped or len(stripped) > 128:

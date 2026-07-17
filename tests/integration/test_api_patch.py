@@ -476,3 +476,16 @@ class TestBranchPatch:
 
         assert resp.status_code == 200
         assert resp.json()["name"] == "Annex"
+
+    def test_patch_branch_empty_body_rejected(self, patch_client, patch_session):
+        branch = SqlBranchRepository(patch_session).get_default()
+        _, token = _make_user(patch_session, "Librarian", "branch_patch_empty")
+        patch_session.commit()
+
+        resp = patch_client.patch(
+            f"/branches/{branch.id}",
+            json={},
+            headers=_bearer(token),
+        )
+
+        assert resp.status_code == 422

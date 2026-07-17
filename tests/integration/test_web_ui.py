@@ -674,7 +674,7 @@ def test_audit_details_rendered_as_collapsible_pretty_json(web_client, librarian
     resp = web_client.get("/ui/audit", cookies=cookies)
     assert resp.status_code == 200
     assert "<details" in resp.text and "<summary" in resp.text
-    assert "<pre" in resp.text
+    assert '<pre class="audit-details"' in resp.text
 
 
 # ── Patron create ─────────────────────────────────────────────────────────────
