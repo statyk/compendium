@@ -123,6 +123,19 @@ def test_web_admin_notifications_renders(client, db_session):
     assert b"hold_ready" in resp.content
 
 
+def test_notification_log_links_to_smtp_settings(client, db_session):
+    make_user(db_session, "web_n_smtp_link", "Administrator")
+    db_session.commit()
+    cookies = _login(client, "web_n_smtp_link")
+    resp = client.get("/ui/admin/notifications", cookies=cookies)
+    assert resp.status_code == 200, resp.text
+    # The global nav already links /ui/admin/system/smtp, so assert on the
+    # new page-body sentence (not just the bare URL) to avoid a false
+    # positive from the nav.
+    assert "SMTP settings" in resp.text
+    assert '/ui/admin/system/smtp">SMTP settings</a>' in resp.text
+
+
 def test_web_admin_notifications_forbidden_readonly(client, db_session):
     make_user(db_session, "web_n_ro", "ReadOnly")
     db_session.commit()

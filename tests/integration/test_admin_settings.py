@@ -497,6 +497,17 @@ class TestSettingsWeb:
         # SMTP password appears in the API Keys section (secrets dispersal)
         assert b'name="smtp_password"' in r.content
 
+    def test_smtp_page_links_to_notification_log(self, client, s_session):
+        _make_user(s_session, role_name="Administrator", username="admin_smtp_link")
+        cookies = _login_cookies(client, "admin_smtp_link")
+        r = client.get("/ui/admin/system/smtp", cookies=cookies)
+        assert r.status_code == 200
+        # The global nav already links /ui/admin/notifications, so assert on
+        # the new page-body sentence (not just the bare URL) to avoid a false
+        # positive from the nav.
+        assert "notification log" in r.text
+        assert '/ui/admin/notifications">notification log</a>' in r.text
+
     def test_retention_page_renders_for_admin(self, client, s_session):
         _make_user(s_session, role_name="Administrator", username="admin_ret")
         cookies = _login_cookies(client, "admin_ret")

@@ -3,6 +3,11 @@
 {% block content %}
 <h2>Notifications</h2>
 
+{% if has_permission(user, 'system.manage') %}
+<p><small>Sending problems? Check the
+  <a href="/ui/admin/system/smtp">SMTP settings</a>.</small></p>
+{% endif %}
+
 {% if message %}<p class="success-banner">{{ message }}</p>{% endif %}
 {% if error %}<p class="error-banner">{{ error }}</p>{% endif %}
 

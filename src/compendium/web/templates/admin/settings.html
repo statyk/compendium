@@ -17,6 +17,11 @@
 <h2>{{ title }}</h2>
 <p>{{ intro | safe }}</p>
 
+{% if page_key == "smtp" %}
+<p><small>Delivery failures are recorded in the
+  <a href="/ui/admin/notifications">notification log</a>.</small></p>
+{% endif %}
+
 {% if message %}<p class="success-banner" id="saved">{{ message }}</p>{% endif %}
 {% if error %}<p class="error-banner" id="saved">{{ error }}</p>{% endif %}
 {% if warning %}<p class="warning-banner">{{ warning }}</p>{% endif %}
