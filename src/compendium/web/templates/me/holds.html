@@ -17,7 +17,7 @@
   <thead>
     <tr><th>Title</th><th>Status</th><th>Queue</th><th>Expires</th><th>Action</th></tr>
   </thead>
-  <tbody>
+  <tbody hx-on::after-swap="var t = event.detail.target; var c = t.querySelector('button, a[href]'); if (c) { c.focus(); }">
     {% for hold in holds %}
     {% set queue_position = queue_positions.get(hold.id) %}
     {% include "me/_hold_row.html" %}

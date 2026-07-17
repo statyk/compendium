@@ -50,3 +50,12 @@ def test_required_markers_canonical():
             f"{name} is a mixed required/optional form and should mark its "
             "required fields with the canonical .required-marker span"
         )
+
+
+def test_me_pages_rehome_focus_after_swap():
+    """After a self-service loan/hold row swaps via HTMX, keyboard focus is
+    lost to <body>. The enclosing row container re-homes focus to the
+    swapped row's first interactive element via hx-on::after-swap."""
+    for name in ("me/loans.html", "me/holds.html"):
+        src = (_TEMPLATES_DIR / name).read_text()
+        assert "hx-on::after-swap" in src, name

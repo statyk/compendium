@@ -10,7 +10,7 @@
   <thead>
     <tr><th>Barcode</th><th>Title</th><th>Due</th><th>Action</th></tr>
   </thead>
-  <tbody>
+  <tbody hx-on::after-swap="var t = event.detail.target; var c = t.querySelector('button, a[href]'); if (c) { c.focus(); }">
     {% for loan in loans %}
     {% include "me/_loan_row.html" %}
     {% endfor %}
