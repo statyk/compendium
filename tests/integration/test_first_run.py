@@ -252,3 +252,25 @@ def test_root_help_shows_quickstart():
     assert "Quickstart:" in result.output
     assert "compendium keygen" in result.output
     assert "compendium serve" in result.output
+
+
+def test_root_help_quickstart_steps_render_one_per_line():
+    """Regression: rich/typer collapses single newlines within a paragraph,
+    so without \\n\\n between steps the whole quickstart block gets rewrapped
+    and steps bleed onto shared lines. Each step must land on its own line,
+    with no other step's text sharing it."""
+    from typer.testing import CliRunner
+    from compendium.cli.main import app
+
+    result = CliRunner().invoke(app, ["--help"])
+    assert result.exit_code == 0
+    lines = result.output.splitlines()
+    steps = ["compendium keygen", "compendium db init", "compendium user add", "compendium serve"]
+    for step in steps:
+        matches = [l for l in lines if step in l]
+        assert len(matches) == 1, f"{step!r} should appear on exactly one line, got {matches}"
+        line = matches[0]
+        others = [s for s in steps if s != step]
+        assert not any(o in line for o in others), (
+            f"line for {step!r} also contains another step: {line!r}"
+        )

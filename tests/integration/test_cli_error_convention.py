@@ -22,6 +22,7 @@ from compendium.repositories.sql.patron_repository import SqlPatronRepository
 from compendium.services import site_settings as ss
 from compendium.services.audit import AuditService
 from compendium.services.patrons import PatronService
+from tests.helpers import setup_sqlite_fts
 
 runner = CliRunner()
 
@@ -40,6 +41,7 @@ def cli_db(monkeypatch):
         poolclass=StaticPool,
     )
     Base.metadata.create_all(engine)
+    setup_sqlite_fts(engine)
     factory = sessionmaker(bind=engine, autoflush=False, expire_on_commit=False)
     seed_session = factory()
     seed_defaults(seed_session)
@@ -158,3 +160,92 @@ def test_patron_list_offset_pages_past_first_batch(cli_db, thirty_patrons):
     assert first.exit_code == 0
     assert second.exit_code == 0
     assert first.stdout != second.stdout
+
+
+@pytest.fixture
+def fifteen_works(cli_db):
+    """Seed 15 works sharing a distinctive title token, for `work search` truncation."""
+    from compendium.repositories.sql.branch_repository import SqlBranchRepository
+    from compendium.repositories.sql.counters import SqlCounterRepository
+    from compendium.repositories.sql.creator_repository import SqlCreatorRepository
+    from compendium.repositories.sql.item_repository import SqlItemRepository
+    from compendium.repositories.sql.media_type_repository import (
+        SqlMediaTypeRepository,
+    )
+    from compendium.repositories.sql.work_repository import SqlWorkRepository
+    from compendium.services.catalog import CatalogService
+
+    factory = sessionmaker(bind=cli_db, autoflush=False, expire_on_commit=False)
+    session = factory()
+    svc = CatalogService(
+        work_repo=SqlWorkRepository(session),
+        item_repo=SqlItemRepository(session),
+        creator_repo=SqlCreatorRepository(session),
+        branch_repo=SqlBranchRepository(session),
+        media_type_repo=SqlMediaTypeRepository(session),
+        counter_repo=SqlCounterRepository(session),
+    )
+    for i in range(15):
+        svc.add_manual("book", f"Zephyrwood Chronicles {i:02d}")
+    session.commit()
+    session.close()
+
+
+@pytest.fixture
+def fifteen_fines(cli_db):
+    """Seed one patron with 15 manually-assessed fines, for `fine list` truncation."""
+    factory = sessionmaker(bind=cli_db, autoflush=False, expire_on_commit=False)
+    session = factory()
+    svc = PatronService(
+        patron_repo=SqlPatronRepository(session),
+        loan_repo=SqlLoanRepository(session),
+        hold_repo=SqlHoldRepository(session),
+        audit_svc=AuditService(SqlAuditLogRepository(session)),
+        actor_label="test",
+        source="cli",
+    )
+    patron = svc.create(full_name="Fine Patron")
+    session.commit()
+    card = patron.library_card_number
+    session.close()
+
+    for _ in range(15):
+        result = runner.invoke(
+            app,
+            [
+                "fine", "assess",
+                "--patron", card,
+                "--kind", "other",
+                "--amount-cents", "100",
+                "--note", "test fine",
+            ],
+        )
+        assert result.exit_code == 0, result.stderr
+
+
+def test_work_search_truncation_notice_present_at_limit(cli_db, fifteen_works):
+    result = runner.invoke(
+        app, ["work", "search", "Zephyrwood", "--limit", "10"]
+    )
+    assert result.exit_code == 0
+    assert "Showing first 10 row(s)" in result.stderr
+
+
+def test_work_search_truncation_notice_absent_under_limit(cli_db, fifteen_works):
+    result = runner.invoke(
+        app, ["work", "search", "Zephyrwood", "--limit", "50"]
+    )
+    assert result.exit_code == 0
+    assert result.stderr == ""
+
+
+def test_fine_list_truncation_notice_present_at_limit(cli_db, fifteen_fines):
+    result = runner.invoke(app, ["fine", "list", "--limit", "10"])
+    assert result.exit_code == 0
+    assert "Showing first 10 row(s)" in result.stderr
+
+
+def test_fine_list_truncation_notice_absent_under_limit(cli_db, fifteen_fines):
+    result = runner.invoke(app, ["fine", "list", "--limit", "50"])
+    assert result.exit_code == 0
+    assert result.stderr == ""

@@ -7,7 +7,7 @@ import os
 import typer
 from sqlalchemy.orm import Session
 
-from compendium.cli.io import error
+from compendium.cli.io import error, truncation_notice
 from compendium.cli.output import Column, emit_detail, emit_list, format_option
 from compendium.db.session import session_scope
 from compendium.domain.errors import DomainError
@@ -114,6 +114,7 @@ def list_lists(
         format,
         empty="No curated lists found.",
     )
+    truncation_notice(len(lists), limit)
 
 
 @app.command("show")

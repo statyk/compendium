@@ -3,9 +3,8 @@
 from __future__ import annotations
 
 import json
-from datetime import date, datetime, timezone
+from datetime import date, datetime, timedelta, timezone
 
-import pytest
 import typer
 from typer.testing import CliRunner
 
@@ -16,7 +15,6 @@ from compendium.cli.output import (
     emit_list,
     format_option,
     json_default,
-    notice,
 )
 
 ROWS = [
@@ -74,15 +72,22 @@ def test_emit_detail_table_labels(capsys):
     assert "Copy B-1" in out and "barcode" in out and "B-1" in out
 
 
-def test_notice_goes_to_stderr(capsys):
-    notice("Showing 5 of 12")
-    out, err = capsys.readouterr()
-    assert out == "" and "Showing 5 of 12" in err
-
-
 def test_json_default_date_and_enum():
     assert json_default(date(2026, 7, 12)) == "2026-07-12"
     assert json_default(OutputFormat.JSON) == "json"
+
+
+def test_json_default_naive_datetime_treated_as_utc():
+    # No tzinfo: json_default assumes UTC rather than guessing local time.
+    naive = datetime(2026, 7, 12, 9, 30, 0)
+    assert json_default(naive) == "2026-07-12T09:30:00+00:00"
+
+
+def test_json_default_non_utc_aware_datetime_converted_to_utc():
+    # Aware, non-UTC offset: converted to UTC before serializing.
+    eastern = timezone(timedelta(hours=-5))
+    aware = datetime(2026, 7, 12, 9, 30, 0, tzinfo=eastern)
+    assert json_default(aware) == "2026-07-12T14:30:00+00:00"
 
 
 def _fmt_app(csv_ok: bool = False) -> typer.Typer:

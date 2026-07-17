@@ -6,6 +6,7 @@ from datetime import datetime, timedelta, timezone
 
 import typer
 
+from compendium.cli.io import truncation_notice
 from compendium.cli.output import Column, emit_csv, emit_list, format_option
 from compendium.db.session import session_scope
 from compendium.repositories.sql.branch_repository import SqlBranchRepository
@@ -87,6 +88,7 @@ def popular(
     ]
     if format == "csv":
         emit_csv(rows, ["work_id", "title", "media_type", "checkout_count"])
+        truncation_notice(len(results), limit)
         return
     emit_list(
         rows,
@@ -98,6 +100,7 @@ def popular(
         format,
         empty="No checkouts in window.",
     )
+    truncation_notice(len(results), limit)
 
 
 @app.command("dormant")
@@ -131,6 +134,7 @@ def dormant(
     ]
     if format == "csv":
         emit_csv(rows, ["barcode", "title", "media_type", "branch", "last_checkout"])
+        truncation_notice(len(results), limit)
         return
     emit_list(
         rows,
@@ -143,6 +147,7 @@ def dormant(
         format,
         empty="No dormant items.",
     )
+    truncation_notice(len(results), limit)
 
 
 @app.command("overdues")

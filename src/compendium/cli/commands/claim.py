@@ -2,7 +2,7 @@ import getpass
 
 import typer
 
-from compendium.cli.io import error
+from compendium.cli.io import error, truncation_notice
 from compendium.cli.output import Column, emit_list, format_option
 from compendium.db.engine import get_settings
 from compendium.db.session import session_scope
@@ -142,3 +142,4 @@ def list_claims(
             format,
             empty="No active claims-returned items.",
         )
+        truncation_notice(len(items), limit)

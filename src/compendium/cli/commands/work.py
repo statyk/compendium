@@ -153,6 +153,7 @@ def search_works(
             order_by=sort,
         )
         _print_works(works, format, empty=f"No results for '{query}'.")
+        truncation_notice(len(works), limit)
 
 
 @app.command("new-arrivals")
@@ -171,6 +172,7 @@ def new_arrivals(
             days=days, limit=limit, include_withdrawn_only=include_withdrawn
         )
         _print_works(works, format, empty=f"No works added in the last {days} days.")
+        truncation_notice(len(works), limit)
 
 
 @app.command("recently-returned")
@@ -189,6 +191,7 @@ def recently_returned(
             days=days, limit=limit, include_withdrawn_only=include_withdrawn
         )
         _print_works(works, format, empty=f"No works returned in the last {days} days.")
+        truncation_notice(len(works), limit)
 
 
 @app.command("edit")

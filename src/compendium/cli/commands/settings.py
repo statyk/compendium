@@ -218,7 +218,7 @@ def get_setting(
     try:
         value = get_site_setting(key)
     except SettingValidationError as exc:
-        error(f"parsing {key}: {exc}")
+        error(f"invalid value for {key}: {exc}")
         raise typer.Exit(1)
     if format == "json":
         emit_detail({"key": key, "value": value}, format)

@@ -1,7 +1,7 @@
 """Shared CLI output helpers: one table style, one JSON contract.
 
 Every list/show command renders through these helpers. Rules:
-- JSON to stdout only; humans' notices/warnings to stderr (``notice``).
+- JSON to stdout only; humans' notices/warnings to stderr.
 - JSON: full row dicts, snake_case keys, ISO-8601 UTC datetimes, integer
   cents, enum values as strings, no truncation.
 - Tables: rich, ``box.SIMPLE``, bold headers. ``Column.formatter`` affects
@@ -11,7 +11,6 @@ Every list/show command renders through these helpers. Rules:
 from __future__ import annotations
 
 import json
-import sys
 from dataclasses import dataclass
 from datetime import date, datetime, timezone
 from enum import Enum
@@ -24,9 +23,7 @@ from rich.table import Table
 
 
 class OutputFormat(str, Enum):
-    TABLE = "table"
     JSON = "json"
-    CSV = "csv"
 
 
 def format_option(*, csv_ok: bool = False) -> Any:
@@ -127,7 +124,3 @@ def emit_csv(rows: list[dict], fieldnames: list[str]) -> None:
     for row in rows:
         writer.writerow({k: csv_safe_cell(row.get(k)) for k in fieldnames})
     typer.echo(buf.getvalue(), nl=False)
-
-
-def notice(msg: str) -> None:
-    print(msg, file=sys.stderr)
