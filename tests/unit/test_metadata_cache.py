@@ -199,6 +199,65 @@ def test_bypass_cache_calls_fetcher_even_on_hit(db_session):
 
 
 # ---------------------------------------------------------------------------
+# Pending-entry visibility under autoflush=False
+#
+# Regression: a row session.add()-ed by an earlier get_or_fetch in the SAME
+# session is pending — not in the identity map, not in the DB — so
+# session.get() misses it unless autoflush flushes first. With
+# autoflush=False (the app's session_scope default, and downstream callers'),
+# a second same-key lookup re-fetched and added a duplicate row → UNIQUE
+# violation at commit.
+# ---------------------------------------------------------------------------
+
+
+@pytest.fixture()
+def noflush_session():
+    engine = create_engine("sqlite:///:memory:")
+    Base.metadata.create_all(engine)
+    with Session(engine, autoflush=False) as session:
+        yield session
+
+
+def test_second_lookup_hits_pending_entry_without_autoflush(noflush_session):
+    payload = {"title": "Kind of Blue"}
+    fetcher = MagicMock(return_value=payload)
+
+    get_or_fetch(noflush_session, "MB", "mbid", "mbid-1", fetcher)
+    result = get_or_fetch(noflush_session, "MB", "mbid", "mbid-1", fetcher)
+
+    fetcher.assert_called_once()
+    assert result == payload
+
+
+def test_same_key_twice_without_autoflush_commits_cleanly(noflush_session):
+    fetcher = MagicMock(return_value={"title": "Kind of Blue"})
+
+    get_or_fetch(noflush_session, "MB", "mbid", "mbid-1", fetcher)
+    get_or_fetch(noflush_session, "MB", "mbid", "mbid-1", fetcher)
+
+    noflush_session.commit()  # must not raise IntegrityError
+
+    row = noflush_session.get(MetadataCache, ("MB", "mbid", "mbid-1"))
+    assert row is not None
+
+
+def test_bypass_cache_updates_pending_entry_without_autoflush(noflush_session):
+    get_or_fetch(
+        noflush_session, "MB", "mbid", "mbid-1",
+        MagicMock(return_value={"title": "v1"}),
+    )
+    get_or_fetch(
+        noflush_session, "MB", "mbid", "mbid-1",
+        MagicMock(return_value={"title": "v2"}), bypass_cache=True,
+    )
+
+    noflush_session.commit()  # must not raise IntegrityError
+
+    row = noflush_session.get(MetadataCache, ("MB", "mbid", "mbid-1"))
+    assert json.loads(row.payload) == {"title": "v2"}
+
+
+# ---------------------------------------------------------------------------
 # Adapter-namespacing — different adapters = different cache entries
 # ---------------------------------------------------------------------------
 

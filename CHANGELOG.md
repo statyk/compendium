@@ -5,6 +5,18 @@ All notable changes to Compendium are documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [Unreleased]
+
+### Fixed
+
+- Metadata cache: two cache-miss lookups of the same `(adapter, kind, value)`
+  key within one `autoflush=False` session each inserted a row, violating the
+  primary key at commit (`IntegrityError` on `metadata_cache`). Cache reads
+  and upserts now also see entries still pending in the session, so the
+  second lookup is a cache hit instead of a duplicate insert — this also
+  removes the redundant network fetch. Reported by RecordShelf (Add Album →
+  Search crashed on a cold cache).
+
 ## [1.6.0] - 2026-07-16
 
 ### Added

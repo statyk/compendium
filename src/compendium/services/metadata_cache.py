@@ -137,7 +137,7 @@ def get_or_fetch(
     now = _now_utc()
 
     if not bypass_cache:
-        row = session.get(MetadataCache, (adapter, kind, value))
+        row = _get_row(session, adapter, kind, value)
         if row is not None:
             if row.is_negative:
                 cutoff = now - timedelta(hours=_NEGATIVE_TTL_HOURS)
@@ -191,10 +191,33 @@ def get_or_fetch(
     return result  # type: ignore[return-value]
 
 
+def _get_row(
+    session: Session, adapter: str, kind: str, value: str
+) -> MetadataCache | None:
+    """Look up a cache row, including one still *pending* in the session.
+
+    A row session.add()-ed earlier in the same session is pending — not in
+    the identity map and not yet in the DB — so session.get() misses it
+    unless autoflush flushes first. With autoflush=False sessions (the app
+    default), that miss caused a second same-key lookup to add a duplicate
+    row and violate the primary key at commit.
+    """
+    row = session.get(MetadataCache, (adapter, kind, value))
+    if row is not None:
+        return row
+    for obj in session.new:
+        if (
+            isinstance(obj, MetadataCache)
+            and obj.adapter == adapter
+            and obj.kind == kind
+            and obj.lookup_value == value
+        ):
+            return obj
+    return None
+
+
 def _upsert_to_session(session: Session, entry: MetadataCache) -> None:
-    existing = session.get(
-        MetadataCache, (entry.adapter, entry.kind, entry.lookup_value)
-    )
+    existing = _get_row(session, entry.adapter, entry.kind, entry.lookup_value)
     if existing is not None:
         existing.payload = entry.payload
         existing.is_negative = entry.is_negative
