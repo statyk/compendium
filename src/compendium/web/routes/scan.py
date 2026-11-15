@@ -688,7 +688,7 @@ def switch_mode(
             status_code=400,
         )
     if row.mode == "checkout" and mode != "checkout":
-        row.borrower_patron_id = None
+        row.borrower = None
         row.count = 0
     row.mode = mode
     session.flush()

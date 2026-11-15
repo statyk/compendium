@@ -4,6 +4,7 @@ from datetime import date, datetime
 
 from sqlalchemy import inspect as sa_inspect
 from sqlalchemy.orm import Session
+from sqlalchemy.types import TypeDecorator
 
 from compendium.domain.enums import FineStatus
 from compendium.domain.models import (
@@ -48,13 +49,15 @@ def _build_kwargs(model_cls, data: dict) -> dict:
         value = data[key]
         if isinstance(value, str):
             col_type = attr.columns[0].type
+            # TypeDecorators (e.g. UtcDateTime) don't reliably proxy python_type
+            # (SA 2.0 raises NotImplementedError, 2.1 returns `object`), so ask
+            # the wrapped impl type instead.
+            if isinstance(col_type, TypeDecorator):
+                col_type = col_type.impl
             try:
                 py = col_type.python_type
             except NotImplementedError:
-                # TypeDecorators (e.g. UtcDateTime) don't proxy python_type;
-                # fall back to the wrapped impl's type.
-                impl = getattr(col_type, "impl", None)
-                py = getattr(impl, "python_type", None) if impl is not None else None
+                py = None
             if py is datetime:
                 value = datetime.fromisoformat(value)
             elif py is date:

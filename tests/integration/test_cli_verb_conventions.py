@@ -3,7 +3,6 @@
 
 Guards against future drift. Hidden aliases are exempt by construction.
 """
-import click
 import typer.main
 
 from compendium.cli.main import app
@@ -17,8 +16,10 @@ WHITELIST = {
 }
 
 
-def _walk(cmd: click.Command, path: tuple[str, ...] = ()):
-    if isinstance(cmd, click.Group):
+def _walk(cmd, path: tuple[str, ...] = ()):
+    # Duck-type on `.commands`: newer Typer (0.29 here) vendors its own Click, so its groups
+    # are no longer instances of the top-level `click.Group`.
+    if hasattr(cmd, "commands"):
         for name, sub in cmd.commands.items():
             if getattr(sub, "hidden", False):
                 continue
