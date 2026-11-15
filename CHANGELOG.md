@@ -5,6 +5,31 @@ All notable changes to Compendium are documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.6.3] - 2026-11-14
+
+### Security
+
+- **Dependency refresh:** all locked dependencies upgraded, clearing every
+  published advisory against the previous lock — including PyJWT,
+  python-multipart, Starlette, cryptography, Pillow, urllib3, anyio, idna,
+  certifi, Mako and pydantic-settings. The Docker image picks these up
+  automatically.
+- **Minimum versions raised** for pip installs so a resolver can't settle on
+  a vulnerable release: `PyJWT>=2.15`, `python-multipart>=0.0.31`,
+  `cryptography>=50.0`, `pydantic-settings>=2.14.2`.
+
+### Changed
+
+- Notable upgrades: SQLAlchemy 2.1, FastAPI 0.163, Starlette 1.10,
+  reportlab 5.1, Typer 0.29, uvicorn 0.54.
+
+### Fixed
+
+- **Trash restore:** restoring a deleted work no longer fails on SQLAlchemy
+  2.1 (timestamps in the snapshot are converted back to datetimes again).
+- **Phone scanner:** switching out of checkout mode now reports the cleared
+  borrower immediately instead of echoing the previous one to the phone.
+
 ## [1.6.2] - 2026-07-17
 
 ### Added
