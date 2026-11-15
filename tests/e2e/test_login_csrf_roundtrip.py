@@ -67,7 +67,9 @@ def test_logout_clears_auth_cookie(page, e2e_server, e2e_seed):
 
     # Submit the logout form (it lives inside a <details> dropdown; submit directly)
     page.evaluate("document.querySelector(\"form[action='/ui/logout']\").submit()")
-    page.wait_for_load_state("networkidle")
+    # Wait for the post-logout redirect itself; "networkidle" can resolve on the
+    # still-idle current page before the submit's response has landed.
+    page.wait_for_url("**/ui/login")
 
     cookies = page.context.cookies()
     auth_cookie = next((c for c in cookies if c["name"] == "compendium_auth"), None)
